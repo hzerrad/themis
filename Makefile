@@ -66,6 +66,14 @@ gen: ## Generate Go and Python code from protobuf contracts
 	$(GO_TOOL) buf generate
 	$(UV) sync --quiet --reinstall-package themis-intelligence  # pick up new generated packages
 
+.PHONY: check-gen
+check-gen: gen ## Fail if committed generated code is out of date
+	@if [ -n "$$(git status --porcelain -- gen intelligence/gen)" ]; then \
+		echo "Generated code is out of date. Run 'make gen' and commit the result:"; \
+		git status --porcelain -- gen intelligence/gen; \
+		exit 1; \
+	fi
+
 # Local cluster
 
 .PHONY: kind-up kind-down
