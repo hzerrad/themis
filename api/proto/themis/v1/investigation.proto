@@ -100,6 +100,6 @@ message EvidenceTemplate {
 
 message Usage {
   int32 steps_used = 1;
-  uint64 input_tokens = 2;
-  uint64 output_tokens = 3;
+  int64 input_tokens = 2;
+  int64 output_tokens = 3;
 }

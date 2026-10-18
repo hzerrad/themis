@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package themis.v1;
+
+service ExecutorService {
+  rpc ExecuteAction(ExecuteActionRequest) returns (ExecuteActionResponse);
+}
+
+enum ExecuteActionStatus {
+  EXECUTE_ACTION_STATUS_UNSPECIFIED = 0;
+  EXECUTE_ACTION_STATUS_SUCCEEDED = 1;
+  EXECUTE_ACTION_STATUS_FAILED = 2;
+  EXECUTE_ACTION_STATUS_AMBIGUOUS = 3;
+  EXECUTE_ACTION_STATUS_STALE = 4;
+}
+
+message ExecuteActionRequest {
+  string action_id = 1;
+}
+
+message ExecuteActionResponse {
+  ExecuteActionStatus status = 1;
+  string message = 2;
+  int64 post_generation = 3;
+}
