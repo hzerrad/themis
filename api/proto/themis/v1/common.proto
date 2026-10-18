@@ -18,6 +18,14 @@ enum DataClassification {
   DATA_CLASSIFICATION_SENSITIVE = 3;
 }
 
+enum CollectionFailureReason {
+  COLLECTION_FAILURE_REASON_UNSPECIFIED = 0;
+  COLLECTION_FAILURE_REASON_NOT_FOUND = 1;
+  COLLECTION_FAILURE_REASON_NOT_AVAILABLE = 2;
+  COLLECTION_FAILURE_REASON_FORBIDDEN = 3;
+  COLLECTION_FAILURE_REASON_TIMEOUT = 4;
+}
+
 message TargetRef {
   string kind = 1;
   string namespace = 2;
@@ -45,6 +53,11 @@ message EvidenceItem {
   int32 redactions = 8;
   google.protobuf.Timestamp collected_at = 9;
   DataClassification classification = 10;
+  string template_version = 11;
+  map<string, string> attributes = 12;
+  google.protobuf.Timestamp window_start = 13;
+  google.protobuf.Timestamp window_end = 14;
+  string content_digest = 15;
 }
 
 message Budget {
@@ -59,4 +72,10 @@ message Provenance {
   string model = 2;
   string prompt_version = 3;
   string route = 4;
+}
+
+message CollectionFailure {
+  TargetRef target = 1;
+  CollectionFailureReason reason = 2;
+  string message = 3;
 }
