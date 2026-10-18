@@ -14,11 +14,11 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-func newIncident(fingerprint string) store.NewIncident {
-	return store.NewIncident{
+func newIncident(fingerprint string) store.IncidentArgs {
+	return store.IncidentArgs{
 		Fingerprint: fingerprint,
 		Profile:     "rollout-regression",
-		Target: store.TargetRef{
+		Target: incident.TargetRef{
 			Group:     "apps",
 			Kind:      "Deployment",
 			Namespace: "shop",
@@ -29,7 +29,7 @@ func newIncident(fingerprint string) store.NewIncident {
 	}
 }
 
-func createOrJoin(t *testing.T, s *store.Store, in store.NewIncident) (string, bool) {
+func createOrJoin(t *testing.T, s *store.Store, in store.IncidentArgs) (string, bool) {
 	t.Helper()
 	var (
 		id      string
@@ -49,7 +49,9 @@ func createOrJoin(t *testing.T, s *store.Store, in store.NewIncident) (string, b
 func transition(t *testing.T, s *store.Store, id string, from, to incident.State) error {
 	t.Helper()
 	return s.InTx(t.Context(), func(tx pgx.Tx) error {
-		return s.Transition(t.Context(), tx, id, from, to, "test", "test")
+		return s.Transition(t.Context(), tx, store.TransitionArgs{
+			ID: id, From: from, To: to, Reason: "test", Actor: "test",
+		})
 	})
 }
 
@@ -198,7 +200,9 @@ func TestTransition_WritesAuditRow(t *testing.T) {
 	before := time.Now()
 
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		return s.Transition(t.Context(), tx, id, incident.Received, incident.Investigating, "leased", "worker-1")
+		return s.Transition(t.Context(), tx, store.TransitionArgs{
+			ID: id, From: incident.Received, To: incident.Investigating, Reason: "leased", Actor: "worker-1",
+		})
 	})
 	if err != nil {
 		t.Fatalf("Transition: %v", err)
