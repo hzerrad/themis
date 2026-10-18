@@ -4,6 +4,10 @@ GO_TOOL      := go tool -modfile=tools/go.mod
 UV           := uv --directory intelligence
 KIND_CLUSTER ?= themis-dev
 
+# Kubernetes version of the API server and etcd that envtest runs in tests.
+ENVTEST_K8S_VERSION ?= 1.37.0
+ENVTEST_DIR         := $(CURDIR)/bin/envtest
+
 # Some checks fail on an empty project; skip them until there is something to check.
 HAS_GO    := $(shell find . -name '*.go' -not -path './tools/*' -not -path './gen/*' -print -quit)
 HAS_PROTO := $(shell find api/proto -name '*.proto' -print -quit 2>/dev/null)
@@ -49,9 +53,9 @@ endif
 .PHONY: test test-go test-python
 test: test-go test-python ## Run all unit tests
 
-test-go: ## Run Go tests with the race detector
+test-go: envtest ## Run Go tests with the race detector
 ifneq ($(HAS_GO),)
-	go test -race ./...
+	KUBEBUILDER_ASSETS="$$($(GO_TOOL) setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_DIR) -p path)" go test -race ./...
 else
 	@echo "test-go: no Go packages yet, skipping"
 endif
@@ -62,15 +66,18 @@ test-python: ## Run Python tests
 # Code generation
 
 .PHONY: gen
-gen: ## Generate Go and Python code from protobuf contracts
+gen: ## Generate code from protobuf contracts and the config schema
 	$(GO_TOOL) buf generate
+	go run ./hack/gen-config-schema deploy/config/themis.schema.json
 	$(UV) sync --quiet --reinstall-package themis-intelligence  # pick up new generated packages
+
+GENERATED := gen intelligence/gen deploy/config/themis.schema.json
 
 .PHONY: check-gen
 check-gen: gen ## Fail if committed generated code is out of date
-	@if [ -n "$$(git status --porcelain -- gen intelligence/gen)" ]; then \
+	@if [ -n "$$(git status --porcelain -- $(GENERATED))" ]; then \
 		echo "Generated code is out of date. Run 'make gen' and commit the result:"; \
-		git status --porcelain -- gen intelligence/gen; \
+		git status --porcelain -- $(GENERATED); \
 		exit 1; \
 	fi
 
@@ -83,6 +90,12 @@ ifndef name
 endif
 	@mkdir -p internal/store/migrations
 	$(GO_TOOL) goose -dir internal/store/migrations -s create $(name) sql
+
+# Kubernetes test environment
+
+.PHONY: envtest
+envtest: ## Download the API server and etcd binaries used by envtest
+	@$(GO_TOOL) setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_DIR) >/dev/null
 
 # Local cluster
 

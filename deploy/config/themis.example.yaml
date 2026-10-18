@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=./themis.schema.json
+#
+# Example Themis configuration. The schema next to this file is generated from
+# internal/config; editors that support the yaml-language-server comment above
+# give completion and validation while editing.
+
+enrolledNamespaces:
+  - shop
+
+intake:
+  bearerTokenFile: /var/run/secrets/themis/intake-token
+
+profiles:
+  - name: rollout-regression
+    priority: 100
+    match:
+      alertNames:
+        - KubePodCrashLooping
+        - KubeDeploymentReplicasMismatch
+        - KubePodOOMKilled
+      targetKinds:
+        - Deployment.apps
