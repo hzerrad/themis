@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"slices"
 
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -17,9 +18,17 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 )
 
-// SupportedTargetKinds lists the workload kinds intake can resolve alerts to,
-// written as Kind.group.
-var SupportedTargetKinds = []string{"Deployment.apps"}
+// TargetKindPattern is the syntax of a target kind: an UpperCamelCase Kind,
+// then a dot and the API group, which is omitted for the core group. For
+// example Deployment.apps, Rollout.argoproj.io or PersistentVolumeClaim.
+const TargetKindPattern = `^[A-Z][A-Za-z0-9]*(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
+
+var targetKindRE = regexp.MustCompile(TargetKindPattern)
+
+// IsTargetKind reports whether s is a well-formed Kind.group.
+func IsTargetKind(s string) bool {
+	return targetKindRE.MatchString(s)
+}
 
 // Config is the root of the configuration file.
 type Config struct {
@@ -67,8 +76,9 @@ type Match struct {
 	// Other labels on the alert are ignored.
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// TargetKinds lists the resolved workload kinds that match, written as
-	// Kind.group, for example Deployment.apps.
+	// TargetKinds lists the resolved target kinds that match, written as
+	// Kind.group, for example Deployment.apps or StatefulSet.apps. Kinds in
+	// the core API group have no suffix, for example PersistentVolumeClaim.
 	TargetKinds []string `json:"targetKinds" jsonschema:"minItems=1,uniqueItems=true"`
 }
 
@@ -159,9 +169,9 @@ func (c Config) Validate() error {
 			add(path+".match.targetKinds", "at least one target kind is required")
 		}
 		for j, kind := range p.Match.TargetKinds {
-			if !slices.Contains(SupportedTargetKinds, kind) {
+			if !IsTargetKind(kind) {
 				add(fmt.Sprintf("%s.match.targetKinds[%d]", path, j),
-					"unsupported kind %q (supported: %v)", kind, SupportedTargetKinds)
+					"%q is not of the form Kind.group, for example Deployment.apps", kind)
 			}
 		}
 	}
