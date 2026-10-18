@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package themis.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum Truth {
+  TRUTH_UNSPECIFIED = 0;
+  TRUTH_TRUE = 1;
+  TRUTH_FALSE = 2;
+  TRUTH_UNKNOWN = 3;
+}
+
+enum DataClassification {
+  DATA_CLASSIFICATION_UNSPECIFIED = 0;
+  DATA_CLASSIFICATION_PUBLIC = 1;
+  DATA_CLASSIFICATION_INTERNAL = 2;
+  DATA_CLASSIFICATION_SENSITIVE = 3;
+}
+
+message TargetRef {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+  string uid = 4;
+  string group = 5;
+}
+
+message PredicateResult {
+  string name = 1;
+  Truth value = 2;
+  string reason = 3;
+  repeated string evidence_ids = 4;
+  string predicate_version = 5;
+}
+
+message EvidenceItem {
+  string id = 1;
+  string template = 2;
+  TargetRef target = 3;
+  string content_type = 4;
+  bytes data = 5;
+  bool truncated = 6;
+  int64 original_bytes = 7;
+  int32 redactions = 8;
+  google.protobuf.Timestamp collected_at = 9;
+  DataClassification classification = 10;
+}
+
+message Budget {
+  int32 max_steps = 1;
+  int64 max_input_tokens = 2;
+  int64 max_output_tokens = 3;
+  google.protobuf.Timestamp deadline = 4;
+}
+
+message Provenance {
+  string source = 1;
+  string model = 2;
+  string prompt_version = 3;
+  string route = 4;
+}
