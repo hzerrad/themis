@@ -74,6 +74,16 @@ check-gen: gen ## Fail if committed generated code is out of date
 		exit 1; \
 	fi
 
+# Database
+
+.PHONY: migration
+migration: ## Create a new SQL migration: make migration name=add_leases
+ifndef name
+	$(error name is required, e.g. make migration name=add_leases)
+endif
+	@mkdir -p internal/store/migrations
+	$(GO_TOOL) goose -dir internal/store/migrations -s create $(name) sql
+
 # Local cluster
 
 .PHONY: kind-up kind-down
