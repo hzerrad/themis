@@ -60,14 +60,12 @@
               "targetKinds": {
                 "items": {
                   "type": "string",
-                  "enum": [
-                    "Deployment.apps"
-                  ]
+                  "pattern": "^[A-Z][A-Za-z0-9]*(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$"
                 },
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "description": "TargetKinds lists the resolved workload kinds that match, written as\nKind.group, for example Deployment.apps."
+                "description": "TargetKinds lists the resolved target kinds that match, written as\nKind.group, for example Deployment.apps or StatefulSet.apps. Kinds in\nthe core API group have no suffix, for example PersistentVolumeClaim."
               }
             },
             "additionalProperties": false,

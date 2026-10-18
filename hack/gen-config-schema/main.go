@@ -34,12 +34,10 @@ func run(out string) error {
 	}
 	s := r.Reflect(&config.Config{})
 
-	// The supported kinds live in Go; copy them in rather than repeating them
-	// in a struct tag.
+	// The kind syntax lives in Go; copy it in rather than repeating it in a
+	// struct tag.
 	kinds := s.Properties.Value("profiles").Items.Properties.Value("match").Properties.Value("targetKinds").Items
-	for _, k := range config.SupportedTargetKinds {
-		kinds.Enum = append(kinds.Enum, k)
-	}
+	kinds.Pattern = config.TargetKindPattern
 	s.ID = "https://github.com/hzerrad/themis/deploy/config/themis.schema.json"
 	s.Title = "Themis configuration"
 

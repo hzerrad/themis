@@ -106,8 +106,9 @@ func TestValidate_Errors(t *testing.T) {
 		{"invalid label key", func(c *config.Config) { c.Profiles[1].Match.Labels = map[string]string{"bad key": "x"} }, "profiles[1].match.labels"},
 		{"invalid label value", func(c *config.Config) { c.Profiles[1].Match.Labels = map[string]string{"severity": "not ok!"} }, "profiles[1].match.labels"},
 		{"no target kinds", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = nil }, "profiles[0].match.targetKinds"},
-		{"unsupported kind", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"StatefulSet.apps"} }, "profiles[0].match.targetKinds[0]"},
-		{"kind without group", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"Deployment"} }, "profiles[0].match.targetKinds[0]"},
+		{"lowercase kind", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"deployment.apps"} }, "profiles[0].match.targetKinds[0]"},
+		{"invalid group", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"Deployment.Apps"} }, "profiles[0].match.targetKinds[0]"},
+		{"kind with slash", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"apps/Deployment"} }, "profiles[0].match.targetKinds[0]"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,6 +139,17 @@ func TestValidate_ReportsEveryError(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("error does not mention %s\n%v", path, err)
 		}
+	}
+}
+
+func TestValidate_AcceptsAnyWellFormedKind(t *testing.T) {
+	c := mustParse(t, validYAML)
+	c.Profiles[0].Match.TargetKinds = []string{
+		"Deployment.apps", "StatefulSet.apps", "Job.batch", "PersistentVolumeClaim", "Rollout.argoproj.io",
+	}
+
+	if err := c.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
 	}
 }
 
