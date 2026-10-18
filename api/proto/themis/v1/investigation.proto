@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package themis.v1;
+
+import "google/protobuf/timestamp.proto";
+import "themis/v1/common.proto";
+
+service InvestigationService {
+  rpc LeaseInvestigation(LeaseInvestigationRequest) returns (LeaseInvestigationResponse);
+  rpc RenewLease(RenewLeaseRequest) returns (RenewLeaseResponse);
+  rpc CompleteInvestigation(CompleteInvestigationRequest) returns (CompleteInvestigationResponse);
+  rpc FailInvestigation(FailInvestigationRequest) returns (FailInvestigationResponse);
+}
+
+enum HypothesisStatus {
+  HYPOTHESIS_STATUS_UNSPECIFIED = 0;
+  HYPOTHESIS_STATUS_REFUTED = 1;
+  HYPOTHESIS_STATUS_SUPPORTED = 2;
+  HYPOTHESIS_STATUS_OPEN = 3;
+}
+
+enum InvestigationConclusion {
+  INVESTIGATION_CONCLUSION_UNSPECIFIED = 0;
+  INVESTIGATION_CONCLUSION_PROPOSED = 1;
+  INVESTIGATION_CONCLUSION_INCONCLUSIVE = 2;
+}
+
+enum InvestigationFailureReason {
+  INVESTIGATION_FAILURE_REASON_UNSPECIFIED = 0;
+  INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE = 1;
+  INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT = 2;
+  INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED = 3;
+  INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED = 4;
+  INVESTIGATION_FAILURE_REASON_INTERNAL = 5;
+}
+
+message LeaseInvestigationRequest {
+  string worker_id = 1;
+}
+
+message LeaseInvestigationResponse {
+  Investigation investigation = 1;
+}
+
+message RenewLeaseRequest {
+  string lease_id = 1;
+}
+
+message RenewLeaseResponse {
+  google.protobuf.Timestamp lease_deadline = 1;
+}
+
+message CompleteInvestigationRequest {
+  string lease_id = 1;
+  InvestigationConclusion conclusion = 2;
+  string summary = 3;
+  repeated Hypothesis hypotheses = 4;
+  Usage usage = 5;
+  Provenance provenance = 6;
+}
+
+message CompleteInvestigationResponse {}
+
+message FailInvestigationRequest {
+  string lease_id = 1;
+  InvestigationFailureReason reason = 2;
+  string message = 3;
+}
+
+message FailInvestigationResponse {}
+
+message Investigation {
+  string lease_id = 1;
+  google.protobuf.Timestamp lease_deadline = 2;
+  string incident_id = 3;
+  string profile = 4;
+  TargetRef target = 5;
+  repeated EvidenceItem initial_evidence = 6;
+  repeated CollectionFailure initial_failures = 7;
+  repeated PredicateResult predicates = 8;
+  repeated EvidenceTemplate allowed_templates = 9;
+  repeated string candidate_capabilities = 10;
+  Budget budget = 11;
+}
+
+message Hypothesis {
+  string root_cause_class = 1;
+  string summary = 2;
+  repeated string supporting_evidence_ids = 3;
+  repeated string contradicting_evidence_ids = 4;
+  repeated string missing = 5;
+  HypothesisStatus status = 6;
+}
+
+message EvidenceTemplate {
+  string name = 1;
+  string description = 2;
+  repeated string params = 3;
+}
+
+message Usage {
+  int32 steps_used = 1;
+  uint64 input_tokens = 2;
+  uint64 output_tokens = 3;
+}
