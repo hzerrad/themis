@@ -61,9 +61,9 @@ message EvidenceItem {
 }
 
 message Budget {
-  uint32 max_steps = 1;
-  uint64 max_input_tokens = 2;
-  uint64 max_output_tokens = 3;
+  int32 max_steps = 1;
+  int64 max_input_tokens = 2;
+  int64 max_output_tokens = 3;
   google.protobuf.Timestamp deadline = 4;
 }
 
