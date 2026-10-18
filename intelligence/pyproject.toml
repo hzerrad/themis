@@ -1,0 +1,51 @@
+[project]
+name = "themis-intelligence"
+version = "0.0.0"
+description = "Bounded incident investigation and governed model access for Themis"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "grpcio>=1.84.0",
+    "protobuf>=7.36.2,<8",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+    "types-grpcio>=1.84.0.20260928",
+    "types-protobuf>=7.35.1.20260906",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# gen/themis holds protobuf-generated code; it installs as the top-level
+# `themis` package so the generated absolute imports (`from themis.v1 import ...`) resolve.
+packages = ["src/themis_intelligence", "gen/themis"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["gen"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["gen"]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
