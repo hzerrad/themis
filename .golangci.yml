@@ -1,0 +1,28 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - exhaustive
+    - gochecksumtype
+    - gosec
+    - misspell
+    - noctx
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: false
+  exclusions:
+    generated: strict
+    paths:
+      - gen/
+
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/hzerrad/themis
