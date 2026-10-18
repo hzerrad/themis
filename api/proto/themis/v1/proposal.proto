@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package themis.v1;
+
+import "themis/v1/common.proto";
+
+service ProposalService {
+  rpc SubmitProposal(SubmitProposalRequest) returns (SubmitProposalResponse);
+}
+
+message SubmitProposalRequest {
+  reserved 4, 5;
+
+  string lease_id = 1;
+  string client_proposal_id = 2;
+  TargetRef target = 3;
+  string expected_effect = 6;
+  string rationale = 7;
+  repeated string cited_evidence_ids = 8;
+  repeated string cited_predicates = 9;
+  Provenance provenance = 10;
+
+  oneof capability {
+    RollbackToRevisionParams rollback_to_revision = 11;
+  }
+}
+
+message RollbackToRevisionParams {
+  int64 revision = 1;
+}
+
+message SubmitProposalResponse {
+  string proposal_id = 1;
+  ProposalStatus status = 2;
+  RejectionReason rejection_reason = 3;
+  string message = 4;
+}
+
+enum ProposalStatus {
+  PROPOSAL_STATUS_UNSPECIFIED = 0;
+  PROPOSAL_STATUS_ACCEPTED = 1;
+  PROPOSAL_STATUS_REJECTED = 2;
+}
+
+enum RejectionReason {
+  REJECTION_REASON_UNSPECIFIED = 0;
+  REJECTION_REASON_TARGET_MISMATCH = 1;
+  REJECTION_REASON_CAPABILITY_NOT_ALLOWED = 2;
+  REJECTION_REASON_INVALID_PARAMS = 3;
+  REJECTION_REASON_UNKNOWN_EVIDENCE = 4;
+  REJECTION_REASON_UNKNOWN_PREDICATE = 5;
+}
