@@ -16,6 +16,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/target"
 )
 
 // actor is recorded on the lifecycle transitions intake makes.
@@ -76,12 +77,12 @@ type rejected struct {
 // judge decides what a firing alert is about. It returns the incident to
 // create or join, or why the alert is rejected, or an error worth retrying.
 func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.IncidentArgs, *rejected, error) {
-	if ns := a.Labels[LabelNamespace]; ns != "" && !w.Config.IsEnrolled(ns) {
+	if ns := a.Labels[target.LabelNamespace]; ns != "" && !w.Config.IsEnrolled(ns) {
 		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
 			fmt.Sprintf("namespace %q is not enrolled", ns)}, nil
 	}
 
-	target, err := ResolveTarget(ctx, w.Reader, w.Mapper, a.Labels)
+	ref, err := target.Resolve(ctx, w.Reader, w.Mapper, a.Labels)
 	if err != nil {
 		if reason, ok := rejectionReason(err); ok {
 			return store.IncidentArgs{}, &rejected{reason, err.Error()}, nil
@@ -91,21 +92,21 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 	// The check above avoids reading the cluster for unenrolled namespaces;
 	// this one enforces enrollment on what was actually resolved, so it holds
 	// even if resolution ever leaves the alert's namespace.
-	if !w.Config.IsEnrolled(target.Namespace) {
+	if !w.Config.IsEnrolled(ref.Namespace) {
 		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
-			fmt.Sprintf("target namespace %q is not enrolled", target.Namespace)}, nil
+			fmt.Sprintf("target namespace %q is not enrolled", ref.Namespace)}, nil
 	}
 
-	profile, ok := w.Config.MatchProfile(a.Name, a.Labels, target)
+	profile, ok := w.Config.MatchProfile(a.Name, a.Labels, ref)
 	if !ok {
 		return store.IncidentArgs{}, &rejected{store.RejectionNoProfile,
-			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, config.TargetKind(target), target.Namespace, target.Name)}, nil
+			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, config.TargetKind(ref), ref.Namespace, ref.Name)}, nil
 	}
 
 	return store.IncidentArgs{
-		Fingerprint: Fingerprint(profile.Name, target),
+		Fingerprint: Fingerprint(profile.Name, ref),
 		Profile:     profile.Name,
-		Target:      target,
+		Target:      ref,
 		Payload:     a.Payload,
 	}, nil, nil
 }
@@ -115,15 +116,15 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 // the API server being unreachable, is not, so the caller retries.
 func rejectionReason(err error) (store.AlertRejectionReason, bool) {
 	switch {
-	case errors.Is(err, ErrMissingLabels):
+	case errors.Is(err, target.ErrMissingLabels):
 		return store.RejectionMissingLabels, true
-	case errors.Is(err, ErrInvalidOverride):
+	case errors.Is(err, target.ErrInvalidOverride):
 		return store.RejectionInvalidOverride, true
-	case errors.Is(err, ErrUnknownKind):
+	case errors.Is(err, target.ErrUnknownKind):
 		return store.RejectionUnknownKind, true
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, target.ErrNotFound):
 		return store.RejectionTargetNotFound, true
-	case errors.Is(err, ErrOwnerChainTooLong):
+	case errors.Is(err, target.ErrOwnerChainTooLong):
 		return store.RejectionOwnerChainTooLong, true
 	case apierrors.IsForbidden(err):
 		// Themis lacks RBAC on the namespace: a misconfiguration that
@@ -198,7 +199,7 @@ func (w *ProcessAlertWorker) reject(ctx context.Context, job *river.Job[ProcessA
 			Reason:     r.reason,
 			Detail:     r.detail,
 			AlertName:  a.Name,
-			Namespace:  a.Labels[LabelNamespace],
+			Namespace:  a.Labels[target.LabelNamespace],
 			Payload:    a.Payload,
 		})
 		if err != nil {

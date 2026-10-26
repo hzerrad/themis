@@ -75,7 +75,7 @@ func profileConfig(ns string) config.Config {
 func newWorkerEnv(t *testing.T, reader client.Reader) *workerEnv {
 	t.Helper()
 	s, pool := pgtest.NewStore(t)
-	ns := newNamespace(t)
+	ns := k8s.NewNamespace(t)
 	if reader == nil {
 		reader = k8s
 	}
@@ -142,7 +142,7 @@ func wantCompleted(t *testing.T, ev *river.Event) {
 
 func alertFor(ns, pod, sourceID string, status intake.AlertStatus) intake.Alert {
 	a := intake.Alert{
-		Source:     intake.AlertmanagerSource,
+		Source:     source,
 		SourceID:   sourceID,
 		Name:       "KubePodCrashLooping",
 		Status:     status,
@@ -178,7 +178,7 @@ func (e *workerEnv) onlyIncident(t *testing.T) (id string, state incident.State,
 
 func TestWorker_FiringAlertOpensIncident(t *testing.T) {
 	e := newWorkerEnv(t, nil)
-	dep, pod := newRollout(t, e.ns, "checkout")
+	dep, pod := k8s.NewRollout(t, e.ns, "checkout")
 
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
 
@@ -203,8 +203,8 @@ func TestWorker_FiringAlertOpensIncident(t *testing.T) {
 // investigation, two alerts.
 func TestWorker_SecondAlertJoins(t *testing.T) {
 	e := newWorkerEnv(t, nil)
-	_, pod1 := newRollout(t, e.ns, "checkout")
-	pod2 := newPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
+	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
+	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
 
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertFiring), nil))
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertFiring), nil))
@@ -253,7 +253,7 @@ func TestWorker_Rejections(t *testing.T) {
 		{
 			name: "no profile",
 			alert: func(t *testing.T, e *workerEnv) intake.Alert {
-				_, pod := newRollout(t, e.ns, "checkout")
+				_, pod := k8s.NewRollout(t, e.ns, "checkout")
 				a := alertFor(e.ns, pod.Name, "fp", intake.AlertFiring)
 				a.Name = "KubeDeploymentReplicasMismatch"
 				return a
@@ -316,8 +316,8 @@ func TestWorker_LastAttemptRecordsProcessingFailed(t *testing.T) {
 // The incident closes only when its last alert resolves.
 func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
 	e := newWorkerEnv(t, nil)
-	_, pod1 := newRollout(t, e.ns, "checkout")
-	pod2 := newPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
+	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
+	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertFiring), nil))
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertFiring), nil))
 
@@ -335,7 +335,7 @@ func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
 // Verification, not the alert, decides the outcome of a fix in flight.
 func TestWorker_ResolvedDoesNotCloseActionInFlight(t *testing.T) {
 	e := newWorkerEnv(t, nil)
-	_, pod := newRollout(t, e.ns, "checkout")
+	_, pod := k8s.NewRollout(t, e.ns, "checkout")
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
 	id, _, _ := e.onlyIncident(t)
 	path := []incident.State{incident.Received, incident.Investigating, incident.Diagnosed,

@@ -1,8 +1,9 @@
-package intake
+package alertmanager
 
 import (
 	"encoding/json/v2"
 	"errors"
+	"github.com/hzerrad/themis/internal/intake"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,20 +13,20 @@ import (
 
 // Translation is internal to intake, so these tests are in package intake.
 
-func parseFixture(t *testing.T, name string) *AlertmanagerPayload {
+func parseFixture(t *testing.T, name string) *Payload {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "test", "fixtures", "alerts", name))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
 	return mustParse(t, data)
 }
 
-func mustParse(t *testing.T, data []byte) *AlertmanagerPayload {
+func mustParse(t *testing.T, data []byte) *Payload {
 	t.Helper()
-	p, err := ParseAlertmanagerPayload(data)
+	p, err := ParsePayload(data)
 	if err != nil {
-		t.Fatalf("ParseAlertmanagerPayload: %v", err)
+		t.Fatalf("ParsePayload: %v", err)
 	}
 	return p
 }
@@ -48,9 +49,9 @@ func TestToAlerts_OnePerAlert(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		got      Alert
+		got      intake.Alert
 		sourceID string
-		status   AlertStatus
+		status   intake.AlertStatus
 		pod      string
 		startsAt time.Time
 		endsAt   time.Time
@@ -59,7 +60,7 @@ func TestToAlerts_OnePerAlert(t *testing.T) {
 			name:     "firing",
 			got:      alerts[0],
 			sourceID: "9c4f1d2b7a8e6c30",
-			status:   AlertFiring,
+			status:   intake.AlertFiring,
 			pod:      "checkout-7d9f8c6b5-x2x7q",
 			startsAt: time.Date(2026, 10, 26, 9, 12, 4, 512_000_000, time.UTC),
 			endsAt:   time.Time{},
@@ -68,7 +69,7 @@ func TestToAlerts_OnePerAlert(t *testing.T) {
 			name:     "resolved",
 			got:      alerts[1],
 			sourceID: "e21a7b3c9d4f8016",
-			status:   AlertResolved,
+			status:   intake.AlertResolved,
 			pod:      "checkout-7d9f8c6b5-m4kzd",
 			startsAt: time.Date(2026, 10, 26, 8, 41, 34, 512_000_000, time.UTC),
 			endsAt:   time.Date(2026, 10, 26, 9, 6, 34, 512_000_000, time.UTC),
@@ -77,8 +78,8 @@ func TestToAlerts_OnePerAlert(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := tt.got
-			if a.Source != AlertmanagerSource {
-				t.Errorf("Source = %q, want %q", a.Source, AlertmanagerSource)
+			if a.Source != Source {
+				t.Errorf("Source = %q, want %q", a.Source, Source)
 			}
 			if a.SourceID != tt.sourceID {
 				t.Errorf("SourceID = %q, want %q", a.SourceID, tt.sourceID)
@@ -167,17 +168,17 @@ func TestToAlerts_InvalidAlertDoesNotCostTheOthers(t *testing.T) {
 		reason   error
 		inDetail string
 	}{
-		{1, "b", "", ErrMissingAlertName, "alert 1"},
-		{2, "c", "", ErrMissingAlertName, "alert 2"},
-		{3, "d", "KubePodOOMKilled", ErrUnsupportedAlertStatus, `"pending"`},
+		{1, "b", "", intake.ErrMissingAlertName, "alert 1"},
+		{2, "c", "", intake.ErrMissingAlertName, "alert 2"},
+		{3, "d", "KubePodOOMKilled", intake.ErrUnsupportedAlertStatus, `"pending"`},
 	}
 	if len(invalid) != len(tests) {
 		t.Fatalf("got %d invalid alerts, want %d: %v", len(invalid), len(tests), invalid)
 	}
 	for i, tt := range tests {
 		got := invalid[i]
-		if !errors.Is(got.Err, ErrInvalidAlert) || !errors.Is(got.Err, tt.reason) {
-			t.Errorf("alert %d: Err = %v, want ErrInvalidAlert and %v", tt.index, got.Err, tt.reason)
+		if !errors.Is(got.Err, intake.ErrInvalidAlert) || !errors.Is(got.Err, tt.reason) {
+			t.Errorf("alert %d: Err = %v, want intake.ErrInvalidAlert and %v", tt.index, got.Err, tt.reason)
 		}
 		if got.Err == nil || !strings.Contains(got.Err.Error(), tt.inDetail) {
 			t.Errorf("alert %d: Err = %v, want it to mention %s", tt.index, got.Err, tt.inDetail)
@@ -185,35 +186,21 @@ func TestToAlerts_InvalidAlertDoesNotCostTheOthers(t *testing.T) {
 		if got.Name != tt.name || got.Labels["pod"] != tt.pod {
 			t.Errorf("alert %d: Name %q, pod %q; want %q, %q", tt.index, got.Name, got.Labels["pod"], tt.name, tt.pod)
 		}
-		if got.Source != AlertmanagerSource || !got.ReceivedAt.Equal(received) || len(got.Payload) == 0 {
+		if got.Source != Source || !got.ReceivedAt.Equal(received) || len(got.Payload) == 0 {
 			t.Errorf("alert %d: Source %q, ReceivedAt %v, Payload %d bytes; want all set", tt.index, got.Source, got.ReceivedAt, len(got.Payload))
 		}
 	}
 }
 
 func TestAlertmanagerStatus(t *testing.T) {
-	for _, s := range []AlertStatus{AlertFiring, AlertResolved} {
-		if got, err := alertmanagerStatus(string(s)); err != nil || got != s {
-			t.Errorf("alertmanagerStatus(%q) = %q, %v; want %q", s, got, err, s)
+	for _, s := range []intake.AlertStatus{intake.AlertFiring, intake.AlertResolved} {
+		if got, err := parseStatus(string(s)); err != nil || got != s {
+			t.Errorf("parseStatus(%q) = %q, %v; want %q", s, got, err, s)
 		}
 	}
 	for _, s := range []string{"", "pending", "FIRING"} {
-		if _, err := alertmanagerStatus(s); !errors.Is(err, ErrUnsupportedAlertStatus) {
-			t.Errorf("alertmanagerStatus(%q) error = %v, want ErrUnsupportedAlertStatus", s, err)
+		if _, err := parseStatus(s); !errors.Is(err, intake.ErrUnsupportedAlertStatus) {
+			t.Errorf("parseStatus(%q) error = %v, want ErrUnsupportedAlertStatus", s, err)
 		}
-	}
-}
-
-// The kind is stored with every queued job; renaming it strands them.
-func TestProcessAlertArgs_KindIsPinned(t *testing.T) {
-	if got := (ProcessAlertArgs{}).Kind(); got != "process_alert" {
-		t.Errorf("Kind = %q, want process_alert", got)
-	}
-}
-
-// River's default of 25 attempts would retry a stale alert for about 18 days.
-func TestProcessAlertArgs_BoundedAttempts(t *testing.T) {
-	if got := (ProcessAlertArgs{}).InsertOpts().MaxAttempts; got != 10 {
-		t.Errorf("MaxAttempts = %d, want 10 (about 4 hours of retries)", got)
 	}
 }

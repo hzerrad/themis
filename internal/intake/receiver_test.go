@@ -11,11 +11,14 @@ import (
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
+// source is the Source of the alerts in these tests.
+const source = "alertmanager"
+
 var receivedAt = time.Date(2026, 10, 26, 9, 12, 5, 0, time.UTC)
 
 func validAlert(pod string) intake.Alert {
 	return intake.Alert{
-		Source:     intake.AlertmanagerSource,
+		Source:     source,
 		SourceID:   "fp-" + pod,
 		Name:       "KubePodCrashLooping",
 		Status:     intake.AlertFiring,
@@ -28,7 +31,7 @@ func validAlert(pod string) intake.Alert {
 
 func invalidAlert(payload string) intake.InvalidAlert {
 	return intake.InvalidAlert{
-		Source:     intake.AlertmanagerSource,
+		Source:     source,
 		Labels:     map[string]string{"namespace": "shop", "pod": "b"},
 		Err:        fmt.Errorf("%w: alert 1: %w", intake.ErrInvalidAlert, intake.ErrMissingAlertName),
 		ReceivedAt: receivedAt,

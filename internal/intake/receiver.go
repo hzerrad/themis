@@ -8,6 +8,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/target"
 )
 
 // Receiver stores what a source sent, whatever the source. It is the only part
@@ -75,7 +76,7 @@ func rejectionOf(a InvalidAlert) store.RejectedAlertArgs {
 		Reason:     store.RejectionInvalidAlert,
 		Detail:     detail,
 		AlertName:  a.Name,
-		Namespace:  a.Labels[LabelNamespace],
+		Namespace:  a.Labels[target.LabelNamespace],
 		Payload:    a.Payload,
 	}
 }
