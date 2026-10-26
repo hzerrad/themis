@@ -1,0 +1,81 @@
+{
+  "receiver": "themis",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "container": "app",
+        "endpoint": "http",
+        "instance": "10.244.1.7:8080",
+        "job": "kube-state-metrics",
+        "namespace": "shop",
+        "pod": "checkout-7d9f8c6b5-x2x7q",
+        "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+        "reason": "CrashLoopBackOff",
+        "service": "kube-prometheus-stack-kube-state-metrics",
+        "severity": "warning",
+        "uid": "5f1c2a7e-3b9d-4c1e-9a8f-2d6e4b7c1a90"
+      },
+      "annotations": {
+        "description": "Pod shop/checkout-7d9f8c6b5-x2x7q (app) is in waiting state (reason: \"CrashLoopBackOff\").",
+        "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping",
+        "summary": "Pod is crash looping."
+      },
+      "startsAt": "2026-10-26T09:12:04.512Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://prometheus.monitoring:9090/graph?g0.expr=max_over_time%28kube_pod_container_status_waiting_reason%7Breason%3D%22CrashLoopBackOff%22%7D%5B5m%5D%29+%3E%3D+1",
+      "fingerprint": "9c4f1d2b7a8e6c30"
+    },
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "KubePodCrashLooping",
+        "container": "app",
+        "endpoint": "http",
+        "instance": "10.244.2.4:8080",
+        "job": "kube-state-metrics",
+        "namespace": "shop",
+        "pod": "checkout-7d9f8c6b5-m4kzd",
+        "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+        "reason": "CrashLoopBackOff",
+        "service": "kube-prometheus-stack-kube-state-metrics",
+        "severity": "warning",
+        "uid": "0b7e9d1c-6a2f-4e8b-b3c5-8f1a9d2e7c46"
+      },
+      "annotations": {
+        "description": "Pod shop/checkout-7d9f8c6b5-m4kzd (app) is in waiting state (reason: \"CrashLoopBackOff\").",
+        "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping",
+        "summary": "Pod is crash looping."
+      },
+      "startsAt": "2026-10-26T08:41:34.512Z",
+      "endsAt": "2026-10-26T09:06:34.512Z",
+      "generatorURL": "http://prometheus.monitoring:9090/graph?g0.expr=max_over_time%28kube_pod_container_status_waiting_reason%7Breason%3D%22CrashLoopBackOff%22%7D%5B5m%5D%29+%3E%3D+1",
+      "fingerprint": "e21a7b3c9d4f8016"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "KubePodCrashLooping",
+    "namespace": "shop"
+  },
+  "commonLabels": {
+    "alertname": "KubePodCrashLooping",
+    "container": "app",
+    "endpoint": "http",
+    "job": "kube-state-metrics",
+    "namespace": "shop",
+    "prometheus": "monitoring/kube-prometheus-stack-prometheus",
+    "reason": "CrashLoopBackOff",
+    "service": "kube-prometheus-stack-kube-state-metrics",
+    "severity": "warning"
+  },
+  "commonAnnotations": {
+    "runbook_url": "https://runbooks.prometheus-operator.dev/runbooks/kubernetes/kubepodcrashlooping",
+    "summary": "Pod is crash looping."
+  },
+  "externalURL": "http://alertmanager.monitoring:9093",
+  "version": "4",
+  "groupKey": "{}/{namespace=~\"shop\"}:{alertname=\"KubePodCrashLooping\", namespace=\"shop\"}",
+  "truncatedAlerts": 0
+}
