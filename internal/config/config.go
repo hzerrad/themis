@@ -1,8 +1,5 @@
-// Package config loads the Themis configuration file.
-//
-// The file is shaped like the custom resources that will replace it: keys are
-// camelCase and fields use JSON tags, so moving to CRDs changes where the
-// configuration comes from, not its structure.
+// Package config loads the Themis configuration file. It is shaped like the
+// custom resources that will replace it.
 package config
 
 import (
@@ -12,15 +9,15 @@ import (
 	"regexp"
 	"slices"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 
 	"github.com/hzerrad/themis/internal/incident"
 )
 
-// TargetKindPattern is the syntax of a target kind: an UpperCamelCase Kind,
-// then a dot and the API group, which is omitted for the core group. For
-// example Deployment.apps, Rollout.argoproj.io or PersistentVolumeClaim.
+// TargetKindPattern matches Kind.group, with no group for the core group:
+// Deployment.apps, Rollout.argoproj.io, PersistentVolumeClaim.
 const TargetKindPattern = `^[A-Z][A-Za-z0-9]*(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
 
 var targetKindRE = regexp.MustCompile(TargetKindPattern)
@@ -32,35 +29,32 @@ func IsTargetKind(s string) bool {
 
 // Config is the root of the configuration file.
 type Config struct {
-	// EnrolledNamespaces are the namespaces Themis watches. Alerts about any
-	// other namespace are recorded as rejected and never create work. Each must
-	// also be enrolled in the Helm values, which grant the RBAC to read it.
+	// EnrolledNamespaces are the namespaces Themis acts on; alerts about others
+	// are rejected.
 	EnrolledNamespaces []string `json:"enrolledNamespaces" jsonschema:"minItems=1,uniqueItems=true"`
 
 	// Intake configures how alerts reach Themis.
 	Intake Intake `json:"intake"`
 
-	// Profiles classify incoming alerts into incident classes. When several
-	// profiles match an alert, the one with the highest priority wins.
+	// Profiles classify alerts into incident classes; the highest priority match
+	// wins.
 	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
 }
 
 // Intake configures the Alertmanager webhook.
 type Intake struct {
-	// BearerTokenFile is the path to a file holding the token Alertmanager must
-	// send in its Authorization header. In a cluster it is a mounted Secret.
+	// BearerTokenFile holds the token Alertmanager must send as a bearer token.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
 }
 
 // Profile is one incident class and the alerts that belong to it.
 type Profile struct {
-	// Name identifies the profile, for example rollout-regression. It must be a
-	// valid DNS label.
+	// Name is a DNS label, for example rollout-regression.
 	Name string `json:"name" jsonschema:"minLength=1,maxLength=63"`
 
-	// Priority orders profiles that match the same alert; higher wins.
-	// Priorities must be unique, so the choice is always deterministic.
-	Priority int `json:"priority"`
+	// Priority orders profiles matching the same alert; higher wins. Unique,
+	// from 1.
+	Priority int `json:"priority" jsonschema:"minimum=1"`
 
 	// Match decides which alerts belong to this profile.
 	Match Match `json:"match"`
@@ -68,17 +62,13 @@ type Profile struct {
 
 // Match selects alerts. An alert matches when every condition holds.
 type Match struct {
-	// AlertNames lists the alertname values that match, for example
-	// KubePodCrashLooping.
+	// AlertNames lists the alertname values that match.
 	AlertNames []string `json:"alertNames" jsonschema:"minItems=1,uniqueItems=true"`
 
-	// Labels must all be present on the alert with exactly these values.
-	// Other labels on the alert are ignored.
+	// Labels must all be present on the alert with these values.
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// TargetKinds lists the resolved target kinds that match, written as
-	// Kind.group, for example Deployment.apps or StatefulSet.apps. Kinds in
-	// the core API group have no suffix, for example PersistentVolumeClaim.
+	// TargetKinds lists the resolved target kinds that match, as Kind.group.
 	TargetKinds []string `json:"targetKinds" jsonschema:"minItems=1,uniqueItems=true"`
 }
 
@@ -91,8 +81,7 @@ func Load(path string) (Config, error) {
 	return Parse(data)
 }
 
-// Parse parses and validates a configuration document. Unknown and duplicate
-// keys are errors, so a misspelled field is reported instead of ignored.
+// Parse parses and validates a configuration document. Unknown keys are errors.
 func Parse(data []byte) (Config, error) {
 	var c Config
 	if err := yaml.UnmarshalStrict(data, &c); err != nil {
@@ -144,10 +133,14 @@ func (c Config) Validate() error {
 			add(path+".name", "duplicate profile name %q", p.Name)
 		}
 		seenName[p.Name] = true
-		if other, ok := seenPriority[p.Priority]; ok {
-			add(path+".priority", "priority %d is already used by profile %q", p.Priority, other)
+		if p.Priority < 1 {
+			add(path+".priority", "must be at least 1, got %d", p.Priority)
+		} else {
+			if other, ok := seenPriority[p.Priority]; ok {
+				add(path+".priority", "priority %d is already used by profile %q", p.Priority, other)
+			}
+			seenPriority[p.Priority] = p.Name
 		}
-		seenPriority[p.Priority] = p.Name
 
 		if len(p.Match.AlertNames) == 0 {
 			add(path+".match.alertNames", "at least one alert name is required")
@@ -184,8 +177,7 @@ func (c Config) IsEnrolled(ns string) bool {
 	return slices.Contains(c.EnrolledNamespaces, ns)
 }
 
-// TargetKind returns the Kind.group form of t used in TargetKinds. Kinds in
-// the core API group have no suffix, as in kubectl.
+// TargetKind returns t as Kind.group.
 func TargetKind(t incident.TargetRef) string {
 	if t.Group == "" {
 		return t.Kind
@@ -193,10 +185,29 @@ func TargetKind(t incident.TargetRef) string {
 	return t.Kind + "." + t.Group
 }
 
-// MatchProfile returns the highest-priority profile that matches an alert with
-// the given name and labels, resolved to target. It returns false when no
-// profile matches.
-func (c Config) MatchProfile(alertName string, labels map[string]string, target incident.TargetRef) (Profile, bool) {
-	// TODO(you): implement. See the tests in config_test.go.
-	return Profile{}, false
+// MatchProfile returns the highest-priority profile matching the alert.
+func (c Config) MatchProfile(alertName string, lbls map[string]string, target incident.TargetRef) (Profile, bool) {
+	candidates := make([]Profile, 0, len(c.Profiles))
+
+	for _, profile := range c.Profiles {
+		if slices.Contains(profile.Match.AlertNames, alertName) &&
+			slices.Contains(profile.Match.TargetKinds, TargetKind(target)) &&
+			labels.SelectorFromSet(profile.Match.Labels).Matches(labels.Set(lbls)) {
+			candidates = append(candidates, profile)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return Profile{}, false
+	}
+
+	// get the candidate with highest priority
+	highestCandidate := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.Priority > highestCandidate.Priority {
+			highestCandidate = candidate
+		}
+	}
+
+	return highestCandidate, true
 }

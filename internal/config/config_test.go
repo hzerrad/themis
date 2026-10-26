@@ -101,6 +101,8 @@ func TestValidate_Errors(t *testing.T) {
 		{"invalid profile name", func(c *config.Config) { c.Profiles[0].Name = "Rollout Regression" }, "profiles[0].name"},
 		{"duplicate profile name", func(c *config.Config) { c.Profiles[1].Name = c.Profiles[0].Name }, "profiles[1].name"},
 		{"duplicate priority", func(c *config.Config) { c.Profiles[1].Priority = c.Profiles[0].Priority }, "profiles[1].priority"},
+		{"missing priority", func(c *config.Config) { c.Profiles[0].Priority = 0 }, "profiles[0].priority"},
+		{"negative priority", func(c *config.Config) { c.Profiles[1].Priority = -5 }, "profiles[1].priority"},
 		{"no alert names", func(c *config.Config) { c.Profiles[0].Match.AlertNames = nil }, "profiles[0].match.alertNames"},
 		{"empty alert name", func(c *config.Config) { c.Profiles[0].Match.AlertNames[1] = "" }, "profiles[0].match.alertNames[1]"},
 		{"invalid label key", func(c *config.Config) { c.Profiles[1].Match.Labels = map[string]string{"bad key": "x"} }, "profiles[1].match.labels"},
@@ -267,5 +269,19 @@ func TestMatchProfile_PriorityNotFileOrder(t *testing.T) {
 
 	if !ok || p.Name != "critical-crashloop" {
 		t.Fatalf("matched %q (ok=%v), want critical-crashloop", p.Name, ok)
+	}
+}
+
+// MatchProfile does not rely on Validate: a matching profile is returned even
+// when its priority is one Validate would reject.
+func TestMatchProfile_UnvalidatedPriority(t *testing.T) {
+	c := mustParse(t, validYAML)
+	c.Profiles = c.Profiles[:1]
+	c.Profiles[0].Priority = 0
+
+	p, ok := c.MatchProfile("KubePodOOMKilled", nil, deployment)
+
+	if !ok || p.Name != "rollout-regression" {
+		t.Fatalf("matched %q (ok=%v), want rollout-regression", p.Name, ok)
 	}
 }

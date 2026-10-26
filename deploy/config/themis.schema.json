@@ -9,14 +9,14 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "description": "EnrolledNamespaces are the namespaces Themis watches. Alerts about any\nother namespace are recorded as rejected and never create work. Each must\nalso be enrolled in the Helm values, which grant the RBAC to read it."
+      "description": "EnrolledNamespaces are the namespaces Themis acts on; alerts about others\nare rejected."
     },
     "intake": {
       "properties": {
         "bearerTokenFile": {
           "type": "string",
           "minLength": 1,
-          "description": "BearerTokenFile is the path to a file holding the token Alertmanager must\nsend in its Authorization header. In a cluster it is a mounted Secret."
+          "description": "BearerTokenFile holds the token Alertmanager must send as a bearer token."
         }
       },
       "additionalProperties": false,
@@ -33,11 +33,12 @@
             "type": "string",
             "maxLength": 63,
             "minLength": 1,
-            "description": "Name identifies the profile, for example rollout-regression. It must be a\nvalid DNS label."
+            "description": "Name is a DNS label, for example rollout-regression."
           },
           "priority": {
             "type": "integer",
-            "description": "Priority orders profiles that match the same alert; higher wins.\nPriorities must be unique, so the choice is always deterministic."
+            "minimum": 1,
+            "description": "Priority orders profiles matching the same alert; higher wins. Unique,\nfrom 1."
           },
           "match": {
             "properties": {
@@ -48,14 +49,14 @@
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "description": "AlertNames lists the alertname values that match, for example\nKubePodCrashLooping."
+                "description": "AlertNames lists the alertname values that match."
               },
               "labels": {
                 "additionalProperties": {
                   "type": "string"
                 },
                 "type": "object",
-                "description": "Labels must all be present on the alert with exactly these values.\nOther labels on the alert are ignored."
+                "description": "Labels must all be present on the alert with these values."
               },
               "targetKinds": {
                 "items": {
@@ -65,7 +66,7 @@
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "description": "TargetKinds lists the resolved target kinds that match, written as\nKind.group, for example Deployment.apps or StatefulSet.apps. Kinds in\nthe core API group have no suffix, for example PersistentVolumeClaim."
+                "description": "TargetKinds lists the resolved target kinds that match, as Kind.group."
               }
             },
             "additionalProperties": false,
@@ -88,7 +89,7 @@
       },
       "type": "array",
       "minItems": 1,
-      "description": "Profiles classify incoming alerts into incident classes. When several\nprofiles match an alert, the one with the highest priority wins."
+      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins."
     }
   },
   "additionalProperties": false,
