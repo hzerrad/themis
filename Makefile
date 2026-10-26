@@ -91,6 +91,10 @@ endif
 	@mkdir -p internal/store/migrations
 	$(GO_TOOL) goose -dir internal/store/migrations -s create $(name) sql
 
+.PHONY: migrate
+migrate: ## Apply all migrations (Themis and River) to $DATABASE_URL
+	go run ./hack/migrate
+
 # Kubernetes test environment
 
 .PHONY: envtest
