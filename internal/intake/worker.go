@@ -88,6 +88,13 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 		}
 		return store.IncidentArgs{}, nil, fmt.Errorf("resolve target: %w", err)
 	}
+	// The check above avoids reading the cluster for unenrolled namespaces;
+	// this one enforces enrollment on what was actually resolved, so it holds
+	// even if resolution ever leaves the alert's namespace.
+	if !w.Config.IsEnrolled(target.Namespace) {
+		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
+			fmt.Sprintf("target namespace %q is not enrolled", target.Namespace)}, nil
+	}
 
 	profile, ok := w.Config.MatchProfile(a.Name, a.Labels, target)
 	if !ok {
