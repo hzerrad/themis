@@ -32,7 +32,7 @@ type TransitionArgs struct {
 }
 
 func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in IncidentArgs) (string, bool, error) {
-	NewID, err := uuid.NewV7()
+	newID, err := uuid.NewV7()
 	if err != nil {
 		return "", false, fmt.Errorf("failed to create incident ID: %w", err)
 	}
@@ -45,7 +45,7 @@ func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in Incident
 	RETURNING id::text
 `
 
-	row := tx.QueryRow(ctx, sql, NewID, in.Fingerprint, incident.Received,
+	row := tx.QueryRow(ctx, sql, newID, in.Fingerprint, incident.Received,
 		in.Profile, in.Target.Group, in.Target.Kind, in.Target.Namespace,
 		in.Target.Name, in.Target.UID,
 	)
@@ -70,7 +70,7 @@ func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in Incident
 		return "", false, fmt.Errorf("failed to record occurrence: %w", err)
 	}
 
-	return id, NewID.String() == id, nil
+	return id, newID.String() == id, nil
 }
 
 func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) error {
