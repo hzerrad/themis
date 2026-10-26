@@ -16,6 +16,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -24,6 +25,10 @@ import (
 // Env is a client of the test API server, with object builders.
 type Env struct {
 	client.Client
+
+	// Config connects to the test API server, for code that builds its own
+	// clients.
+	Config *rest.Config
 }
 
 // Start starts an API server with the given custom resource definitions. Call
@@ -39,7 +44,7 @@ func Start(crds ...*apiextensionsv1.CustomResourceDefinition) (env *Env, stop fu
 	if err != nil {
 		return nil, nil, errors.Join(err, te.Stop())
 	}
-	return &Env{Client: c}, func() { _ = te.Stop() }, nil
+	return &Env{Client: c, Config: cfg}, func() { _ = te.Stop() }, nil
 }
 
 // assets finds the binaries `make envtest` downloaded, so tests run from an IDE

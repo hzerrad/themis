@@ -6,6 +6,7 @@ package pgtest
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -42,10 +43,9 @@ func start() {
 	connStr, startErr = ctr.ConnectionString(ctx, "sslmode=disable")
 }
 
-// NewStore returns a migrated store on a fresh database, plus its pool for
-// assertions that read tables directly. It skips the test in -short mode,
-// because it needs Docker.
-func NewStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
+// NewDatabase creates an empty database and returns its connection string. It
+// skips the test in -short mode, because it needs Docker.
+func NewDatabase(t *testing.T) string {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("needs Docker; skipped in -short mode")
@@ -66,12 +66,22 @@ func NewStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
 		t.Fatalf("create database: %v", err)
 	}
 
-	cfg, err := pgxpool.ParseConfig(connStr)
+	u, err := url.Parse(connStr)
 	if err != nil {
-		t.Fatalf("parse config: %v", err)
+		t.Fatalf("parse connection string: %v", err)
 	}
-	cfg.ConnConfig.Database = name
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	u.Path = "/" + name
+	return u.String()
+}
+
+// NewStore returns a migrated store on a fresh database, plus its pool for
+// assertions that read tables directly.
+func NewStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
+	t.Helper()
+	dbURL := NewDatabase(t)
+	ctx := t.Context()
+
+	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
