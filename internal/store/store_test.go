@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
@@ -81,6 +82,64 @@ func TestEnqueue_CommitsWithTransaction(t *testing.T) {
 
 	if n := count(t, pool, "SELECT count(*) FROM river_job WHERE kind = 'test'"); n != 1 {
 		t.Errorf("jobs = %d, want 1", n)
+	}
+}
+
+type boundedJobArgs struct{}
+
+func (boundedJobArgs) Kind() string { return "bounded" }
+
+func (boundedJobArgs) InsertOpts() river.InsertOpts { return river.InsertOpts{MaxAttempts: 3} }
+
+func TestEnqueueManyTx_CommitsAll(t *testing.T) {
+	s, pool := newStore(t)
+
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.EnqueueManyTx(t.Context(), tx, []river.JobArgs{testJobArgs{}, testJobArgs{}, boundedJobArgs{}})
+	})
+	if err != nil {
+		t.Fatalf("InTx: %v", err)
+	}
+
+	if n := count(t, pool, "SELECT count(*) FROM river_job"); n != 3 {
+		t.Errorf("jobs = %d, want 3", n)
+	}
+	// Each job keeps its own args' insert options.
+	if n := count(t, pool, "SELECT count(*) FROM river_job WHERE kind = 'bounded' AND max_attempts = 3"); n != 1 {
+		t.Errorf("bounded jobs with max_attempts 3 = %d, want 1", n)
+	}
+}
+
+func TestEnqueueManyTx_RolledBackWithCaller(t *testing.T) {
+	s, pool := newStore(t)
+
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		if err := s.EnqueueManyTx(t.Context(), tx, []river.JobArgs{testJobArgs{}, testJobArgs{}}); err != nil {
+			return err
+		}
+		return errRollback
+	})
+
+	if !errors.Is(err, errRollback) {
+		t.Fatalf("InTx err = %v, want the callback's error", err)
+	}
+	if n := count(t, pool, "SELECT count(*) FROM river_job"); n != 0 {
+		t.Errorf("jobs = %d, want 0", n)
+	}
+}
+
+func TestEnqueueManyTx_NoJobs(t *testing.T) {
+	s, pool := newStore(t)
+
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.EnqueueManyTx(t.Context(), tx, nil)
+	})
+
+	if err != nil {
+		t.Fatalf("EnqueueManyTx(nil): %v", err)
+	}
+	if n := count(t, pool, "SELECT count(*) FROM river_job"); n != 0 {
+		t.Errorf("jobs = %d, want 0", n)
 	}
 }
 
