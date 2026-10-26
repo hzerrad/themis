@@ -1,4 +1,4 @@
-package intake_test
+package alertmanager_test
 
 import (
 	"errors"
@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hzerrad/themis/internal/intake"
+	"github.com/hzerrad/themis/internal/intake/alertmanager"
 )
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "test", "fixtures", "alerts", name))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name))
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -23,13 +23,13 @@ func readFixture(t *testing.T, name string) []byte {
 // A payload as kube-prometheus-stack's Alertmanager sends it: one group with a
 // firing and a resolved alert.
 func TestParseAlertmanagerPayload_Fixture(t *testing.T) {
-	p, err := intake.ParseAlertmanagerPayload(readFixture(t, "kube-pod-crashlooping.json"))
+	p, err := alertmanager.ParsePayload(readFixture(t, "kube-pod-crashlooping.json"))
 	if err != nil {
-		t.Fatalf("ParseAlertmanagerPayload: %v", err)
+		t.Fatalf("ParsePayload: %v", err)
 	}
 
-	if p.Version != intake.AlertmanagerPayloadVersion {
-		t.Errorf("Version = %q, want %q", p.Version, intake.AlertmanagerPayloadVersion)
+	if p.Version != alertmanager.PayloadVersion {
+		t.Errorf("Version = %q, want %q", p.Version, alertmanager.PayloadVersion)
 	}
 	if p.TruncatedAlerts != 0 {
 		t.Errorf("TruncatedAlerts = %d, want 0", p.TruncatedAlerts)
@@ -63,9 +63,9 @@ func TestParseAlertmanagerPayload_Fixture(t *testing.T) {
 
 // The JSON key is camelCase; a mistyped tag would silently decode to 0.
 func TestParseAlertmanagerPayload_TruncatedAlerts(t *testing.T) {
-	p, err := intake.ParseAlertmanagerPayload([]byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
+	p, err := alertmanager.ParsePayload([]byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
 	if err != nil {
-		t.Fatalf("ParseAlertmanagerPayload: %v", err)
+		t.Fatalf("ParsePayload: %v", err)
 	}
 	if p.TruncatedAlerts != 3 {
 		t.Errorf("TruncatedAlerts = %d, want 3", p.TruncatedAlerts)
@@ -78,19 +78,19 @@ func TestParseAlertmanagerPayload_Errors(t *testing.T) {
 		body string
 		want error
 	}{
-		{"other version", `{"version":"5","alerts":[]}`, intake.ErrUnsupportedAlertmanagerPayloadVersion},
-		{"missing version", `{"alerts":[]}`, intake.ErrUnsupportedAlertmanagerPayloadVersion},
-		{"version as a number", `{"version":4,"alerts":[]}`, intake.ErrParseFailed},
-		{"empty body", ``, intake.ErrParseFailed},
-		{"not JSON", `version=4`, intake.ErrParseFailed},
-		{"not an object", `[{"version":"4"}]`, intake.ErrParseFailed},
-		{"wrong field type", `{"version":"4","alerts":"none"}`, intake.ErrParseFailed},
-		{"duplicate key", `{"version":"4","version":"4","alerts":[]}`, intake.ErrParseFailed},
-		{"trailing data", `{"version":"4","alerts":[]} {}`, intake.ErrParseFailed},
+		{"other version", `{"version":"5","alerts":[]}`, alertmanager.ErrUnsupportedVersion},
+		{"missing version", `{"alerts":[]}`, alertmanager.ErrUnsupportedVersion},
+		{"version as a number", `{"version":4,"alerts":[]}`, alertmanager.ErrParseFailed},
+		{"empty body", ``, alertmanager.ErrParseFailed},
+		{"not JSON", `version=4`, alertmanager.ErrParseFailed},
+		{"not an object", `[{"version":"4"}]`, alertmanager.ErrParseFailed},
+		{"wrong field type", `{"version":"4","alerts":"none"}`, alertmanager.ErrParseFailed},
+		{"duplicate key", `{"version":"4","version":"4","alerts":[]}`, alertmanager.ErrParseFailed},
+		{"trailing data", `{"version":"4","alerts":[]} {}`, alertmanager.ErrParseFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := intake.ParseAlertmanagerPayload([]byte(tt.body))
+			p, err := alertmanager.ParsePayload([]byte(tt.body))
 
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("err = %v, want %v", err, tt.want)
@@ -105,7 +105,7 @@ func TestParseAlertmanagerPayload_Errors(t *testing.T) {
 // The version error names the version received, so an operator can tell
 // which Alertmanager sent it.
 func TestParseAlertmanagerPayload_VersionErrorNamesVersion(t *testing.T) {
-	_, err := intake.ParseAlertmanagerPayload([]byte(`{"version":"5","alerts":[]}`))
+	_, err := alertmanager.ParsePayload([]byte(`{"version":"5","alerts":[]}`))
 
 	if err == nil || !strings.Contains(err.Error(), `"5"`) {
 		t.Errorf("err = %v, want it to name version \"5\"", err)
@@ -114,9 +114,9 @@ func TestParseAlertmanagerPayload_VersionErrorNamesVersion(t *testing.T) {
 
 // The parse error keeps the decoder's cause, so logs show what was wrong.
 func TestParseAlertmanagerPayload_ParseErrorKeepsCause(t *testing.T) {
-	_, err := intake.ParseAlertmanagerPayload([]byte(`{"version":"4","version":"4"}`))
+	_, err := alertmanager.ParsePayload([]byte(`{"version":"4","version":"4"}`))
 
-	if err == nil || err.Error() == intake.ErrParseFailed.Error() {
+	if err == nil || err.Error() == alertmanager.ErrParseFailed.Error() {
 		t.Errorf("err = %v, want the sentinel plus the decoder's cause", err)
 	}
 }

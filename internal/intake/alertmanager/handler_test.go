@@ -1,4 +1,4 @@
-package intake_test
+package alertmanager_test
 
 import (
 	"bytes"
@@ -15,10 +15,13 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/intake"
+	"github.com/hzerrad/themis/internal/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
 const token = "s3cret-token"
+
+var receivedAt = time.Date(2026, 10, 26, 9, 12, 5, 0, time.UTC)
 
 // fakeReceiver records what the handler hands over.
 type fakeReceiver struct {
@@ -46,10 +49,10 @@ func writeToken(t *testing.T, content string) string {
 	return path
 }
 
-func newHandler(t *testing.T, r intake.AlertReceiver) (*intake.AlertmanagerHandler, *bytes.Buffer) {
+func newHandler(t *testing.T, r alertmanager.Receiver) (*alertmanager.Handler, *bytes.Buffer) {
 	t.Helper()
 	var logs bytes.Buffer
-	return &intake.AlertmanagerHandler{
+	return &alertmanager.Handler{
 		Receiver:  r,
 		TokenFile: writeToken(t, token+"\n"),
 		Logger:    slog.New(slog.NewTextHandler(&logs, nil)),
@@ -145,9 +148,9 @@ func TestAlertmanagerHandler_TokenRotation(t *testing.T) {
 // Themis's own misconfiguration is a 503, so Alertmanager retries; an empty
 // token file never lets an empty bearer token through.
 func TestAlertmanagerHandler_TokenFileProblems(t *testing.T) {
-	tests := map[string]func(h *intake.AlertmanagerHandler){
-		"missing file": func(h *intake.AlertmanagerHandler) { h.TokenFile = filepath.Join(t.TempDir(), "absent") },
-		"empty file":   func(h *intake.AlertmanagerHandler) { h.TokenFile = writeToken(t, "\n") },
+	tests := map[string]func(h *alertmanager.Handler){
+		"missing file": func(h *alertmanager.Handler) { h.TokenFile = filepath.Join(t.TempDir(), "absent") },
+		"empty file":   func(h *alertmanager.Handler) { h.TokenFile = writeToken(t, "\n") },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -195,7 +198,7 @@ func TestAlertmanagerHandler_BadPayload(t *testing.T) {
 func TestAlertmanagerHandler_TooLarge(t *testing.T) {
 	r := &fakeReceiver{}
 	h, _ := newHandler(t, r)
-	body := append([]byte(`{"version":"4","alerts":[],"pad":"`), bytes.Repeat([]byte("x"), intake.MaxAlertmanagerBodyBytes)...)
+	body := append([]byte(`{"version":"4","alerts":[],"pad":"`), bytes.Repeat([]byte("x"), alertmanager.MaxBodyBytes)...)
 
 	rec := post(h, "Bearer "+token, body)
 
@@ -246,11 +249,11 @@ func TestAlertmanagerHandler_WarnsWhenTruncated(t *testing.T) {
 	}
 }
 
-// Registered at AlertmanagerRoute, other methods are refused by the mux.
+// Registered at Route, other methods are refused by the mux.
 func TestAlertmanagerHandler_RouteRefusesOtherMethods(t *testing.T) {
 	h, _ := newHandler(t, &fakeReceiver{})
 	mux := http.NewServeMux()
-	mux.Handle(intake.AlertmanagerRoute, h)
+	mux.Handle(alertmanager.Route, h)
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/intake/alertmanager", nil))

@@ -1,5 +1,6 @@
-// Package intake turns alerts into incidents.
-package intake
+// Package target finds the workload an alert is about: the object its labels
+// name, followed up controller owner references to the top.
+package target
 
 import (
 	"context"
@@ -30,10 +31,8 @@ type LabelKind struct {
 	Kind  schema.GroupKind
 }
 
-// ObjectLabels are the alert labels that name an object, in the order they are
-// tried. They follow kube-state-metrics and kubelet label names. Labels that
-// name a workload come before pod, because they name the workload directly.
-// Supporting another alert family is usually one more entry here.
+// ObjectLabels are the alert labels that name an object, in the order tried:
+// workloads before pod.
 var ObjectLabels = []LabelKind{
 	{Label: "deployment", Kind: schema.GroupKind{Group: "apps", Kind: "Deployment"}},
 	{Label: "statefulset", Kind: schema.GroupKind{Group: "apps", Kind: "StatefulSet"}},
@@ -43,47 +42,21 @@ var ObjectLabels = []LabelKind{
 	{Label: "pod", Kind: schema.GroupKind{Kind: "Pod"}},
 }
 
-// MaxOwnerDepth bounds the walk up controller owner references, so a cycle of
-// owner references cannot loop forever. Real chains are 3 or fewer hops.
+// MaxOwnerDepth bounds the owner walk against reference cycles.
 const MaxOwnerDepth = 8
 
-// Reasons an alert's target cannot be resolved. Each becomes the reason
-// recorded on the rejected alert.
+// Reasons an alert's target cannot be resolved.
 var (
-	// ErrMissingLabels the alert has no namespace label, or none of the
-	// labels that name an object.
-	ErrMissingLabels = errors.New("alert has no labels naming an object")
-
-	// ErrInvalidOverride themis_target is not of the form <Kind.group>/<name>,
-	// where Kind.group follows config.TargetKindPattern.
-	ErrInvalidOverride = errors.New("themis_target must be <Kind.group>/<name>")
-
-	// ErrUnknownKind the cluster does not serve the kind, for example a
-	// misspelled override or a CRD that is not installed.
-	ErrUnknownKind = errors.New("kind not served by the cluster")
-
-	// ErrNotFound an object on the way to the target does not exist, or an
-	// owner reference points at an object that has since been recreated.
-	ErrNotFound = errors.New("target not found")
-
-	// ErrOwnerChainTooLong following controller owner references did not end
-	// within MaxOwnerDepth hops, which means the references form a cycle.
+	ErrMissingLabels     = errors.New("alert has no labels naming an object")
+	ErrInvalidOverride   = errors.New("themis_target must be <Kind.group>/<name>")
+	ErrUnknownKind       = errors.New("kind not served by the cluster")
+	ErrNotFound          = errors.New("target not found")
 	ErrOwnerChainTooLong = errors.New("owner reference chain too long")
 )
 
-// ResolveTarget finds the object an alert is about.
-//
-//  1. themis_target (<Kind.group>/<name>, for example Deployment.apps/api) is
-//     an explicit override and is returned as named, without walking owners.
-//  2. Otherwise the first label in ObjectLabels that is set names an object,
-//     and controller owner references are followed up from it until an
-//     object has no controller. That top-level object is the target, whatever
-//     its kind: whether Themis handles that kind is decided by the profiles.
-//
-// Objects are looked up in the alert's namespace, or at cluster scope for
-// cluster-scoped kinds. Empty label values count as absent.
-// The returned target always carries the UID of the live object.
-func ResolveTarget(ctx context.Context, c client.Reader, mapper meta.RESTMapper, labels map[string]string) (incident.TargetRef, error) {
+// Resolve finds the object an alert is about: themis_target as named, or the
+// first ObjectLabels object followed up controller owners to the top.
+func Resolve(ctx context.Context, c client.Reader, mapper meta.RESTMapper, labels map[string]string) (incident.TargetRef, error) {
 	ns := labels[LabelNamespace]
 	if ns == "" {
 		return incident.TargetRef{}, ErrMissingLabels
