@@ -61,6 +61,17 @@ func TestParse_ExampleFile(t *testing.T) {
 	}
 }
 
+// The configuration `make run` uses must stay valid as the schema evolves.
+func TestParse_DevFile(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "hack", "dev", "themis.yaml"))
+	if err != nil {
+		t.Fatalf("read dev config: %v", err)
+	}
+	if _, err := config.Parse(data); err != nil {
+		t.Fatalf("hack/dev/themis.yaml is invalid: %v", err)
+	}
+}
+
 func TestParse_UnknownFieldIsAnError(t *testing.T) {
 	doc := strings.Replace(validYAML, "priority: 100", "priority: 100\n    prority: 5", 1)
 

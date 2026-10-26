@@ -109,3 +109,22 @@ kind-up: ## Create the local kind cluster
 
 kind-down: ## Delete the local kind cluster
 	$(GO_TOOL) kind delete cluster --name $(KIND_CLUSTER)
+
+# Running locally
+
+DEV_TOKEN := bin/dev/intake-token
+
+.PHONY: run
+run: ## Run themis-core locally against the kind cluster and $DATABASE_URL
+	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
+	@mkdir -p $(dir $(DEV_TOKEN))
+	@test -s $(DEV_TOKEN) || { openssl rand -hex 32 > $(DEV_TOKEN) && chmod 600 $(DEV_TOKEN); }
+	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER)
+
+.PHONY: send-alert
+send-alert: ## Post the sample Alertmanager payload to a running `make run`
+	curl -sS -X POST http://localhost:8080/v1/intake/alertmanager \
+		-H "Authorization: Bearer $$(cat $(DEV_TOKEN))" \
+		-H "Content-Type: application/json" \
+		--data @test/fixtures/alerts/kube-pod-crashlooping.json
+	@echo
