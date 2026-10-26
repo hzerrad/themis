@@ -47,6 +47,23 @@ func (s *Store) EnqueueTx(ctx context.Context, tx pgx.Tx, args river.JobArgs) er
 	return nil
 }
 
+// EnqueueManyTx enqueues jobs in one statement, in the caller's transaction:
+// they become visible together when it commits, or not at all. Each job uses
+// its args' InsertOpts, if any.
+func (s *Store) EnqueueManyTx(ctx context.Context, tx pgx.Tx, args []river.JobArgs) error {
+	if len(args) == 0 {
+		return nil
+	}
+	params := make([]river.InsertManyParams, len(args))
+	for i, a := range args {
+		params[i] = river.InsertManyParams{Args: a}
+	}
+	if _, err := s.river.InsertManyTx(ctx, tx, params); err != nil {
+		return fmt.Errorf("enqueue %d jobs: %w", len(args), err)
+	}
+	return nil
+}
+
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	sub, err := fs.Sub(migrationsFS, "migrations")
 	if err != nil {
