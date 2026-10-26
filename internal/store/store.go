@@ -36,6 +36,11 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 	}, nil
 }
 
+// Ping reports whether the database answers.
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
 func (s *Store) InTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, s.pool, fn)
 }
