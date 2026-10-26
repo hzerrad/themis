@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -35,6 +36,14 @@ func run(url string) error {
 		return fmt.Errorf("connect: %w", err)
 	}
 	defer pool.Close()
+
+	// Without a deadline, an unreachable server (for example a firewall
+	// dropping packets) makes the first query wait forever.
+	pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := pool.Ping(pingCtx); err != nil {
+		return fmt.Errorf("database unreachable: %w", err)
+	}
 
 	if err := store.Migrate(ctx, pool); err != nil {
 		return err
