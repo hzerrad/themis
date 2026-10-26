@@ -23,6 +23,17 @@ Models propose; deterministic controls decide. A Kubernetes write is never consi
 | `themis-executor` | Go | Executes approved, digest-bound actions after independent re-verification; installed only in write mode |
 | PostgreSQL | | Durable state, audit trail, and job queue |
 
+## Supported versions
+
+Themis supports the same Kubernetes releases the Kubernetes project maintains: the three most recent minor versions. The window moves with each Kubernetes release.
+
+| Dependency | Supported |
+|---|---|
+| Kubernetes | 1.35, 1.36, 1.37 |
+| Alertmanager | any release sending webhook payload version `4` |
+
+Versions outside the window are not tested and may not work. The Helm chart refuses to install on an older Kubernetes, and Themis rejects Alertmanager webhooks of an unknown payload version.
+
 ## Development
 
 Requirements: Go, [uv](https://docs.astral.sh/uv/), Node.js, Docker, and Helm. Other tools (buf, golangci-lint, kind) are pinned in `tools/go.mod` and run through `go tool`, so no separate install is needed.
