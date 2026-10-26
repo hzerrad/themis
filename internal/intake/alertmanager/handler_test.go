@@ -16,6 +16,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -75,7 +76,7 @@ func fixture(t *testing.T) []byte {
 	return readFixture(t, "kube-pod-crashlooping.json")
 }
 
-func TestAlertmanagerHandler_Accepts(t *testing.T) {
+func TestHandler_Accepts(t *testing.T) {
 	r := &fakeReceiver{}
 	h, _ := newHandler(t, r)
 
@@ -96,7 +97,7 @@ func TestAlertmanagerHandler_Accepts(t *testing.T) {
 	}
 }
 
-func TestAlertmanagerHandler_Unauthorized(t *testing.T) {
+func TestHandler_Unauthorized(t *testing.T) {
 	tests := map[string]string{
 		"no header":    "",
 		"wrong token":  "Bearer not-the-token",
@@ -122,7 +123,7 @@ func TestAlertmanagerHandler_Unauthorized(t *testing.T) {
 }
 
 // The scheme is case-insensitive (RFC 7235).
-func TestAlertmanagerHandler_LowercaseScheme(t *testing.T) {
+func TestHandler_LowercaseScheme(t *testing.T) {
 	h, _ := newHandler(t, &fakeReceiver{})
 
 	if rec := post(h, "bearer "+token, fixture(t)); rec.Code != http.StatusAccepted {
@@ -131,7 +132,7 @@ func TestAlertmanagerHandler_LowercaseScheme(t *testing.T) {
 }
 
 // A rotated Secret takes effect on the next request, without a restart.
-func TestAlertmanagerHandler_TokenRotation(t *testing.T) {
+func TestHandler_TokenRotation(t *testing.T) {
 	h, _ := newHandler(t, &fakeReceiver{})
 	if err := os.WriteFile(h.TokenFile, []byte("rotated-token"), 0o600); err != nil {
 		t.Fatalf("rotate token: %v", err)
@@ -147,7 +148,7 @@ func TestAlertmanagerHandler_TokenRotation(t *testing.T) {
 
 // Themis's own misconfiguration is a 503, so Alertmanager retries; an empty
 // token file never lets an empty bearer token through.
-func TestAlertmanagerHandler_TokenFileProblems(t *testing.T) {
+func TestHandler_TokenFileProblems(t *testing.T) {
 	tests := map[string]func(h *alertmanager.Handler){
 		"missing file": func(h *alertmanager.Handler) { h.TokenFile = filepath.Join(t.TempDir(), "absent") },
 		"empty file":   func(h *alertmanager.Handler) { h.TokenFile = writeToken(t, "\n") },
@@ -173,7 +174,7 @@ func TestAlertmanagerHandler_TokenFileProblems(t *testing.T) {
 	}
 }
 
-func TestAlertmanagerHandler_BadPayload(t *testing.T) {
+func TestHandler_BadPayload(t *testing.T) {
 	tests := map[string]string{
 		"not JSON":    `version=4`,
 		"old version": `{"version":"3","alerts":[]}`,
@@ -195,7 +196,7 @@ func TestAlertmanagerHandler_BadPayload(t *testing.T) {
 	}
 }
 
-func TestAlertmanagerHandler_TooLarge(t *testing.T) {
+func TestHandler_TooLarge(t *testing.T) {
 	r := &fakeReceiver{}
 	h, _ := newHandler(t, r)
 	body := append([]byte(`{"version":"4","alerts":[],"pad":"`), bytes.Repeat([]byte("x"), alertmanager.MaxBodyBytes)...)
@@ -210,7 +211,7 @@ func TestAlertmanagerHandler_TooLarge(t *testing.T) {
 	}
 }
 
-func TestAlertmanagerHandler_StoreFailureIs503(t *testing.T) {
+func TestHandler_StoreFailureIs503(t *testing.T) {
 	h, logs := newHandler(t, &fakeReceiver{err: errors.New("database down")})
 
 	rec := post(h, "Bearer "+token, fixture(t))
@@ -224,7 +225,7 @@ func TestAlertmanagerHandler_StoreFailureIs503(t *testing.T) {
 }
 
 // One malformed alert does not cost the request: it is handed over as invalid.
-func TestAlertmanagerHandler_InvalidAlertStillAccepted(t *testing.T) {
+func TestHandler_InvalidAlertStillAccepted(t *testing.T) {
 	r := &fakeReceiver{}
 	h, _ := newHandler(t, r)
 	body := []byte(`{"version":"4","alerts":[
@@ -239,7 +240,7 @@ func TestAlertmanagerHandler_InvalidAlertStillAccepted(t *testing.T) {
 	}
 }
 
-func TestAlertmanagerHandler_WarnsWhenTruncated(t *testing.T) {
+func TestHandler_WarnsWhenTruncated(t *testing.T) {
 	h, logs := newHandler(t, &fakeReceiver{})
 
 	post(h, "Bearer "+token, []byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
@@ -250,7 +251,7 @@ func TestAlertmanagerHandler_WarnsWhenTruncated(t *testing.T) {
 }
 
 // Registered at Route, other methods are refused by the mux.
-func TestAlertmanagerHandler_RouteRefusesOtherMethods(t *testing.T) {
+func TestHandler_RouteRefusesOtherMethods(t *testing.T) {
 	h, _ := newHandler(t, &fakeReceiver{})
 	mux := http.NewServeMux()
 	mux.Handle(alertmanager.Route, h)
@@ -264,7 +265,7 @@ func TestAlertmanagerHandler_RouteRefusesOtherMethods(t *testing.T) {
 }
 
 // End to end with the real receiver: the fixture's alerts become jobs.
-func TestAlertmanagerHandler_StoresJobs(t *testing.T) {
+func TestHandler_StoresJobs(t *testing.T) {
 	s, pool := pgtest.NewStore(t)
 	h, _ := newHandler(t, intake.NewReceiver(s))
 
@@ -273,5 +274,34 @@ func TestAlertmanagerHandler_StoresJobs(t *testing.T) {
 	}
 	if n := pgtest.Count(t, pool, `SELECT count(*) FROM river_job WHERE kind = 'process_alert'`); n != 2 {
 		t.Errorf("process_alert jobs = %d, want 2", n)
+	}
+}
+
+// Every answer is counted by status code, refusals included.
+func TestHandler_CountsRequests(t *testing.T) {
+	const name = "themis_intake_requests_total"
+	accepted := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "202"})
+	unauthorized := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "401"})
+	h, _ := newHandler(t, &fakeReceiver{})
+
+	post(h, "Bearer "+token, fixture(t))
+	post(h, "Bearer wrong", fixture(t))
+
+	if got := accepted(); got != 1 {
+		t.Errorf("202 count changed by %v, want 1", got)
+	}
+	if got := unauthorized(); got != 1 {
+		t.Errorf("401 count changed by %v, want 1", got)
+	}
+}
+
+func TestHandler_CountsTruncated(t *testing.T) {
+	truncated := metrictest.Delta(t, "themis_intake_truncated_alerts_total", map[string]string{"source": alertmanager.Source})
+	h, _ := newHandler(t, &fakeReceiver{})
+
+	post(h, "Bearer "+token, []byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
+
+	if got := truncated(); got != 3 {
+		t.Errorf("truncated count changed by %v, want 3", got)
 	}
 }

@@ -11,33 +11,23 @@ import (
 	"github.com/hzerrad/themis/internal/target"
 )
 
-// Receiver stores what a source sent, whatever the source. It is the only part
-// of intake that a source's HTTP handler calls after translating a request,
-// and the only part that writes to the database at request time.
+// Receiver stores what any source sent.
 type Receiver struct {
 	store *store.Store
 }
 
-// NewReceiver returns a Receiver that stores into s.
 func NewReceiver(s *store.Store) *Receiver {
 	return &Receiver{store: s}
 }
 
 // Received counts what Receive stored.
 type Received struct {
-	// Accepted alerts are queued for processing, one process_alert job each.
 	Accepted int
-
-	// Rejected alerts could not be translated and are recorded as rejections
-	// with reason invalid_alert.
 	Rejected int
 }
 
 // Receive stores one request's alerts in one transaction: a process_alert job
-// for each valid alert and a rejection for each invalid one. Either everything
-// is stored or nothing is, so a sender that retries after an error does not
-// leave duplicates behind. An error means nothing was stored; the handler
-// answers 503 so that the sender retries.
+// per valid alert and a rejection per invalid one.
 func (r *Receiver) Receive(ctx context.Context, alerts []Alert, invalid []InvalidAlert) (Received, error) {
 	if len(alerts) == 0 && len(invalid) == 0 {
 		return Received{}, nil
@@ -61,6 +51,12 @@ func (r *Receiver) Receive(ctx context.Context, alerts []Alert, invalid []Invali
 	})
 	if err != nil {
 		return Received{}, fmt.Errorf("store received alerts: %w", err)
+	}
+	for _, a := range alerts {
+		alertsReceived.WithLabelValues(a.Source, "accepted").Inc()
+	}
+	for _, a := range invalid {
+		alertsReceived.WithLabelValues(a.Source, "invalid").Inc()
 	}
 	return Received{Accepted: len(alerts), Rejected: len(invalid)}, nil
 }

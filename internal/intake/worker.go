@@ -23,32 +23,27 @@ import (
 const actor = "intake"
 
 // ProcessAlertWorker turns a received alert into an incident occurrence, the
-// end of an incident, or a rejection.
-//
-// A firing alert is checked for enrollment, resolved to its target workload
-// and matched to a profile; it then creates or joins the incident for that
-// profile and target. A resolved alert is found by its identity at the source,
-// without reading the cluster, because its target may be gone; when none of
-// the incident's alerts still fires and no fix is in flight, the incident
-// closes as self_resolved.
-//
-// Each outcome is stored in one transaction together with the job's
-// completion, so a crash cannot apply it twice. Errors that are answers become
-// rejections; others are returned so that River retries, and on the last
-// attempt they become a processing_failed rejection.
+// end of an incident, or a rejection. Each outcome commits with the job's
+// completion; transient errors are retried, then rejected as processing_failed.
 type ProcessAlertWorker struct {
 	river.WorkerDefaults[ProcessAlertArgs]
 
 	Config config.Config
 	Store  *store.Store
 
-	// Reader and Mapper read the cluster to resolve targets.
 	Reader client.Reader
 	Mapper meta.RESTMapper
 }
 
-// Work processes one alert.
 func (w *ProcessAlertWorker) Work(ctx context.Context, job *river.Job[ProcessAlertArgs]) error {
+	err := w.work(ctx, job)
+	if err != nil {
+		alertsProcessed.WithLabelValues(outcomeRetried, "").Inc()
+	}
+	return err
+}
+
+func (w *ProcessAlertWorker) work(ctx context.Context, job *river.Job[ProcessAlertArgs]) error {
 	a := job.Args.Alert
 	if a.Status == AlertResolved {
 		return w.resolve(ctx, job)
@@ -74,8 +69,8 @@ type rejected struct {
 	detail string
 }
 
-// judge decides what a firing alert is about. It returns the incident to
-// create or join, or why the alert is rejected, or an error worth retrying.
+// judge returns the incident a firing alert belongs to, or why it is rejected,
+// or an error worth retrying.
 func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.IncidentArgs, *rejected, error) {
 	if ns := a.Labels[target.LabelNamespace]; ns != "" && !w.Config.IsEnrolled(ns) {
 		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
@@ -89,9 +84,7 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 		}
 		return store.IncidentArgs{}, nil, fmt.Errorf("resolve target: %w", err)
 	}
-	// The check above avoids reading the cluster for unenrolled namespaces;
-	// this one enforces enrollment on what was actually resolved, so it holds
-	// even if resolution ever leaves the alert's namespace.
+	// Enforced again on what was resolved, not only on the alert's label.
 	if !w.Config.IsEnrolled(ref.Namespace) {
 		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
 			fmt.Sprintf("target namespace %q is not enrolled", ref.Namespace)}, nil
@@ -111,9 +104,7 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 	}, nil, nil
 }
 
-// rejectionReason classifies a target resolution error. Errors that are an
-// answer, which retrying cannot change, are rejections. Anything else, such as
-// the API server being unreachable, is not, so the caller retries.
+// rejectionReason classifies resolution errors that retrying cannot change.
 func rejectionReason(err error) (store.AlertRejectionReason, bool) {
 	switch {
 	case errors.Is(err, target.ErrMissingLabels):
@@ -127,20 +118,22 @@ func rejectionReason(err error) (store.AlertRejectionReason, bool) {
 	case errors.Is(err, target.ErrOwnerChainTooLong):
 		return store.RejectionOwnerChainTooLong, true
 	case apierrors.IsForbidden(err):
-		// Themis lacks RBAC on the namespace: a misconfiguration that
-		// retrying never fixes.
 		return store.RejectionForbidden, true
 	default:
 		return "", false
 	}
 }
 
-// fire creates or joins the incident, records the alert as firing in it, and
-// queues the investigation of a new incident.
+// fire creates or joins the incident and queues the investigation of a new one.
 func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAlertArgs], in store.IncidentArgs) error {
 	a := job.Args.Alert
-	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		id, created, err := w.Store.CreateOrJoinIncident(ctx, tx, in)
+	var created bool
+	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		var (
+			id  string
+			err error
+		)
+		id, created, err = w.Store.CreateOrJoinIncident(ctx, tx, in)
 		if err != nil {
 			return err
 		}
@@ -157,14 +150,22 @@ func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAle
 		}
 		return complete(ctx, tx, job)
 	})
+	if err != nil {
+		return err
+	}
+	if created {
+		alertsProcessed.WithLabelValues(outcomeCreated, "").Inc()
+	} else {
+		alertsProcessed.WithLabelValues(outcomeJoined, "").Inc()
+	}
+	return nil
 }
 
-// resolve marks the alert resolved in its open incidents, and closes each
-// incident that has no firing alert left and no fix in flight. An alert that
-// belongs to no open incident has nothing to resolve.
+// resolve marks the alert resolved and closes incidents with no firing alert
+// left and no fix in flight.
 func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[ProcessAlertArgs]) error {
 	a := job.Args.Alert
-	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
+	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		incidents, err := w.Store.ResolveAlert(ctx, tx, store.ResolvedAlertArgs{
 			Source: a.Source, SourceID: a.SourceID, StartsAt: a.StartsAt, EndsAt: a.EndsAt,
 		})
@@ -172,8 +173,6 @@ func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[Process
 			return err
 		}
 		for _, inc := range incidents {
-			// A fix in flight cannot move to self_resolved: verification
-			// decides its outcome, not the alert.
 			if inc.Firing > 0 || !incident.CanTransition(inc.State, incident.SelfResolved) {
 				continue
 			}
@@ -187,12 +186,17 @@ func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[Process
 		}
 		return complete(ctx, tx, job)
 	})
+	if err != nil {
+		return err
+	}
+	alertsProcessed.WithLabelValues(outcomeResolved, "").Inc()
+	return nil
 }
 
 // reject records why the alert did not become an incident.
 func (w *ProcessAlertWorker) reject(ctx context.Context, job *river.Job[ProcessAlertArgs], r rejected) error {
 	a := job.Args.Alert
-	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
+	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		_, err := w.Store.InsertRejectedAlert(ctx, tx, store.RejectedAlertArgs{
 			Source:     a.Source,
 			ReceivedAt: a.ReceivedAt,
@@ -207,10 +211,14 @@ func (w *ProcessAlertWorker) reject(ctx context.Context, job *river.Job[ProcessA
 		}
 		return complete(ctx, tx, job)
 	})
+	if err != nil {
+		return err
+	}
+	alertsProcessed.WithLabelValues(outcomeRejected, string(r.reason)).Inc()
+	return nil
 }
 
-// complete marks the job done in tx, so its outcome and its completion commit
-// together.
+// complete marks the job done in tx.
 func complete(ctx context.Context, tx pgx.Tx, job *river.Job[ProcessAlertArgs]) error {
 	if _, err := river.JobCompleteTx[*riverpgxv5.Driver](ctx, tx, job); err != nil {
 		return fmt.Errorf("complete job %d: %w", job.ID, err)
