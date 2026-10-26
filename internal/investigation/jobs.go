@@ -1,12 +1,20 @@
 // Package investigation runs the investigation of an incident.
 package investigation
 
-// InvestigateArgs are the arguments of the job that investigates a new
-// incident. It is queued in the same transaction that creates the incident.
+import "github.com/riverqueue/river"
+
+// Queue holds investigate jobs apart from the default queue.
+const Queue = "investigation"
+
+// InvestigateArgs investigate a new incident.
 type InvestigateArgs struct {
 	IncidentID string `json:"incidentID"`
 }
 
-// Kind is the job's type name. It is persisted with every job, so it must
-// never change once released: queued jobs with the old name would never run.
+// Kind is persisted with each job and must never change.
 func (InvestigateArgs) Kind() string { return "investigate" }
+
+// InsertOpts puts every investigate job on Queue.
+func (InvestigateArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{Queue: Queue}
+}
