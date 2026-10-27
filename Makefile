@@ -110,6 +110,24 @@ kind-up: ## Create the local kind cluster
 kind-down: ## Delete the local kind cluster
 	$(GO_TOOL) kind delete cluster --name $(KIND_CLUSTER)
 
+# Scenario 1 on the kind cluster. Every command names the kind context, so the
+# current kubectl context, which may be a real cluster, is never touched.
+KUBECTL := kubectl --context kind-$(KIND_CLUSTER)
+
+.PHONY: demo-up demo-break demo-fix demo-down
+demo-up: ## Deploy the healthy checkout workload (revision 1) to kind
+	$(KUBECTL) apply -f hack/dev/demo/checkout.yaml
+	$(KUBECTL) -n shop rollout status deployment/checkout --timeout=120s
+
+demo-break: ## Roll out a revision of checkout that is OOMKilled on every start
+	$(KUBECTL) -n shop set env deployment/checkout MODE=leak
+
+demo-fix: ## Roll checkout back to its previous revision
+	$(KUBECTL) -n shop rollout undo deployment/checkout
+
+demo-down: ## Remove the checkout workload
+	$(KUBECTL) delete -f hack/dev/demo/checkout.yaml --ignore-not-found
+
 # Running locally
 
 DEV_TOKEN := bin/dev/intake-token

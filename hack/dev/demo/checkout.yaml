@@ -1,0 +1,57 @@
+# A workload for the local kind cluster that reproduces scenario 1, the bad
+# rollout. `make demo-up` deploys a healthy revision 1; `make demo-break` sets
+# MODE=leak, which creates revision 2: its container fills memory until it is
+# OOMKilled, so the rollout gets stuck with the revision-1 pods still serving.
+# `make demo-fix` rolls back, the action Themis will propose.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: shop
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: shop
+  labels:
+    app: checkout
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          # `tail /dev/zero` never finds a line end, so it buffers forever.
+          args:
+            - |
+              if [ "$MODE" = leak ]; then exec tail /dev/zero; fi
+              while true; do sleep 3600; done
+          env:
+            - name: MODE
+              value: healthy
+            # Not a real secret: shows that evidence never copies pod specs.
+            - name: DB_PASSWORD
+              value: demo-not-a-real-secret
+          resources:
+            requests:
+              memory: 16Mi
+            limits:
+              memory: 48Mi
+          readinessProbe:
+            exec:
+              command: ["true"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
