@@ -6,6 +6,7 @@ package kubetest
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -166,7 +169,9 @@ func (e *Env) NewDeployment(t *testing.T, ns, name string) *appsv1.Deployment {
 func (e *Env) NewReplicaSet(t *testing.T, ns, name string, owners ...metav1.OwnerReference) *appsv1.ReplicaSet {
 	t.Helper()
 	rs := &appsv1.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, OwnerReferences: owners},
+		// The Deployment controller copies the pod template's labels onto
+		// the ReplicaSet, and finds its ReplicaSets with its selector.
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name, Labels: PodLabels, OwnerReferences: owners},
 		Spec:       appsv1.ReplicaSetSpec{Selector: Selector(), Template: PodTemplate()},
 	}
 	e.Create(t, rs)
@@ -181,6 +186,63 @@ func (e *Env) NewPod(t *testing.T, ns, name string, owners ...metav1.OwnerRefere
 	}
 	e.Create(t, p)
 	return p
+}
+
+// Load creates the objects of a multi-document YAML file, relative to the
+// repository root, in namespace ns, in file order, and returns them.
+//
+// Owner references name their owner by kind and name; Load fills in the UID
+// of the owner created earlier in the same file. Each object's status is
+// written after it is created, since the API server ignores status on create
+// and envtest has no controllers or kubelet to set it.
+func (e *Env) Load(t *testing.T, ns, path string) []*unstructured.Unstructured {
+	t.Helper()
+	root, err := repoRoot()
+	if err != nil {
+		t.Fatalf("find repository root: %v", err)
+	}
+	f, err := os.Open(filepath.Join(root, path)) //nolint:gosec // a fixture path chosen by the test
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	uids := map[string]types.UID{} // kind/name → UID
+	var objs []*unstructured.Unstructured
+	dec := utilyaml.NewYAMLOrJSONDecoder(f, 4096)
+	for {
+		u := &unstructured.Unstructured{}
+		if err := dec.Decode(&u.Object); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		if len(u.Object) == 0 {
+			continue
+		}
+		u.SetNamespace(ns)
+		refs := u.GetOwnerReferences()
+		for i, ref := range refs {
+			uid, ok := uids[ref.Kind+"/"+ref.Name]
+			if !ok {
+				t.Fatalf("%s %s: owner %s %s must come earlier in %s", u.GetKind(), u.GetName(), ref.Kind, ref.Name, path)
+			}
+			refs[i].UID = uid
+		}
+		u.SetOwnerReferences(refs)
+
+		status, hasStatus := u.Object["status"]
+		e.Create(t, u)
+		if hasStatus {
+			u.Object["status"] = status
+			if err := e.Status().Update(t.Context(), u); err != nil {
+				t.Fatalf("update status of %s %s: %v", u.GetKind(), u.GetName(), err)
+			}
+		}
+		uids[u.GetKind()+"/"+u.GetName()] = u.GetUID()
+		objs = append(objs, u)
+	}
+	return objs
 }
 
 // NewRollout creates Deployment → ReplicaSet → Pod, as the Deployment
