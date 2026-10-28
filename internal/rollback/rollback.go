@@ -90,11 +90,11 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision i
 	desired := *rs.Spec.Template.DeepCopy()
 	delete(desired.Labels, hashLabel)
 
-	specHash, err := templateHash(d.Spec.Template)
+	specHash, err := TemplateHash(d.Spec.Template)
 	if err != nil {
 		return Live{}, err
 	}
-	desiredHash, err := templateHash(desired)
+	desiredHash, err := TemplateHash(desired)
 	if err != nil {
 		return Live{}, err
 	}
@@ -171,7 +171,8 @@ func replicaSetAt(ctx context.Context, c client.Reader, d *appsv1.Deployment, re
 	return nil, fmt.Errorf("%w: %d", ErrNoSuchRevision, revision)
 }
 
-func templateHash(t corev1.PodTemplateSpec) (string, error) {
+// TemplateHash hashes a pod template the way actions bind it.
+func TemplateHash(t corev1.PodTemplateSpec) (string, error) {
 	data, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&t)
 	if err != nil {
 		return "", fmt.Errorf("convert template: %w", err)
