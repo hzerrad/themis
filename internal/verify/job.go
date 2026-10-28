@@ -1,0 +1,209 @@
+package verify
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/rollback"
+	"github.com/hzerrad/themis/internal/store"
+)
+
+// DefaultPoll is how often a verification looks at the target.
+const DefaultPoll = 15 * time.Second
+
+const revisionAnnotation = "deployment.kubernetes.io/revision"
+
+// outcomes maps a final outcome to the incident's end. Restoring the
+// pre-incident state after a failure comes in a later milestone.
+var outcomes = map[Outcome]incident.State{
+	Resolved:     incident.Resolved,
+	Contained:    incident.ContainedEscalated,
+	Unchanged:    incident.Escalated,
+	Worsened:     incident.Escalated,
+	Inconclusive: incident.Escalated,
+}
+
+// Worker works verify jobs, snoozing until the outcome is final.
+type Worker struct {
+	river.WorkerDefaults[VerifyArgs]
+
+	Config config.Config
+	Store  *store.Store
+	Reader client.Reader
+	Now    func() time.Time
+	Poll   time.Duration
+}
+
+func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
+	final, err := w.Verify(ctx, job.Args)
+	if err != nil || final {
+		return err
+	}
+	poll := w.Poll
+	if poll == 0 {
+		poll = DefaultPoll
+	}
+	return river.JobSnooze(poll)
+}
+
+// Verify observes the target once and reports whether the outcome is final.
+func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
+	a, err := w.Store.Action(ctx, w.Store.DB(), args.ActionID)
+	if err != nil {
+		return false, err
+	}
+	in, err := w.Store.Incident(ctx, a.IncidentID)
+	if err != nil {
+		return false, err
+	}
+	if in.State != incident.Verifying {
+		return true, nil
+	}
+	applied, _ := a.Params["templateHash"].(string)
+	profile, _ := w.Config.Profile(in.Profile)
+	v := profile.EffectiveVerification()
+	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
+
+	now := w.now()
+	obs, restarts, err := observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
+	if err != nil {
+		return false, err
+	}
+
+	final := false
+	err = w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		rec, err := w.Store.StartVerification(ctx, tx, store.Verification{
+			ActionID: a.ID, WindowStart: args.WindowStart, ReadyBefore: obs.ReadyReplicas, RestartsBase: restarts,
+		})
+		if err != nil {
+			return err
+		}
+		obs.ReadyBefore = rec.ReadyBefore
+		obs.RestartDelta = max(restarts-rec.RestartsBase, 0)
+		if obs.Healthy() {
+			if rec.HealthySince == nil {
+				rec.HealthySince = &now
+			}
+			obs.StableFor = now.Sub(*rec.HealthySince)
+		} else {
+			rec.HealthySince = nil
+		}
+
+		outcome, done := Evaluate(obs, criteria, now.Sub(rec.WindowStart))
+		rec.Observation, err = json.Marshal(obs)
+		if err != nil {
+			return err
+		}
+		if done {
+			rec.Outcome = string(outcome)
+		}
+		if err := w.Store.UpdateVerification(ctx, tx, rec); err != nil || !done {
+			return err
+		}
+		final = true
+		return w.Store.Transition(ctx, tx, store.TransitionArgs{
+			ID: in.ID, From: incident.Verifying, To: outcomes[outcome],
+			Reason: fmt.Sprintf("verification: %s (%d/%d ready, %d new OOM kills)", outcome, obs.ReadyReplicas, obs.DesiredReplicas, obs.NewOOMKills),
+			Actor:  "verify",
+		})
+	})
+	return final, err
+}
+
+// observe reads the target's state, and the restarts of its current
+// revision's containers. A template other than the applied one is a foreign
+// change; generation is not, since annotation updates bump it.
+func observe(ctx context.Context, c client.Reader, t incident.TargetRef, since time.Time, applied string) (Observation, int32, error) {
+	var d appsv1.Deployment
+	err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &d)
+	if apierrors.IsNotFound(err) || (err == nil && string(d.UID) != t.UID) {
+		return Observation{ForeignSpecChange: true}, 0, nil
+	}
+	if err != nil {
+		return Observation{}, 0, fmt.Errorf("get Deployment %s: %w", t.Name, err)
+	}
+	live, err := rollback.TemplateHash(d.Spec.Template)
+	if err != nil {
+		return Observation{}, 0, err
+	}
+	desired := int32(1)
+	if d.Spec.Replicas != nil {
+		desired = *d.Spec.Replicas
+	}
+	s := d.Status
+	o := Observation{
+		DesiredReplicas: desired,
+		ReadyReplicas:   s.ReadyReplicas,
+		RolloutComplete: s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == desired &&
+			s.AvailableReplicas == desired && s.Replicas == desired,
+		ForeignSpecChange: live != applied,
+	}
+
+	pods, err := currentPods(ctx, c, &d)
+	if err != nil {
+		return Observation{}, 0, err
+	}
+	var restarts int32
+	for _, p := range pods {
+		for _, cs := range p.Status.ContainerStatuses {
+			restarts += cs.RestartCount
+			if term := cs.LastTerminationState.Terminated; term != nil && term.Reason == "OOMKilled" && !term.FinishedAt.Time.Before(since) {
+				o.NewOOMKills++
+			}
+		}
+	}
+	return o, restarts, nil
+}
+
+// currentPods are the pods of the ReplicaSet at the Deployment's revision.
+func currentPods(ctx context.Context, c client.Reader, d *appsv1.Deployment) ([]corev1.Pod, error) {
+	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	if err != nil {
+		return nil, err
+	}
+	in := []client.ListOption{client.InNamespace(d.Namespace), client.MatchingLabelsSelector{Selector: selector}}
+	var sets appsv1.ReplicaSetList
+	if err := c.List(ctx, &sets, in...); err != nil {
+		return nil, fmt.Errorf("list ReplicaSets: %w", err)
+	}
+	var current *appsv1.ReplicaSet
+	for i := range sets.Items {
+		rs := &sets.Items[i]
+		if metav1.IsControlledBy(rs, d) && rs.Annotations[revisionAnnotation] == d.Annotations[revisionAnnotation] {
+			current = rs
+		}
+	}
+	if current == nil {
+		return nil, nil
+	}
+	var pods corev1.PodList
+	if err := c.List(ctx, &pods, in...); err != nil {
+		return nil, fmt.Errorf("list pods: %w", err)
+	}
+	var out []corev1.Pod
+	for _, p := range pods.Items {
+		if metav1.IsControlledBy(&p, current) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (w *Worker) now() time.Time {
+	if w.Now != nil {
+		return w.Now()
+	}
+	return time.Now()
+}
