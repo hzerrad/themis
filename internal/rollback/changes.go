@@ -16,7 +16,8 @@ import (
 )
 
 // Change is one difference between the current and the restored template.
-// Values that look secret, by name or content, are hidden.
+// Env values that look secret, by name or content, are hidden; commands and
+// args are never shown, since secrets hide in them in too many shapes.
 type Change struct {
 	Container string `json:"container"`
 	Field     string `json:"field"`
@@ -59,10 +60,10 @@ func containerChanges(pre, desired corev1.PodTemplateSpec) []Change {
 		add("limits", quantitiesJSON(b.Resources.Limits), quantitiesJSON(a.Resources.Limits))
 		add("requests", quantitiesJSON(b.Resources.Requests), quantitiesJSON(a.Resources.Requests))
 		if !slices.Equal(b.Command, a.Command) {
-			out = append(out, Change{name, "command", argv(b.Command), argv(a.Command)})
+			out = append(out, Change{name, "command", "changed", "changed"})
 		}
 		if !slices.Equal(b.Args, a.Args) {
-			out = append(out, Change{name, "args", argv(b.Args), argv(a.Args)})
+			out = append(out, Change{name, "args", "changed", "changed"})
 		}
 		out = append(out, envChanges(name, b.Env, a.Env)...)
 	}
@@ -113,67 +114,6 @@ func envValue(e corev1.EnvVar) string {
 		return "hidden (sensitive name)"
 	}
 	return shown(e.Value)
-}
-
-// argv shows arguments one by one, hiding a sensitive flag's value whether it
-// follows "=" or comes as the next argument, and both halves of a secret
-// split across two arguments, such as "Bearer" and its token. Each
-// argument's fate is decided once: shown, shown as a flag name, or hidden.
-func argv(args []string) string {
-	const (
-		show = iota
-		name // the flag name stays; its value is the next argument
-		hide
-	)
-	fate := make([]int, len(args))
-	// introduces is set for a sensitive flag without "=": what follows it is
-	// secret, even when the flag is itself hidden as a value.
-	introduces := make([]bool, len(args))
-	for i, a := range args {
-		introduces[i] = sensitiveFlag(a) && !strings.Contains(a, "=")
-		switch {
-		case i > 0 && introduces[i-1] && fate[i-1] != show:
-			fate[i] = hide
-		case looksSecret(a):
-			fate[i] = hide
-		case sensitiveFlag(a) && strings.Contains(a, "="):
-			fate[i] = hide
-		case sensitiveFlag(a):
-			fate[i] = name
-		}
-	}
-	for i := 0; i+1 < len(args); i++ {
-		if fate[i] == show && fate[i+1] == show && looksSecret(args[i]+" "+args[i+1]) {
-			fate[i], fate[i+1] = hide, hide
-		}
-	}
-	out := make([]string, len(args))
-	for i, a := range args {
-		value := i > 0 && introduces[i-1] && fate[i-1] != show
-		switch {
-		case fate[i] == hide && !value && sensitiveFlag(a) && strings.Contains(a, "="):
-			flag, _, _ := strings.Cut(a, "=")
-			out[i] = flag + "=<hidden>"
-		case fate[i] == hide:
-			out[i] = "<hidden>"
-		default:
-			out[i] = a
-		}
-	}
-	return truncate(strings.Join(out, " "))
-}
-
-// sensitiveFlag is a flag naming a secret, or a bare word that introduces
-// one: a value following it is secret.
-func sensitiveFlag(a string) bool {
-	flag, _, _ := strings.Cut(a, "=")
-	word := strings.TrimRight(strings.ToLower(flag), ":")
-	return (strings.HasPrefix(a, "-") || strings.HasSuffix(flag, ":") || word == "bearer" || word == "basic") &&
-		(sensitiveName.MatchString(flag) || word == "bearer" || word == "basic")
-}
-
-func looksSecret(s string) bool {
-	return shown(s) != truncate(s)
 }
 
 // shown is s, unless the evidence redaction rules find a secret in it.

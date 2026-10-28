@@ -77,22 +77,13 @@ func TestChanges_ImageAndResources(t *testing.T) {
 	}
 }
 
-// Args are shown, unless they carry a secret.
-func TestChanges_Args(t *testing.T) {
+// Args can carry secrets in too many shapes to show them.
+func TestChanges_ArgsNeverShown(t *testing.T) {
 	pre, desired := template(), template()
-	pre.Spec.Containers[0].Args = []string{"--workers=2", "--token=abc123", "--db-password", "hunter2", "-k", "AKIAIOSFODNN7EXAMPLE"}
+	pre.Spec.Containers[0].Args = []string{"--workers=2", "--db-password", "hunter2"}
 	desired.Spec.Containers[0].Args = []string{"--workers=4"}
-	c, ok := find(rollback.Changes(pre, desired), "args")
-	if !ok || c.After != "--workers=4" {
+	if c, ok := find(rollback.Changes(pre, desired), "args"); !ok || c.Before != "changed" || c.After != "changed" {
 		t.Errorf("args = %+v, %v", c, ok)
-	}
-	for _, secret := range []string{"abc123", "hunter2", "AKIA"} {
-		if strings.Contains(c.Before, secret) {
-			t.Errorf("args show %s: %s", secret, c.Before)
-		}
-	}
-	if !strings.Contains(c.Before, "--workers=2") {
-		t.Errorf("args hide what is not secret: %s", c.Before)
 	}
 }
 
@@ -138,27 +129,6 @@ func TestChanges_RandomValuesHidden(t *testing.T) {
 		c, _ := find(rollback.Changes(pre, desired), "env REF")
 		if got := c.After == "hidden (looks like a secret)"; got != hidden {
 			t.Errorf("%q: hidden = %v, want %v", value, got, hidden)
-		}
-	}
-}
-
-// A secret split across two arguments is hidden too.
-func TestChanges_SplitSecretsHidden(t *testing.T) {
-	for _, args := range [][]string{
-		{"-H", "Authorization:", "Bearer", "abcdef123456"},
-		{"--password", "hunter2"},
-		{"connect", "password:", "hunter2"},
-		// A value shaped like a sensitive flag is still a value.
-		{"--password", "--token=hunter2"},
-		{"--api-key", "--secret-abcdef123456"},
-	} {
-		pre, desired := template(), template()
-		pre.Spec.Containers[0].Args = args
-		c, _ := find(rollback.Changes(pre, desired), "args")
-		for _, secret := range []string{"abcdef123456", "hunter2"} {
-			if strings.Contains(c.Before, secret) {
-				t.Errorf("%v: args show %s: %s", args, secret, c.Before)
-			}
 		}
 	}
 }
