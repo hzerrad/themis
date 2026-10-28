@@ -81,6 +81,83 @@ type Profile struct {
 
 	// Investigation bounds each investigation; zero fields take defaults.
 	Investigation Investigation `json:"investigation,omitzero"`
+
+	// Policy decides whether proposed actions run, wait for approval, or not.
+	Policy Policy `json:"policy,omitzero"`
+
+	// Verification measures an action's outcome; zero fields take defaults.
+	Verification Verification `json:"verification,omitzero"`
+}
+
+// Policy modes.
+const (
+	// ModeGuarded runs actions only after a human approves them.
+	ModeGuarded = "guarded"
+	// ModeObserve never runs actions: proposals become recommendations.
+	ModeObserve = "observe"
+)
+
+// Policy decisions.
+const (
+	DecisionAllow           = "allow"
+	DecisionDeny            = "deny"
+	DecisionRequireApproval = "require_approval"
+)
+
+// Policy is evaluated on every derived action. The first matching rule
+// decides; with none, the action needs approval.
+type Policy struct {
+	Mode            string       `json:"mode,omitempty" jsonschema:"enum=guarded,enum=observe"`
+	Rules           []PolicyRule `json:"rules,omitempty"`
+	ApprovalTimeout Duration     `json:"approvalTimeout,omitzero"`
+}
+
+// PolicyRule decides when its CEL expression holds. The expression sees
+// action.capability, action.risk, target.namespace, target.managed_by,
+// predicates (name to "true", "false" or "unknown") and mode.
+type PolicyRule struct {
+	Name     string `json:"name" jsonschema:"minLength=1"`
+	When     string `json:"when" jsonschema:"minLength=1"`
+	Decision string `json:"decision" jsonschema:"enum=allow,enum=deny,enum=require_approval"`
+}
+
+// Verification bounds how an action's outcome is measured.
+type Verification struct {
+	// Window is how long to watch the target after an action.
+	Window Duration `json:"window,omitzero"`
+	// Stability is how long the target must stay healthy within the window.
+	Stability Duration `json:"stability,omitzero"`
+}
+
+// Policy and verification defaults.
+const (
+	DefaultApprovalTimeout = 30 * time.Minute
+	DefaultVerifyWindow    = 5 * time.Minute
+	DefaultVerifyStability = 2 * time.Minute
+)
+
+// EffectivePolicy returns p's policy with defaults filled in.
+func (p Profile) EffectivePolicy() Policy {
+	pol := p.Policy
+	if pol.Mode == "" {
+		pol.Mode = ModeGuarded
+	}
+	if pol.ApprovalTimeout.Duration == 0 {
+		pol.ApprovalTimeout.Duration = DefaultApprovalTimeout
+	}
+	return pol
+}
+
+// EffectiveVerification returns p's verification with defaults filled in.
+func (p Profile) EffectiveVerification() Verification {
+	v := p.Verification
+	if v.Window.Duration == 0 {
+		v.Window.Duration = DefaultVerifyWindow
+	}
+	if v.Stability.Duration == 0 {
+		v.Stability.Duration = min(DefaultVerifyStability, v.Window.Duration)
+	}
+	return v
 }
 
 // Evidence names evidence templates.
@@ -292,6 +369,27 @@ func (c Config) Validate() error {
 		}
 		if p.Investigation.Timeout.Duration < 0 {
 			add(path+".investigation.timeout", "must be positive")
+		}
+		if m := p.Policy.Mode; m != "" && m != ModeGuarded && m != ModeObserve {
+			add(path+".policy.mode", "must be guarded or observe, got %q", m)
+		}
+		if p.Policy.ApprovalTimeout.Duration < 0 {
+			add(path+".policy.approvalTimeout", "must be positive")
+		}
+		for j, r := range p.Policy.Rules {
+			rpath := fmt.Sprintf("%s.policy.rules[%d]", path, j)
+			if r.Name == "" {
+				add(rpath+".name", "is required")
+			}
+			if r.When == "" {
+				add(rpath+".when", "is required")
+			}
+			if r.Decision != DecisionAllow && r.Decision != DecisionDeny && r.Decision != DecisionRequireApproval {
+				add(rpath+".decision", "must be allow, deny or require_approval, got %q", r.Decision)
+			}
+		}
+		if v := p.EffectiveVerification(); v.Window.Duration < 0 || v.Stability.Duration < 0 || v.Stability.Duration > v.Window.Duration {
+			add(path+".verification", "stability must be positive and within the window")
 		}
 	}
 

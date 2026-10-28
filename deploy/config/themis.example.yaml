@@ -27,3 +27,22 @@ profiles:
       initial: [rollout_history, pod_states, target_events]
       allowed: [rollout_history, pod_states, target_events, container_logs_tail]
     capabilities: [deployment.rollback-to-revision]
+    policy:
+      mode: guarded
+      approvalTimeout: 30m
+      rules:
+        - name: gitops-owns-the-target
+          when: predicates.gitops_managed != "false"
+          decision: deny
+        - name: rollback-needs-a-bad-rollout
+          when: >-
+            action.capability == "deployment.rollback-to-revision" &&
+            (predicates.oom_killed_new_revision != "true" ||
+             predicates.failure_onset_after_rollout != "true")
+          decision: deny
+        - name: rollback-needs-approval
+          when: action.capability == "deployment.rollback-to-revision"
+          decision: require_approval
+    verification:
+      window: 5m
+      stability: 2m
