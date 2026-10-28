@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"slices"
@@ -49,6 +50,9 @@ type Config struct {
 	// Executor is where approved actions run; without it Themis never writes.
 	Executor *Executor `json:"executor,omitempty"`
 
+	// Notifications announce escalations to humans.
+	Notifications Notifications `json:"notifications,omitzero"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins.
 	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
@@ -78,6 +82,26 @@ type Executor struct {
 
 	// BearerTokenFile holds the token the executor requires.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+}
+
+// Notifications configures outbound notices.
+type Notifications struct {
+	// Webhook receives a JSON POST for every escalation.
+	Webhook *Webhook `json:"webhook,omitempty"`
+
+	// ExternalURL is where people reach the UI, for links in notices.
+	ExternalURL string `json:"externalURL,omitempty"`
+}
+
+// Webhook is an HTTP endpoint for notices: URL, or URLFile when the URL
+// embeds a key and comes from a Secret.
+type Webhook struct {
+	URL     string `json:"url,omitempty"`
+	URLFile string `json:"urlFile,omitempty"`
+
+	// BearerTokenFile holds a token sent as a bearer token, if the receiver
+	// needs one.
+	BearerTokenFile string `json:"bearerTokenFile,omitempty"`
 }
 
 // Profile is one incident class and the alerts that belong to it.
@@ -316,6 +340,17 @@ func (c Config) Validate() error {
 	if c.API.BearerTokenFile == "" {
 		add("api.bearerTokenFile", "is required")
 	}
+	if w := c.Notifications.Webhook; w != nil {
+		switch {
+		case (w.URL == "") == (w.URLFile == ""):
+			add("notifications.webhook", "set exactly one of url and urlFile")
+		case w.URL != "" && !IsHTTPURL(w.URL):
+			add("notifications.webhook.url", "%q is not an http or https URL", w.URL)
+		}
+	}
+	if e := c.Notifications.ExternalURL; e != "" && !IsHTTPURL(e) {
+		add("notifications.externalURL", "%q is not an http or https URL", e)
+	}
 	if c.Executor != nil {
 		if c.Executor.Address == "" {
 			add("executor.address", "is required")
@@ -475,4 +510,10 @@ func (c Config) Profile(name string) (Profile, bool) {
 		}
 	}
 	return Profile{}, false
+}
+
+// IsHTTPURL reports whether s is an absolute http or https URL.
+func IsHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
