@@ -1,6 +1,7 @@
 """The investigation loop: an explicit state machine over model decisions."""
 
 import json
+import time
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Literal, Protocol
@@ -185,8 +186,13 @@ def proposal_request(
 
 
 async def investigate(
-    job: investigation_pb2.Investigation, core: Core, model: Model, max_steps: int
+    job: investigation_pb2.Investigation,
+    core: Core,
+    model: Model,
+    max_steps: int,
+    deadline: float | None = None,
 ) -> InvestigationResult:
+    """Runs at most max_steps model steps, none started after deadline (epoch seconds)."""
     messages = [
         Message(role="system", content=system_prompt(job, max_steps)),
         Message(role="user", content=incident_prompt(job)),
@@ -223,6 +229,10 @@ async def investigate(
         )
 
     for step in range(1, max_steps + 1):
+        if deadline is not None and time.time() >= deadline:
+            raise InvestigationError(
+                "deadline_exceeded", "the investigation budget's deadline passed"
+            )
         result = await model.complete(
             ModelRequest(
                 task_class="investigation_step",
