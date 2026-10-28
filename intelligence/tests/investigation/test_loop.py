@@ -216,3 +216,11 @@ async def test_spent_budget_lets_a_proposal_through_without_logs() -> None:
     )
     result = await investigate(job(), core, model, max_steps=6)
     assert result.conclusion == "proposed"
+
+
+async def test_past_deadline_stops_before_the_next_step() -> None:
+    model = ScriptedModel({"kind": "conclude_inconclusive"})
+    with pytest.raises(InvestigationError) as err:
+        await investigate(job(), FakeCore(), model, max_steps=6, deadline=0.0)
+    assert err.value.reason == "deadline_exceeded"
+    assert model.requests == []
