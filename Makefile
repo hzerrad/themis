@@ -147,15 +147,44 @@ demo-down: ## Remove the checkout workload
 DEV_TOKEN              := bin/dev/intake-token
 DEV_INVESTIGATOR_TOKEN := bin/dev/investigator-token
 DEV_ADMIN_TOKEN        := bin/dev/admin-token
+DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
+DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
+MODEL_NAME             ?= qwen3:8b
+
+.PHONY: dev-db
+dev-db: ## Start a development PostgreSQL on 127.0.0.1:5432
+	@docker start themis-postgres >/dev/null 2>&1 || docker run -d --name themis-postgres \
+		-e POSTGRES_USER=themis -e POSTGRES_PASSWORD=themis -e POSTGRES_DB=themis \
+		-p 127.0.0.1:5432:5432 postgres:17-alpine >/dev/null
+	@echo "DATABASE_URL=$(DEV_DATABASE_URL)"
+
+.PHONY: dev-tokens
+dev-tokens:
+	@mkdir -p $(dir $(DEV_TOKEN))
+	@for f in $(DEV_TOKEN) $(DEV_INVESTIGATOR_TOKEN) $(DEV_ADMIN_TOKEN) $(DEV_EXECUTOR_TOKEN); do \
+		test -s $$f || { openssl rand -hex 32 > $$f && chmod 600 $$f; }; done
 
 .PHONY: run
-run: ## Run themis-core locally against the kind cluster and $DATABASE_URL
+run: dev-tokens ## Run themis-core locally against the kind cluster and $DATABASE_URL
 	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
-	@mkdir -p $(dir $(DEV_TOKEN))
-	@test -s $(DEV_TOKEN) || { openssl rand -hex 32 > $(DEV_TOKEN) && chmod 600 $(DEV_TOKEN); }
-	@test -s $(DEV_INVESTIGATOR_TOKEN) || { openssl rand -hex 32 > $(DEV_INVESTIGATOR_TOKEN) && chmod 600 $(DEV_INVESTIGATOR_TOKEN); }
-	@test -s $(DEV_ADMIN_TOKEN) || { openssl rand -hex 32 > $(DEV_ADMIN_TOKEN) && chmod 600 $(DEV_ADMIN_TOKEN); }
-	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER)
+	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
+		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8082
+
+.PHONY: run-executor
+run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and $DATABASE_URL
+	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
+	go run ./cmd/themis-executor --kube-context kind-$(KIND_CLUSTER) --token-file $(DEV_EXECUTOR_TOKEN) \
+		--grpc-addr 127.0.0.1:9091 --probe-addr 127.0.0.1:8083
+
+.PHONY: run-intelligence
+run-intelligence: dev-tokens ## Run the investigator against a local Ollama
+	THEMIS_CORE_ADDR=127.0.0.1:9090 THEMIS_TOKEN_FILE=$(CURDIR)/$(DEV_INVESTIGATOR_TOKEN) \
+		MODEL_BASE_URL=http://127.0.0.1:11434/v1 MODEL_NAME=$(MODEL_NAME) MODEL_ENDPOINT=ollama \
+		$(UV) run python -m themis_intelligence
+
+.PHONY: demo-alert
+demo-alert: ## Post an alert for the crash-looping checkout pod to `make run`
+	KIND_CLUSTER=$(KIND_CLUSTER) hack/dev/demo-alert.sh
 
 .PHONY: send-alert
 send-alert: ## Post the sample Alertmanager payload to a running `make run`
