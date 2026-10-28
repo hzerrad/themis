@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -190,5 +191,17 @@ func TestRolloutHistory_DeploymentRecreated(t *testing.T) {
 	target.UID = "uid-of-the-deleted-deployment"
 	if _, err := evidence.NewRolloutHistory().Collect(t.Context(), k8s, target, nil); !errors.Is(err, evidence.ErrTargetGone) {
 		t.Errorf("err = %v, want ErrTargetGone", err)
+	}
+}
+
+func TestRolloutHistory_RecordsWhenTheTemplateChanged(t *testing.T) {
+	before := time.Now().Add(-time.Minute)
+	item := collectRolloutHistory(t, loadScenario1(t))
+	var view evidence.RolloutHistoryView
+	if err := json.Unmarshal(item.Data, &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Deployment.TemplateChangedAt.Before(before) {
+		t.Errorf("TemplateChangedAt = %v, want the time the fixture was written", view.Deployment.TemplateChangedAt)
 	}
 }
