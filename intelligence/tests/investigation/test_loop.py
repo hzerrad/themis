@@ -193,3 +193,26 @@ def test_cited_predicates_are_names_not_sentences() -> None:
     bad = propose(cited_predicates=["Deployment/shop/checkout has currentRevision 2"])
     with pytest.raises(ValidationError):
         StepDecision.model_validate(bad)
+
+
+async def test_proposal_waits_for_the_logs() -> None:
+    core = FakeCore()
+    model = ScriptedModel(
+        propose(),
+        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
+        propose(),
+    )
+    result = await investigate(job(), core, model, max_steps=6)
+    assert result.conclusion == "proposed"
+    assert len(core.submitted) == 1
+    assert "container_logs_tail" in model.requests[1].messages[-1].content
+
+
+async def test_spent_budget_lets_a_proposal_through_without_logs() -> None:
+    core = AbortingCore()
+    model = ScriptedModel(
+        {"kind": "request_evidence", "template": "pod_states", "params": {}},
+        propose(),
+    )
+    result = await investigate(job(), core, model, max_steps=6)
+    assert result.conclusion == "proposed"
