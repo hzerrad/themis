@@ -10,6 +10,9 @@ enrolledNamespaces:
 intake:
   bearerTokenFile: bin/dev/intake-token
 
+investigators:
+  bearerTokenFile: bin/dev/investigator-token
+
 profiles:
   - name: rollout-regression
     priority: 100

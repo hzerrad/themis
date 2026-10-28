@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/hzerrad/themis/internal/core"
+	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
@@ -39,7 +40,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-const token = "smoke-token"
+const (
+	token              = "smoke-token"
+	investigatorSecret = "investigator-token"
+)
 
 func freeAddr(t *testing.T) string {
 	t.Helper()
@@ -72,9 +76,12 @@ func readFile(t *testing.T, path string) string {
 func writeConfig(t *testing.T, ns string) string {
 	t.Helper()
 	tokenFile := writeFile(t, "token", token+"\n")
+	investigatorToken := writeFile(t, "investigator-token", investigatorSecret+"\n")
 	return writeFile(t, "themis.yaml", fmt.Sprintf(`
 enrolledNamespaces: [%s]
 intake:
+  bearerTokenFile: %s
+investigators:
   bearerTokenFile: %s
 profiles:
   - name: rollout-regression
@@ -85,7 +92,7 @@ profiles:
     evidence:
       initial: [rollout_history, pod_states]
       allowed: [rollout_history, pod_states]
-`, ns, tokenFile))
+`, ns, tokenFile, investigatorToken))
 }
 
 // eventually polls cond until it holds or the timeout passes. It stops early if
@@ -177,7 +184,8 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 		return n == 1
 	})
 	// The investigation is prepared and offered to investigators over gRPC.
-	conn, err := grpc.NewClient(o.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(o.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithPerRPCCredentials(grpcserver.BearerToken(investigatorSecret)))
 	if err != nil {
 		t.Fatal(err)
 	}
