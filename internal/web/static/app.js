@@ -14,7 +14,7 @@ function h(tag, attrs = {}, ...children) {
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (v !== undefined && v !== null && v !== false) el.setAttribute(k, v === true ? "" : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -161,6 +161,12 @@ function actionPanel(a, reload) {
     error);
 }
 
+function usage(u) {
+  if (!u || !u.stepsUsed) return "—";
+  const n = (v) => Number(v || 0).toLocaleString();
+  return `${u.stepsUsed} steps · ${n(u.inputTokens)} input tokens · ${n(u.outputTokens)} output tokens`;
+}
+
 function hypotheses(inv) {
   const hs = (inv && inv.Hypotheses) || [];
   if (hs.length === 0) return h("p", { class: "muted" }, "No hypotheses recorded.");
@@ -204,7 +210,7 @@ async function detail(id) {
         h("dt", {}, "Conclusion"), h("dd", {}, inv.Conclusion || "—"),
         h("dt", {}, "Summary"), h("dd", {}, inv.Summary || "—"),
         h("dt", {}, "Model"), h("dd", {}, (inv.Provenance && inv.Provenance.model) || "—"),
-        h("dt", {}, "Usage"), h("dd", { class: "mono" }, JSON.stringify(inv.Usage || {}))),
+        h("dt", {}, "Usage"), h("dd", {}, usage(inv.Usage))),
       h("h2", {}, "Hypotheses"), hypotheses(inv)]
       : h("p", { class: "muted" }, "Not investigated yet.")),
 
