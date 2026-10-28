@@ -101,6 +101,20 @@ migrate: ## Apply all migrations (Themis and River) to $DATABASE_URL
 envtest: ## Download the API server and etcd binaries used by envtest
 	@$(GO_TOOL) setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_DIR) >/dev/null
 
+# Images
+
+IMAGE_TAG ?= dev
+
+.PHONY: images
+images: ## Build the core, executor and intelligence images
+	docker build -f build/Dockerfile --build-arg BIN=themis-core -t themis-core:$(IMAGE_TAG) .
+	docker build -f build/Dockerfile --build-arg BIN=themis-executor -t themis-executor:$(IMAGE_TAG) .
+	docker build -f build/intelligence.Dockerfile -t themis-intelligence:$(IMAGE_TAG) .
+
+.PHONY: kind-load
+kind-load: images ## Build the images and load them into the kind cluster
+	$(GO_TOOL) kind load docker-image --name $(KIND_CLUSTER) themis-core:$(IMAGE_TAG) themis-executor:$(IMAGE_TAG) themis-intelligence:$(IMAGE_TAG)
+
 # Local cluster
 
 .PHONY: kind-up kind-down
