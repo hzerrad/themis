@@ -140,6 +140,12 @@ themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_UR
 themis-down: ## Uninstall Themis from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall themis -n themis
 
+.PHONY: ui
+ui: ## Open the in-cluster Themis UI on http://127.0.0.1:8090 and print its token
+	@echo "Admin token: $$($(KUBECTL) -n themis get secret themis-tokens -o jsonpath='{.data.admin}' | base64 -d)"
+	@echo "UI: http://127.0.0.1:8090"
+	$(KUBECTL) -n themis port-forward svc/themis-core 8090:8080
+
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-cluster Themis
 	$(KUBECTL) create namespace monitoring --dry-run=client -o yaml | $(KUBECTL) apply -f -
