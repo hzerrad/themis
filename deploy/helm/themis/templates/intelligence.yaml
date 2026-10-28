@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-intelligence
+  labels: {{- include "themis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: intelligence
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "themis.labels" . | nindent 8 }}
+        app.kubernetes.io/component: intelligence
+    spec:
+      # The investigator holds no cluster or database credentials.
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: intelligence
+          image: {{ include "themis.image" (dict "root" . "component" "intelligence") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - {name: THEMIS_CORE_ADDR, value: "{{ .Release.Name }}-core:9090"}
+            - {name: THEMIS_TOKEN_FILE, value: /var/run/secrets/themis/investigator}
+            - {name: MODEL_BASE_URL, value: {{ .Values.model.baseURL | quote }}}
+            - {name: MODEL_NAME, value: {{ .Values.model.name | quote }}}
+            - {name: MODEL_CEILING, value: {{ .Values.model.ceiling | quote }}}
+            - {name: MODEL_TOKEN_BUDGET, value: {{ .Values.model.tokenBudget | quote }}}
+            {{- if .Values.model.apiKeySecret }}
+            - {name: MODEL_API_KEY_FILE, value: /var/run/secrets/model/apiKey}
+            {{- end }}
+          resources: {{- toYaml .Values.resources.intelligence | nindent 12 }}
+          securityContext: {{- include "themis.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: token, mountPath: /var/run/secrets/themis, readOnly: true}
+            {{- if .Values.model.apiKeySecret }}
+            - {name: model, mountPath: /var/run/secrets/model, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: token
+          secret:
+            secretName: {{ .Release.Name }}-tokens
+            items: [{key: investigator, path: investigator}]
+        {{- if .Values.model.apiKeySecret }}
+        - name: model
+          secret: {secretName: {{ .Values.model.apiKeySecret }}}
+        {{- end }}

@@ -1,0 +1,55 @@
+{{- if .Values.networkPolicy.enabled }}
+# The investigator may reach only the core's gRPC API, the model and DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-intelligence
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 14 }}
+      ports: [{port: 9090, protocol: TCP}]
+    - to: [{ipBlock: {cidr: {{ .Values.model.egressCIDR }}}}]
+    - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+---
+# The core's gRPC API serves the investigator; its HTTP API anyone with a token.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-core
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 14 }}
+      ports: [{port: 9090, protocol: TCP}]
+    - ports: [{port: 8080, protocol: TCP}, {port: 8081, protocol: TCP}, {port: 8082, protocol: TCP}]
+{{- if .Values.executor.enabled }}
+---
+# Only the core may ask the executor to act.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-executor
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "executor") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 14 }}
+      ports: [{port: 9091, protocol: TCP}]
+    - ports: [{port: 8081, protocol: TCP}]
+{{- end }}
+{{- end }}

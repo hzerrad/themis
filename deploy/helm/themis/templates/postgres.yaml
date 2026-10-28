@@ -1,0 +1,60 @@
+{{- if and .Values.postgres.enabled (not .Values.database.existingSecret) }}
+{{- $name := printf "%s-database" .Release.Name -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
+{{- $password := randAlphaNum 32 -}}
+{{- if $existing }}{{ $password = index $existing.data "password" | b64dec }}{{ end -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels: {{- include "themis.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  password: {{ $password | quote }}
+  DATABASE_URL: "postgres://themis:{{ $password }}@{{ .Release.Name }}-postgres:5432/themis?sslmode=disable"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "themis.selector" (dict "root" . "component" "postgres") | nindent 4 }}
+  ports:
+    - {name: postgres, port: 5432, targetPort: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  labels: {{- include "themis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "themis.labels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          env:
+            - {name: POSTGRES_USER, value: themis}
+            - {name: POSTGRES_DB, value: themis}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ $name }}, key: password}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{containerPort: 5432}]
+          readinessProbe: {exec: {command: [pg_isready, -U, themis]}, periodSeconds: 5}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: {{ .Values.postgres.storage }}}}
+{{- end }}
