@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,7 +84,9 @@ func (e *env) awaiting(t *testing.T) store.Action {
 			Params:   map[string]any{"revision": int64(1), "templateHash": "sha256:t"},
 			Decision: "require_approval", PolicyID: "approve", PolicyDigest: "sha256:p", Constraints: map[string]any{},
 			BlastRadius: map[string]any{"replicas": int64(3)}, Risk: "medium",
-			State: store.ActionAwaitingApproval, ExpiresAt: &expires,
+			PreState: []byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"leak"},{"name":"DB_PASSWORD","value":"s3cret-now"}]}]}}`),
+			Desired:  []byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"healthy"},{"name":"DB_PASSWORD","value":"s3cret-before"}]}]}}`),
+			State:    store.ActionAwaitingApproval, ExpiresAt: &expires,
 		}
 		a.Digest, err = digest.Compute(a.Fields())
 		if err != nil {
@@ -279,5 +282,21 @@ func TestExpire_Escalates(t *testing.T) {
 	}
 	if got := e.state(t, a.IncidentID); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
+	}
+}
+
+// The detail shows that MODE changes, never what MODE or any secret holds.
+func TestIncidentDetail_ShowsChangesNotTemplates(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+	rec := e.do(t, http.MethodGet, "/v1/incidents/"+a.IncidentID, token, nil)
+	body := rec.Body.String()
+	for _, leak := range []string{"s3cret", "leak", "healthy"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("the detail contains %q", leak)
+		}
+	}
+	if !strings.Contains(body, `"field":"env MODE"`) {
+		t.Errorf("the detail does not show that MODE changes: %s", body)
 	}
 }

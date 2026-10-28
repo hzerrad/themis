@@ -3,7 +3,6 @@
 package approval
 
 import (
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"log/slog"
@@ -11,10 +10,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/hzerrad/themis/internal/auth"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -106,7 +107,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, act := range actions {
-		v := actionView{Action: act, PreState: jsontext.Value(act.PreState), Desired: jsontext.Value(act.Desired)}
+		v := viewAction(act)
 		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
 			v.Execution = &e
 		}
@@ -149,7 +150,7 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	a.reply(w, act)
+	a.reply(w, viewAction(act))
 }
 
 type denyRequest struct {
@@ -231,4 +232,13 @@ func (a *API) logger() *slog.Logger {
 		return a.Logger
 	}
 	return slog.Default()
+}
+
+// changes diffs an action's templates, and says so when it cannot.
+func changes(a store.Action) []rollback.Change {
+	var pre, desired corev1.PodTemplateSpec
+	if json.Unmarshal(a.PreState, &pre) != nil || json.Unmarshal(a.Desired, &desired) != nil {
+		return []rollback.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
+	}
+	return rollback.Changes(pre, desired)
 }
