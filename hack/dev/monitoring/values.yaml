@@ -1,0 +1,57 @@
+# Prometheus, kube-state-metrics and Alertmanager for the kind cluster, with
+# alerts fast enough to watch: KubePodCrashLooping fires after 30s, not the
+# 15m of kube-prometheus-stack. Alertmanager posts to the in-cluster
+# themis-core with the intake token.
+server:
+  global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+  persistentVolume:
+    enabled: false
+
+serverFiles:
+  alerting_rules.yml:
+    groups:
+      - name: themis-demo
+        rules:
+          - alert: KubePodCrashLooping
+            expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[2m]) >= 1
+            for: 30s
+            labels:
+              severity: warning
+            annotations:
+              summary: Pod is crash looping.
+              description: Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is in CrashLoopBackOff.
+
+alertmanager:
+  enabled: true
+  persistence:
+    enabled: false
+  extraSecretMounts:
+    - name: themis-intake
+      mountPath: /etc/alertmanager/themis
+      secretName: themis-intake-token
+      readOnly: true
+  config:
+    route:
+      receiver: themis
+      group_by: [alertname, namespace, pod]
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 4h
+    receivers:
+      - name: themis
+        webhook_configs:
+          - url: http://themis-core.themis.svc:8080/v1/intake/alertmanager
+            send_resolved: true
+            http_config:
+              authorization:
+                type: Bearer
+                credentials_file: /etc/alertmanager/themis/token
+
+kube-state-metrics:
+  enabled: true
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
