@@ -1,0 +1,36 @@
+name: End-to-end
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths-ignore: ["**.md", "docs/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bad-rollout:
+    name: Bad rollout on kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make e2e
+      - name: Component logs
+        if: failure()
+        run: |
+          for f in test/e2e/artifacts/*.log; do echo "::group::$f"; cat "$f"; echo "::endgroup::"; done
