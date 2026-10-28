@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/investigation"
@@ -369,5 +370,43 @@ func TestWorker_ResolvedNeedsNoCluster(t *testing.T) {
 
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM rejected_alerts`); n != 0 {
 		t.Errorf("rejections = %d, want 0: a resolved alert without an incident is not a rejection", n)
+	}
+}
+
+// Self-resolving while a fix awaits approval cancels the fix: nobody should
+// approve it any more, and it must not block the next action on the target.
+func TestWorker_SelfResolveCancelsPendingAction(t *testing.T) {
+	e := newWorkerEnv(t, nil)
+	_, pod := k8s.NewRollout(t, e.ns, "checkout")
+	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
+	id, _, _ := e.onlyIncident(t)
+	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		path := []incident.State{incident.Received, incident.Investigating, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval}
+		for i := 1; i < len(path); i++ {
+			if err := e.store.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: "test", Actor: "test"}); err != nil {
+				return err
+			}
+		}
+		p, _, err := e.store.InsertProposal(t.Context(), tx, store.Proposal{IncidentID: id, LeaseID: "0192f0c1-0000-7000-8000-000000000001", ClientProposalID: "p", Capability: "c", CapabilityVersion: "1", Params: map[string]any{}, Status: store.ProposalAccepted})
+		if err != nil {
+			return err
+		}
+		_, err = e.store.InsertAction(t.Context(), tx, store.Action{
+			IncidentID: id, ProposalID: p.ID, Capability: "c", Target: digest.TargetIdentity{UID: "u"},
+			Params: map[string]any{}, BlastRadius: map[string]any{}, Constraints: map[string]any{}, State: store.ActionAwaitingApproval, Digest: "d",
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertResolved), nil))
+
+	if _, state, _ := e.onlyIncident(t); state != incident.SelfResolved {
+		t.Errorf("state = %s, want self_resolved", state)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM actions WHERE incident_id = $1 AND state = 'canceled'`, id); n != 1 {
+		t.Error("the pending action was not canceled")
 	}
 }

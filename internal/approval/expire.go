@@ -2,6 +2,7 @@ package approval
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -44,7 +45,9 @@ func (w *ExpireWorker) Expire(ctx context.Context) error {
 				ID: a.IncidentID, From: incident.AwaitingApproval, To: incident.Escalated,
 				Reason: "nobody approved the action in time", Actor: "approval",
 			})
-			if err != nil {
+			// An incident that already moved on keeps its state; the action
+			// still expires.
+			if err != nil && !errors.Is(err, store.ErrStateConflict) {
 				return err
 			}
 		}

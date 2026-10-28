@@ -191,6 +191,9 @@ func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[Process
 			if err != nil {
 				return err
 			}
+			if err := w.Store.CancelPendingActions(ctx, tx, inc.IncidentID); err != nil {
+				return err
+			}
 		}
 		return complete(ctx, tx, job)
 	})
