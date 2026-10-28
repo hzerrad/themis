@@ -126,7 +126,9 @@ async def test_model_target_forwarded_unchanged() -> None:
         "u-dns",
     )
     assert result.conclusion == "inconclusive"
-    assert "TARGET_MISMATCH" in model.requests[-1].messages[-1].content
+    told = model.requests[-1].messages[-1].content
+    assert "TARGET_MISMATCH" in told
+    assert TARGET.uid in told
 
 
 async def test_rejected_proposal_lets_the_model_continue() -> None:

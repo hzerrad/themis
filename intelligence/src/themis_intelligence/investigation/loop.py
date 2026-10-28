@@ -124,20 +124,23 @@ def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
     )
 
 
-def incident_prompt(job: investigation_pb2.Investigation) -> str:
+def target_json(job: investigation_pb2.Investigation) -> str:
     t = job.target
+    return json.dumps(
+        {"group": t.group, "kind": t.kind, "namespace": t.namespace, "name": t.name, "uid": t.uid}
+    )
+
+
+def incident_prompt(job: investigation_pb2.Investigation) -> str:
     predicates = "\n".join(
         f"- {p.name} = {_TRUTHS.get(p.value, 'unknown')}: {p.reason}"
         + (f" (evidence {', '.join(p.evidence_ids)})" if p.evidence_ids else "")
         for p in job.predicates
     )
     evidence = "\n\n".join(render_evidence(i) for i in job.initial_evidence)
-    target = json.dumps(
-        {"group": t.group, "kind": t.kind, "namespace": t.namespace, "name": t.name, "uid": t.uid}
-    )
     return (
         f"Incident {job.incident_id}, profile {job.profile}.\n"
-        f"Target: {target}\n\n"
+        f"Target (use this exact object as proposal.target): {target_json(job)}\n\n"
         f"Predicates:\n{predicates or '- none'}\n\n"
         f"Evidence:\n\n{evidence}"
     )
@@ -298,7 +301,11 @@ async def investigate(
                 if resp.status == proposal_pb2.PROPOSAL_STATUS_ACCEPTED:
                     return done("proposed", step, [resp.proposal_id])
                 reason = proposal_pb2.RejectionReason.Name(resp.rejection_reason)
-                tell(f"The proposal was rejected ({reason}): {fence(resp.message)}")
+                hint = ""
+                if resp.rejection_reason == proposal_pb2.REJECTION_REASON_TARGET_MISMATCH:
+                    # A hint only: the attempt stays on record as a safety event.
+                    hint = f" The incident's target is {target_json(job)}."
+                tell(f"The proposal was rejected ({reason}): {fence(resp.message)}{hint}")
             case "conclude_inconclusive":
                 return done("inconclusive", step, [])
     return done("inconclusive", max_steps, [])
