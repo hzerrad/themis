@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels: {{- include "themis.labels" . | nindent 4 }}
+data:
+  themis.yaml: |
+    enrolledNamespaces: {{- toYaml .Values.enrolledNamespaces | nindent 6 }}
+    intake:
+      bearerTokenFile: /var/run/secrets/themis/intake
+    investigators:
+      bearerTokenFile: /var/run/secrets/themis/investigator
+    api:
+      bearerTokenFile: /var/run/secrets/themis/admin
+    {{- if .Values.executor.enabled }}
+    executor:
+      address: {{ .Release.Name }}-executor:9091
+      bearerTokenFile: /var/run/secrets/themis/executor
+    {{- end }}
+    profiles: {{- toYaml .Values.profiles | nindent 6 }}

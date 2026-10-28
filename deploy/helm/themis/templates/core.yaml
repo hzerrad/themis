@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-core
+  labels: {{- include "themis.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-core
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 4 }}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+    - {name: grpc, port: 9090, targetPort: grpc}
+    - {name: metrics, port: 8082, targetPort: metrics}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-core
+  labels: {{- include "themis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: core
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "themis.labels" . | nindent 8 }}
+        app.kubernetes.io/component: core
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-core
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: core
+          image: {{ include "themis.image" (dict "root" . "component" "core") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [--config=/etc/themis/themis.yaml]
+          env:
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 9090}
+            - {name: probes, containerPort: 8081}
+            - {name: metrics, containerPort: 8082}
+          readinessProbe: {httpGet: {path: /readyz, port: probes}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: probes}, periodSeconds: 10}
+          resources: {{- toYaml .Values.resources.core | nindent 12 }}
+          securityContext: {{- include "themis.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/themis, readOnly: true}
+            - {name: tokens, mountPath: /var/run/secrets/themis, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: {{ .Release.Name }}-config}
+        - name: tokens
+          secret:
+            secretName: {{ .Release.Name }}-tokens
+            items:
+              - {key: intake, path: intake}
+              - {key: investigator, path: investigator}
+              - {key: admin, path: admin}
+              {{- if .Values.executor.enabled }}
+              - {key: executor, path: executor}
+              {{- end }}
+{{- range .Values.enrolledNamespaces }}
+---
+# Read-only: workloads, pods, their logs and events. Never Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $.Release.Name }}-core-read
+  namespace: {{ . }}
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events, persistentvolumeclaims]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $.Release.Name }}-core-read
+  namespace: {{ . }}
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $.Release.Name }}-core-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $.Release.Name }}-core
+    namespace: {{ $.Release.Namespace }}
+{{- end }}

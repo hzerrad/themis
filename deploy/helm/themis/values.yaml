@@ -1,0 +1,76 @@
+image:
+  # Images are named <repository>/themis-{core,executor,intelligence}:<tag>.
+  repository: ""
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# Namespaces Themis may read, and with the executor, write. Each gets its own
+# Role: Themis never creates RBAC at runtime.
+enrolledNamespaces:
+  - shop
+
+database:
+  # A Secret with a DATABASE_URL key. Empty uses the bundled PostgreSQL.
+  existingSecret: ""
+
+# A single PostgreSQL for trying Themis; not for production.
+postgres:
+  enabled: true
+  image: postgres:17-alpine
+  storage: 1Gi
+
+model:
+  # An OpenAI-compatible endpoint, such as Ollama.
+  baseURL: http://ollama.ollama.svc:11434/v1
+  name: qwen3:8b
+  # The most sensitive evidence the endpoint may receive.
+  ceiling: sensitive
+  # A Secret with an apiKey key, if the endpoint needs one.
+  apiKeySecret: ""
+  # CIDR the investigator may reach the model at, for the NetworkPolicy.
+  egressCIDR: 0.0.0.0/0
+  tokenBudget: 200000
+
+# The executor is the only component that writes to workloads. Off by
+# default: Themis then diagnoses and proposes, and never acts.
+executor:
+  enabled: false
+
+networkPolicy:
+  enabled: true
+
+# Incident profiles, as in deploy/config/themis.example.yaml.
+profiles:
+  - name: rollout-regression
+    priority: 100
+    match:
+      alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
+      targetKinds: [Deployment.apps]
+    evidence:
+      initial: [rollout_history, pod_states, target_events]
+      allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+    capabilities: [deployment.rollback-to-revision]
+    policy:
+      mode: guarded
+      approvalTimeout: 30m
+      rules:
+        - name: gitops-owns-the-target
+          when: predicates.gitops_managed != "false"
+          decision: deny
+        - name: rollback-needs-a-bad-rollout
+          when: >-
+            action.capability == "deployment.rollback-to-revision" &&
+            (predicates.oom_killed_new_revision != "true" ||
+             predicates.failure_onset_after_rollout != "true")
+          decision: deny
+        - name: rollback-needs-approval
+          when: action.capability == "deployment.rollback-to-revision"
+          decision: require_approval
+    verification:
+      window: 5m
+      stability: 2m
+
+resources:
+  core: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
+  executor: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 256Mi}}
+  intelligence: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
