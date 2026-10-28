@@ -1,8 +1,10 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 
@@ -114,4 +116,24 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("river migrate: %w", err)
 	}
 	return nil
+}
+
+func bytesReader(b []byte) *bytes.Reader { return bytes.NewReader(b) }
+
+// normalizeNumbers turns JSON numbers into int64 when integral, else float64,
+// so values read back hash as they were written.
+func normalizeNumbers(m map[string]any) map[string]any {
+	for k, v := range m {
+		switch n := v.(type) {
+		case json.Number:
+			if i, err := n.Int64(); err == nil {
+				m[k] = i
+			} else if f, err := n.Float64(); err == nil {
+				m[k] = f
+			}
+		case map[string]any:
+			m[k] = normalizeNumbers(n)
+		}
+	}
+	return m
 }
