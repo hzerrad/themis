@@ -185,7 +185,7 @@ type server struct {
 
 // Start serves until ctx is done, then shuts down gracefully.
 func (s *server) Start(ctx context.Context) error {
-	ln, err := net.Listen("tcp", s.addr)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.addr, err)
 	}

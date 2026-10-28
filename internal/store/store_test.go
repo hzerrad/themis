@@ -134,7 +134,6 @@ func TestEnqueueManyTx_NoJobs(t *testing.T) {
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		return s.EnqueueManyTx(t.Context(), tx, nil)
 	})
-
 	if err != nil {
 		t.Fatalf("EnqueueManyTx(nil): %v", err)
 	}

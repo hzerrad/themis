@@ -62,7 +62,7 @@ func newHandler(t *testing.T, r alertmanager.Receiver) (*alertmanager.Handler, *
 }
 
 func post(h http.Handler, auth string, body []byte) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, "/v1/intake/alertmanager", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/intake/alertmanager", bytes.NewReader(body))
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
@@ -257,7 +257,7 @@ func TestHandler_RouteRefusesOtherMethods(t *testing.T) {
 	mux.Handle(alertmanager.Route, h)
 
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/intake/alertmanager", nil))
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/intake/alertmanager", nil))
 
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET status = %d, want 405", rec.Code)

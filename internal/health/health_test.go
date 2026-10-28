@@ -16,7 +16,7 @@ type pinger func(ctx context.Context) error
 func (p pinger) Ping(ctx context.Context) error { return p(ctx) }
 
 func check(db health.Pinger) error {
-	return health.Database(db)(httptest.NewRequest("GET", "/readyz", nil))
+	return health.Database(db)(httptest.NewRequestWithContext(context.Background(), "GET", "/readyz", nil))
 }
 
 func TestDatabase_Ready(t *testing.T) {

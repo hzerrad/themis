@@ -54,8 +54,10 @@ func (w *ProcessAlertWorker) work(ctx context.Context, job *river.Job[ProcessAle
 	case err != nil && job.Attempt < job.MaxAttempts:
 		return err
 	case err != nil:
-		rejection = &rejected{store.RejectionProcessingFailed,
-			fmt.Sprintf("gave up after %d attempts: %v", job.Attempt, err)}
+		rejection = &rejected{
+			store.RejectionProcessingFailed,
+			fmt.Sprintf("gave up after %d attempts: %v", job.Attempt, err),
+		}
 	}
 	if rejection != nil {
 		return w.reject(ctx, job, *rejection)
@@ -73,8 +75,10 @@ type rejected struct {
 // or an error worth retrying.
 func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.IncidentArgs, *rejected, error) {
 	if ns := a.Labels[target.LabelNamespace]; ns != "" && !w.Config.IsEnrolled(ns) {
-		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
-			fmt.Sprintf("namespace %q is not enrolled", ns)}, nil
+		return store.IncidentArgs{}, &rejected{
+			store.RejectionNotEnrolled,
+			fmt.Sprintf("namespace %q is not enrolled", ns),
+		}, nil
 	}
 
 	ref, err := target.Resolve(ctx, w.Reader, w.Mapper, a.Labels)
@@ -86,14 +90,18 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 	}
 	// Enforced again on what was resolved, not only on the alert's label.
 	if !w.Config.IsEnrolled(ref.Namespace) {
-		return store.IncidentArgs{}, &rejected{store.RejectionNotEnrolled,
-			fmt.Sprintf("target namespace %q is not enrolled", ref.Namespace)}, nil
+		return store.IncidentArgs{}, &rejected{
+			store.RejectionNotEnrolled,
+			fmt.Sprintf("target namespace %q is not enrolled", ref.Namespace),
+		}, nil
 	}
 
 	profile, ok := w.Config.MatchProfile(a.Name, a.Labels, ref)
 	if !ok {
-		return store.IncidentArgs{}, &rejected{store.RejectionNoProfile,
-			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, config.TargetKind(ref), ref.Namespace, ref.Name)}, nil
+		return store.IncidentArgs{}, &rejected{
+			store.RejectionNoProfile,
+			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, config.TargetKind(ref), ref.Namespace, ref.Name),
+		}, nil
 	}
 
 	return store.IncidentArgs{

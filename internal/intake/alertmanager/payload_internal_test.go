@@ -3,19 +3,20 @@ package alertmanager
 import (
 	"encoding/json/v2"
 	"errors"
-	"github.com/hzerrad/themis/internal/intake"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hzerrad/themis/internal/intake"
 )
 
 // Translation is internal to intake, so these tests are in package intake.
 
 func parseFixture(t *testing.T, name string) *Payload {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name)) //nolint:gosec // a fixture name chosen by the test
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
