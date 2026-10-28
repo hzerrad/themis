@@ -19,6 +19,8 @@ intake:
   bearerTokenFile: /var/run/secrets/themis/intake-token
 investigators:
   bearerTokenFile: /var/run/secrets/themis/investigator-token
+api:
+  bearerTokenFile: /var/run/secrets/themis/admin-token
 profiles:
   - name: rollout-regression
     priority: 100
@@ -120,6 +122,7 @@ func TestValidate_Errors(t *testing.T) {
 		{"invalid namespace", func(c *config.Config) { c.EnrolledNamespaces[0] = "Shop_1" }, "enrolledNamespaces[0]"},
 		{"duplicate namespace", func(c *config.Config) { c.EnrolledNamespaces[1] = "shop" }, "enrolledNamespaces[1]"},
 		{"no token file", func(c *config.Config) { c.Intake.BearerTokenFile = "" }, "intake.bearerTokenFile"},
+		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"no investigator token file", func(c *config.Config) { c.Investigators.BearerTokenFile = "" }, "investigators.bearerTokenFile"},
 		{"no profiles", func(c *config.Config) { c.Profiles = nil }, "profiles"},
 		{"invalid profile name", func(c *config.Config) { c.Profiles[0].Name = "Rollout Regression" }, "profiles[0].name"},

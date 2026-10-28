@@ -43,6 +43,7 @@ func TestMain(m *testing.M) {
 const (
 	token              = "smoke-token"
 	investigatorSecret = "investigator-token"
+	adminSecret        = "admin-token"
 )
 
 func freeAddr(t *testing.T) string {
@@ -77,11 +78,14 @@ func writeConfig(t *testing.T, ns string) string {
 	t.Helper()
 	tokenFile := writeFile(t, "token", token+"\n")
 	investigatorToken := writeFile(t, "investigator-token", investigatorSecret+"\n")
+	adminToken := writeFile(t, "admin-token", adminSecret+"\n")
 	return writeFile(t, "themis.yaml", fmt.Sprintf(`
 enrolledNamespaces: [%s]
 intake:
   bearerTokenFile: %s
 investigators:
+  bearerTokenFile: %s
+api:
   bearerTokenFile: %s
 profiles:
   - name: rollout-regression
@@ -92,7 +96,7 @@ profiles:
     evidence:
       initial: [rollout_history, pod_states]
       allowed: [rollout_history, pod_states]
-`, ns, tokenFile, investigatorToken))
+`, ns, tokenFile, investigatorToken, adminToken))
 }
 
 // eventually polls cond until it holds or the timeout passes. It stops early if
