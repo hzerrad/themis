@@ -67,3 +67,14 @@ func latest(b evidence.Bundle, template string, v any) (string, bool) {
 func result(name string, value Truth, reason string, ids ...string) Result {
 	return Result{Name: name, Version: "1", Value: value, Reason: reason, EvidenceIDs: ids}
 }
+
+// ParseTruth is the inverse of Truth.String; anything else is Unknown.
+func ParseTruth(s string) Truth {
+	switch s {
+	case "true":
+		return True
+	case "false":
+		return False
+	}
+	return Unknown
+}
