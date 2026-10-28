@@ -150,3 +150,10 @@ ol.timeline li::before {
 details summary { cursor: pointer; }
 .hypothesis { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .hypothesis:last-child { border-bottom: 0; }
+
+.callout.quiet { border-left-color: var(--accent); }
+.callout .lead { margin: 0 0 6px; font-weight: 600; }
+.callout ul { margin: 0; padding-left: 18px; }
+details.rejected { margin-top: 16px; }
+details.rejected .grid { margin-top: 12px; }
+caption { caption-side: bottom; text-align: left; padding-top: 8px; font-size: 12px; }
