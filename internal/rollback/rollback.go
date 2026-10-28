@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -65,20 +66,52 @@ type Live struct {
 	Replicas  int32
 }
 
-// Read reads the target and the template of its revision.
-func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision int64) (Live, error) {
+// TemplateSnapshot identifies the target's current template.
+type TemplateSnapshot struct {
+	SpecHash string
+
+	// Manager last wrote the template, at ChangedAt.
+	Manager   string
+	ChangedAt time.Time
+}
+
+// Snapshot reads the target's current template identity.
+func Snapshot(ctx context.Context, c client.Reader, t incident.TargetRef) (TemplateSnapshot, error) {
+	d, err := getTarget(ctx, c, t)
+	if err != nil {
+		return TemplateSnapshot{}, err
+	}
+	hash, err := TemplateHash(d.Spec.Template)
+	if err != nil {
+		return TemplateSnapshot{}, err
+	}
+	manager, at := templateWriter(d)
+	return TemplateSnapshot{SpecHash: hash, Manager: manager, ChangedAt: at}, nil
+}
+
+func getTarget(ctx context.Context, c client.Reader, t incident.TargetRef) (*appsv1.Deployment, error) {
 	if t.Group != appsv1.GroupName || t.Kind != "Deployment" {
-		return Live{}, fmt.Errorf("%w: %s.%s is not a Deployment", ErrStale, t.Kind, t.Group)
+		return nil, fmt.Errorf("%w: %s.%s is not a Deployment", ErrStale, t.Kind, t.Group)
 	}
 	var d appsv1.Deployment
 	if err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &d); apierrors.IsNotFound(err) {
-		return Live{}, fmt.Errorf("%w: Deployment %s is gone", ErrStale, t.Name)
+		return nil, fmt.Errorf("%w: Deployment %s is gone", ErrStale, t.Name)
 	} else if err != nil {
-		return Live{}, fmt.Errorf("get Deployment %s: %w", t.Name, err)
+		return nil, fmt.Errorf("get Deployment %s: %w", t.Name, err)
 	}
 	if string(d.UID) != t.UID {
-		return Live{}, fmt.Errorf("%w: Deployment %s was recreated", ErrStale, t.Name)
+		return nil, fmt.Errorf("%w: Deployment %s was recreated", ErrStale, t.Name)
 	}
+	return &d, nil
+}
+
+// Read reads the target and the template of its revision.
+func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision int64) (Live, error) {
+	dp, err := getTarget(ctx, c, t)
+	if err != nil {
+		return Live{}, err
+	}
+	d := *dp
 	if d.Annotations[revisionAnnotation] == strconv.FormatInt(revision, 10) {
 		return Live{}, fmt.Errorf("%w: %d", ErrAlreadyCurrent, revision)
 	}
@@ -191,6 +224,12 @@ func TemplateHash(t corev1.PodTemplateSpec) (string, error) {
 
 // templateManager is the field manager that last wrote spec.template.
 func templateManager(d *appsv1.Deployment) string {
+	manager, _ := templateWriter(d)
+	return manager
+}
+
+// templateWriter is the field manager that last wrote spec.template, and when.
+func templateWriter(d *appsv1.Deployment) (string, time.Time) {
 	manager := ""
 	var latest *metav1.Time
 	for _, mf := range d.ManagedFields {
@@ -201,7 +240,10 @@ func templateManager(d *appsv1.Deployment) string {
 			manager, latest = mf.Manager, mf.Time
 		}
 	}
-	return manager
+	if latest == nil {
+		return manager, time.Time{}
+	}
+	return manager, latest.UTC()
 }
 
 // managedBy names the GitOps tool that owns d, or is empty.
