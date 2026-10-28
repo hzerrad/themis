@@ -27,6 +27,10 @@ import (
 // DefaultLeaseFor is how long a lease lasts without renewal.
 const DefaultLeaseFor = time.Minute
 
+// retryBackoff delays the lease after a failure, doubling with each attempt,
+// so a brief model outage does not use up every attempt.
+const retryBackoff = 30 * time.Second
+
 const actor = "investigator"
 
 type Server struct {
