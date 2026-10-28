@@ -52,6 +52,10 @@ type DeploymentView struct {
 	Paused              bool            `json:"paused,omitzero"`
 	Conditions          []ConditionView `json:"conditions,omitempty"`
 
+	// TemplateChangedAt is when the pod template was last written: a rollout
+	// that reuses an old ReplicaSet starts then, not at its creation.
+	TemplateChangedAt time.Time `json:"templateChangedAt,omitzero"`
+
 	// Markers are GitOps labels and annotations; Managers are field managers.
 	Markers  map[string]string `json:"ownershipMarkers,omitempty"`
 	Managers []string          `json:"fieldManagers,omitempty"`
@@ -163,6 +167,9 @@ func viewDeployment(d *appsv1.Deployment) DeploymentView {
 	for _, mf := range d.ManagedFields {
 		if !slices.Contains(v.Managers, mf.Manager) {
 			v.Managers = append(v.Managers, mf.Manager)
+		}
+		if mf.Time != nil && mf.FieldsV1 != nil && strings.Contains(mf.FieldsV1.GetRawString(), `"f:template"`) && mf.Time.After(v.TemplateChangedAt) {
+			v.TemplateChangedAt = mf.Time.UTC()
 		}
 	}
 	return v
