@@ -23,3 +23,15 @@ func TestServesThePage(t *testing.T) {
 		}
 	}
 }
+
+// The UI must not answer for the API: a wrong method gets 405, not a page.
+func TestLeavesOtherPathsToTheAPI(t *testing.T) {
+	mux := http.NewServeMux()
+	web.Register(mux)
+	mux.Handle("POST /v1/intake/alertmanager", http.NotFoundHandler())
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/intake/alertmanager", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET on a POST route = %d, want 405", rec.Code)
+	}
+}
