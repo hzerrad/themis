@@ -113,3 +113,12 @@ func TestLogsTail_IsSensitive(t *testing.T) {
 		t.Errorf("Classification = %q, want sensitive", c)
 	}
 }
+
+// Silence is not evidence: empty logs say so.
+func TestLogsTail_EmptyLogsAreExplained(t *testing.T) {
+	logs := fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": ""}
+	data := string(collectLogs(t, logs, loadScenario1(t), nil).Data)
+	if !strings.Contains(data, "neither confirms nor contradicts") {
+		t.Errorf("empty logs carry no note: %s", data)
+	}
+}
