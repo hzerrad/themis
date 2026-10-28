@@ -36,6 +36,17 @@ func New(pool *pgxpool.Pool) (*Store, error) {
 	}, nil
 }
 
+// Querier runs queries: a transaction or the store's pool.
+type Querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// DB queries outside a transaction.
+func (s *Store) DB() Querier {
+	return s.pool
+}
+
 // Ping reports whether the database answers.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
