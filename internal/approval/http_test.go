@@ -298,3 +298,19 @@ func TestIncidentDetail_ShowsChangesNotTemplates(t *testing.T) {
 		t.Errorf("the detail does not show how MODE changes: %s", body)
 	}
 }
+
+// One incident that moved on must not stop the sweep for every other one.
+func TestExpire_ToleratesAnIncidentThatMovedOn(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = 'self_resolved' WHERE id = $1`, a.IncidentID); err != nil {
+		t.Fatal(err)
+	}
+	w := &approval.ExpireWorker{Store: e.store, Now: func() time.Time { return now.Add(time.Hour) }}
+	if err := w.Expire(t.Context()); err != nil {
+		t.Fatalf("Expire: %v", err)
+	}
+	if got, _ := e.store.Action(t.Context(), e.store.DB(), a.ID); got.State != store.ActionExpired {
+		t.Errorf("action = %s, want expired", got.State)
+	}
+}

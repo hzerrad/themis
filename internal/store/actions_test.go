@@ -169,3 +169,23 @@ func TestExpireApprovals(t *testing.T) {
 		t.Errorf("a new action after expiry: %v", err)
 	}
 }
+
+// An incident that closes before approval takes its pending action with it,
+// freeing the target.
+func TestCancelPendingActions(t *testing.T) {
+	s, _ := newStore(t)
+	a := awaitingAction(t, s)
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.CancelPendingActions(t.Context(), tx, a.IncidentID)
+	})
+	if err != nil {
+		t.Fatalf("CancelPendingActions: %v", err)
+	}
+	if got, _ := s.Action(t.Context(), s.DB(), a.ID); got.State != store.ActionCanceled {
+		t.Errorf("action = %s, want canceled", got.State)
+	}
+	b := a
+	if err := s.InTx(t.Context(), func(tx pgx.Tx) error { _, err := s.InsertAction(t.Context(), tx, b); return err }); err != nil {
+		t.Errorf("the target is still taken: %v", err)
+	}
+}
