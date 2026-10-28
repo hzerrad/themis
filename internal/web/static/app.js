@@ -86,26 +86,16 @@ async function list() {
         h("tbody", {}, rows))));
 }
 
-function containers(template) {
-  return ((template && template.spec && template.spec.containers) || []).map((c) => ({
-    name: c.name,
-    image: c.image,
-    limits: JSON.stringify((c.resources && c.resources.limits) || {}),
-    requests: JSON.stringify((c.resources && c.resources.requests) || {}),
-  }));
-}
-
-function templateDiff(pre, desired) {
-  const now = containers(pre);
+function changesTable(changes) {
+  if (!changes || changes.length === 0) {
+    return h("p", { class: "muted" }, "The restored template is the same as the current one.");
+  }
   return h("table", {},
     h("thead", {}, h("tr", {}, ["Container", "Field", "Now", "After"].map((c) => h("th", {}, c)))),
-    h("tbody", {}, containers(desired).flatMap((d) => {
-      const n = now.find((c) => c.name === d.name) || {};
-      return ["image", "limits", "requests"].map((f) => h("tr", {},
-        h("td", {}, d.name), h("td", { class: "muted" }, f),
-        h("td", { class: `mono ${n[f] !== d[f] ? "diff-old" : ""}` }, n[f] || "—"),
-        h("td", { class: `mono ${n[f] !== d[f] ? "diff-new" : ""}` }, d[f])));
-    })));
+    h("tbody", {}, changes.map((c) => h("tr", {},
+      h("td", {}, c.container), h("td", { class: "mono" }, c.field),
+      h("td", { class: "mono diff-old" }, c.before), h("td", { class: "mono diff-new" }, c.after)))),
+    h("caption", { class: "muted" }, "Env values, commands and args are never shown: only that they change."));
 }
 
 function proposalPanel(p) {
@@ -156,7 +146,7 @@ function actionPanel(a, reload) {
       a.Verification ? [h("dt", {}, "Verification"), h("dd", {}, a.Verification.Outcome ? state(a.Verification.Outcome) : "in progress",
         h("pre", {}, JSON.stringify(a.Verification.Observation, null, 2)))] : null),
     h("h2", {}, "What changes"),
-    templateDiff(a.PreState, a.Desired),
+    changesTable(a.Changes),
     a.State === "awaiting_approval" ? h("div", { class: "actions" }, approve, reason, deny) : null,
     error);
 }
@@ -180,6 +170,51 @@ function hypotheses(inv) {
       h("br"), `missing: ${(x.missing || []).join("; ") || "—"}`)));
 }
 
+const NEXT = {
+  received: "Themis received the alert and is collecting evidence.",
+  investigating: "The investigator is reading the evidence.",
+  diagnosed: "The investigator proposed a fix; governance is checking it against the cluster and policy.",
+  proposed: "Governance is deciding on the proposed fix.",
+  awaiting_approval: "A fix awaits your approval. Check what it changes, then approve or deny it.",
+  authorized: "Approved. The executor is about to act.",
+  executing: "The executor is applying the fix.",
+  verifying: "The fix was applied. Themis is watching whether the workload recovers.",
+  resolved: "The fix worked: the workload recovered and stayed healthy.",
+  contained_escalated: "The fix helped but the workload is not fully healthy. A human should take over.",
+  escalated: "Themis could not resolve this. A human should take over.",
+  closed_no_action: "Closed without acting: no fix was justified or allowed.",
+  self_resolved: "The alert resolved on its own before Themis acted.",
+  rejected: "Themis did not act on this alert.",
+  canceled: "Canceled.",
+};
+
+// summary says, in plain words, what happened and what is expected of you.
+function summary(inc, inv, actions, proposals) {
+  const facts = [];
+  const accepted = proposals.find((p) => p.Status === "accepted");
+  const action = actions[actions.length - 1];
+  if (inv && inv.Summary) facts.push(h("li", {}, h("strong", {}, "Diagnosis: "), inv.Summary));
+  if (action) {
+    const changed = (action.Changes || []).map((c) => c.field).join(", ") || "nothing visible";
+    facts.push(h("li", {}, h("strong", {}, "Proposed fix: "),
+      `roll back to revision ${action.Params.revision}, which changes ${changed} on ${action.BlastRadius.replicas} replicas.`));
+    facts.push(h("li", {}, h("strong", {}, "Policy: "), action.DecisionReason));
+  } else if (accepted) {
+    facts.push(h("li", {}, h("strong", {}, "Proposed fix: "), accepted.Rationale));
+  }
+  const rejected = proposals.filter((p) => p.Status === "rejected").length;
+  if (rejected) facts.push(h("li", {}, h("strong", {}, "Rejected attempts: "), `${rejected}, kept below as safety records.`));
+  return h("div", { class: `callout ${inc.state === "awaiting_approval" ? "" : "quiet"}` },
+    h("p", { class: "lead" }, NEXT[inc.state] || inc.state), facts.length ? h("ul", {}, facts) : null);
+}
+
+function rejectedAttempts(proposals) {
+  if (proposals.length === 0) return null;
+  return h("details", { class: "panel rejected" },
+    h("summary", {}, `Rejected attempts (${proposals.length}): proposals the core refused, recorded as safety events`),
+    proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p))));
+}
+
 async function detail(id) {
   const reload = () => detail(id).catch(showError);
   const d = await api(`/v1/incidents/${encodeURIComponent(id)}`);
@@ -193,15 +228,13 @@ async function detail(id) {
     h("h1", {}, target(inc.target), " ", state(inc.state)),
     h("p", { class: "muted mono" }, `${inc.id} · profile ${inc.profile} · uid ${inc.target.UID} · opened ${time(inc.createdAt)}`),
 
-    actions.some((a) => a.State === "awaiting_approval")
-      ? h("div", { class: "callout" }, "An action awaits your approval. Compare the proposal with the action derived from the cluster before approving.")
-      : null,
+    summary(inc, inv, actions, proposals),
 
     actions.map((a) => {
       const p = proposals.find((x) => x.ID === a.ProposalID);
       return h("div", { class: "grid" }, p ? proposalPanel(p) : h("div"), actionPanel(a, reload));
     }),
-    proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID)).map((p) => h("div", { class: "grid" }, proposalPanel(p))),
+    rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID))),
 
     h("h2", {}, "Investigation"),
     h("div", { class: "panel" }, inv
