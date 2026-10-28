@@ -30,6 +30,15 @@ func currentRevision(h evidence.RolloutHistoryView) (evidence.RevisionView, bool
 	return evidence.RevisionView{}, false
 }
 
+// rolloutAt is when the current revision rolled out: its ReplicaSet's
+// creation, or a later template change that reused it.
+func rolloutAt(h evidence.RolloutHistoryView, cur evidence.RevisionView) time.Time {
+	if h.Deployment.TemplateChangedAt.After(cur.CreatedAt) {
+		return h.Deployment.TemplateChangedAt
+	}
+	return cur.CreatedAt
+}
+
 // priorRevision is the newest revision older than the current one.
 func priorRevision(h evidence.RolloutHistoryView, current evidence.RevisionView) (evidence.RevisionView, bool) {
 	cur, err := strconv.ParseInt(current.Revision, 10, 64)
@@ -55,14 +64,15 @@ func RolloutRecent(b evidence.Bundle, window time.Duration, now time.Time) Resul
 		return result(NameRolloutRecent, Unknown, "no rollout history")
 	}
 	cur, ok := currentRevision(h)
-	if !ok || cur.CreatedAt.IsZero() {
-		return result(NameRolloutRecent, Unknown, "the current revision or its creation time is unknown")
+	at := rolloutAt(h, cur)
+	if !ok || at.IsZero() {
+		return result(NameRolloutRecent, Unknown, "the current revision or its rollout time is unknown")
 	}
-	age := now.Sub(cur.CreatedAt)
+	age := now.Sub(at)
 	if age <= window {
-		return result(NameRolloutRecent, True, fmt.Sprintf("revision %s was created %s ago", cur.Revision, age.Round(time.Second)), id)
+		return result(NameRolloutRecent, True, fmt.Sprintf("revision %s rolled out %s ago", cur.Revision, age.Round(time.Second)), id)
 	}
-	return result(NameRolloutRecent, False, fmt.Sprintf("revision %s was created %s ago, beyond %s", cur.Revision, age.Round(time.Second), window), id)
+	return result(NameRolloutRecent, False, fmt.Sprintf("revision %s rolled out %s ago, beyond %s", cur.Revision, age.Round(time.Second), window), id)
 }
 
 // failure is a sign of trouble: a warning event or a container that died.
@@ -104,7 +114,8 @@ func FailureOnsetAfterRollout(b evidence.Bundle) Result {
 		return result(NameFailureOnsetAfterRollout, Unknown, "no rollout history")
 	}
 	cur, ok := currentRevision(h)
-	if !ok || cur.CreatedAt.IsZero() {
+	at := rolloutAt(h, cur)
+	if !ok || at.IsZero() {
 		return result(NameFailureOnsetAfterRollout, Unknown, "the rollout time is unknown")
 	}
 	fs := failures(b)
@@ -121,16 +132,16 @@ func FailureOnsetAfterRollout(b evidence.Bundle) Result {
 			undated++
 			continue
 		}
-		if f.at.Before(cur.CreatedAt) {
+		if f.at.Before(at) {
 			return result(NameFailureOnsetAfterRollout, False,
-				fmt.Sprintf("%s at %s predates revision %s at %s", f.what, f.at.Format(time.RFC3339), cur.Revision, cur.CreatedAt.Format(time.RFC3339)), hid, f.id)
+				fmt.Sprintf("%s at %s predates revision %s at %s", f.what, f.at.Format(time.RFC3339), cur.Revision, at.Format(time.RFC3339)), hid, f.id)
 		}
 	}
 	if undated > 0 {
 		return result(NameFailureOnsetAfterRollout, Unknown, fmt.Sprintf("%d failures have no time", undated))
 	}
 	return result(NameFailureOnsetAfterRollout, True,
-		fmt.Sprintf("all %d failures follow revision %s at %s", len(fs), cur.Revision, cur.CreatedAt.Format(time.RFC3339)), ids...)
+		fmt.Sprintf("all %d failures follow revision %s at %s", len(fs), cur.Revision, at.Format(time.RFC3339)), ids...)
 }
 
 func failed(c evidence.ContainerView) bool {

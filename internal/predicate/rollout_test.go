@@ -237,3 +237,15 @@ func TestTruth_JSON(t *testing.T) {
 		t.Errorf("Marshal = %s, %v", b, err)
 	}
 }
+
+// Rolling out a template seen before reuses its old ReplicaSet: the rollout
+// starts when the template changed, not when the ReplicaSet was created.
+func TestRolloutTime_ReusedReplicaSet(t *testing.T) {
+	h := history()
+	h.Revisions[0].CreatedAt = rolloutAt.Add(-48 * time.Hour)
+	h.Deployment.TemplateChangedAt = rolloutAt
+	b := replace(t, scenario1(t), evidence.RolloutHistory, h)
+
+	assertTruth(t, predicate.RolloutRecent(b, time.Hour, now), predicate.True)
+	assertTruth(t, predicate.FailureOnsetAfterRollout(b), predicate.True)
+}
