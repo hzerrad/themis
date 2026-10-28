@@ -28,7 +28,9 @@ git commit -s
 
 ## Local checks
 
-Run `make lint test` before opening a pull request. CI runs the same targets.
+Run `make lint test` before opening a pull request. CI runs the same targets, and `make e2e`, which runs the bad-rollout scenarios on a fresh kind cluster with a fake model, so it needs only Docker.
+
+Changes to the investigation prompt or loop are easiest to judge against a real model: see [Running locally](docs/demo.md#running-locally).
 
 ## Reporting security issues
 
