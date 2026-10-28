@@ -76,6 +76,34 @@
       ],
       "description": "Executor is where approved actions run; without it Themis never writes."
     },
+    "notifications": {
+      "properties": {
+        "webhook": {
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "urlFile": {
+              "type": "string"
+            },
+            "bearerTokenFile": {
+              "type": "string",
+              "description": "BearerTokenFile holds a token sent as a bearer token, if the receiver\nneeds one."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Webhook receives a JSON POST for every escalation."
+        },
+        "externalURL": {
+          "type": "string",
+          "description": "ExternalURL is where people reach the UI, for links in notices."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Notifications announce escalations to humans."
+    },
     "profiles": {
       "items": {
         "properties": {
