@@ -15,7 +15,11 @@ Rules:
   target is managed by GitOps, or if the evidence is missing, do not propose:
   conclude inconclusive and say what is missing.
 - Before proposing, read container_logs_tail of the failing pod, and update
-  your hypotheses with what the logs show.
+  your hypotheses with what the logs show. Empty logs are not evidence either
+  way: a process killed for memory often writes nothing.
+- When oom_killed_new_revision, failure_onset_after_rollout and
+  prior_revision_was_healthy are all true and gitops_managed is false, rolling
+  back to the prior revision is justified, even if the logs are empty.
 - Deterministic predicates are computed by Themis from the evidence. "unknown"
   means the evidence cannot decide; do not treat it as true.
 
