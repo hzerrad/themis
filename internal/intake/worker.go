@@ -135,12 +135,19 @@ func rejectionReason(err error) (store.AlertRejectionReason, bool) {
 // fire creates or joins the incident and queues the investigation of a new one.
 func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAlertArgs], in store.IncidentArgs) error {
 	a := job.Args.Alert
-	var created bool
+	var created, stale bool
 	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		var (
 			id  string
 			err error
 		)
+		// The resolution of this episode was processed first.
+		if stale, err = w.Store.Resolved(ctx, tx, a.Source, a.SourceID, a.StartsAt); err != nil || stale {
+			if err != nil {
+				return err
+			}
+			return complete(ctx, tx, job)
+		}
 		id, created, err = w.Store.CreateOrJoinIncident(ctx, tx, in)
 		if err != nil {
 			return err
@@ -161,9 +168,13 @@ func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAle
 	if err != nil {
 		return err
 	}
-	if created {
+	switch {
+	case stale:
+		alertsProcessed.WithLabelValues(outcomeStale, "").Inc()
+		return nil
+	case created:
 		alertsProcessed.WithLabelValues(outcomeCreated, "").Inc()
-	} else {
+	default:
 		alertsProcessed.WithLabelValues(outcomeJoined, "").Inc()
 	}
 	return nil
@@ -174,9 +185,11 @@ func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAle
 func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[ProcessAlertArgs]) error {
 	a := job.Args.Alert
 	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		incidents, err := w.Store.ResolveAlert(ctx, tx, store.ResolvedAlertArgs{
-			Source: a.Source, SourceID: a.SourceID, StartsAt: a.StartsAt, EndsAt: a.EndsAt,
-		})
+		resolved := store.ResolvedAlertArgs{Source: a.Source, SourceID: a.SourceID, StartsAt: a.StartsAt, EndsAt: a.EndsAt}
+		if err := w.Store.RecordResolution(ctx, tx, resolved); err != nil {
+			return err
+		}
+		incidents, err := w.Store.ResolveAlert(ctx, tx, resolved)
 		if err != nil {
 			return err
 		}
