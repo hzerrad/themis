@@ -3,6 +3,7 @@ package verify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -48,6 +49,10 @@ type Worker struct {
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	final, err := w.Verify(ctx, job.Args)
+	if err != nil && job.Attempt >= job.MaxAttempts {
+		// A write happened: never leave the incident in verifying.
+		return w.escalate(ctx, job.Args.ActionID, "verification could not observe the target: "+err.Error())
+	}
 	if err != nil || final {
 		return err
 	}
@@ -199,6 +204,22 @@ func currentPods(ctx context.Context, c client.Reader, d *appsv1.Deployment) ([]
 		}
 	}
 	return out, nil
+}
+
+func (w *Worker) escalate(ctx context.Context, actionID, reason string) error {
+	a, err := w.Store.Action(ctx, w.Store.DB(), actionID)
+	if err != nil {
+		return err
+	}
+	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
+			ID: a.IncidentID, From: incident.Verifying, To: incident.Escalated, Reason: reason, Actor: "verify",
+		})
+		if errors.Is(err, store.ErrStateConflict) {
+			return nil
+		}
+		return err
+	})
 }
 
 func (w *Worker) now() time.Time {

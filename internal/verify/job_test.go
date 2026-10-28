@@ -1,10 +1,14 @@
 package verify_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -229,6 +233,29 @@ func TestJob_HumanEditDuringWindow_Inconclusive(t *testing.T) {
 	}
 	if got := e.outcome(t); got != string(verify.Inconclusive) {
 		t.Errorf("outcome = %q, want inconclusive", got)
+	}
+	if got := e.state(t); got != incident.Escalated {
+		t.Errorf("state = %s, want escalated", got)
+	}
+}
+
+// failingReader stands in for an API server that refuses every read.
+type failingReader struct{}
+
+func (failingReader) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return errors.New("forbidden")
+}
+
+func (failingReader) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return errors.New("forbidden")
+}
+
+func TestJob_UnobservableOnTheLastAttempt_Escalates(t *testing.T) {
+	e := executed(t)
+	w := &verify.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Now: func() time.Time { return windowStart }}
+	job := &river.Job[verify.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 10, MaxAttempts: 10}, Args: e.args}
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatalf("Work: %v", err)
 	}
 	if got := e.state(t); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
