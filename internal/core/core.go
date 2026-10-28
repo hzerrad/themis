@@ -13,15 +13,20 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"google.golang.org/grpc"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/health"
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -31,8 +36,9 @@ type Options struct {
 	DatabaseURL string
 	Kubernetes  *rest.Config
 
-	// MetricsAddr "0" disables metrics.
+	// MetricsAddr "0" disables metrics. GRPCAddr serves investigators.
 	HTTPAddr    string
+	GRPCAddr    string
 	ProbeAddr   string
 	MetricsAddr string
 
@@ -61,6 +67,19 @@ func Run(ctx context.Context, o Options) error {
 
 	cfg, err := config.Load(o.ConfigPath)
 	if err != nil {
+		return err
+	}
+	clientset, err := kubernetes.NewForConfig(o.Kubernetes)
+	if err != nil {
+		return fmt.Errorf("create clientset: %w", err)
+	}
+	registry := evidence.NewRegistry(
+		evidence.NewRolloutHistory(),
+		evidence.NewPodStates(),
+		evidence.NewTargetEvents(),
+		evidence.NewContainerLogsTail(evidence.ClientsetLogs{Clientset: clientset}),
+	)
+	if err := checkTemplates(cfg, registry); err != nil {
 		return err
 	}
 
@@ -96,10 +115,23 @@ func Run(ctx context.Context, o Options) error {
 		Reader: mgr.GetAPIReader(),
 		Mapper: mgr.GetRESTMapper(),
 	})
-	runner, err := s.NewWorkerRunner(workers, o.Workers, log)
+	river.AddWorker(workers, &investigation.PrepareWorker{
+		Config:   cfg,
+		Store:    s,
+		Reader:   mgr.GetAPIReader(),
+		Registry: registry,
+		Logger:   log,
+	})
+	runner, err := s.NewWorkerRunner(workers, map[string]int{
+		river.QueueDefault:  o.Workers,
+		investigation.Queue: o.Workers,
+	}, log)
 	if err != nil {
 		return err
 	}
+
+	rpc := grpc.NewServer()
+	(&grpcserver.Server{Store: s, Config: cfg, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}).Register(rpc)
 
 	mux := http.NewServeMux()
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
@@ -120,8 +152,11 @@ func Run(ctx context.Context, o Options) error {
 	if err := mgr.Add(&server{addr: o.HTTPAddr, handler: mux, log: log}); err != nil {
 		return err
 	}
+	if err := mgr.Add(&grpcRunnable{addr: o.GRPCAddr, server: rpc}); err != nil {
+		return err
+	}
 
-	log.Info("starting themis-core", "http", o.HTTPAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
+	log.Info("starting themis-core", "http", o.HTTPAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
 	return mgr.Start(ctx)
 }
 
@@ -180,3 +215,46 @@ func (s *server) Start(ctx context.Context) error {
 }
 
 func (s *server) NeedLeaderElection() bool { return false }
+
+// checkTemplates refuses profiles naming templates Themis does not have.
+func checkTemplates(cfg config.Config, r evidence.Registry) error {
+	var errs []error
+	for _, p := range cfg.Profiles {
+		for _, name := range p.Evidence.Allowed {
+			if _, ok := r[name]; !ok {
+				errs = append(errs, fmt.Errorf("profile %s: unknown evidence template %q", p.Name, name))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// grpcRunnable serves gRPC until ctx is done, then stops gracefully.
+type grpcRunnable struct {
+	addr   string
+	server *grpc.Server
+}
+
+func (g *grpcRunnable) Start(ctx context.Context) error {
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", g.addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", g.addr, err)
+	}
+	served := make(chan error, 1)
+	go func() { served <- g.server.Serve(ln) }()
+	select {
+	case err := <-served:
+		return fmt.Errorf("serve grpc: %w", err)
+	case <-ctx.Done():
+	}
+	stopped := make(chan struct{})
+	go func() { g.server.GracefulStop(); close(stopped) }()
+	select {
+	case <-stopped:
+	case <-time.After(shutdownTimeout):
+		g.server.Stop()
+	}
+	return nil
+}
+
+func (g *grpcRunnable) NeedLeaderElection() bool { return false }
