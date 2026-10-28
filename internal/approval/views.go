@@ -19,12 +19,14 @@ type incidentView struct {
 	OccurrenceCount int       `json:"occurrenceCount"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
+	SupersededBy    string    `json:"supersededBy,omitempty"`
 }
 
 func viewIncident(in store.Incident) incidentView {
 	return incidentView{
 		ID: in.ID, State: string(in.State), Profile: in.Profile, Target: in.Target,
 		OccurrenceCount: in.OccurrenceCount, CreatedAt: in.CreatedAt, UpdatedAt: in.UpdatedAt,
+		SupersededBy: in.SupersededBy,
 	}
 }
 

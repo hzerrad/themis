@@ -204,8 +204,12 @@ function summary(inc, inv, actions, proposals) {
   }
   const rejected = proposals.filter((p) => p.Status === "rejected").length;
   if (rejected) facts.push(h("li", {}, h("strong", {}, "Rejected attempts: "), `${rejected}, kept below as safety records.`));
+  const lead = inc.supersededBy
+    ? ["The target was changed outside Themis and still fails, so a new incident investigates its new state: ",
+      h("a", { href: `#/incidents/${inc.supersededBy}` }, "open the new incident"), "."]
+    : NEXT[inc.state] || inc.state;
   return h("div", { class: `callout ${inc.state === "awaiting_approval" ? "" : "quiet"}` },
-    h("p", { class: "lead" }, NEXT[inc.state] || inc.state), facts.length ? h("ul", {}, facts) : null);
+    h("p", { class: "lead" }, lead), facts.length ? h("ul", {}, facts) : null);
 }
 
 function rejectedAttempts(proposals) {
