@@ -61,7 +61,7 @@ func (c ClientsetLogs) Logs(ctx context.Context, req LogRequest) (io.ReadCloser,
 	}).Stream(ctx)
 }
 
-type logsView struct {
+type LogsView struct {
 	Pod       string `json:"pod"`
 	Container string `json:"container"`
 	Previous  bool   `json:"previousRun"`
@@ -141,7 +141,7 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 	}
 
 	logs := tailUTF8(strings.ToValidUTF8(string(tail.buf), "\uFFFD"), MaxLogBytes)
-	data, err := json.Marshal(logsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs})
+	data, err := json.Marshal(LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs})
 	if err != nil {
 		return Item{}, err
 	}
