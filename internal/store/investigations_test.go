@@ -309,3 +309,20 @@ func TestIncidentInvestigation(t *testing.T) {
 		t.Errorf("IncidentInvestigation = %+v, %v", r, err)
 	}
 }
+
+// An incident that closed mid-investigation takes the lease with it, and is
+// not investigated again.
+func TestLease_LostWhenTheIncidentCloses(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	inv, _ := lease(t, s, t0)
+	if err := transition(t, s, id, incident.Investigating, incident.SelfResolved); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := leased(t, s, inv.LeaseID, t0); !errors.Is(err, store.ErrLeaseLost) {
+		t.Errorf("err = %v, want ErrLeaseLost", err)
+	}
+	if _, ok := lease(t, s, t0.Add(2*leaseFor)); ok {
+		t.Error("the investigation of a closed incident was leased again")
+	}
+}

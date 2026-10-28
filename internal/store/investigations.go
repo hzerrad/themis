@@ -18,8 +18,8 @@ import (
 // MaxInvestigationAttempts bounds the leases of one investigation.
 const MaxInvestigationAttempts = 3
 
-// ErrLeaseLost means a lease is unknown, expired or superseded: its holder's
-// results are stale.
+// ErrLeaseLost means a lease is unknown, expired, superseded, or its incident
+// moved on: its holder's results are stale.
 var ErrLeaseLost = errors.New("investigation lease lost")
 
 // Investigation is an incident's investigation and its current lease.
@@ -97,6 +97,7 @@ func (s *Store) LeaseInvestigation(ctx context.Context, tx pgx.Tx, workerID stri
 	WITH next AS (
 		SELECT id FROM investigations
 		WHERE (state = 'pending' OR (state = 'leased' AND lease_deadline < $1)) AND attempts < $2 AND lease_after <= $1
+		  AND EXISTS (SELECT 1 FROM incidents i WHERE i.id = investigations.incident_id AND i.state = 'investigating')
 		ORDER BY created_at
 		LIMIT 1
 		FOR UPDATE SKIP LOCKED
@@ -129,7 +130,7 @@ func (s *Store) LeasedInvestigation(ctx context.Context, tx pgx.Tx, leaseID stri
 	row := tx.QueryRow(ctx, `
 	SELECT `+investigationColumns+`
 	FROM investigations v JOIN incidents i ON i.id = v.incident_id
-	WHERE v.lease_id = $1 AND v.state = 'leased' AND v.lease_deadline >= $2
+	WHERE v.lease_id = $1 AND v.state = 'leased' AND v.lease_deadline >= $2 AND i.state = 'investigating'
 	FOR UPDATE OF v
 `, leaseID, now)
 	inv, err := scanInvestigation(row)
