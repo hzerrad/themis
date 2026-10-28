@@ -10,6 +10,9 @@ enrolledNamespaces:
 intake:
   bearerTokenFile: /var/run/secrets/themis/intake-token
 
+investigators:
+  bearerTokenFile: /var/run/secrets/themis/investigator-token
+
 profiles:
   - name: rollout-regression
     priority: 100

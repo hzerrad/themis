@@ -26,6 +26,21 @@
       ],
       "description": "Intake configures how alerts reach Themis."
     },
+    "investigators": {
+      "properties": {
+        "bearerTokenFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "BearerTokenFile holds the token investigators must send as a bearer token."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "bearerTokenFile"
+      ],
+      "description": "Investigators configures access to the gRPC API."
+    },
     "profiles": {
       "items": {
         "properties": {
@@ -152,6 +167,7 @@
   "required": [
     "enrolledNamespaces",
     "intake",
+    "investigators",
     "profiles"
   ],
   "title": "Themis configuration",

@@ -40,6 +40,9 @@ type Config struct {
 	// Intake configures how alerts reach Themis.
 	Intake Intake `json:"intake"`
 
+	// Investigators configures access to the gRPC API.
+	Investigators Investigators `json:"investigators"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins.
 	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
@@ -48,6 +51,12 @@ type Config struct {
 // Intake configures the Alertmanager webhook.
 type Intake struct {
 	// BearerTokenFile holds the token Alertmanager must send as a bearer token.
+	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+}
+
+// Investigators configures the investigators' gRPC API.
+type Investigators struct {
+	// BearerTokenFile holds the token investigators must send as a bearer token.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
 }
 
@@ -203,6 +212,9 @@ func (c Config) Validate() error {
 
 	if c.Intake.BearerTokenFile == "" {
 		add("intake.bearerTokenFile", "is required")
+	}
+	if c.Investigators.BearerTokenFile == "" {
+		add("investigators.bearerTokenFile", "is required")
 	}
 
 	if len(c.Profiles) == 0 {

@@ -130,7 +130,7 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	rpc := grpc.NewServer()
+	rpc := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.RequireToken(cfg.Investigators.BearerTokenFile)))
 	(&grpcserver.Server{Store: s, Config: cfg, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}).Register(rpc)
 
 	mux := http.NewServeMux()

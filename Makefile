@@ -130,13 +130,15 @@ demo-down: ## Remove the checkout workload
 
 # Running locally
 
-DEV_TOKEN := bin/dev/intake-token
+DEV_TOKEN              := bin/dev/intake-token
+DEV_INVESTIGATOR_TOKEN := bin/dev/investigator-token
 
 .PHONY: run
 run: ## Run themis-core locally against the kind cluster and $DATABASE_URL
 	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
 	@mkdir -p $(dir $(DEV_TOKEN))
 	@test -s $(DEV_TOKEN) || { openssl rand -hex 32 > $(DEV_TOKEN) && chmod 600 $(DEV_TOKEN); }
+	@test -s $(DEV_INVESTIGATOR_TOKEN) || { openssl rand -hex 32 > $(DEV_INVESTIGATOR_TOKEN) && chmod 600 $(DEV_INVESTIGATOR_TOKEN); }
 	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER)
 
 .PHONY: send-alert
