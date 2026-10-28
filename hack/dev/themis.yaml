@@ -20,3 +20,7 @@ profiles:
         - KubePodOOMKilled
       targetKinds:
         - Deployment.apps
+    evidence:
+      initial: [rollout_history, pod_states, target_events]
+      allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+    capabilities: [deployment.rollback-to-revision]

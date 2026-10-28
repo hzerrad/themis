@@ -3,11 +3,15 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"regexp"
 	"slices"
+	"time"
+
+	"github.com/invopop/jsonschema"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -58,6 +62,88 @@ type Profile struct {
 
 	// Match decides which alerts belong to this profile.
 	Match Match `json:"match"`
+
+	// Evidence lists the templates investigations of this profile may use.
+	Evidence Evidence `json:"evidence"`
+
+	// Capabilities are the remediations proposals may name; none means
+	// diagnosis only.
+	Capabilities []string `json:"capabilities,omitempty" jsonschema:"uniqueItems=true"`
+
+	// Investigation bounds each investigation; zero fields take defaults.
+	Investigation Investigation `json:"investigation,omitzero"`
+}
+
+// Evidence names evidence templates.
+type Evidence struct {
+	// Initial templates are collected before the investigation starts.
+	Initial []string `json:"initial,omitempty" jsonschema:"uniqueItems=true"`
+
+	// Allowed templates may be requested during the investigation.
+	Allowed []string `json:"allowed" jsonschema:"minItems=1,uniqueItems=true"`
+}
+
+// Investigation bounds an investigation.
+type Investigation struct {
+	MaxSteps            int      `json:"maxSteps,omitempty" jsonschema:"minimum=1"`
+	MaxEvidenceRequests int      `json:"maxEvidenceRequests,omitempty" jsonschema:"minimum=1"`
+	Timeout             Duration `json:"timeout,omitzero"`
+}
+
+// Investigation defaults.
+const (
+	DefaultMaxSteps             = 8
+	DefaultMaxEvidenceRequests  = 6
+	DefaultInvestigationTimeout = 5 * time.Minute
+)
+
+// KnownCapabilities are the remediations Themis can execute.
+var KnownCapabilities = []string{"deployment.rollback-to-revision"}
+
+// InvestigationBudget returns p's investigation bounds with defaults filled in.
+func (p Profile) InvestigationBudget() Investigation {
+	b := p.Investigation
+	if b.MaxSteps == 0 {
+		b.MaxSteps = DefaultMaxSteps
+	}
+	if b.MaxEvidenceRequests == 0 {
+		b.MaxEvidenceRequests = DefaultMaxEvidenceRequests
+	}
+	if b.Timeout.Duration == 0 {
+		b.Timeout.Duration = DefaultInvestigationTimeout
+	}
+	return b
+}
+
+// AllowsTemplate reports whether investigations of p may use template.
+func (p Profile) AllowsTemplate(template string) bool {
+	return slices.Contains(p.Evidence.Allowed, template)
+}
+
+// Duration is a time.Duration written like "5m".
+type Duration struct {
+	time.Duration
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return fmt.Errorf("duration must be a string like 5m: %w", err)
+	}
+	v, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	d.Duration = v
+	return nil
+}
+
+func (Duration) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{Type: "string", Pattern: `^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$`, Description: "A duration such as 90s or 5m."}
 }
 
 // Match selects alerts. An alert matches when every condition holds.
@@ -166,6 +252,34 @@ func (c Config) Validate() error {
 				add(fmt.Sprintf("%s.match.targetKinds[%d]", path, j),
 					"%q is not of the form Kind.group, for example Deployment.apps", kind)
 			}
+		}
+
+		if len(p.Evidence.Allowed) == 0 {
+			add(path+".evidence.allowed", "at least one template is required")
+		}
+		for j, name := range p.Evidence.Allowed {
+			if slices.Contains(p.Evidence.Allowed[:j], name) {
+				add(fmt.Sprintf("%s.evidence.allowed[%d]", path, j), "duplicate template %q", name)
+			}
+		}
+		for j, name := range p.Evidence.Initial {
+			if !p.AllowsTemplate(name) {
+				add(fmt.Sprintf("%s.evidence.initial[%d]", path, j), "template %q is not in evidence.allowed", name)
+			}
+		}
+		for j, name := range p.Capabilities {
+			if !slices.Contains(KnownCapabilities, name) {
+				add(fmt.Sprintf("%s.capabilities[%d]", path, j), "unknown capability %q", name)
+			}
+		}
+		if p.Investigation.MaxSteps < 0 {
+			add(path+".investigation.maxSteps", "must be positive")
+		}
+		if p.Investigation.MaxEvidenceRequests < 0 {
+			add(path+".investigation.maxEvidenceRequests", "must be positive")
+		}
+		if p.Investigation.Timeout.Duration < 0 {
+			add(path+".investigation.timeout", "must be positive")
 		}
 	}
 

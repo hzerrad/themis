@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -22,6 +23,13 @@ profiles:
     match:
       alertNames: [KubePodCrashLooping, KubePodOOMKilled]
       targetKinds: [Deployment.apps]
+    evidence:
+      initial: [rollout_history, pod_states]
+      allowed: [rollout_history, pod_states, container_logs_tail]
+    capabilities: [deployment.rollback-to-revision]
+    investigation:
+      maxSteps: 4
+      timeout: 2m
   - name: critical-crashloop
     priority: 200
     match:
@@ -29,6 +37,8 @@ profiles:
       labels:
         severity: critical
       targetKinds: [Deployment.apps]
+    evidence:
+      allowed: [pod_states]
 `
 
 func mustParse(t *testing.T, doc string) config.Config {
@@ -122,6 +132,12 @@ func TestValidate_Errors(t *testing.T) {
 		{"lowercase kind", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"deployment.apps"} }, "profiles[0].match.targetKinds[0]"},
 		{"invalid group", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"Deployment.Apps"} }, "profiles[0].match.targetKinds[0]"},
 		{"kind with slash", func(c *config.Config) { c.Profiles[0].Match.TargetKinds = []string{"apps/Deployment"} }, "profiles[0].match.targetKinds[0]"},
+		{"no allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = nil }, "profiles[1].evidence.allowed"},
+		{"duplicate allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = []string{"pod_states", "pod_states"} }, "profiles[1].evidence.allowed[1]"},
+		{"initial not allowed", func(c *config.Config) { c.Profiles[0].Evidence.Initial = []string{"target_events"} }, "profiles[0].evidence.initial[0]"},
+		{"unknown capability", func(c *config.Config) { c.Profiles[0].Capabilities = []string{"deployment.delete"} }, "profiles[0].capabilities[0]"},
+		{"negative max steps", func(c *config.Config) { c.Profiles[0].Investigation.MaxSteps = -1 }, "profiles[0].investigation.maxSteps"},
+		{"negative timeout", func(c *config.Config) { c.Profiles[0].Investigation.Timeout.Duration = -time.Second }, "profiles[0].investigation.timeout"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -294,5 +310,33 @@ func TestMatchProfile_UnvalidatedPriority(t *testing.T) {
 
 	if !ok || p.Name != "rollout-regression" {
 		t.Fatalf("matched %q (ok=%v), want rollout-regression", p.Name, ok)
+	}
+}
+
+func TestParse_Investigation(t *testing.T) {
+	c := mustParse(t, validYAML)
+	got := c.Profiles[0].InvestigationBudget()
+	if got.MaxSteps != 4 || got.Timeout.Duration != 2*time.Minute {
+		t.Errorf("budget = %+v, want 4 steps in 2m", got)
+	}
+	if got.MaxEvidenceRequests != config.DefaultMaxEvidenceRequests {
+		t.Errorf("MaxEvidenceRequests = %d, want the default", got.MaxEvidenceRequests)
+	}
+	if d := c.Profiles[1].InvestigationBudget(); d.MaxSteps != config.DefaultMaxSteps || d.Timeout.Duration != config.DefaultInvestigationTimeout {
+		t.Errorf("defaults = %+v", d)
+	}
+}
+
+func TestParse_InvalidDuration(t *testing.T) {
+	doc := strings.Replace(validYAML, "timeout: 2m", "timeout: 2 minutes", 1)
+	if _, err := config.Parse([]byte(doc)); err == nil {
+		t.Error("Parse accepted an invalid duration")
+	}
+}
+
+func TestProfile_AllowsTemplate(t *testing.T) {
+	p := mustParse(t, validYAML).Profiles[0]
+	if !p.AllowsTemplate("container_logs_tail") || p.AllowsTemplate("target_events") {
+		t.Error("AllowsTemplate does not follow evidence.allowed")
 	}
 }

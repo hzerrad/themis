@@ -76,6 +76,60 @@
               "targetKinds"
             ],
             "description": "Match decides which alerts belong to this profile."
+          },
+          "evidence": {
+            "properties": {
+              "initial": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true,
+                "description": "Initial templates are collected before the investigation starts."
+              },
+              "allowed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Allowed templates may be requested during the investigation."
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "allowed"
+            ],
+            "description": "Evidence lists the templates investigations of this profile may use."
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "description": "Capabilities are the remediations proposals may name; none means\ndiagnosis only."
+          },
+          "investigation": {
+            "properties": {
+              "maxSteps": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "maxEvidenceRequests": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "timeout": {
+                "type": "string",
+                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "description": "Investigation bounds each investigation; zero fields take defaults."
           }
         },
         "additionalProperties": false,
@@ -83,7 +137,8 @@
         "required": [
           "name",
           "priority",
-          "match"
+          "match",
+          "evidence"
         ],
         "description": "Profile is one incident class and the alerts that belong to it."
       },
