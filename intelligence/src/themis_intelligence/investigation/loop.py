@@ -25,6 +25,7 @@ from themis_intelligence.platform.contract import (
 )
 
 PROMPT_VERSION = "rollout_v1"
+LOGS_TEMPLATE = "container_logs_tail"
 MAX_OUTPUT_TOKENS = 2048
 STEP_DEADLINE_S = 120.0
 
@@ -194,6 +195,8 @@ async def investigate(
     for i in job.initial_evidence:
         level = higher(level, classification(i))
     allowed = {t.name for t in job.allowed_templates}
+    # A proposal waits for the logs when the profile allows reading them.
+    logs_read = LOGS_TEMPLATE not in allowed
     usage = Usage()
     provenance = common_pb2.Provenance(source="themis-intelligence", prompt_version=PROMPT_VERSION)
     invalid = 0
@@ -279,12 +282,15 @@ async def investigate(
                     )
                 except grpc.RpcError as e:
                     if e.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                        logs_read = True
                         tell("The evidence budget is spent. Decide with the evidence you have.")
                         continue
                     if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
                         tell(f"The request was refused: {fence(e.details() or '')}")
                         continue
                     raise
+                if decision.template == LOGS_TEMPLATE:
+                    logs_read = True
                 for i in resp.items:
                     level = higher(level, classification(i))
                 parts = [render_evidence(i) for i in resp.items]
@@ -294,6 +300,12 @@ async def investigate(
                 if decision.proposal is None:
                     invalid += 1
                     tell("A propose decision needs a proposal.")
+                    continue
+                if not logs_read:
+                    tell(
+                        f"Read {LOGS_TEMPLATE} of the failing pod before proposing: "
+                        "the logs may confirm or contradict your hypotheses."
+                    )
                     continue
                 resp = await core.submit_proposal(
                     proposal_request(job, decision.proposal, step, provenance)

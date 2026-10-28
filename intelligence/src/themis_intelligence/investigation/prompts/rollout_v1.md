@@ -14,6 +14,8 @@ Rules:
   prior revision was healthy. If the failure predates the rollout, if the
   target is managed by GitOps, or if the evidence is missing, do not propose:
   conclude inconclusive and say what is missing.
+- Before proposing, read container_logs_tail of the failing pod, and update
+  your hypotheses with what the logs show.
 - Deterministic predicates are computed by Themis from the evidence. "unknown"
   means the evidence cannot decide; do not treat it as true.
 
