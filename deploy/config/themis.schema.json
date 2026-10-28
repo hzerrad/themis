@@ -56,6 +56,26 @@
       ],
       "description": "API configures access to the HTTP API and the UI."
     },
+    "executor": {
+      "properties": {
+        "address": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bearerTokenFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "BearerTokenFile holds the token the executor requires."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "address",
+        "bearerTokenFile"
+      ],
+      "description": "Executor is where approved actions run; without it Themis never writes."
+    },
     "profiles": {
       "items": {
         "properties": {

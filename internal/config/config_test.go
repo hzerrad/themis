@@ -122,6 +122,7 @@ func TestValidate_Errors(t *testing.T) {
 		{"invalid namespace", func(c *config.Config) { c.EnrolledNamespaces[0] = "Shop_1" }, "enrolledNamespaces[0]"},
 		{"duplicate namespace", func(c *config.Config) { c.EnrolledNamespaces[1] = "shop" }, "enrolledNamespaces[1]"},
 		{"no token file", func(c *config.Config) { c.Intake.BearerTokenFile = "" }, "intake.bearerTokenFile"},
+		{"executor without address", func(c *config.Config) { c.Executor = &config.Executor{BearerTokenFile: "/t"} }, "executor.address"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"no investigator token file", func(c *config.Config) { c.Investigators.BearerTokenFile = "" }, "investigators.bearerTokenFile"},
 		{"no profiles", func(c *config.Config) { c.Profiles = nil }, "profiles"},
