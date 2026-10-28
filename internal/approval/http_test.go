@@ -285,18 +285,16 @@ func TestExpire_Escalates(t *testing.T) {
 	}
 }
 
-// The detail shows that MODE changes, never what MODE or any secret holds.
+// The detail shows what MODE changes to, never a secret.
 func TestIncidentDetail_ShowsChangesNotTemplates(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
 	rec := e.do(t, http.MethodGet, "/v1/incidents/"+a.IncidentID, token, nil)
 	body := rec.Body.String()
-	for _, leak := range []string{"s3cret", "leak", "healthy"} {
-		if strings.Contains(body, leak) {
-			t.Errorf("the detail contains %q", leak)
-		}
+	if strings.Contains(body, "s3cret") {
+		t.Error("the detail contains a secret")
 	}
-	if !strings.Contains(body, `"field":"env MODE"`) {
-		t.Errorf("the detail does not show that MODE changes: %s", body)
+	if !strings.Contains(body, `"field":"env MODE","before":"leak","after":"healthy"`) {
+		t.Errorf("the detail does not show how MODE changes: %s", body)
 	}
 }
