@@ -116,14 +116,23 @@ type Incident struct {
 	OccurrenceCount int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+
+	// ObservedSpecHash is the template the investigation started from.
+	ObservedSpecHash string
+
+	// SupersededBy is the incident that replaced this one after the target
+	// changed outside Themis.
+	SupersededBy string
 }
 
-const incidentColumns = `id::text, state, profile, target_group, target_kind, target_namespace, target_name, target_uid, occurrence_count, created_at, updated_at`
+const incidentColumns = `id::text, state, profile, target_group, target_kind, target_namespace, target_name, target_uid, occurrence_count, created_at, updated_at,
+	observed_spec_hash, coalesce(superseded_by::text, '')`
 
 func scanIncident(row pgx.Row) (Incident, error) {
 	var in Incident
 	t := &in.Target
-	err := row.Scan(&in.ID, &in.State, &in.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &in.OccurrenceCount, &in.CreatedAt, &in.UpdatedAt)
+	err := row.Scan(&in.ID, &in.State, &in.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &in.OccurrenceCount, &in.CreatedAt, &in.UpdatedAt,
+		&in.ObservedSpecHash, &in.SupersededBy)
 	return in, err
 }
 
@@ -169,4 +178,43 @@ func (s *Store) Transitions(ctx context.Context, incidentID string) ([]Transitio
 		err := row.Scan(&t.From, &t.To, &t.Reason, &t.Actor, &t.At)
 		return t, err
 	})
+}
+
+// SetObservedSpec records the template an investigation starts from.
+func (s *Store) SetObservedSpec(ctx context.Context, tx pgx.Tx, id, hash string) error {
+	if _, err := tx.Exec(ctx, `UPDATE incidents SET observed_spec_hash = $2 WHERE id = $1`, id, hash); err != nil {
+		return fmt.Errorf("record observed spec of incident %s: %w", id, err)
+	}
+	return nil
+}
+
+// ReconcilableIncidents are open incidents not yet executing whose template
+// is known, oldest first.
+func (s *Store) ReconcilableIncidents(ctx context.Context, limit int) ([]Incident, error) {
+	rows, err := s.pool.Query(ctx, `
+	SELECT `+incidentColumns+` FROM incidents
+	WHERE state IN ('investigating', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
+	ORDER BY created_at LIMIT $1
+`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list incidents to reconcile: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
+}
+
+// Supersede links an incident to the one that replaced it, and carries its
+// firing alerts over, so they resolve the successor.
+func (s *Store) Supersede(ctx context.Context, tx pgx.Tx, oldID, newID string) error {
+	if _, err := tx.Exec(ctx, `UPDATE incidents SET superseded_by = $2 WHERE id = $1`, oldID, newID); err != nil {
+		return fmt.Errorf("supersede incident %s: %w", oldID, err)
+	}
+	_, err := tx.Exec(ctx, `
+	INSERT INTO incident_alerts (incident_id, source, source_id, status, starts_at)
+	SELECT $2, source, source_id, status, starts_at FROM incident_alerts WHERE incident_id = $1 AND status = 'firing'
+	ON CONFLICT DO NOTHING
+`, oldID, newID)
+	if err != nil {
+		return fmt.Errorf("carry alerts of incident %s over: %w", oldID, err)
+	}
+	return nil
 }

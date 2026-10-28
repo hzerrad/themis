@@ -296,9 +296,11 @@ func (s *Store) ActionExecution(ctx context.Context, q Querier, actionID string)
 	return e, nil
 }
 
-// CancelPendingActions cancels an incident's actions that await approval.
+// CancelPendingActions cancels an incident's actions not yet claimed for
+// execution. A claim and a cancel race safely: each needs the state it
+// leaves.
 func (s *Store) CancelPendingActions(ctx context.Context, tx pgx.Tx, incidentID string) error {
-	_, err := tx.Exec(ctx, `UPDATE actions SET state = 'canceled', updated_at = now() WHERE incident_id = $1 AND state = 'awaiting_approval'`, incidentID)
+	_, err := tx.Exec(ctx, `UPDATE actions SET state = 'canceled', updated_at = now() WHERE incident_id = $1 AND state IN ('awaiting_approval', 'authorized')`, incidentID)
 	if err != nil {
 		return fmt.Errorf("cancel pending actions of incident %s: %w", incidentID, err)
 	}

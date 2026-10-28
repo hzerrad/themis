@@ -341,3 +341,34 @@ func TestListIncidentsAndTransitions(t *testing.T) {
 		t.Errorf("Transitions = %v, %v", trail, err)
 	}
 }
+
+func TestSupersede(t *testing.T) {
+	s, pool := newStore(t)
+	old, _ := createOrJoin(t, s, newIncident("fp-old"))
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		if err := s.SetObservedSpec(t.Context(), tx, old, "sha256:spec"); err != nil {
+			return err
+		}
+		return s.RecordFiringAlert(t.Context(), tx, store.FiringAlertArgs{IncidentID: old, Source: "alertmanager", SourceID: "a1", StartsAt: time.Now()})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	advance(t, s, old, incident.Received, incident.Investigating)
+	list, err := s.ReconcilableIncidents(t.Context(), 10)
+	if err != nil || len(list) != 1 || list[0].ObservedSpecHash != "sha256:spec" {
+		t.Fatalf("ReconcilableIncidents = %+v, %v", list, err)
+	}
+
+	advance(t, s, old, incident.Investigating, incident.Canceled)
+	succ, _ := createOrJoin(t, s, newIncident("fp-old"))
+	if err := s.InTx(t.Context(), func(tx pgx.Tx) error { return s.Supersede(t.Context(), tx, old, succ) }); err != nil {
+		t.Fatalf("Supersede: %v", err)
+	}
+	if in, _ := s.Incident(t.Context(), old); in.SupersededBy != succ {
+		t.Errorf("SupersededBy = %q, want %s", in.SupersededBy, succ)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM incident_alerts WHERE incident_id = $1 AND status = 'firing'`, succ); n != 1 {
+		t.Errorf("%d firing alerts carried over, want 1", n)
+	}
+}
