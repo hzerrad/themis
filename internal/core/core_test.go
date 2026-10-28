@@ -205,6 +205,25 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 		t.Errorf("%d initial items, want 2", len(leased.GetInitialEvidence()))
 	}
 
+	// The API lists the incident to the admin, and to nobody else.
+	listReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+o.HTTPAddr+"/v1/incidents", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, _ := get("http://" + o.HTTPAddr + "/v1/incidents"); code != http.StatusUnauthorized {
+		t.Errorf("anonymous GET /v1/incidents = %d, want 401", code)
+	}
+	listReq.Header.Set("Authorization", "Bearer "+adminSecret)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(listResp.Body)
+	_ = listResp.Body.Close()
+	if listResp.StatusCode != http.StatusOK || !strings.Contains(string(body), leased.GetIncidentId()) {
+		t.Errorf("GET /v1/incidents = %d %s", listResp.StatusCode, body)
+	}
+
 	_, metrics := get("http://" + o.MetricsAddr + "/metrics")
 	if !strings.Contains(metrics, `themis_intake_alerts_processed_total{outcome="created",reason=""}`) {
 		t.Errorf("/metrics does not report the created incident")
