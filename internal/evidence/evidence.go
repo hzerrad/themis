@@ -69,7 +69,7 @@ func NewRegistry(templates ...Template) Registry {
 	return r
 }
 
-// Collect runs the named template for t.
+// Collect runs the named template for t and redacts its answer.
 func (r Registry) Collect(ctx context.Context, c client.Reader, name string, t incident.TargetRef, params map[string]string, now time.Time) (Item, error) {
 	tmpl, ok := r[name]
 	if !ok {
@@ -83,6 +83,9 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, t i
 	if err != nil {
 		return Item{}, err
 	}
+	var n int
+	item.Data, n = Redact(item.Data, DefaultRules)
+	item.Redactions += n
 	item.ID = id.String()
 	item.Template = name
 	item.Target = t
