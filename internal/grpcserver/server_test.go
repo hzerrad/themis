@@ -225,10 +225,27 @@ func TestFail_LastAttemptEscalates(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FailInvestigation: %v", err)
 		}
+		e.clock.now = e.clock.now.Add(10 * time.Minute)
 	}
 	if got := e.state(t, incidentID); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
 	}
+}
+
+func TestFail_BacksOffBeforeTheNextLease(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	_, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+		LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w"}); err != nil || resp.GetInvestigation() != nil {
+		t.Errorf("leased again at once: %v, %v", resp, err)
+	}
+	e.clock.now = e.clock.now.Add(time.Minute)
+	e.lease(t)
 }
 
 func TestLease_AbandonedLastAttemptEscalates(t *testing.T) {

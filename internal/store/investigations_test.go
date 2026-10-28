@@ -173,15 +173,16 @@ func TestFailInvestigation_RetriesThenGivesUp(t *testing.T) {
 	s, _ := newStore(t)
 	investigating(t, s)
 
+	now := t0
 	for attempt := 1; attempt <= store.MaxInvestigationAttempts; attempt++ {
-		inv, ok := lease(t, s, t0)
+		inv, ok := lease(t, s, now)
 		if !ok {
 			t.Fatalf("attempt %d: nothing to lease", attempt)
 		}
 		var exhausted bool
 		err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 			var err error
-			exhausted, err = s.FailInvestigation(t.Context(), tx, inv.LeaseID, "model_unavailable", "connection refused")
+			exhausted, err = s.FailInvestigation(t.Context(), tx, inv.LeaseID, "model_unavailable", "connection refused", now.Add(time.Minute))
 			return err
 		})
 		if err != nil {
@@ -190,8 +191,14 @@ func TestFailInvestigation_RetriesThenGivesUp(t *testing.T) {
 		if want := attempt == store.MaxInvestigationAttempts; exhausted != want {
 			t.Errorf("attempt %d: exhausted = %v, want %v", attempt, exhausted, want)
 		}
+		if !exhausted {
+			if _, ok := lease(t, s, now.Add(30*time.Second)); ok {
+				t.Errorf("attempt %d: leased again before its retry time", attempt)
+			}
+		}
+		now = now.Add(time.Minute)
 	}
-	if _, ok := lease(t, s, t0); ok {
+	if _, ok := lease(t, s, now); ok {
 		t.Error("a failed investigation was leased")
 	}
 }

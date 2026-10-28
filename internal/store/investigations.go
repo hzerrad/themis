@@ -96,7 +96,7 @@ func (s *Store) LeaseInvestigation(ctx context.Context, tx pgx.Tx, workerID stri
 	row := tx.QueryRow(ctx, `
 	WITH next AS (
 		SELECT id FROM investigations
-		WHERE (state = 'pending' OR (state = 'leased' AND lease_deadline < $1)) AND attempts < $2
+		WHERE (state = 'pending' OR (state = 'leased' AND lease_deadline < $1)) AND attempts < $2 AND lease_after <= $1
 		ORDER BY created_at
 		LIMIT 1
 		FOR UPDATE SKIP LOCKED
@@ -177,16 +177,17 @@ func (s *Store) CompleteInvestigation(ctx context.Context, tx pgx.Tx, leaseID st
 }
 
 // FailInvestigation releases a lease after a failure. The investigation is
-// leased again unless that was its last attempt, which it reports.
-func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, reason, message string) (bool, error) {
+// leased again from retryAt unless that was its last attempt, which it
+// reports.
+func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, reason, message string, retryAt time.Time) (bool, error) {
 	var exhausted bool
 	err := tx.QueryRow(ctx, `
 	UPDATE investigations
 	SET state = CASE WHEN attempts >= $2 THEN 'failed'::investigation_state ELSE 'pending' END,
-	    lease_id = NULL, lease_deadline = NULL, failure = $3, updated_at = now()
+	    lease_id = NULL, lease_deadline = NULL, failure = $3, lease_after = $4, updated_at = now()
 	WHERE lease_id = $1 AND state = 'leased'
 	RETURNING state = 'failed'
-`, leaseID, MaxInvestigationAttempts, reason+": "+message).Scan(&exhausted)
+`, leaseID, MaxInvestigationAttempts, reason+": "+message, retryAt).Scan(&exhausted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, ErrLeaseLost
 	}

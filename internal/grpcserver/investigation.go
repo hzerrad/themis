@@ -175,7 +175,8 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		if err != nil {
 			return err
 		}
-		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, req.GetReason().String(), req.GetMessage())
+		retryAt := s.now().Add(retryBackoff << (inv.Attempts - 1))
+		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, req.GetReason().String(), req.GetMessage(), retryAt)
 		if err != nil || !exhausted {
 			return err
 		}
