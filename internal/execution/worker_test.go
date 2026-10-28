@@ -6,12 +6,15 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/execution"
+	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
@@ -96,12 +99,45 @@ func TestExecute_LostReply(t *testing.T) {
 	}
 }
 
+// A claimed action is the executor's: its record decides, not the core.
 func TestExecute_AlreadyClaimed(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
+	s, pool := pgtest.NewStore(t)
 	a := authorized(t, s)
+	if _, err := pool.Exec(t.Context(), `UPDATE actions SET state = 'executing' WHERE id = $1`, a.ID); err != nil {
+		t.Fatal(err)
+	}
 	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, "not authorized")}}
 	if err := w.Execute(t.Context(), a.ID); err != nil {
 		t.Errorf("err = %v, want nil: retrying cannot help", err)
+	}
+	if got, _ := s.Action(t.Context(), s.DB(), a.ID); got.State != store.ActionExecuting {
+		t.Errorf("action = %s, want executing", got.State)
+	}
+}
+
+// An approval the executor cannot use leaves nothing to wait for.
+func TestExecute_UnusableApproval_Cancels(t *testing.T) {
+	s, _ := pgtest.NewStore(t)
+	a := authorized(t, s)
+	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, "the approval is consumed or bound to another digest")}}
+	if err := w.Execute(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Canceled {
+		t.Errorf("incident = %s, want canceled", in.State)
+	}
+}
+
+func TestExecute_UnreachableOnTheLastAttempt_Cancels(t *testing.T) {
+	s, _ := pgtest.NewStore(t)
+	a := authorized(t, s)
+	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.Unavailable, "connection refused")}}
+	job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: 25, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Canceled {
+		t.Errorf("incident = %s, want canceled", in.State)
 	}
 }
 

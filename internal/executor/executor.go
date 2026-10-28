@@ -23,6 +23,10 @@ import (
 
 const actor = "executor"
 
+// executeTimeout bounds an execution, apart from the caller's deadline: a
+// caller that stops waiting must not cut a write short.
+const executeTimeout = 90 * time.Second
+
 type Status string
 
 const (
@@ -48,6 +52,8 @@ type Executor struct {
 // Execute runs an action once. The execution record is committed before it
 // returns, so a lost reply can be recovered from the database.
 func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), executeTimeout)
+	defer cancel()
 	a, err := e.Store.Action(ctx, e.Store.DB(), actionID)
 	if err != nil {
 		return Result{}, err
