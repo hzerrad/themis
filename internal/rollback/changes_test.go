@@ -27,16 +27,29 @@ func find(changes []rollback.Change, field string) (rollback.Change, bool) {
 	return rollback.Change{}, false
 }
 
-func TestChanges_EnvByNameNeverByValue(t *testing.T) {
-	pre := template(corev1.EnvVar{Name: "MODE", Value: "leak"}, corev1.EnvVar{Name: "DB_PASSWORD", Value: "s3cret-a"}, corev1.EnvVar{Name: "OLD", Value: "x"})
-	desired := template(corev1.EnvVar{Name: "MODE", Value: "healthy"}, corev1.EnvVar{Name: "DB_PASSWORD", Value: "s3cret-b"}, corev1.EnvVar{Name: "NEW", Value: "y"})
+func TestChanges_EnvShownUnlessSecret(t *testing.T) {
+	pre := template(
+		corev1.EnvVar{Name: "MODE", Value: "leak"},
+		corev1.EnvVar{Name: "DB_PASSWORD", Value: "s3cret-a"},
+		corev1.EnvVar{Name: "UPSTREAM", Value: "https://app:s3cret-c@db"}, //nolint:gosec // a fake credential to hide
+		corev1.EnvVar{Name: "OLD", Value: "x"},
+	)
+	desired := template(
+		corev1.EnvVar{Name: "MODE", Value: "healthy"},
+		corev1.EnvVar{Name: "DB_PASSWORD", Value: "s3cret-b"},
+		corev1.EnvVar{Name: "UPSTREAM", Value: "https://app:s3cret-d@db"}, //nolint:gosec // a fake credential to hide
+		corev1.EnvVar{Name: "NEW", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+			LocalObjectReference: corev1.LocalObjectReference{Name: "db"}, Key: "password",
+		}}},
+	)
 
 	changes := rollback.Changes(pre, desired)
 	for field, want := range map[string][2]string{
-		"env MODE":        {"changed", "changed"},
-		"env DB_PASSWORD": {"changed", "changed"},
-		"env OLD":         {"set", "removed"},
-		"env NEW":         {"not set", "set"},
+		"env MODE":        {"leak", "healthy"},
+		"env DB_PASSWORD": {"hidden (sensitive name)", "hidden (sensitive name)"},
+		"env UPSTREAM":    {"hidden (looks like a secret)", "hidden (looks like a secret)"},
+		"env OLD":         {"x", "not set"},
+		"env NEW":         {"not set", "from secret db/password"},
 	} {
 		c, ok := find(changes, field)
 		if !ok || c.Before != want[0] || c.After != want[1] || c.Container != "app" {
@@ -44,10 +57,8 @@ func TestChanges_EnvByNameNeverByValue(t *testing.T) {
 		}
 	}
 	for _, c := range changes {
-		for _, v := range []string{c.Before, c.After} {
-			if strings.Contains(v, "s3cret") || v == "leak" || v == "healthy" {
-				t.Errorf("a change shows an env value: %+v", c)
-			}
+		if strings.Contains(c.Before+c.After, "s3cret") {
+			t.Errorf("a change shows a secret: %+v", c)
 		}
 	}
 }
@@ -66,14 +77,22 @@ func TestChanges_ImageAndResources(t *testing.T) {
 	}
 }
 
-// Commands carry secrets as often as env does.
-func TestChanges_CommandAndArgsHidden(t *testing.T) {
+// Args are shown, unless they carry a secret.
+func TestChanges_Args(t *testing.T) {
 	pre, desired := template(), template()
-	pre.Spec.Containers[0].Args = []string{"--token=abc"}
-	desired.Spec.Containers[0].Args = []string{"--token=def"}
+	pre.Spec.Containers[0].Args = []string{"--workers=2", "--token=abc123", "--db-password", "hunter2", "-k", "AKIAIOSFODNN7EXAMPLE"}
+	desired.Spec.Containers[0].Args = []string{"--workers=4"}
 	c, ok := find(rollback.Changes(pre, desired), "args")
-	if !ok || c.Before != "changed" || strings.Contains(c.After, "def") {
+	if !ok || c.After != "--workers=4" {
 		t.Errorf("args = %+v, %v", c, ok)
+	}
+	for _, secret := range []string{"abc123", "hunter2", "AKIA"} {
+		if strings.Contains(c.Before, secret) {
+			t.Errorf("args show %s: %s", secret, c.Before)
+		}
+	}
+	if !strings.Contains(c.Before, "--workers=2") {
+		t.Errorf("args hide what is not secret: %s", c.Before)
 	}
 }
 
@@ -102,6 +121,44 @@ func TestChanges_ListsEveryOtherDifference(t *testing.T) {
 	for _, field := range []string{"spec.serviceAccountName", "spec.containers.app.securityContext", "spec.initContainers"} {
 		if c, ok := find(changes, field); !ok || c.After != "changed" {
 			t.Errorf("%s is not disclosed: %+v", field, changes)
+		}
+	}
+}
+
+// A random token under an innocent name is still hidden.
+func TestChanges_RandomValuesHidden(t *testing.T) {
+	for value, hidden := range map[string]bool{
+		"8f3kQz7LmP2xV9rT4nWb6yHc":            true,
+		"healthy":                             false,
+		"https://api.example.com/v1/checkout": false,
+		"1048576":                             false,
+	} {
+		pre := template(corev1.EnvVar{Name: "REF", Value: "old"})
+		desired := template(corev1.EnvVar{Name: "REF", Value: value})
+		c, _ := find(rollback.Changes(pre, desired), "env REF")
+		if got := c.After == "hidden (looks like a secret)"; got != hidden {
+			t.Errorf("%q: hidden = %v, want %v", value, got, hidden)
+		}
+	}
+}
+
+// A secret split across two arguments is hidden too.
+func TestChanges_SplitSecretsHidden(t *testing.T) {
+	for _, args := range [][]string{
+		{"-H", "Authorization:", "Bearer", "abcdef123456"},
+		{"--password", "hunter2"},
+		{"connect", "password:", "hunter2"},
+		// A value shaped like a sensitive flag is still a value.
+		{"--password", "--token=hunter2"},
+		{"--api-key", "--secret-abcdef123456"},
+	} {
+		pre, desired := template(), template()
+		pre.Spec.Containers[0].Args = args
+		c, _ := find(rollback.Changes(pre, desired), "args")
+		for _, secret := range []string{"abcdef123456", "hunter2"} {
+			if strings.Contains(c.Before, secret) {
+				t.Errorf("%v: args show %s: %s", args, secret, c.Before)
+			}
 		}
 	}
 }
