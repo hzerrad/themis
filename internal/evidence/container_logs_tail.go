@@ -66,7 +66,13 @@ type LogsView struct {
 	Container string `json:"container"`
 	Previous  bool   `json:"previousRun"`
 	Logs      string `json:"logs"`
+
+	// Note explains empty logs, so silence is not read as evidence.
+	Note string `json:"note,omitempty"`
 }
+
+// emptyLogsNote is the Note of a container that wrote nothing.
+const emptyLogsNote = "the container wrote no output; processes killed for memory often log nothing, so this neither confirms nor contradicts a hypothesis"
 
 type containerLogsTail struct {
 	logs LogReader
@@ -141,7 +147,11 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 	}
 
 	logs := tailUTF8(strings.ToValidUTF8(string(tail.buf), "\uFFFD"), MaxLogBytes)
-	data, err := json.Marshal(LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs})
+	view := LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs}
+	if strings.TrimSpace(logs) == "" {
+		view.Note = emptyLogsNote
+	}
+	data, err := json.Marshal(view)
 	if err != nil {
 		return Item{}, err
 	}
