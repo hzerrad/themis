@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 import grpc
@@ -15,6 +15,9 @@ from themis_intelligence.investigation.loop import Core, InvestigationError, Mod
 log = logging.getLogger(__name__)
 
 DEFAULT_MAX_STEPS = 8
+REPORT_ATTEMPTS = 3
+
+_TRANSIENT = {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED}
 
 _CONCLUSIONS = {
     "proposed": investigation_pb2.INVESTIGATION_CONCLUSION_PROPOSED,
@@ -46,11 +49,13 @@ class Worker:
         new_model: Callable[[], Model],
         worker_id: str | None = None,
         heartbeat_s: float = 20.0,
+        retry_s: float = 2.0,
     ) -> None:
         self.core = core
         self.new_model = new_model
         self.worker_id = worker_id or socket.gethostname()
         self.heartbeat_s = heartbeat_s
+        self.retry_s = retry_s
 
     async def run(self, idle_s: float = 2.0) -> None:
         while True:
@@ -68,27 +73,43 @@ class Worker:
         if job is None:
             return False
         log.info("investigating incident %s", job.incident_id)
-        heartbeat = asyncio.create_task(self._heartbeat(job.lease_id))
-        try:
-            result = await investigate(
-                job, self.core, self.new_model(), job.budget.max_steps or DEFAULT_MAX_STEPS
+        deadline = job.budget.deadline.ToSeconds() if job.budget.HasField("deadline") else None
+        task = asyncio.create_task(
+            investigate(
+                job,
+                self.core,
+                self.new_model(),
+                job.budget.max_steps or DEFAULT_MAX_STEPS,
+                deadline,
             )
+        )
+        lost = asyncio.Event()
+        heartbeat = asyncio.create_task(self._heartbeat(job.lease_id, task, lost))
+        try:
+            result = await task
+        except asyncio.CancelledError:
+            if not lost.is_set():
+                raise
+            log.warning("lease of incident %s lost; investigation abandoned", job.incident_id)
+            return True
         except InvestigationError as e:
             log.warning("investigation of %s failed: %s", job.incident_id, e)
-            await self.core.fail(
+            await self._report(
+                self.core.fail,
                 investigation_pb2.FailInvestigationRequest(
                     lease_id=job.lease_id, reason=_FAILURES[e.reason], message=str(e)
-                )
+                ),
             )
             return True
         except Exception as e:
             log.exception("investigation of %s crashed", job.incident_id)
-            await self.core.fail(
+            await self._report(
+                self.core.fail,
                 investigation_pb2.FailInvestigationRequest(
                     lease_id=job.lease_id,
                     reason=investigation_pb2.INVESTIGATION_FAILURE_REASON_INTERNAL,
                     message=f"{type(e).__name__}: {e}",
-                )
+                ),
             )
             return True
         finally:
@@ -96,7 +117,8 @@ class Worker:
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat
 
-        await self.core.complete(
+        await self._report(
+            self.core.complete,
             investigation_pb2.CompleteInvestigationRequest(
                 lease_id=job.lease_id,
                 conclusion=_CONCLUSIONS[result.conclusion],
@@ -104,16 +126,35 @@ class Worker:
                 hypotheses=result.hypotheses,
                 usage=result.usage,
                 provenance=result.provenance,
-            )
+            ),
         )
         log.info("incident %s: %s", job.incident_id, result.conclusion)
         return True
 
-    async def _heartbeat(self, lease_id: str) -> None:
+    async def _report[R](self, call: Callable[[R], Awaitable[None]], req: R) -> None:
+        """Retries transient errors, so a finished result is not lost to one."""
+        for attempt in range(REPORT_ATTEMPTS):
+            try:
+                await call(req)
+                return
+            except grpc.RpcError as e:
+                if e.code() not in _TRANSIENT or attempt == REPORT_ATTEMPTS - 1:
+                    log.warning("cannot report to the core: %s", e)
+                    return
+                await asyncio.sleep(self.retry_s * (attempt + 1))
+
+    async def _heartbeat(
+        self, lease_id: str, task: asyncio.Task[object], lost: asyncio.Event
+    ) -> None:
+        """Renews the lease; when the core says it is lost, stops the investigation."""
         while True:
             await asyncio.sleep(self.heartbeat_s)
             try:
                 await self.core.renew_lease(lease_id)
             except grpc.RpcError as e:
-                log.warning("cannot renew lease %s: %s", lease_id, e)
+                if e.code() in _TRANSIENT:
+                    log.warning("cannot renew lease %s, retrying: %s", lease_id, e)
+                    continue
+                lost.set()
+                task.cancel()
                 return
