@@ -15,10 +15,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/hzerrad/themis/internal/core"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+
+	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
 var k8s *kubetest.Env
@@ -56,6 +60,15 @@ func writeFile(t *testing.T, name, content string) string {
 	return path
 }
 
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path) //nolint:gosec // a test file
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func writeConfig(t *testing.T, ns string) string {
 	t.Helper()
 	tokenFile := writeFile(t, "token", token+"\n")
@@ -69,6 +82,9 @@ profiles:
     match:
       alertNames: [KubePodCrashLooping]
       targetKinds: [Deployment.apps]
+    evidence:
+      initial: [rollout_history, pod_states]
+      allowed: [rollout_history, pod_states]
 `, ns, tokenFile))
 }
 
@@ -114,6 +130,7 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 		HTTPAddr:    freeAddr(t),
 		ProbeAddr:   freeAddr(t),
 		MetricsAddr: freeAddr(t),
+		GRPCAddr:    freeAddr(t),
 		Workers:     2,
 		Logger:      slog.New(slog.DiscardHandler),
 	}
@@ -159,9 +176,21 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 		_ = db.QueryRow(t.Context(), `SELECT count(*) FROM incidents WHERE profile = 'rollout-regression'`).Scan(&n)
 		return n == 1
 	})
-	var queue string
-	if err := db.QueryRow(t.Context(), `SELECT queue FROM river_job WHERE kind = 'investigate'`).Scan(&queue); err != nil || queue != "investigation" {
-		t.Errorf("investigate job queue = %q (%v), want investigation", queue, err)
+	// The investigation is prepared and offered to investigators over gRPC.
+	conn, err := grpc.NewClient(o.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	investigations := themisv1.NewInvestigationServiceClient(conn)
+	var leased *themisv1.Investigation
+	eventually(t, "a leasable investigation", exited, func() bool {
+		resp, err := investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "smoke"})
+		leased = resp.GetInvestigation()
+		return err == nil && leased != nil
+	})
+	if len(leased.GetInitialEvidence()) != 2 {
+		t.Errorf("%d initial items, want 2", len(leased.GetInitialEvidence()))
 	}
 
 	_, metrics := get("http://" + o.MetricsAddr + "/metrics")
@@ -186,6 +215,9 @@ func TestRun_RefusesToStart(t *testing.T) {
 	tests := map[string]func(o *core.Options){
 		"invalid config":  func(o *core.Options) { o.ConfigPath = writeFile(t, "bad.yaml", "enrolledNamespaces: []\n") },
 		"no database URL": func(o *core.Options) { o.DatabaseURL = "" },
+		"unknown template": func(o *core.Options) {
+			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
+		},
 		"unreachable database": func(o *core.Options) {
 			o.DatabaseURL = "postgres://themis:themis@" + freeAddr(t) + "/themis?sslmode=disable&connect_timeout=2"
 		},
@@ -199,6 +231,7 @@ func TestRun_RefusesToStart(t *testing.T) {
 				HTTPAddr:    freeAddr(t),
 				ProbeAddr:   freeAddr(t),
 				MetricsAddr: "0",
+				GRPCAddr:    freeAddr(t),
 				Workers:     1,
 				Logger:      slog.New(slog.DiscardHandler),
 			}

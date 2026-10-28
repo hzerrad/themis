@@ -23,6 +23,7 @@ func main() {
 	var kubeContext string
 	flag.StringVar(&o.ConfigPath, "config", "/etc/themis/themis.yaml", "path to the Themis configuration file")
 	flag.StringVar(&o.HTTPAddr, "http-addr", ":8080", "address of the intake and API server")
+	flag.StringVar(&o.GRPCAddr, "grpc-addr", ":9090", "address of the gRPC API for investigators")
 	flag.StringVar(&o.ProbeAddr, "probe-addr", ":8081", "address of the /healthz and /readyz probes")
 	flag.StringVar(&o.MetricsAddr, "metrics-addr", ":8082", `address of /metrics; "0" disables it`)
 	flag.IntVar(&o.Workers, "workers", 10, "jobs to run at once")
