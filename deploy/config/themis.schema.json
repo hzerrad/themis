@@ -145,6 +145,72 @@
             "additionalProperties": false,
             "type": "object",
             "description": "Investigation bounds each investigation; zero fields take defaults."
+          },
+          "policy": {
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "guarded",
+                  "observe"
+                ]
+              },
+              "rules": {
+                "items": {
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "when": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "decision": {
+                      "type": "string",
+                      "enum": [
+                        "allow",
+                        "deny",
+                        "require_approval"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "when",
+                    "decision"
+                  ],
+                  "description": "PolicyRule decides when its CEL expression holds."
+                },
+                "type": "array"
+              },
+              "approvalTimeout": {
+                "type": "string",
+                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "description": "Policy decides whether proposed actions run, wait for approval, or not."
+          },
+          "verification": {
+            "properties": {
+              "window": {
+                "type": "string",
+                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+                "description": "Window is how long to watch the target after an action."
+              },
+              "stability": {
+                "type": "string",
+                "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+                "description": "Stability is how long the target must stay healthy within the window."
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "description": "Verification measures an action's outcome; zero fields take defaults."
           }
         },
         "additionalProperties": false,

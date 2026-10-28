@@ -140,6 +140,16 @@ func TestValidate_Errors(t *testing.T) {
 		{"initial not allowed", func(c *config.Config) { c.Profiles[0].Evidence.Initial = []string{"target_events"} }, "profiles[0].evidence.initial[0]"},
 		{"unknown capability", func(c *config.Config) { c.Profiles[0].Capabilities = []string{"deployment.delete"} }, "profiles[0].capabilities[0]"},
 		{"negative max steps", func(c *config.Config) { c.Profiles[0].Investigation.MaxSteps = -1 }, "profiles[0].investigation.maxSteps"},
+		{"unknown mode", func(c *config.Config) { c.Profiles[0].Policy.Mode = "autonomous" }, "profiles[0].policy.mode"},
+		{"rule without condition", func(c *config.Config) {
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", Decision: config.DecisionDeny}}
+		}, "profiles[0].policy.rules[0].when"},
+		{"unknown decision", func(c *config.Config) {
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: "true", Decision: "maybe"}}
+		}, "profiles[0].policy.rules[0].decision"},
+		{"stability beyond window", func(c *config.Config) {
+			c.Profiles[0].Verification = config.Verification{Window: config.Duration{Duration: time.Minute}, Stability: config.Duration{Duration: time.Hour}}
+		}, "profiles[0].verification"},
 		{"negative timeout", func(c *config.Config) { c.Profiles[0].Investigation.Timeout.Duration = -time.Second }, "profiles[0].investigation.timeout"},
 	}
 	for _, tt := range tests {
@@ -341,5 +351,15 @@ func TestProfile_AllowsTemplate(t *testing.T) {
 	p := mustParse(t, validYAML).Profiles[0]
 	if !p.AllowsTemplate("container_logs_tail") || p.AllowsTemplate("target_events") {
 		t.Error("AllowsTemplate does not follow evidence.allowed")
+	}
+}
+
+func TestProfile_PolicyAndVerificationDefaults(t *testing.T) {
+	p := mustParse(t, validYAML).Profiles[1]
+	if pol := p.EffectivePolicy(); pol.Mode != config.ModeGuarded || pol.ApprovalTimeout.Duration != config.DefaultApprovalTimeout {
+		t.Errorf("policy = %+v", pol)
+	}
+	if v := p.EffectiveVerification(); v.Window.Duration != config.DefaultVerifyWindow || v.Stability.Duration != config.DefaultVerifyStability {
+		t.Errorf("verification = %+v", v)
 	}
 }
