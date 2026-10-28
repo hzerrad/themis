@@ -95,7 +95,7 @@ function changesTable(changes) {
     h("tbody", {}, changes.map((c) => h("tr", {},
       h("td", {}, c.container), h("td", { class: "mono" }, c.field),
       h("td", { class: "mono diff-old" }, c.before), h("td", { class: "mono diff-new" }, c.after)))),
-    h("caption", { class: "muted" }, "Values that look secret, by name or content, are hidden; references are shown as references."));
+    h("caption", { class: "muted" }, "Env values that look secret are hidden, references are shown as references, and commands and args only as changed."));
 }
 
 function proposalPanel(p) {
