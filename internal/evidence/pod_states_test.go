@@ -18,9 +18,8 @@ import (
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
 
-// These tests do not depend on the shape of pod_states' JSON. They look for
-// the JSON object describing a pod (the one holding the pod's name) and check
-// what is inside it.
+// These tests do not depend on the shape of a template's JSON. They look for
+// the JSON object holding an object's name and check what is inside it.
 
 // loadScenario1 loads the scenario 1 cluster and returns the checkout
 // Deployment as a target.
@@ -56,9 +55,9 @@ func collectPodStates(t *testing.T, target incident.TargetRef) evidence.Item {
 	return item
 }
 
-// podObject returns the innermost JSON object that has a string field equal to
-// the pod's name.
-func podObject(t *testing.T, data []byte, pod string) any {
+// objectNamed returns the innermost JSON object that has a string field equal to
+// name.
+func objectNamed(t *testing.T, data []byte, name string) any {
 	t.Helper()
 	var root any
 	if err := json.Unmarshal(data, &root); err != nil {
@@ -70,7 +69,7 @@ func podObject(t *testing.T, data []byte, pod string) any {
 		switch v := v.(type) {
 		case map[string]any:
 			for _, field := range v {
-				if s, ok := field.(string); ok && s == pod {
+				if s, ok := field.(string); ok && s == name {
 					found = v
 				}
 			}
@@ -85,22 +84,29 @@ func podObject(t *testing.T, data []byte, pod string) any {
 	}
 	walk(root)
 	if found == nil {
-		t.Fatalf("no JSON object for pod %s in %s", pod, data)
+		t.Fatalf("no JSON object for %s in %s", name, data)
 	}
 	return found
 }
 
 var revisionKey = regexp.MustCompile(`(?i)revision`)
 
-// revisionOf finds a field whose name contains "revision" in the pod's object.
+// revisionOf finds the field named "revision" in obj, or else one whose name
+// contains it.
 func revisionOf(t *testing.T, obj any) string {
 	t.Helper()
-	for k, v := range obj.(map[string]any) {
+	m := obj.(map[string]any)
+	for k, v := range m {
+		if strings.EqualFold(k, "revision") {
+			return fmt.Sprint(v)
+		}
+	}
+	for k, v := range m {
 		if revisionKey.MatchString(k) {
 			return fmt.Sprint(v)
 		}
 	}
-	t.Fatalf("pod object has no revision field: %v", obj)
+	t.Fatalf("object has no revision field: %v", obj)
 	return ""
 }
 
@@ -115,7 +121,7 @@ func TestPodStates_DescribesEveryPodOfTheTarget(t *testing.T) {
 		"checkout-5c6a1e2f3-a1b2c", "checkout-5c6a1e2f3-d3e4f", "checkout-5c6a1e2f3-g5h6i",
 		"checkout-7d9f8b6c4-x2kqp",
 	} {
-		podObject(t, item.Data, pod)
+		objectNamed(t, item.Data, pod)
 	}
 	if strings.Contains(string(item.Data), "cart-6b7c8d9e0-z9y8x") {
 		t.Error("Data describes a pod of another workload")
@@ -132,7 +138,7 @@ func TestPodStates_RecordsEachPodsRevision(t *testing.T) {
 		"checkout-7d9f8b6c4-x2kqp": "2",
 	}
 	for pod, want := range tests {
-		if got := revisionOf(t, podObject(t, item.Data, pod)); got != want {
+		if got := revisionOf(t, objectNamed(t, item.Data, pod)); got != want {
 			t.Errorf("revision of %s = %s, want %s", pod, got, want)
 		}
 	}
@@ -142,13 +148,13 @@ func TestPodStates_RecordsEachPodsRevision(t *testing.T) {
 // it is backing off.
 func TestPodStates_RecordsLastTermination(t *testing.T) {
 	item := collectPodStates(t, loadScenario1(t))
-	crashing := podObject(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
+	crashing := objectNamed(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
 	for _, want := range []string{"OOMKilled", "CrashLoopBackOff"} {
 		if !contains(crashing, want) {
 			t.Errorf("the crashing pod's object lacks %s: %v", want, crashing)
 		}
 	}
-	if healthy := podObject(t, item.Data, "checkout-5c6a1e2f3-a1b2c"); contains(healthy, "OOMKilled") {
+	if healthy := objectNamed(t, item.Data, "checkout-5c6a1e2f3-a1b2c"); contains(healthy, "OOMKilled") {
 		t.Errorf("a healthy pod is reported OOMKilled: %v", healthy)
 	}
 }
@@ -172,7 +178,7 @@ func TestPodStates_TimesAreUTC(t *testing.T) {
 	t.Cleanup(func() { time.Local = local })
 
 	item := collectPodStates(t, loadScenario1(t))
-	crashing := podObject(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
+	crashing := objectNamed(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
 	if !contains(crashing, `"2026-10-27T09:14:02Z"`) {
 		t.Errorf("the OOM kill's finish time is not in UTC: %v", crashing)
 	}

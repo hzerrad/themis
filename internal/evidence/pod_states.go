@@ -8,9 +8,7 @@ import (
 	"slices"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,40 +71,25 @@ func NewPodStates() Template { return podStates{} }
 func (podStates) Name() string { return PodStates }
 
 func (podStates) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, _ map[string]string) (Item, error) {
-	if t.Group != appsv1.GroupName || t.Kind != "Deployment" {
-		return Item{}, fmt.Errorf("%w: %s.%s", ErrUnsupportedTarget, t.Kind, t.Group)
+	d, err := getDeployment(ctx, c, t)
+	if err != nil {
+		return Item{}, err
 	}
-
-	var d appsv1.Deployment
-	if err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &d); apierrors.IsNotFound(err) {
-		return Item{}, fmt.Errorf("%w: Deployment %s", ErrTargetGone, t.Name)
-	} else if err != nil {
-		return Item{}, fmt.Errorf("get Deployment %s: %w", t.Name, err)
+	replicaSets, err := ownedReplicaSets(ctx, c, d)
+	if err != nil {
+		return Item{}, err
 	}
-	if string(d.UID) != t.UID {
-		return Item{}, fmt.Errorf("%w: Deployment %s was recreated", ErrTargetGone, t.Name)
+	revisions := map[types.UID]string{}
+	for _, rs := range replicaSets {
+		revisions[rs.UID] = rs.Annotations[revisionAnnotation]
 	}
 
 	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
 	if err != nil {
 		return Item{}, fmt.Errorf("selector of Deployment %s: %w", t.Name, err)
 	}
-	inTarget := []client.ListOption{client.InNamespace(t.Namespace), client.MatchingLabelsSelector{Selector: selector}}
-
-	// Ownership decides, not labels: selectors of workloads can overlap.
-	var replicaSets appsv1.ReplicaSetList
-	if err := c.List(ctx, &replicaSets, inTarget...); err != nil {
-		return Item{}, fmt.Errorf("list ReplicaSets of Deployment %s: %w", t.Name, err)
-	}
-	revisions := map[types.UID]string{}
-	for _, rs := range replicaSets.Items {
-		if metav1.IsControlledBy(&rs, &d) {
-			revisions[rs.UID] = rs.Annotations[revisionAnnotation]
-		}
-	}
-
 	var pods corev1.PodList
-	if err := c.List(ctx, &pods, inTarget...); err != nil {
+	if err := c.List(ctx, &pods, client.InNamespace(t.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
 		return Item{}, fmt.Errorf("list pods of Deployment %s: %w", t.Name, err)
 	}
 	var view podStatesView
