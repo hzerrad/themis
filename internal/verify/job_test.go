@@ -3,6 +3,7 @@ package verify_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,6 +234,10 @@ func TestJob_HumanEditDuringWindow_Inconclusive(t *testing.T) {
 	}
 	if got := e.outcome(t); got != string(verify.Inconclusive) {
 		t.Errorf("outcome = %q, want inconclusive", got)
+	}
+	trail, err := e.store.Transitions(t.Context(), e.inc)
+	if err != nil || !strings.Contains(trail[len(trail)-1].Reason, "changed outside Themis") {
+		t.Errorf("the escalation does not say why: %+v", trail[len(trail)-1])
 	}
 	if got := e.state(t); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)

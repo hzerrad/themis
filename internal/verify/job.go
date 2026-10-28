@@ -118,10 +118,12 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 			return err
 		}
 		final = true
+		reason := fmt.Sprintf("verification: %s (%d/%d ready, %d new OOM kills)", outcome, obs.ReadyReplicas, obs.DesiredReplicas, obs.NewOOMKills)
+		if obs.ForeignSpecChange {
+			reason = "verification: inconclusive, the target was changed outside Themis during the window"
+		}
 		return w.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: in.ID, From: incident.Verifying, To: outcomes[outcome],
-			Reason: fmt.Sprintf("verification: %s (%d/%d ready, %d new OOM kills)", outcome, obs.ReadyReplicas, obs.DesiredReplicas, obs.NewOOMKills),
-			Actor:  "verify",
+			ID: in.ID, From: incident.Verifying, To: outcomes[outcome], Reason: reason, Actor: "verify",
 		})
 	})
 	return final, err
