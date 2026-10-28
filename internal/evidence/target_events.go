@@ -22,12 +22,12 @@ const TargetEvents = "target_events"
 // maxEvents bounds an item; the most recent events are kept.
 const maxEvents = 100
 
-type targetEventsView struct {
-	Events      []eventView `json:"events"`
+type TargetEventsView struct {
+	Events      []EventView `json:"events"`
 	TotalEvents int         `json:"totalEvents"`
 }
 
-type eventView struct {
+type EventView struct {
 	Object  string `json:"object"` // Kind/name
 	Type    string `json:"type"`
 	Reason  string `json:"reason"`
@@ -71,7 +71,7 @@ func (targetEvents) Collect(ctx context.Context, c client.Reader, t incident.Tar
 	if err := c.List(ctx, &list, client.InNamespace(t.Namespace)); err != nil {
 		return Item{}, fmt.Errorf("list events in %s: %w", t.Namespace, err)
 	}
-	var view targetEventsView
+	var view TargetEventsView
 	for i := range list.Items {
 		ev := &list.Items[i]
 		if !about[ev.InvolvedObject.UID] {
@@ -81,7 +81,7 @@ func (targetEvents) Collect(ctx context.Context, c client.Reader, t incident.Tar
 	}
 
 	view.TotalEvents = len(view.Events)
-	slices.SortFunc(view.Events, func(a, b eventView) int {
+	slices.SortFunc(view.Events, func(a, b EventView) int {
 		return cmp.Or(b.LastSeen.Compare(a.LastSeen), cmp.Compare(a.Reason, b.Reason))
 	})
 	truncated := len(view.Events) > maxEvents
@@ -99,8 +99,8 @@ func (targetEvents) Collect(ctx context.Context, c client.Reader, t incident.Tar
 // viewEvent takes each time from whichever field the writer set: legacy
 // writers set the timestamps, events.k8s.io/v1 writers set eventTime and the
 // series.
-func viewEvent(ev *corev1.Event) eventView {
-	v := eventView{
+func viewEvent(ev *corev1.Event) EventView {
+	v := EventView{
 		Object:  ev.InvolvedObject.Kind + "/" + ev.InvolvedObject.Name,
 		Type:    bounded(ev.Type, maxReasonBytes),
 		Reason:  bounded(ev.Reason, maxReasonBytes),

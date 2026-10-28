@@ -24,13 +24,13 @@ const maxPods = 50
 
 const revisionAnnotation = "deployment.kubernetes.io/revision"
 
-// podStatesView describes state only: pod specs often hold literal secrets.
-type podStatesView struct {
-	Pods      []podView `json:"pods"`
+// PodStatesView describes state only: pod specs often hold literal secrets.
+type PodStatesView struct {
+	Pods      []PodView `json:"pods"`
 	TotalPods int       `json:"totalPods"`
 }
 
-type podView struct {
+type PodView struct {
 	Name     string          `json:"name"`
 	Revision string          `json:"revision"`
 	Phase    corev1.PodPhase `json:"phase"`
@@ -38,10 +38,10 @@ type podView struct {
 
 	StartedAt time.Time `json:"startedAt,omitzero"`
 
-	Containers []containerView `json:"containers"`
+	Containers []ContainerView `json:"containers"`
 }
 
-type containerView struct {
+type ContainerView struct {
 	Name         string `json:"name"`
 	Init         bool   `json:"init,omitzero"`
 	Image        string `json:"image"`
@@ -49,12 +49,12 @@ type containerView struct {
 	RestartCount int32  `json:"restartCount"`
 
 	// LastTermination is where a restarted container's OOMKilled shows.
-	State           *stateView `json:"state,omitempty"`
-	LastTermination *stateView `json:"lastTermination,omitempty"`
+	State           *StateView `json:"state,omitempty"`
+	LastTermination *StateView `json:"lastTermination,omitempty"`
 }
 
-// stateView leaves messages out: they are whatever the application wrote.
-type stateView struct {
+// StateView leaves messages out: they are whatever the application wrote.
+type StateView struct {
 	Status     string    `json:"status"` // waiting, running or terminated
 	Reason     string    `json:"reason,omitempty"`
 	ExitCode   *int32    `json:"exitCode,omitempty"`
@@ -87,13 +87,13 @@ func (podStates) Collect(ctx context.Context, c client.Reader, t incident.Target
 	if err != nil {
 		return Item{}, err
 	}
-	var view podStatesView
+	var view PodStatesView
 	for _, pod := range pods {
 		view.Pods = append(view.Pods, viewPod(pod, revisions[metav1.GetControllerOf(pod).UID]))
 	}
 
 	view.TotalPods = len(view.Pods)
-	slices.SortFunc(view.Pods, func(a, b podView) int {
+	slices.SortFunc(view.Pods, func(a, b PodView) int {
 		return cmp.Or(
 			cmp.Compare(healthRank(a), healthRank(b)),
 			cmp.Compare(a.Name, b.Name),
@@ -111,8 +111,8 @@ func (podStates) Collect(ctx context.Context, c client.Reader, t incident.Target
 	return Item{Data: data, Truncated: truncated}, nil
 }
 
-func viewPod(pod *corev1.Pod, revision string) podView {
-	v := podView{Name: pod.Name, Revision: revision, Phase: pod.Status.Phase}
+func viewPod(pod *corev1.Pod, revision string) PodView {
+	v := PodView{Name: pod.Name, Revision: revision, Phase: pod.Status.Phase}
 	if pod.Status.StartTime != nil {
 		v.StartedAt = pod.Status.StartTime.UTC()
 	}
@@ -130,8 +130,8 @@ func viewPod(pod *corev1.Pod, revision string) podView {
 	return v
 }
 
-func viewContainer(cs corev1.ContainerStatus, init bool) containerView {
-	return containerView{
+func viewContainer(cs corev1.ContainerStatus, init bool) ContainerView {
+	return ContainerView{
 		Name:            cs.Name,
 		Init:            init,
 		Image:           cs.Image,
@@ -142,14 +142,14 @@ func viewContainer(cs corev1.ContainerStatus, init bool) containerView {
 	}
 }
 
-func viewState(s corev1.ContainerState) *stateView {
+func viewState(s corev1.ContainerState) *StateView {
 	switch {
 	case s.Waiting != nil:
-		return &stateView{Status: "waiting", Reason: s.Waiting.Reason}
+		return &StateView{Status: "waiting", Reason: s.Waiting.Reason}
 	case s.Running != nil:
-		return &stateView{Status: "running", StartedAt: s.Running.StartedAt.UTC()}
+		return &StateView{Status: "running", StartedAt: s.Running.StartedAt.UTC()}
 	case s.Terminated != nil:
-		return &stateView{
+		return &StateView{
 			Status:     "terminated",
 			Reason:     s.Terminated.Reason,
 			ExitCode:   &s.Terminated.ExitCode,
@@ -161,7 +161,7 @@ func viewState(s corev1.ContainerState) *stateView {
 }
 
 // healthRank orders pods for truncation: not ready, restarted, healthy.
-func healthRank(p podView) int {
+func healthRank(p PodView) int {
 	if !p.Ready {
 		return 0
 	}

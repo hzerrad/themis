@@ -34,13 +34,13 @@ var gitOpsMarkers = []string{
 	"helm.toolkit.fluxcd.io/",
 }
 
-type rolloutHistoryView struct {
-	Deployment     deploymentView `json:"deployment"`
-	Revisions      []revisionView `json:"revisions"`
+type RolloutHistoryView struct {
+	Deployment     DeploymentView `json:"deployment"`
+	Revisions      []RevisionView `json:"revisions"`
 	TotalRevisions int            `json:"totalRevisions"`
 }
 
-type deploymentView struct {
+type DeploymentView struct {
 	Name                string          `json:"name"`
 	Revision            string          `json:"currentRevision"`
 	Generation          int64           `json:"generation"`
@@ -50,14 +50,14 @@ type deploymentView struct {
 	ReadyReplicas       int32           `json:"readyReplicas"`
 	UnavailableReplicas int32           `json:"unavailableReplicas"`
 	Paused              bool            `json:"paused,omitzero"`
-	Conditions          []conditionView `json:"conditions,omitempty"`
+	Conditions          []ConditionView `json:"conditions,omitempty"`
 
 	// Markers are GitOps labels and annotations; Managers are field managers.
 	Markers  map[string]string `json:"ownershipMarkers,omitempty"`
 	Managers []string          `json:"fieldManagers,omitempty"`
 }
 
-type conditionView struct {
+type ConditionView struct {
 	Type           string    `json:"type"`
 	Status         string    `json:"status"`
 	Reason         string    `json:"reason,omitempty"`
@@ -66,7 +66,7 @@ type conditionView struct {
 	LastTransition time.Time `json:"lastTransitionTime,omitzero"`
 }
 
-type revisionView struct {
+type RevisionView struct {
 	ReplicaSet string `json:"replicaSet"`
 	Revision   string `json:"revision"`
 
@@ -77,11 +77,11 @@ type revisionView struct {
 	Replicas        int32     `json:"replicas"`
 	ReadyReplicas   int32     `json:"readyReplicas"`
 
-	Containers []templateContainerView `json:"containers"`
+	Containers []TemplateContainerView `json:"containers"`
 }
 
-// templateContainerView leaves out env, args and commands, which hold secrets.
-type templateContainerView struct {
+// TemplateContainerView leaves out env, args and commands, which hold secrets.
+type TemplateContainerView struct {
 	Name     string            `json:"name"`
 	Image    string            `json:"image"`
 	Requests map[string]string `json:"requests,omitempty"`
@@ -105,12 +105,12 @@ func (rolloutHistory) Collect(ctx context.Context, c client.Reader, t incident.T
 		return Item{}, err
 	}
 
-	view := rolloutHistoryView{Deployment: viewDeployment(d)}
+	view := RolloutHistoryView{Deployment: viewDeployment(d)}
 	for _, rs := range replicaSets {
 		view.Revisions = append(view.Revisions, viewRevision(rs, view.Deployment.Revision))
 	}
 	view.TotalRevisions = len(view.Revisions)
-	slices.SortFunc(view.Revisions, func(a, b revisionView) int {
+	slices.SortFunc(view.Revisions, func(a, b RevisionView) int {
 		return cmp.Or(
 			cmp.Compare(revisionNumber(b.Revision), revisionNumber(a.Revision)),
 			cmp.Compare(a.ReplicaSet, b.ReplicaSet),
@@ -137,8 +137,8 @@ func revisionNumber(s string) int64 {
 	return n
 }
 
-func viewDeployment(d *appsv1.Deployment) deploymentView {
-	v := deploymentView{
+func viewDeployment(d *appsv1.Deployment) DeploymentView {
+	v := DeploymentView{
 		Name:                d.Name,
 		Revision:            d.Annotations[revisionAnnotation],
 		Generation:          d.Generation,
@@ -151,7 +151,7 @@ func viewDeployment(d *appsv1.Deployment) deploymentView {
 		Markers:             gitOpsMarkersOf(d),
 	}
 	for _, cond := range d.Status.Conditions {
-		v.Conditions = append(v.Conditions, conditionView{
+		v.Conditions = append(v.Conditions, ConditionView{
 			Type:           string(cond.Type),
 			Status:         string(cond.Status),
 			Reason:         cond.Reason,
@@ -185,8 +185,8 @@ func gitOpsMarkersOf(obj metav1.Object) map[string]string {
 	return markers
 }
 
-func viewRevision(rs *appsv1.ReplicaSet, current string) revisionView {
-	v := revisionView{
+func viewRevision(rs *appsv1.ReplicaSet, current string) RevisionView {
+	v := RevisionView{
 		ReplicaSet:      rs.Name,
 		Revision:        rs.Annotations[revisionAnnotation],
 		FormerRevisions: rs.Annotations[revisionHistoryAnnotation],
@@ -196,7 +196,7 @@ func viewRevision(rs *appsv1.ReplicaSet, current string) revisionView {
 	}
 	v.Current = v.Revision != "" && v.Revision == current
 	for _, ctr := range rs.Spec.Template.Spec.Containers {
-		v.Containers = append(v.Containers, templateContainerView{
+		v.Containers = append(v.Containers, TemplateContainerView{
 			Name:     ctr.Name,
 			Image:    ctr.Image,
 			Requests: quantities(ctr.Resources.Requests),
