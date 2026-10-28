@@ -23,7 +23,7 @@ type WorkerRunner struct {
 
 // NewWorkerRunner works the given queues, each with at most its number of jobs
 // at a time.
-func (s *Store) NewWorkerRunner(workers *river.Workers, queues map[string]int, logger *slog.Logger) (*WorkerRunner, error) {
+func (s *Store) NewWorkerRunner(workers *river.Workers, queues map[string]int, periodic []*river.PeriodicJob, logger *slog.Logger) (*WorkerRunner, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -32,9 +32,10 @@ func (s *Store) NewWorkerRunner(workers *river.Workers, queues map[string]int, l
 		configs[name] = river.QueueConfig{MaxWorkers: n}
 	}
 	client, err := river.NewClient(riverpgxv5.New(s.pool), &river.Config{
-		Queues:  configs,
-		Workers: workers,
-		Logger:  logger,
+		Queues:       configs,
+		PeriodicJobs: periodic,
+		Workers:      workers,
+		Logger:       logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create river worker client: %w", err)
