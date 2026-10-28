@@ -101,3 +101,32 @@ func (s *Store) ResolveAlert(ctx context.Context, tx pgx.Tx, in ResolvedAlertArg
 	}
 	return incidents, nil
 }
+
+// RecordResolution remembers that an alert's episode ended, even when no
+// incident holds the alert yet, so a late firing notification of that
+// episode is recognised as stale.
+func (s *Store) RecordResolution(ctx context.Context, tx pgx.Tx, in ResolvedAlertArgs) error {
+	_, err := tx.Exec(ctx, `
+	INSERT INTO alert_resolutions (source, source_id, starts_at, ends_at) VALUES ($1, $2, $3, $4)
+	ON CONFLICT (source, source_id) DO UPDATE
+	SET starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, updated_at = now()
+	WHERE EXCLUDED.starts_at >= alert_resolutions.starts_at
+`, in.Source, in.SourceID, in.StartsAt, in.EndsAt)
+	if err != nil {
+		return fmt.Errorf("record resolution of %s/%s: %w", in.Source, in.SourceID, err)
+	}
+	return nil
+}
+
+// Resolved reports whether the episode of an alert that started at startsAt
+// has already ended.
+func (s *Store) Resolved(ctx context.Context, tx pgx.Tx, source, sourceID string, startsAt time.Time) (bool, error) {
+	var resolved bool
+	err := tx.QueryRow(ctx, `
+	SELECT EXISTS (SELECT 1 FROM alert_resolutions WHERE source = $1 AND source_id = $2 AND starts_at >= $3)
+`, source, sourceID, startsAt).Scan(&resolved)
+	if err != nil {
+		return false, fmt.Errorf("check resolution of %s/%s: %w", source, sourceID, err)
+	}
+	return resolved, nil
+}

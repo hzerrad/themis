@@ -410,3 +410,23 @@ func TestWorker_SelfResolveCancelsPendingAction(t *testing.T) {
 		t.Error("the pending action was not canceled")
 	}
 }
+
+// A resolution processed before its firing notification must not leave an
+// incident open for an alert that already healed.
+func TestWorker_ResolvedBeforeFiring_IsStale(t *testing.T) {
+	e := newWorkerEnv(t, nil)
+	_, pod := k8s.NewRollout(t, e.ns, "checkout")
+	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-late", intake.AlertResolved), nil))
+	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-late", intake.AlertFiring), nil))
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incidents`); n != 0 {
+		t.Errorf("%d incidents for a healed alert, want none", n)
+	}
+
+	// A later episode of the same alert fires again.
+	next := alertFor(e.ns, pod.Name, "fp-late", intake.AlertFiring)
+	next.StartsAt = next.StartsAt.Add(time.Hour)
+	wantCompleted(t, e.process(t, next, nil))
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incidents`); n != 1 {
+		t.Errorf("%d incidents after a new episode, want 1", n)
+	}
+}

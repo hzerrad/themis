@@ -26,7 +26,7 @@ var (
 
 	alertsProcessed = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_intake_alerts_processed_total",
-		Help: "Alerts processed, by outcome (created, joined, resolved, rejected, retried) and, for rejections, reason.",
+		Help: "Alerts processed, by outcome (created, joined, resolved, stale, rejected, retried) and, for rejections, reason.",
 	}, []string{"outcome", "reason"})
 )
 
@@ -37,6 +37,7 @@ const (
 	outcomeResolved = "resolved"
 	outcomeRejected = "rejected"
 	outcomeRetried  = "retried"
+	outcomeStale    = "stale"
 )
 
 func init() {
