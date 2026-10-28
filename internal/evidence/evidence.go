@@ -6,7 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,4 +108,21 @@ func (b Bundle) ByTemplate(name string) []Item {
 		}
 	}
 	return items
+}
+
+// maxMessageBytes bounds free text that objects carry, such as condition and
+// event messages: anyone allowed to write the object chooses it.
+const maxMessageBytes = 256
+
+// bounded cuts s to at most n bytes on a rune boundary, keeping it valid
+// UTF-8.
+func bounded(s string, n int) string {
+	s = strings.ToValidUTF8(s, "�")
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
