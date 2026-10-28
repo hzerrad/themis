@@ -7,8 +7,9 @@ from pydantic import BaseModel
 
 from themis_intelligence.platform.contract import ProviderRequest, ProviderResponse, Usage
 
-# The caller's deadline bounds each call; this only backstops a hung socket.
-TIMEOUT = httpx.Timeout(600)
+# The caller's deadline bounds each call. Connecting is bounded separately, so
+# an unreachable endpoint reads as unavailable rather than slow.
+TIMEOUT = httpx.Timeout(600, connect=10)
 
 
 class _Message(BaseModel):
