@@ -17,4 +17,19 @@ data:
       address: {{ .Release.Name }}-executor:9091
       bearerTokenFile: /var/run/secrets/themis/executor
     {{- end }}
+    {{- with .Values.notifications }}
+    {{- if or .webhookSecret .externalURL }}
+    notifications:
+      {{- if .externalURL }}
+      externalURL: {{ .externalURL | quote }}
+      {{- end }}
+      {{- if .webhookSecret }}
+      webhook:
+        urlFile: /var/run/secrets/themis-webhook/url
+        {{- if .webhookToken }}
+        bearerTokenFile: /var/run/secrets/themis-webhook/token
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
     profiles: {{- toYaml .Values.profiles | nindent 6 }}

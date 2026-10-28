@@ -55,7 +55,14 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/themis, readOnly: true}
             - {name: tokens, mountPath: /var/run/secrets/themis, readOnly: true}
+            {{- if .Values.notifications.webhookSecret }}
+            - {name: webhook, mountPath: /var/run/secrets/themis-webhook, readOnly: true}
+            {{- end }}
       volumes:
+        {{- if .Values.notifications.webhookSecret }}
+        - name: webhook
+          secret: {secretName: {{ .Values.notifications.webhookSecret }}}
+        {{- end }}
         - name: config
           configMap: {name: {{ .Release.Name }}-config}
         - name: tokens
