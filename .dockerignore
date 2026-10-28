@@ -1,0 +1,13 @@
+*
+!go.mod
+!go.sum
+!cmd/
+!gen/
+!internal/
+!intelligence/pyproject.toml
+!intelligence/uv.lock
+!intelligence/README.md
+!intelligence/src/
+!intelligence/gen/
+**/__pycache__
+**/*_test.go
