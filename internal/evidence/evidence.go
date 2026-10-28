@@ -114,10 +114,13 @@ func (b Bundle) ByTemplate(name string) []Item {
 // event messages: anyone allowed to write the object chooses it.
 const maxMessageBytes = 256
 
+// maxReasonBytes bounds short free text, such as an event's reason.
+const maxReasonBytes = 128
+
 // bounded cuts s to at most n bytes on a rune boundary, keeping it valid
 // UTF-8.
 func bounded(s string, n int) string {
-	s = strings.ToValidUTF8(s, "�")
+	s = strings.ToValidUTF8(s, "\uFFFD")
 	if len(s) <= n {
 		return s
 	}

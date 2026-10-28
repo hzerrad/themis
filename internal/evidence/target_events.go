@@ -102,8 +102,8 @@ func (targetEvents) Collect(ctx context.Context, c client.Reader, t incident.Tar
 func viewEvent(ev *corev1.Event) eventView {
 	v := eventView{
 		Object:  ev.InvolvedObject.Kind + "/" + ev.InvolvedObject.Name,
-		Type:    ev.Type,
-		Reason:  ev.Reason,
+		Type:    bounded(ev.Type, maxReasonBytes),
+		Reason:  bounded(ev.Reason, maxReasonBytes),
 		Message: bounded(ev.Message, maxMessageBytes),
 		Count:   ev.Count,
 	}
