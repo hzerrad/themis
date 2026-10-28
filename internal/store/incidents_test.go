@@ -372,3 +372,18 @@ func TestSupersede(t *testing.T) {
 		t.Errorf("%d firing alerts carried over, want 1", n)
 	}
 }
+
+// Every escalation queues its notification in the same transaction; other
+// transitions do not.
+func TestTransition_QueuesEscalationNotice(t *testing.T) {
+	s, pool := newStore(t)
+	id, _ := createOrJoin(t, s, newIncident("fp-notify"))
+	advance(t, s, id, incident.Received, incident.Investigating)
+	if n := count(t, pool, `SELECT count(*) FROM river_job WHERE kind = $1`, store.EscalationArgs{}.Kind()); n != 0 {
+		t.Fatalf("%d notices before escalating", n)
+	}
+	advance(t, s, id, incident.Investigating, incident.Escalated)
+	if n := count(t, pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'incidentID' = $2 AND args->>'to' = 'escalated'`, store.EscalationArgs{}.Kind(), id); n != 1 {
+		t.Errorf("%d notices after escalating, want 1", n)
+	}
+}

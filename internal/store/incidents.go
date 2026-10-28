@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/incident"
 )
@@ -102,8 +103,27 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
 
+	if tst.To == incident.Escalated || tst.To == incident.ContainedEscalated {
+		return s.EnqueueTx(ctx, tx, EscalationArgs{IncidentID: tst.ID, From: tst.From, To: tst.To, Reason: tst.Reason, At: time.Now().UTC()})
+	}
 	return nil
 }
+
+// EscalationArgs notify that an incident was handed to humans. They are
+// queued by the transition itself, so no escalation goes unannounced.
+type EscalationArgs struct {
+	IncidentID string         `json:"incidentID"`
+	From       incident.State `json:"from"`
+	To         incident.State `json:"to"`
+	Reason     string         `json:"reason"`
+	At         time.Time      `json:"at"`
+}
+
+// Kind is persisted with each job and must never change.
+func (EscalationArgs) Kind() string { return "notify_escalation" }
+
+// InsertOpts keep trying a receiver for about a day.
+func (EscalationArgs) InsertOpts() river.InsertOpts { return river.InsertOpts{MaxAttempts: 12} }
 
 // ErrNotFound means no row has the requested ID.
 var ErrNotFound = errors.New("not found")
