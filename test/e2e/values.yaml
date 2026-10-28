@@ -1,0 +1,40 @@
+# Themis for the end-to-end test: the executor on, the fake model, a webhook
+# receiver, and windows short enough to wait for.
+image:
+  tag: dev
+enrolledNamespaces: [shop]
+executor:
+  enabled: true
+model:
+  baseURL: http://fake-model.themis.svc:8080/v1
+  name: fake
+notifications:
+  webhookSecret: e2e-webhook
+  webhookToken: true
+profiles:
+  - name: rollout-regression
+    priority: 100
+    match:
+      alertNames: [KubePodCrashLooping]
+      targetKinds: [Deployment.apps]
+    evidence:
+      initial: [rollout_history, pod_states, target_events]
+      allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+    capabilities: [deployment.rollback-to-revision]
+    policy:
+      mode: guarded
+      rules:
+        - name: gitops-owns-the-target
+          when: predicates.gitops_managed != "false"
+          decision: deny
+        - name: rollback-needs-a-bad-rollout
+          when: >-
+            predicates.oom_killed_new_revision != "true" ||
+            predicates.failure_onset_after_rollout != "true"
+          decision: deny
+        - name: rollback-needs-approval
+          when: action.capability == "deployment.rollback-to-revision"
+          decision: require_approval
+    verification:
+      window: 3m
+      stability: 45s
