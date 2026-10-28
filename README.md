@@ -47,6 +47,25 @@ make kind-up   # start a local multi-node cluster
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
 
+## Try it locally
+
+The bad-rollout scenario on kind, with a local model through [Ollama](https://ollama.com). Every process listens on `127.0.0.1` only.
+
+```bash
+make kind-up dev-db                # cluster and PostgreSQL
+export DATABASE_URL=postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
+ollama pull qwen3:8b               # with `ollama serve` running
+make run                           # themis-core, in one terminal
+make run-executor                  # themis-executor, in another
+make run-intelligence              # the investigator, in a third
+make demo-up demo-break            # deploy checkout, then roll out an OOMKilled revision
+make demo-alert                    # once a checkout pod is crash looping
+```
+
+Open <http://127.0.0.1:8080> and sign in with the token in `bin/dev/admin-token`. The incident shows the evidence, the predicates, the investigator's hypotheses, and the proposed rollback next to the action derived from the cluster. Approving sends the digest you were shown; the executor checks it again before writing, and verification decides whether the incident is resolved.
+
+To install in a cluster instead, see `deploy/helm/themis`. The chart is read-only unless `executor.enabled=true`.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
