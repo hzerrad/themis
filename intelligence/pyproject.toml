@@ -7,7 +7,9 @@ license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "grpcio>=1.84.0",
+    "httpx>=0.28.1",
     "protobuf>=7.36.2,<8",
+    "pydantic>=2.14.1",
 ]
 
 [dependency-groups]
@@ -15,6 +17,7 @@ dev = [
     "pyright>=1.1.414",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
     "ruff>=0.17.1",
     "types-grpcio>=1.84.0.20260928",
     "types-protobuf>=7.35.1.20260906",
