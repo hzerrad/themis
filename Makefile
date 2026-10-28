@@ -124,6 +124,34 @@ kind-up: ## Create the local kind cluster
 kind-down: ## Delete the local kind cluster
 	$(GO_TOOL) kind delete cluster --name $(KIND_CLUSTER)
 
+# Themis and monitoring on the kind cluster. Bring your own model:
+# make themis-up MODEL_URL=https://... MODEL_NAME=... [MODEL_KEY_SECRET=...]
+MODEL_URL        ?=
+MODEL_KEY_SECRET ?=
+PROMETHEUS_CHART := 29.39.0
+
+.PHONY: themis-up themis-down
+themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_URL and MODEL_NAME
+	@test -n "$(MODEL_URL)" || { echo "set MODEL_URL (and MODEL_NAME) to an OpenAI-compatible endpoint"; exit 1; }
+	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
+		--set executor.enabled=true --set model.baseURL=$(MODEL_URL) --set model.name=$(MODEL_NAME) \
+		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) --wait --timeout 5m
+
+themis-down: ## Uninstall Themis from kind
+	helm --kube-context kind-$(KIND_CLUSTER) uninstall themis -n themis
+
+.PHONY: monitoring-up monitoring-down
+monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-cluster Themis
+	$(KUBECTL) create namespace monitoring --dry-run=client -o yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n themis get secret themis-tokens -o jsonpath='{.data.intake}' | base64 -d | \
+		$(KUBECTL) -n monitoring create secret generic themis-intake-token --from-file=token=/dev/stdin \
+		--dry-run=client -o yaml | $(KUBECTL) apply -f -
+	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring prometheus-community/prometheus \
+		--version $(PROMETHEUS_CHART) -n monitoring -f hack/dev/monitoring/values.yaml --wait --timeout 5m
+
+monitoring-down: ## Uninstall the monitoring stack from kind
+	helm --kube-context kind-$(KIND_CLUSTER) uninstall monitoring -n monitoring
+
 # Scenario 1 on the kind cluster. Every command names the kind context, so the
 # current kubectl context, which may be a real cluster, is never touched.
 KUBECTL := kubectl --context kind-$(KIND_CLUSTER)
@@ -150,6 +178,7 @@ DEV_ADMIN_TOKEN        := bin/dev/admin-token
 DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
 DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
 MODEL_NAME             ?= qwen3:8b
+OLLAMA_URL             ?= http://127.0.0.1:11434/v1
 
 .PHONY: dev-db
 dev-db: ## Start a development PostgreSQL on 127.0.0.1:5432
@@ -179,7 +208,7 @@ run-executor: dev-tokens ## Run themis-executor locally against the kind cluster
 .PHONY: run-intelligence
 run-intelligence: dev-tokens ## Run the investigator against a local Ollama
 	THEMIS_CORE_ADDR=127.0.0.1:9090 THEMIS_TOKEN_FILE=$(CURDIR)/$(DEV_INVESTIGATOR_TOKEN) \
-		MODEL_BASE_URL=http://127.0.0.1:11434/v1 MODEL_NAME=$(MODEL_NAME) MODEL_ENDPOINT=ollama \
+		MODEL_BASE_URL=$(OLLAMA_URL) MODEL_NAME=$(MODEL_NAME) MODEL_ENDPOINT=ollama \
 		$(UV) run python -m themis_intelligence
 
 .PHONY: demo-alert
