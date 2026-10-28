@@ -32,6 +32,7 @@ import (
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/investigation"
+	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/verify"
 	"github.com/hzerrad/themis/internal/web"
@@ -144,6 +145,7 @@ func Run(ctx context.Context, o Options) error {
 	defer closeExecutor()
 	river.AddWorker(workers, &execution.Worker{Store: s, Executor: executor})
 	river.AddWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
+	river.AddWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
 	if executor == nil {
 		log.Warn("no executor is configured: approved actions are canceled, never executed")
 	}
@@ -155,6 +157,9 @@ func Run(ctx context.Context, o Options) error {
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
 			return approval.ExpireArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}),
+		river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) {
+			return reconcile.Args{}, nil
+		}, nil),
 	}, log)
 	if err != nil {
 		return err
