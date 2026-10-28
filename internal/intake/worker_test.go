@@ -338,8 +338,10 @@ func TestWorker_ResolvedDoesNotCloseActionInFlight(t *testing.T) {
 	_, pod := k8s.NewRollout(t, e.ns, "checkout")
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
 	id, _, _ := e.onlyIncident(t)
-	path := []incident.State{incident.Received, incident.Investigating, incident.Diagnosed,
-		incident.Proposed, incident.Authorized, incident.Executing}
+	path := []incident.State{
+		incident.Received, incident.Investigating, incident.Diagnosed,
+		incident.Proposed, incident.Authorized, incident.Executing,
+	}
 	for i := 1; i < len(path); i++ {
 		err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
 			return e.store.Transition(t.Context(), tx, store.TransitionArgs{

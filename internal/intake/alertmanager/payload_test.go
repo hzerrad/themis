@@ -13,7 +13,7 @@ import (
 
 func readFixture(t *testing.T, name string) []byte {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name))
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "alerts", name)) //nolint:gosec // a fixture name chosen by the test
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
