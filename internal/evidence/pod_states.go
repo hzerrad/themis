@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json/v2"
-	"fmt"
 	"slices"
 	"time"
 
@@ -84,25 +83,13 @@ func (podStates) Collect(ctx context.Context, c client.Reader, t incident.Target
 		revisions[rs.UID] = rs.Annotations[revisionAnnotation]
 	}
 
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	pods, err := ownedPods(ctx, c, d, replicaSets)
 	if err != nil {
-		return Item{}, fmt.Errorf("selector of Deployment %s: %w", t.Name, err)
-	}
-	var pods corev1.PodList
-	if err := c.List(ctx, &pods, client.InNamespace(t.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
-		return Item{}, fmt.Errorf("list pods of Deployment %s: %w", t.Name, err)
+		return Item{}, err
 	}
 	var view podStatesView
-	for _, pod := range pods.Items {
-		owner := metav1.GetControllerOf(&pod)
-		if owner == nil {
-			continue
-		}
-		revision, ok := revisions[owner.UID]
-		if !ok {
-			continue
-		}
-		view.Pods = append(view.Pods, viewPod(&pod, revision))
+	for _, pod := range pods {
+		view.Pods = append(view.Pods, viewPod(pod, revisions[metav1.GetControllerOf(pod).UID]))
 	}
 
 	view.TotalPods = len(view.Pods)

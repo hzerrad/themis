@@ -329,3 +329,55 @@ status:
       state:
         running:
           startedAt: "2026-10-01T00:00:00Z"
+---
+# Events, as the Deployment controller and the kubelet record them.
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout.scaled-up
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: checkout
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set checkout-7d9f8b6c4 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: "2026-10-27T09:00:00Z"
+lastTimestamp: "2026-10-27T09:00:00Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-x2kqp
+type: Warning
+reason: BackOff
+message: Back-off restarting failed container app in pod checkout-7d9f8b6c4-x2kqp
+source:
+  component: kubelet
+count: 14
+firstTimestamp: "2026-10-27T09:01:30Z"
+lastTimestamp: "2026-10-27T09:14:05Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: cart-6b7c8d9e0-z9y8x.pulled
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: cart-6b7c8d9e0-z9y8x
+type: Normal
+reason: Pulled
+message: Container image "example/cart:1.0.0" already present on machine
+source:
+  component: kubelet
+count: 1
+firstTimestamp: "2026-10-01T00:00:00Z"
+lastTimestamp: "2026-10-01T00:00:00Z"

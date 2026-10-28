@@ -191,8 +191,8 @@ func (e *Env) NewPod(t *testing.T, ns, name string, owners ...metav1.OwnerRefere
 // Load creates the objects of a multi-document YAML file, relative to the
 // repository root, in namespace ns, in file order, and returns them.
 //
-// Owner references name their owner by kind and name; Load fills in the UID
-// of the owner created earlier in the same file. Each object's status is
+// Owner references and Event involvedObjects name their object by kind and
+// name; Load fills in the UID of the object created earlier in the same file. Each object's status is
 // written after it is created, since the API server ignores status on create
 // and envtest has no controllers or kubelet to set it.
 func (e *Env) Load(t *testing.T, ns, path string) []*unstructured.Unstructured {
@@ -230,6 +230,9 @@ func (e *Env) Load(t *testing.T, ns, path string) []*unstructured.Unstructured {
 			refs[i].UID = uid
 		}
 		u.SetOwnerReferences(refs)
+		if u.GetKind() == "Event" {
+			linkInvolvedObject(t, u, ns, uids)
+		}
 
 		status, hasStatus := u.Object["status"]
 		e.Create(t, u)
@@ -243,6 +246,20 @@ func (e *Env) Load(t *testing.T, ns, path string) []*unstructured.Unstructured {
 		objs = append(objs, u)
 	}
 	return objs
+}
+
+// linkInvolvedObject points an Event at the object of the same kind and name
+// created earlier, in namespace ns.
+func linkInvolvedObject(t *testing.T, u *unstructured.Unstructured, ns string, uids map[string]types.UID) {
+	t.Helper()
+	kind, _, _ := unstructured.NestedString(u.Object, "involvedObject", "kind")
+	name, _, _ := unstructured.NestedString(u.Object, "involvedObject", "name")
+	uid, ok := uids[kind+"/"+name]
+	if !ok {
+		t.Fatalf("Event %s: involved %s %s must come earlier", u.GetName(), kind, name)
+	}
+	_ = unstructured.SetNestedField(u.Object, ns, "involvedObject", "namespace")
+	_ = unstructured.SetNestedField(u.Object, string(uid), "involvedObject", "uid")
 }
 
 // NewRollout creates Deployment → ReplicaSet → Pod, as the Deployment
