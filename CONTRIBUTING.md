@@ -26,6 +26,8 @@ All commits must be signed off to certify the [Developer Certificate of Origin](
 git commit -s
 ```
 
+CI checks that every commit of a pull request carries a `Signed-off-by` matching its author.
+
 ## Local checks
 
 Run `make lint test` before opening a pull request. CI runs the same targets, and `make e2e`, which runs the bad-rollout scenarios on a fresh kind cluster with a fake model, so it needs only Docker.
