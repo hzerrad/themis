@@ -46,6 +46,9 @@ type Config struct {
 	// API configures access to the HTTP API and the UI.
 	API API `json:"api"`
 
+	// Executor is where approved actions run; without it Themis never writes.
+	Executor *Executor `json:"executor,omitempty"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins.
 	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
@@ -66,6 +69,14 @@ type Investigators struct {
 // API configures the HTTP API.
 type API struct {
 	// BearerTokenFile holds the admin token the API and UI require.
+	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+}
+
+// Executor configures the connection to themis-executor.
+type Executor struct {
+	Address string `json:"address" jsonschema:"minLength=1"`
+
+	// BearerTokenFile holds the token the executor requires.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
 }
 
@@ -304,6 +315,14 @@ func (c Config) Validate() error {
 	}
 	if c.API.BearerTokenFile == "" {
 		add("api.bearerTokenFile", "is required")
+	}
+	if c.Executor != nil {
+		if c.Executor.Address == "" {
+			add("executor.address", "is required")
+		}
+		if c.Executor.BearerTokenFile == "" {
+			add("executor.bearerTokenFile", "is required")
+		}
 	}
 
 	if len(c.Profiles) == 0 {
