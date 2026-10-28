@@ -34,7 +34,15 @@ type evidenceView struct {
 
 type actionView struct {
 	store.Action
-	Execution *store.Execution `json:",omitempty"`
+	PreState     jsontext.Value
+	Desired      jsontext.Value
+	Execution    *store.Execution  `json:",omitempty"`
+	Verification *verificationView `json:",omitempty"`
+}
+
+type verificationView struct {
+	store.Verification
+	Observation jsontext.Value
 }
 
 // detailView puts the proposal next to the action derived from it.

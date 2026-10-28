@@ -3,6 +3,7 @@
 package approval
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"log/slog"
@@ -105,9 +106,12 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, act := range actions {
-		v := actionView{Action: act}
+		v := actionView{Action: act, PreState: jsontext.Value(act.PreState), Desired: jsontext.Value(act.Desired)}
 		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
 			v.Execution = &e
+		}
+		if ver, err := a.Store.Verification(ctx, a.Store.DB(), act.ID); err == nil {
+			v.Verification = &verificationView{Verification: ver, Observation: ver.Observation}
 		}
 		d.Actions = append(d.Actions, v)
 	}
