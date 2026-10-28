@@ -293,3 +293,12 @@ func TestPredicates_Stored(t *testing.T) {
 		t.Errorf("Predicates = %+v", results)
 	}
 }
+
+func TestIncidentInvestigation(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	r, err := s.IncidentInvestigation(t.Context(), id)
+	if err != nil || r.State != "pending" {
+		t.Errorf("IncidentInvestigation = %+v, %v", r, err)
+	}
+}

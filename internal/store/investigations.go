@@ -319,3 +319,31 @@ func jsonOr(b []byte, empty string) []byte {
 	}
 	return b
 }
+
+// InvestigationRecord is what an incident's investigation recorded.
+type InvestigationRecord struct {
+	State      string
+	Attempts   int
+	Conclusion string
+	Summary    string
+	Hypotheses json.RawMessage
+	Usage      json.RawMessage
+	Provenance json.RawMessage
+	Failure    string
+}
+
+// IncidentInvestigation returns the investigation of an incident.
+func (s *Store) IncidentInvestigation(ctx context.Context, incidentID string) (InvestigationRecord, error) {
+	var r InvestigationRecord
+	err := s.pool.QueryRow(ctx, `
+	SELECT state::text, attempts, conclusion, summary, hypotheses, usage, provenance, failure
+	FROM investigations WHERE incident_id = $1
+`, incidentID).Scan(&r.State, &r.Attempts, &r.Conclusion, &r.Summary, &r.Hypotheses, &r.Usage, &r.Provenance, &r.Failure)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return InvestigationRecord{}, fmt.Errorf("investigation of %s: %w", incidentID, ErrNotFound)
+	}
+	if err != nil {
+		return InvestigationRecord{}, fmt.Errorf("investigation of %s: %w", incidentID, err)
+	}
+	return r, nil
+}

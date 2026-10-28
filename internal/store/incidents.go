@@ -140,3 +140,33 @@ func (s *Store) Incident(ctx context.Context, id string) (Incident, error) {
 	}
 	return in, nil
 }
+
+// ListIncidents returns the most recent incidents, newest first.
+func (s *Store) ListIncidents(ctx context.Context, limit int) ([]Incident, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents ORDER BY created_at DESC, id DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list incidents: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
+}
+
+type Transition struct {
+	From   incident.State
+	To     incident.State
+	Reason string
+	Actor  string
+	At     time.Time
+}
+
+// Transitions returns an incident's audit trail in order.
+func (s *Store) Transitions(ctx context.Context, incidentID string) ([]Transition, error) {
+	rows, err := s.pool.Query(ctx, `SELECT from_state, to_state, reason, actor, at FROM transitions WHERE incident_id = $1 ORDER BY id`, incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("transitions of incident %s: %w", incidentID, err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Transition, error) {
+		var t Transition
+		err := row.Scan(&t.From, &t.To, &t.Reason, &t.Actor, &t.At)
+		return t, err
+	})
+}
