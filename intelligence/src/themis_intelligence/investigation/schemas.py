@@ -4,10 +4,20 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
+
+PredicateName = Literal[
+    "rollout_recent",
+    "failure_onset_after_rollout",
+    "prior_revision_was_healthy",
+    "oom_killed_new_revision",
+    "gitops_managed",
+]
 
 
 class TargetOut(BaseModel):
+    """The incident's target, copied exactly."""
+
     group: str
     kind: str
     namespace: str
@@ -33,7 +43,7 @@ class ProposalOut(BaseModel):
     expected_effect: str
     rationale: str
     cited_evidence_ids: list[str]
-    cited_predicates: list[str]
+    cited_predicates: list[PredicateName]
 
 
 class StepDecision(BaseModel):

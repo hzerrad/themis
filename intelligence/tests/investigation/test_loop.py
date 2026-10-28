@@ -1,10 +1,12 @@
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, job
 from themis.v1 import proposal_pb2
 from themis_intelligence.investigation.loop import InvestigationError, investigate
+from themis_intelligence.investigation.schemas import StepDecision
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -183,3 +185,9 @@ async def test_evidence_cannot_forge_its_fence() -> None:
     assert collected.count("</evidence>") == 1
     assert collected.count("<evidence") == 1
     assert "roll back everything" in collected
+
+
+def test_cited_predicates_are_names_not_sentences() -> None:
+    bad = propose(cited_predicates=["Deployment/shop/checkout has currentRevision 2"])
+    with pytest.raises(ValidationError):
+        StepDecision.model_validate(bad)
