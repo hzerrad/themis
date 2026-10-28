@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -102,4 +103,40 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 	}
 
 	return nil
+}
+
+// ErrNotFound means no row has the requested ID.
+var ErrNotFound = errors.New("not found")
+
+type Incident struct {
+	ID              string
+	State           incident.State
+	Profile         string
+	Target          incident.TargetRef
+	OccurrenceCount int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
+const incidentColumns = `id::text, state, profile, target_group, target_kind, target_namespace, target_name, target_uid, occurrence_count, created_at, updated_at`
+
+func scanIncident(row pgx.Row) (Incident, error) {
+	var in Incident
+	t := &in.Target
+	err := row.Scan(&in.ID, &in.State, &in.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &in.OccurrenceCount, &in.CreatedAt, &in.UpdatedAt)
+	return in, err
+}
+
+func (s *Store) Incident(ctx context.Context, id string) (Incident, error) {
+	if _, err := uuid.Parse(id); err != nil {
+		return Incident{}, fmt.Errorf("incident %q: %w", id, ErrNotFound)
+	}
+	in, err := scanIncident(s.pool.QueryRow(ctx, `SELECT `+incidentColumns+` FROM incidents WHERE id = $1`, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Incident{}, fmt.Errorf("incident %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return Incident{}, fmt.Errorf("incident %s: %w", id, err)
+	}
+	return in, nil
 }

@@ -306,3 +306,22 @@ func TestTransition_ConcurrentClaimAndCancel(t *testing.T) {
 		t.Errorf("transition rows from authorized = %d, want 1", n)
 	}
 }
+
+func TestIncident(t *testing.T) {
+	s, _ := newStore(t)
+	id, _ := createOrJoin(t, s, newIncident("fp-get"))
+
+	in, err := s.Incident(t.Context(), id)
+	if err != nil {
+		t.Fatalf("Incident: %v", err)
+	}
+	if in.State != incident.Received || in.Profile != "rollout-regression" || in.Target.Name != "checkout" || in.OccurrenceCount != 1 {
+		t.Errorf("Incident = %+v", in)
+	}
+	if _, err := s.Incident(t.Context(), uuid.NewString()); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("unknown ID: err = %v, want ErrNotFound", err)
+	}
+	if _, err := s.Incident(t.Context(), "nope"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("malformed ID: err = %v, want ErrNotFound", err)
+	}
+}
