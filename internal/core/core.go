@@ -34,6 +34,7 @@ import (
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/verify"
+	"github.com/hzerrad/themis/internal/web"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -164,6 +165,7 @@ func Run(ctx context.Context, o Options) error {
 
 	mux := http.NewServeMux()
 	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log}).Register(mux)
+	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
 		TokenFile: cfg.Intake.BearerTokenFile,
