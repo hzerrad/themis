@@ -15,6 +15,7 @@ import (
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
+	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -68,6 +69,11 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		items = append(items, item)
 	}
 	results := predicate.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now)
+	// The template investigated, so a change outside Themis can be noticed.
+	snap, err := rollback.Snapshot(ctx, w.Reader, in.Target)
+	if err != nil {
+		w.logger().Warn("cannot snapshot the target's template", "incident", in.ID, "error", err)
+	}
 
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
@@ -80,8 +86,10 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		if err != nil {
 			return err
 		}
-		_, err = w.Store.CreateInvestigation(ctx, tx, in.ID, items, results)
-		return err
+		if _, err := w.Store.CreateInvestigation(ctx, tx, in.ID, items, results); err != nil {
+			return err
+		}
+		return w.Store.SetObservedSpec(ctx, tx, in.ID, snap.SpecHash)
 	})
 }
 

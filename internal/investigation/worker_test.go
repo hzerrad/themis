@@ -109,6 +109,9 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM investigations WHERE incident_id = $1 AND state = 'pending'`, id); n != 1 {
 		t.Error("no pending investigation")
 	}
+	if in, _ := e.store.Incident(t.Context(), id); in.ObservedSpecHash == "" {
+		t.Error("the investigated template is not recorded")
+	}
 }
 
 // River delivers at least once: a second run must change nothing.
