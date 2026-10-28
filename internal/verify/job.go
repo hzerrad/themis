@@ -82,7 +82,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
 
 	now := w.now()
-	obs, restarts, err := observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
+	obs, restarts, err := Observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
 	if err != nil {
 		return false, err
 	}
@@ -129,10 +129,10 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	return final, err
 }
 
-// observe reads the target's state, and the restarts of its current
+// Observe reads the target's state, and the restarts of its current
 // revision's containers. A template other than the applied one is a foreign
 // change; generation is not, since annotation updates bump it.
-func observe(ctx context.Context, c client.Reader, t incident.TargetRef, since time.Time, applied string) (Observation, int32, error) {
+func Observe(ctx context.Context, c client.Reader, t incident.TargetRef, since time.Time, applied string) (Observation, int32, error) {
 	var d appsv1.Deployment
 	err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &d)
 	if apierrors.IsNotFound(err) || (err == nil && string(d.UID) != t.UID) {
