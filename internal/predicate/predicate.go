@@ -78,3 +78,10 @@ func ParseTruth(s string) Truth {
 	}
 	return Unknown
 }
+
+func (t Truth) MarshalText() ([]byte, error) { return []byte(t.String()), nil }
+
+func (t *Truth) UnmarshalText(b []byte) error {
+	*t = ParseTruth(string(b))
+	return nil
+}

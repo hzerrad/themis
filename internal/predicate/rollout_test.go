@@ -230,3 +230,10 @@ func TestTruth_String(t *testing.T) {
 		t.Error("the zero Truth is not Unknown")
 	}
 }
+
+func TestTruth_JSON(t *testing.T) {
+	b, err := json.Marshal([]predicate.Truth{predicate.True, predicate.Unknown})
+	if err != nil || string(b) != `["true","unknown"]` {
+		t.Errorf("Marshal = %s, %v", b, err)
+	}
+}
