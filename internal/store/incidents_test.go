@@ -325,3 +325,19 @@ func TestIncident(t *testing.T) {
 		t.Errorf("malformed ID: err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestListIncidentsAndTransitions(t *testing.T) {
+	s, _ := newStore(t)
+	first, _ := createOrJoin(t, s, newIncident("fp-a"))
+	second, _ := createOrJoin(t, s, newIncident("fp-b"))
+	advance(t, s, first, incident.Received, incident.Investigating)
+
+	list, err := s.ListIncidents(t.Context(), 10)
+	if err != nil || len(list) != 2 || list[0].ID != second {
+		t.Fatalf("ListIncidents = %v, %v; want newest first", list, err)
+	}
+	trail, err := s.Transitions(t.Context(), first)
+	if err != nil || len(trail) != 1 || trail[0].To != incident.Investigating {
+		t.Errorf("Transitions = %v, %v", trail, err)
+	}
+}
