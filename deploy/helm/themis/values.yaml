@@ -40,6 +40,16 @@ model:
 executor:
   enabled: false
 
+# An escalation webhook: a JSON POST whenever Themis hands an incident to
+# humans. The URL is read from a Secret, since webhook URLs often embed a key.
+notifications:
+  # A Secret in the release namespace with a url key.
+  webhookSecret: ""
+  # Whether the Secret also has a token key, sent as a bearer token.
+  webhookToken: false
+  # Where people reach the UI, for links in notices.
+  externalURL: ""
+
 networkPolicy:
   enabled: true
 

@@ -32,6 +32,7 @@ import (
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/investigation"
+	"github.com/hzerrad/themis/internal/notify"
 	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/verify"
@@ -146,6 +147,7 @@ func Run(ctx context.Context, o Options) error {
 	river.AddWorker(workers, &execution.Worker{Store: s, Executor: executor})
 	river.AddWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
 	river.AddWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
+	river.AddWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications})
 	if executor == nil {
 		log.Warn("no executor is configured: approved actions are canceled, never executed")
 	}
