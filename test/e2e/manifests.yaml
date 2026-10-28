@@ -1,0 +1,47 @@
+# The fake model and a webhook receiver that logs what it is sent.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fake-model}
+spec:
+  selector: {matchLabels: {app: fake-model}}
+  template:
+    metadata: {labels: {app: fake-model}}
+    spec:
+      containers:
+        - name: model
+          image: python:3.13-slim
+          command: [python, -u, /app/fake_model.py]
+          volumeMounts: [{name: app, mountPath: /app}]
+      volumes: [{name: app, configMap: {name: fake-model}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: fake-model}
+spec: {selector: {app: fake-model}, ports: [{port: 8080}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: webhook-sink}
+spec:
+  selector: {matchLabels: {app: webhook-sink}}
+  template:
+    metadata: {labels: {app: webhook-sink}}
+    spec:
+      containers:
+        - name: sink
+          image: python:3.13-slim
+          command: [python, -u, -c]
+          args:
+            - |
+              from http.server import BaseHTTPRequestHandler, HTTPServer
+              class H(BaseHTTPRequestHandler):
+                  def do_POST(self):
+                      body = self.rfile.read(int(self.headers["Content-Length"]))
+                      print("AUTH", self.headers.get("Authorization"), "BODY", body.decode(), flush=True)
+                      self.send_response(204); self.end_headers()
+              HTTPServer(("", 8080), H).serve_forever()
+---
+apiVersion: v1
+kind: Service
+metadata: {name: webhook-sink}
+spec: {selector: {app: webhook-sink}, ports: [{port: 8080}]}

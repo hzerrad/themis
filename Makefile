@@ -115,6 +115,12 @@ images: ## Build the core, executor and intelligence images
 kind-load: images ## Build the images and load them into the kind cluster
 	$(GO_TOOL) kind load docker-image --name $(KIND_CLUSTER) themis-core:$(IMAGE_TAG) themis-executor:$(IMAGE_TAG) themis-intelligence:$(IMAGE_TAG)
 
+# End-to-end test
+
+.PHONY: e2e
+e2e: ## Run the bad-rollout scenarios on a fresh kind cluster with a fake model
+	test/e2e/run.sh
+
 # Local cluster
 
 .PHONY: kind-up kind-down
