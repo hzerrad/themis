@@ -13,6 +13,9 @@ intake:
 investigators:
   bearerTokenFile: bin/dev/investigator-token
 
+api:
+  bearerTokenFile: bin/dev/admin-token
+
 profiles:
   - name: rollout-regression
     priority: 100

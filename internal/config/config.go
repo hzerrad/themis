@@ -43,6 +43,9 @@ type Config struct {
 	// Investigators configures access to the gRPC API.
 	Investigators Investigators `json:"investigators"`
 
+	// API configures access to the HTTP API and the UI.
+	API API `json:"api"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins.
 	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
@@ -57,6 +60,12 @@ type Intake struct {
 // Investigators configures the investigators' gRPC API.
 type Investigators struct {
 	// BearerTokenFile holds the token investigators must send as a bearer token.
+	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+}
+
+// API configures the HTTP API.
+type API struct {
+	// BearerTokenFile holds the admin token the API and UI require.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
 }
 
@@ -292,6 +301,9 @@ func (c Config) Validate() error {
 	}
 	if c.Investigators.BearerTokenFile == "" {
 		add("investigators.bearerTokenFile", "is required")
+	}
+	if c.API.BearerTokenFile == "" {
+		add("api.bearerTokenFile", "is required")
 	}
 
 	if len(c.Profiles) == 0 {

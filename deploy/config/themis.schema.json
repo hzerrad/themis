@@ -41,6 +41,21 @@
       ],
       "description": "Investigators configures access to the gRPC API."
     },
+    "api": {
+      "properties": {
+        "bearerTokenFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "BearerTokenFile holds the admin token the API and UI require."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "bearerTokenFile"
+      ],
+      "description": "API configures access to the HTTP API and the UI."
+    },
     "profiles": {
       "items": {
         "properties": {
@@ -234,6 +249,7 @@
     "enrolledNamespaces",
     "intake",
     "investigators",
+    "api",
     "profiles"
   ],
   "title": "Themis configuration",

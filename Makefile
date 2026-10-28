@@ -132,6 +132,7 @@ demo-down: ## Remove the checkout workload
 
 DEV_TOKEN              := bin/dev/intake-token
 DEV_INVESTIGATOR_TOKEN := bin/dev/investigator-token
+DEV_ADMIN_TOKEN        := bin/dev/admin-token
 
 .PHONY: run
 run: ## Run themis-core locally against the kind cluster and $DATABASE_URL
@@ -139,6 +140,7 @@ run: ## Run themis-core locally against the kind cluster and $DATABASE_URL
 	@mkdir -p $(dir $(DEV_TOKEN))
 	@test -s $(DEV_TOKEN) || { openssl rand -hex 32 > $(DEV_TOKEN) && chmod 600 $(DEV_TOKEN); }
 	@test -s $(DEV_INVESTIGATOR_TOKEN) || { openssl rand -hex 32 > $(DEV_INVESTIGATOR_TOKEN) && chmod 600 $(DEV_INVESTIGATOR_TOKEN); }
+	@test -s $(DEV_ADMIN_TOKEN) || { openssl rand -hex 32 > $(DEV_ADMIN_TOKEN) && chmod 600 $(DEV_ADMIN_TOKEN); }
 	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER)
 
 .PHONY: send-alert
