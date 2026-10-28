@@ -51,7 +51,7 @@ const target = (t) => `${t.Kind || t.kind} ${t.Namespace || t.namespace}/${t.Nam
 const short = (id) => (id || "").slice(-12);
 
 function render(...nodes) {
-  main.replaceChildren(...nodes);
+  main.replaceChildren(...nodes.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
 }
 
 function login() {
