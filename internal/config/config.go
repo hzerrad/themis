@@ -325,3 +325,13 @@ func (c Config) MatchProfile(alertName string, lbls map[string]string, target in
 
 	return highestCandidate, true
 }
+
+// Profile returns the profile named name.
+func (c Config) Profile(name string) (Profile, bool) {
+	for _, p := range c.Profiles {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return Profile{}, false
+}
