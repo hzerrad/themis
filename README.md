@@ -64,7 +64,7 @@ make demo-alert                    # once a checkout pod is crash looping
 
 Open <http://127.0.0.1:8080> and sign in with the token in `bin/dev/admin-token`. The incident shows the evidence, the predicates, the investigator's hypotheses, and the proposed rollback next to the action derived from the cluster. Approving sends the digest you were shown; the executor checks it again before writing, and verification decides whether the incident is resolved.
 
-To install in a cluster instead, see `deploy/helm/themis`. The chart is read-only unless `executor.enabled=true`.
+To install in a cluster instead, use `deploy/helm/themis` and bring your own model: set `model.baseURL` and `model.name` to any OpenAI-compatible endpoint, hosted or local, and `model.apiKeySecret` if it needs a key. The chart is read-only unless `executor.enabled=true`.
 
 ## License
 

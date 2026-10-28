@@ -19,13 +19,17 @@ postgres:
   image: postgres:17-alpine
   storage: 1Gi
 
+# Bring your own model: any OpenAI-compatible endpoint, hosted or local.
 model:
-  # An OpenAI-compatible endpoint, such as Ollama.
-  baseURL: http://ollama.ollama.svc:11434/v1
-  name: qwen3:8b
-  # The most sensitive evidence the endpoint may receive.
+  # Required, for example https://api.openai.com/v1 or http://ollama:11434/v1.
+  baseURL: ""
+  # Required: the model name the endpoint serves.
+  name: ""
+  # The most sensitive evidence the endpoint may receive. sensitive includes
+  # (redacted) container logs; set internal to keep logs from the endpoint.
   ceiling: sensitive
-  # A Secret with an apiKey key, if the endpoint needs one.
+  # A Secret in the release namespace with an apiKey key, if the endpoint
+  # needs one.
   apiKeySecret: ""
   # CIDR the investigator may reach the model at, for the NetworkPolicy.
   egressCIDR: 0.0.0.0/0

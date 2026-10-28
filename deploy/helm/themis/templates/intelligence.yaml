@@ -23,8 +23,8 @@ spec:
           env:
             - {name: THEMIS_CORE_ADDR, value: "{{ .Release.Name }}-core:9090"}
             - {name: THEMIS_TOKEN_FILE, value: /var/run/secrets/themis/investigator}
-            - {name: MODEL_BASE_URL, value: {{ .Values.model.baseURL | quote }}}
-            - {name: MODEL_NAME, value: {{ .Values.model.name | quote }}}
+            - {name: MODEL_BASE_URL, value: {{ required "model.baseURL is required: bring your own OpenAI-compatible endpoint" .Values.model.baseURL | quote }}}
+            - {name: MODEL_NAME, value: {{ required "model.name is required" .Values.model.name | quote }}}
             - {name: MODEL_CEILING, value: {{ .Values.model.ceiling | quote }}}
             - {name: MODEL_TOKEN_BUDGET, value: {{ .Values.model.tokenBudget | quote }}}
             {{- if .Values.model.apiKeySecret }}
