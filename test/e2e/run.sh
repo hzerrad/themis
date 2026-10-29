@@ -92,7 +92,7 @@ $KIND get clusters 2>/dev/null | grep -qx "$CLUSTER" || $KIND create cluster --n
 make -s kind-load KIND_CLUSTER="$CLUSTER" >/dev/null
 
 log "workload, model, monitoring, Themis"
-$K apply -f hack/dev/demo/checkout.yaml >/dev/null
+$K apply -f scripts/dev/demo/checkout.yaml >/dev/null
 $K -n shop rollout status deploy/checkout --timeout=180s >/dev/null
 $K create namespace themis --dry-run=client -o yaml | $K apply -f - >/dev/null
 $K -n themis create configmap fake-model --from-file=test/e2e/fake_model.py --dry-run=client -o yaml | $K apply -f - >/dev/null

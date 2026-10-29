@@ -68,7 +68,7 @@ test-python: ## Run Python tests
 .PHONY: gen
 gen: ## Generate code from protobuf contracts and the config schema
 	$(GO_TOOL) buf generate
-	go run ./hack/gen-config-schema deploy/config/themis.schema.json
+	go run ./scripts/gen-config-schema deploy/config/themis.schema.json
 	$(UV) sync --quiet --reinstall-package themis-intelligence  # pick up new generated packages
 
 GENERATED := gen intelligence/gen deploy/config/themis.schema.json
@@ -93,7 +93,7 @@ endif
 
 .PHONY: migrate
 migrate: ## Apply all migrations (Themis and River) to $DATABASE_URL
-	go run ./hack/migrate
+	go run ./scripts/migrate
 
 # Kubernetes test environment
 
@@ -125,7 +125,7 @@ e2e: ## Run the bad-rollout scenarios on a fresh kind cluster with a fake model
 
 .PHONY: kind-up kind-down
 kind-up: ## Create the local kind cluster
-	$(GO_TOOL) kind create cluster --name $(KIND_CLUSTER) --config hack/kind-config.yaml
+	$(GO_TOOL) kind create cluster --name $(KIND_CLUSTER) --config scripts/kind-config.yaml
 
 kind-down: ## Delete the local kind cluster
 	$(GO_TOOL) kind delete cluster --name $(KIND_CLUSTER)
@@ -159,7 +159,7 @@ monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-c
 		$(KUBECTL) -n monitoring create secret generic themis-intake-token --from-file=token=/dev/stdin \
 		--dry-run=client -o yaml | $(KUBECTL) apply -f -
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring prometheus-community/prometheus \
-		--version $(PROMETHEUS_CHART) -n monitoring -f hack/dev/monitoring/values.yaml --wait --timeout 5m
+		--version $(PROMETHEUS_CHART) -n monitoring -f scripts/dev/monitoring/values.yaml --wait --timeout 5m
 
 monitoring-down: ## Uninstall the monitoring stack from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall monitoring -n monitoring
@@ -170,7 +170,7 @@ KUBECTL := kubectl --context kind-$(KIND_CLUSTER)
 
 .PHONY: demo-up demo-break demo-fix demo-down
 demo-up: ## Deploy the healthy checkout workload (revision 1) to kind
-	$(KUBECTL) apply -f hack/dev/demo/checkout.yaml
+	$(KUBECTL) apply -f scripts/dev/demo/checkout.yaml
 	$(KUBECTL) -n shop rollout status deployment/checkout --timeout=120s
 
 demo-break: ## Roll out a revision of checkout that is OOMKilled on every start
@@ -180,7 +180,7 @@ demo-fix: ## Roll checkout back to its previous revision
 	$(KUBECTL) -n shop rollout undo deployment/checkout
 
 demo-down: ## Remove the checkout workload
-	$(KUBECTL) delete -f hack/dev/demo/checkout.yaml --ignore-not-found
+	$(KUBECTL) delete -f scripts/dev/demo/checkout.yaml --ignore-not-found
 
 # Running locally
 
@@ -208,7 +208,7 @@ dev-tokens:
 .PHONY: run
 run: dev-tokens ## Run themis-core locally against the kind cluster and $DATABASE_URL
 	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
-	go run ./cmd/themis-core --config hack/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
+	go run ./cmd/themis-core --config scripts/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
 		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8082
 
 .PHONY: run-executor
@@ -225,7 +225,7 @@ run-intelligence: dev-tokens ## Run the investigator against a local Ollama
 
 .PHONY: demo-alert
 demo-alert: ## Post an alert for the crash-looping checkout pod to `make run`
-	KIND_CLUSTER=$(KIND_CLUSTER) hack/dev/demo-alert.sh
+	KIND_CLUSTER=$(KIND_CLUSTER) scripts/dev/demo-alert.sh
 
 .PHONY: send-alert
 send-alert: ## Post the sample Alertmanager payload to a running `make run`

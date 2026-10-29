@@ -77,12 +77,12 @@ func TestParse_ExampleFile(t *testing.T) {
 
 // The configuration `make run` uses must stay valid as the schema evolves.
 func TestParse_DevFile(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "hack", "dev", "themis.yaml"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "dev", "themis.yaml"))
 	if err != nil {
 		t.Fatalf("read dev config: %v", err)
 	}
 	if _, err := config.Parse(data); err != nil {
-		t.Fatalf("hack/dev/themis.yaml is invalid: %v", err)
+		t.Fatalf("scripts/dev/themis.yaml is invalid: %v", err)
 	}
 }
 

@@ -1,6 +1,6 @@
 # Configuration
 
-Themis reads one YAML file, `themis.yaml`. The Helm chart renders it from its values; for a local run, see [`hack/dev/themis.yaml`](../hack/dev/themis.yaml). A commented example is in [`deploy/config/themis.example.yaml`](../deploy/config/themis.example.yaml), and [`deploy/config/themis.schema.json`](../deploy/config/themis.schema.json) is its JSON Schema: editors with YAML language support complete and validate the file as you type.
+Themis reads one YAML file, `themis.yaml`. The Helm chart renders it from its values; for a local run, see [`scripts/dev/themis.yaml`](../scripts/dev/themis.yaml). A commented example is in [`deploy/config/themis.example.yaml`](../deploy/config/themis.example.yaml), and [`deploy/config/themis.schema.json`](../deploy/config/themis.schema.json) is its JSON Schema: editors with YAML language support complete and validate the file as you type.
 
 Unknown keys are errors, and Themis reports every problem at once and refuses to start rather than run half-configured.
 
