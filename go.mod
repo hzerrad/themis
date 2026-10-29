@@ -6,7 +6,7 @@ toolchain go1.27.3
 
 require (
 	github.com/go-logr/logr v1.4.4
-	github.com/google/cel-go v0.29.2
+	github.com/google/cel-go v0.30.0
 	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pgx/v5 v5.11.0
