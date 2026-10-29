@@ -53,6 +53,8 @@ Themis supports the same Kubernetes releases the Kubernetes project maintains: t
 | Alertmanager | any release sending webhook payload version `4` |
 | Model | any OpenAI-compatible chat completions endpoint with JSON-schema structured output |
 
+CI runs the tests against every Kubernetes version in the window, and weekly against the next, unreleased one. Themis logs the warnings the API server sends, such as for a deprecated API, and counts them in the `themis_kube_api_deprecation_warnings_total` metric.
+
 Versions outside the window are not tested and may not work. The Helm chart refuses to install on an older Kubernetes, and Themis rejects Alertmanager webhooks of an unknown payload version.
 
 ## Development

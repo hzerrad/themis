@@ -1,0 +1,35 @@
+name: Next Kubernetes
+
+# The Go tests against the next, unreleased Kubernetes (its newest alpha, beta
+# or release candidate), so a break shows up before the release does. It runs
+# on a schedule, never on pull requests: a failure here warns, it never blocks
+# a merge.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays, 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Kubernetes version to test, e.g. v1.38.0-rc.0; empty for the newest published
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  go-test:
+    name: Go tests (next Kubernetes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make test-go-next
+        env:
+          NEXT_K8S_VERSION: ${{ inputs.version }}
