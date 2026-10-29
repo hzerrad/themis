@@ -66,6 +66,7 @@ make help      # list targets
 make lint      # lint Go, Python, protobuf
 make test      # unit and integration tests (needs Docker for PostgreSQL)
 make e2e       # the bad-rollout scenarios on a fresh kind cluster, with a fake model
+make vuln      # known vulnerabilities in the Go and Python dependencies
 ```
 
 To run the components on your machine against kind while you work on them, see [Running locally](docs/demo.md#running-locally).

@@ -68,6 +68,24 @@ test-go-next: envtest ## Run Go tests against the next, unreleased Kubernetes (L
 test-python: ## Run Python tests
 	$(UV) run pytest || test $$? -eq 5  # exit code 5 means no tests collected
 
+# Security
+
+.PHONY: vuln vuln-go vuln-python vuln-images
+vuln: vuln-go vuln-python ## Scan Go and Python dependencies for known vulnerabilities
+
+vuln-go: ## Report known vulnerabilities the Go code can reach (govulncheck)
+	$(GO_TOOL) govulncheck ./...
+
+vuln-python: ## Report known vulnerabilities in the intelligence service's runtime dependencies
+	@mkdir -p bin
+	$(UV) export --quiet --frozen --no-dev --no-emit-project --format requirements-txt -o $(CURDIR)/bin/intelligence-requirements.txt
+	$(UV) run pip-audit --strict --disable-pip -r $(CURDIR)/bin/intelligence-requirements.txt
+
+vuln-images: images ## Scan the images for fixable HIGH and CRITICAL vulnerabilities (needs trivy)
+	@status=0; for image in themis-core themis-executor themis-intelligence; do \
+		trivy image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 $$image:$(IMAGE_TAG) || status=1; \
+	done; exit $$status
+
 # Code generation
 
 .PHONY: gen
