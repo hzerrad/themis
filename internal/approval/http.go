@@ -17,6 +17,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 // approver is the identity of the bootstrap admin token.
@@ -42,7 +43,7 @@ func (a *API) authed(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		want, err := auth.ReadToken(a.TokenFile)
 		if err != nil {
-			a.logger().Error("cannot read the admin token", "file", a.TokenFile, "error", err)
+			a.logger().ErrorContext(r.Context(), "cannot read the admin token", "file", a.TokenFile, telemetry.FieldError, err)
 			http.Error(w, "API temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -57,53 +58,53 @@ func (a *API) authed(h http.HandlerFunc) http.Handler {
 func (a *API) list(w http.ResponseWriter, r *http.Request) {
 	incidents, err := a.Store.ListIncidents(r.Context(), 100)
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	out := make([]incidentView, 0, len(incidents))
 	for _, in := range incidents {
 		out = append(out, viewIncident(in))
 	}
-	a.reply(w, out)
+	a.reply(w, r, out)
 }
 
 func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	in, err := a.Store.Incident(ctx, r.PathValue("id"))
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	d := detailView{Incident: viewIncident(in)}
 	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	items, err := a.Store.Evidence(ctx, in.ID)
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	for _, it := range items {
 		d.Evidence = append(d.Evidence, evidenceView{Item: it, Data: it.Data})
 	}
 	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
 		d.Investigation = &inv
 	} else if !errors.Is(err, store.ErrNotFound) {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	actions, err := a.Store.IncidentActions(ctx, a.Store.DB(), in.ID)
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
 	for _, act := range actions {
@@ -116,7 +117,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Actions = append(d.Actions, v)
 	}
-	a.reply(w, d)
+	a.reply(w, r, d)
 }
 
 type approveRequest struct {
@@ -147,10 +148,10 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		return a.Store.EnqueueTx(ctx, tx, governance.ExecuteArgs{ActionID: act.ID})
 	})
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
-	a.reply(w, viewAction(act))
+	a.reply(w, r, viewAction(act))
 }
 
 type denyRequest struct {
@@ -183,10 +184,10 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		a.fail(w, err)
+		a.fail(w, r, err)
 		return
 	}
-	a.reply(w, map[string]string{"state": string(store.ActionDenied)})
+	a.reply(w, r, map[string]string{"state": string(store.ActionDenied)})
 }
 
 func (a *API) decode(w http.ResponseWriter, r *http.Request, v any) bool {
@@ -197,14 +198,14 @@ func (a *API) decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-func (a *API) reply(w http.ResponseWriter, v any) {
+func (a *API) reply(w http.ResponseWriter, r *http.Request, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.MarshalWrite(w, v); err != nil {
-		a.logger().Error("cannot write a response", "error", err)
+		a.logger().ErrorContext(r.Context(), "cannot write a response", telemetry.FieldError, err)
 	}
 }
 
-func (a *API) fail(w http.ResponseWriter, err error) {
+func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		http.Error(w, "not found", http.StatusNotFound)
@@ -215,7 +216,7 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrExpired):
 		http.Error(w, "the approval window has passed", http.StatusGone)
 	default:
-		a.logger().Error("API request failed", "error", err)
+		a.logger().ErrorContext(r.Context(), "API request failed", telemetry.FieldError, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }

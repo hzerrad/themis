@@ -18,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
 )
 
@@ -153,7 +154,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 			return err
 		}
 		if res.Status != Succeeded {
-			e.logger().Warn("action not executed", "action", a.ID, "status", res.Status, "message", res.Message)
+			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
 			return e.advance(ctx, tx, a.IncidentID, string(res.Status)+": "+res.Message, incident.Executing, incident.Escalated)
 		}
 		if err := e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Verifying); err != nil {

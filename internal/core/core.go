@@ -149,7 +149,7 @@ func Run(ctx context.Context, o Options) error {
 	river.AddWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
 	river.AddWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications})
 	if executor == nil {
-		log.Warn("no executor is configured: approved actions are canceled, never executed")
+		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
 
 	runner, err := s.NewWorkerRunner(workers, map[string]int{
@@ -195,7 +195,7 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	log.Info("starting themis-core", "http", o.HTTPAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
+	log.InfoContext(ctx, "starting themis-core", "http", o.HTTPAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
 	return mgr.Start(ctx)
 }
 
