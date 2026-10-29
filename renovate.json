@@ -80,6 +80,21 @@
     {
       "groupName": "GitHub Actions",
       "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "One Trivy version in mise.toml and the Security workflow. After the GitHub Actions group, so it wins for the workflow's copy.",
+      "groupName": "Trivy",
+      "matchDepNames": ["trivy", "aquasecurity/trivy"]
+    },
+    {
+      "description": "One Python version in .python-version and the intelligence image.",
+      "groupName": "Python",
+      "matchDepNames": ["python"]
+    },
+    {
+      "description": "One uv version in mise.toml and the intelligence image.",
+      "groupName": "uv",
+      "matchDepNames": ["uv", "ghcr.io/astral-sh/uv"]
     }
   ],
   "customManagers": [
@@ -91,14 +106,6 @@
       "depNameTemplate": "prometheus",
       "registryUrlTemplate": "https://prometheus-community.github.io/helm-charts",
       "datasourceTemplate": "helm"
-    },
-    {
-      "description": "Trivy in the Security workflow, kept in step with mise.toml.",
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/security\\.yml$/"],
-      "matchStrings": ["version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
-      "depNameTemplate": "aquasecurity/trivy",
-      "datasourceTemplate": "github-releases"
     }
   ]
 }
