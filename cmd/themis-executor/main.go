@@ -26,6 +26,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/executor"
 	"github.com/hzerrad/themis/internal/grpcserver"
+	"github.com/hzerrad/themis/internal/kubewarn"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -63,6 +64,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	if err != nil {
 		return fmt.Errorf("kubernetes config: %w", err)
 	}
+	kubewarn.Install(kube, log)
 	c, err := client.New(kube, client.Options{})
 	if err != nil {
 		return fmt.Errorf("kubernetes client: %w", err)

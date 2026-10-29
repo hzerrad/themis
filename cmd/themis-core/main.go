@@ -16,6 +16,7 @@ import (
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	"github.com/hzerrad/themis/internal/core"
+	"github.com/hzerrad/themis/internal/kubewarn"
 )
 
 func main() {
@@ -36,6 +37,7 @@ func main() {
 	if err != nil {
 		fail(log, fmt.Errorf("kubernetes config: %w", err))
 	}
+	kubewarn.Install(kube, log)
 	o.Kubernetes = kube
 	o.Logger = log
 
