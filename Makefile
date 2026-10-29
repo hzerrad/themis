@@ -50,7 +50,7 @@ endif
 	$(UV) run ruff format
 	$(UV) run ruff check --fix
 
-.PHONY: test test-go test-python
+.PHONY: test test-go test-go-next test-python
 test: test-go test-python ## Run all unit tests
 
 test-go: envtest ## Run Go tests with the race detector
@@ -59,6 +59,11 @@ ifneq ($(HAS_GO),)
 else
 	@echo "test-go: no Go packages yet, skipping"
 endif
+
+test-go-next: envtest ## Run Go tests against the next, unreleased Kubernetes (Linux only)
+	@# Stop if the script fails: tests without KUBEBUILDER_ASSETS fall back to a released version.
+	assets="$$(scripts/envtest-next.sh "$$($(GO_TOOL) setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir $(ENVTEST_DIR) -p path)")" && \
+		KUBEBUILDER_ASSETS="$$assets" go test -race ./...
 
 test-python: ## Run Python tests
 	$(UV) run pytest || test $$? -eq 5  # exit code 5 means no tests collected
