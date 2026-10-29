@@ -17,11 +17,13 @@ import (
 
 	"github.com/hzerrad/themis/internal/core"
 	"github.com/hzerrad/themis/internal/kubewarn"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 func main() {
 	o := core.Options{DatabaseURL: os.Getenv("DATABASE_URL")}
 	var kubeContext string
+	var level slog.Level
 	flag.StringVar(&o.ConfigPath, "config", "/etc/themis/themis.yaml", "path to the Themis configuration file")
 	flag.StringVar(&o.HTTPAddr, "http-addr", ":8080", "address of the intake and API server")
 	flag.StringVar(&o.GRPCAddr, "grpc-addr", ":9090", "address of the gRPC API for investigators")
@@ -29,9 +31,11 @@ func main() {
 	flag.StringVar(&o.MetricsAddr, "metrics-addr", ":8082", `address of /metrics; "0" disables it`)
 	flag.IntVar(&o.Workers, "workers", 10, "jobs to run at once")
 	flag.StringVar(&kubeContext, "kube-context", "", "kubeconfig context to use; empty for the current one")
+	flag.TextVar(&level, "log-level", slog.LevelInfo, "least severe level logged: debug, info, warn or error")
 	flag.Parse()
 
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := telemetry.NewLogger(os.Stdout, "core", level)
+	slog.SetDefault(log)
 
 	kube, err := ctrlconfig.GetConfigWithContext(kubeContext)
 	if err != nil {
