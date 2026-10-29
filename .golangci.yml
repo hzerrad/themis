@@ -10,9 +10,14 @@ linters:
     - gosec
     - misspell
     - noctx
+    - sloglint
   settings:
     exhaustive:
       default-signifies-exhaustive: false
+    sloglint:
+      context: scope
+      static-msg: true
+      key-naming-case: snake
   exclusions:
     generated: strict
     paths:
