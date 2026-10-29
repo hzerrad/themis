@@ -20,6 +20,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -86,7 +87,7 @@ func (s *Server) internal(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return status.FromContextError(ctx.Err()).Err()
 	}
-	s.logger().Error("gRPC request failed", "error", err)
+	s.logger().ErrorContext(ctx, "gRPC request failed", telemetry.FieldError, err)
 	return status.Error(codes.Internal, "internal error")
 }
 

@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -39,7 +40,7 @@ func (s *Server) ExecuteAction(ctx context.Context, req *themisv1.ExecuteActionR
 	case errors.Is(err, store.ErrNotAuthorized), errors.Is(err, store.ErrApprovalUnusable):
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	case err != nil:
-		s.Executor.logger().Error("execution failed", "action", req.GetActionId(), "error", err)
+		s.Executor.logger().ErrorContext(ctx, "execution failed", telemetry.FieldActionID, req.GetActionId(), telemetry.FieldError, err)
 		return nil, status.Error(codes.Internal, "internal error")
 	}
 	return &themisv1.ExecuteActionResponse{Status: statuses[res.Status], Message: res.Message, PostGeneration: res.PostGeneration}, nil

@@ -45,7 +45,7 @@ func main() {
 	log := telemetry.NewLogger(os.Stdout, "executor", level)
 	slog.SetDefault(log)
 	if err := run(ctrl.SetupSignalHandler(), log, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext); err != nil {
-		log.Error("themis-executor stopped", "error", err)
+		log.Error("themis-executor stopped", telemetry.FieldError, err)
 		os.Exit(1)
 	}
 }
@@ -104,7 +104,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
-	log.Info("starting themis-executor", "grpc", grpcAddr, "probes", probeAddr, "metrics", metricsAddr)
+	log.InfoContext(ctx, "starting themis-executor", "grpc", grpcAddr, "probes", probeAddr, "metrics", metricsAddr)
 	select {
 	case err := <-served:
 		return fmt.Errorf("serve grpc: %w", err)

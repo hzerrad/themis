@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/intake"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 const Route = "POST /v1/intake/alertmanager"
@@ -48,6 +49,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	w := &statusWriter{ResponseWriter: rw, code: http.StatusOK}
 	defer func() { intake.ObserveRequest(Source, w.code) }()
 
+	ctx := r.Context()
 	log := h.Logger
 	if log == nil {
 		log = slog.Default()
@@ -61,7 +63,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// Authenticate before reading the body.
 	want, err := h.token()
 	if err != nil {
-		log.Error("cannot read the intake token", "file", h.TokenFile, "error", err)
+		log.ErrorContext(ctx, "cannot read the intake token", "file", h.TokenFile, telemetry.FieldError, err)
 		http.Error(w, "intake temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -83,29 +85,29 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	payload, err := ParsePayload(body)
 	if err != nil {
-		log.Warn("refused an Alertmanager payload", "error", err)
+		log.WarnContext(ctx, "refused an Alertmanager payload", telemetry.FieldError, err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if payload.TruncatedAlerts > 0 {
 		intake.ObserveTruncated(Source, payload.TruncatedAlerts)
-		log.Warn("Alertmanager dropped alerts from a notification; raise max_alerts on the Themis receiver",
+		log.WarnContext(ctx, "Alertmanager dropped alerts from a notification; raise max_alerts on the Themis receiver",
 			"truncated", payload.TruncatedAlerts, "receiver", payload.Receiver)
 	}
 
 	alerts, invalid, err := payload.toAlerts(receivedAt)
 	if err != nil {
-		log.Error("cannot translate an Alertmanager payload", "error", err)
+		log.ErrorContext(ctx, "cannot translate an Alertmanager payload", telemetry.FieldError, err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
 	for _, a := range invalid {
-		log.Warn("rejected an invalid alert", "alert", a.Name, "error", a.Err)
+		log.WarnContext(ctx, "rejected an invalid alert", "alert", a.Name, telemetry.FieldError, a.Err)
 	}
 
-	got, err := h.Receiver.Receive(r.Context(), alerts, invalid)
+	got, err := h.Receiver.Receive(ctx, alerts, invalid)
 	if err != nil {
-		log.Error("cannot store received alerts", "alerts", len(alerts)+len(invalid), "error", err)
+		log.ErrorContext(ctx, "cannot store received alerts", "alerts", len(alerts)+len(invalid), telemetry.FieldError, err)
 		http.Error(w, "intake temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}

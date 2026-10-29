@@ -51,6 +51,6 @@ func main() {
 }
 
 func fail(log *slog.Logger, err error) {
-	log.Error("themis-core stopped", "error", err)
+	log.Error("themis-core stopped", telemetry.FieldError, err)
 	os.Exit(1)
 }

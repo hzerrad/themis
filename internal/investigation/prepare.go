@@ -17,6 +17,7 @@ import (
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 const actor = "investigation"
@@ -63,7 +64,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		if err != nil {
 			// Missing evidence makes predicates unknown; it does not stop the
 			// investigation.
-			w.logger().Warn("cannot collect initial evidence", "incident", in.ID, "template", name, "error", err)
+			w.logger().WarnContext(ctx, "cannot collect initial evidence", telemetry.FieldIncidentID, in.ID, "template", name, telemetry.FieldError, err)
 			continue
 		}
 		items = append(items, item)
@@ -72,7 +73,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	// The template investigated, so a change outside Themis can be noticed.
 	snap, err := rollback.Snapshot(ctx, w.Reader, in.Target)
 	if err != nil {
-		w.logger().Warn("cannot snapshot the target's template", "incident", in.ID, "error", err)
+		w.logger().WarnContext(ctx, "cannot snapshot the target's template", telemetry.FieldIncidentID, in.ID, telemetry.FieldError, err)
 	}
 
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {

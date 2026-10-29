@@ -19,6 +19,7 @@ import (
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
 )
 
@@ -59,7 +60,7 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 	}
 	for _, in := range incidents {
 		if err := w.one(ctx, in); err != nil && !errors.Is(err, errMovedOn) {
-			w.logger().Warn("cannot reconcile incident", "incident", in.ID, "error", err)
+			w.logger().WarnContext(ctx, "cannot reconcile incident", telemetry.FieldIncidentID, in.ID, telemetry.FieldError, err)
 		}
 	}
 	return nil
