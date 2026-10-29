@@ -59,7 +59,7 @@ Versions outside the window are not tested and may not work. The Helm chart refu
 
 ## Development
 
-Requirements: Go, [uv](https://docs.astral.sh/uv/), Docker, and Helm. Other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`, so no separate install is needed.
+Requirements: Docker, plus Go, [uv](https://docs.astral.sh/uv/), Helm and kubectl. Their versions are pinned in `mise.toml`: with [mise](https://mise.jdx.dev/), `mise install` installs them. Other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`, so no separate install is needed.
 
 ```bash
 make help      # list targets
