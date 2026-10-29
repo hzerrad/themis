@@ -39,7 +39,7 @@ spec:
         - name: core
           image: {{ include "themis.image" (dict "root" . "component" "core") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: [--config=/etc/themis/themis.yaml]
+          args: [--config=/etc/themis/themis.yaml, --log-level={{ .Values.logLevel }}]
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}

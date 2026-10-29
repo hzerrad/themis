@@ -37,7 +37,7 @@ spec:
         - name: executor
           image: {{ include "themis.image" (dict "root" . "component" "executor") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: [--token-file=/var/run/secrets/themis/executor]
+          args: [--token-file=/var/run/secrets/themis/executor, --log-level={{ .Values.logLevel }}]
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
