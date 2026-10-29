@@ -8,6 +8,7 @@
   "minimumReleaseAge": "3 days",
   "labels": ["dependencies"],
   "postUpdateOptions": ["gomodTidy"],
+  "platformAutomerge": false,
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "labels": ["dependencies", "security"],
@@ -16,7 +17,7 @@
   },
   "packageRules": [
     {
-      "description": "Patch and digest updates merge themselves once every check passes.",
+      "description": "Patch and digest updates merge themselves once every check passes. Renovate merges them itself (platformAutomerge is off) so the e2e run, which is not a required check, gates them too.",
       "matchUpdateTypes": ["patch", "digest", "pin", "pinDigest"],
       "automerge": true
     },
