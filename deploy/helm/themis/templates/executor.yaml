@@ -14,6 +14,7 @@ spec:
   selector: {{- include "themis.selector" (dict "root" . "component" "executor") | nindent 4 }}
   ports:
     - {name: grpc, port: 9091, targetPort: grpc}
+    - {name: metrics, port: 8082, targetPort: metrics}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -43,6 +44,7 @@ spec:
           ports:
             - {name: grpc, containerPort: 9091}
             - {name: probes, containerPort: 8081}
+            - {name: metrics, containerPort: 8082}
           readinessProbe: {httpGet: {path: /readyz, port: probes}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: probes}, periodSeconds: 10}
           resources: {{- toYaml .Values.resources.executor | nindent 12 }}

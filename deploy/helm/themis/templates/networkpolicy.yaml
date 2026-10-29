@@ -50,6 +50,6 @@ spec:
         - podSelector:
             matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 14 }}
       ports: [{port: 9091, protocol: TCP}]
-    - ports: [{port: 8081, protocol: TCP}]
+    - ports: [{port: 8081, protocol: TCP}, {port: 8082, protocol: TCP}]
 {{- end }}
 {{- end }}

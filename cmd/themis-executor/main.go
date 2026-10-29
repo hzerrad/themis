@@ -17,10 +17,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/hzerrad/themis/internal/executor"
 	"github.com/hzerrad/themis/internal/grpcserver"
@@ -28,21 +30,22 @@ import (
 )
 
 func main() {
-	var grpcAddr, probeAddr, tokenFile, kubeContext string
+	var grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string
 	flag.StringVar(&grpcAddr, "grpc-addr", ":9091", "address of the ExecutorService")
 	flag.StringVar(&probeAddr, "probe-addr", ":8081", "address of /healthz and /readyz")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8082", `address of /metrics; "0" disables it`)
 	flag.StringVar(&tokenFile, "token-file", "/var/run/secrets/themis/executor-token", "file holding the token the core must send")
 	flag.StringVar(&kubeContext, "kube-context", "", "kubeconfig context to use; empty for the current one")
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(ctrl.SetupSignalHandler(), log, grpcAddr, probeAddr, tokenFile, kubeContext); err != nil {
+	if err := run(ctrl.SetupSignalHandler(), log, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext); err != nil {
 		log.Error("themis-executor stopped", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, tokenFile, kubeContext string) error {
+func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string) error {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		return errors.New("no database URL: set DATABASE_URL")
@@ -85,9 +88,17 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, tokenFile, 
 	})}
 	go func() { _ = probes.ListenAndServe() }()
 
+	var metricsSrv *http.Server
+	if metricsAddr != "0" {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
+		metricsSrv = &http.Server{Addr: metricsAddr, ReadHeaderTimeout: 5 * time.Second, Handler: mux}
+		go func() { _ = metricsSrv.ListenAndServe() }()
+	}
+
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
-	log.Info("starting themis-executor", "grpc", grpcAddr, "probes", probeAddr)
+	log.Info("starting themis-executor", "grpc", grpcAddr, "probes", probeAddr, "metrics", metricsAddr)
 	select {
 	case err := <-served:
 		return fmt.Errorf("serve grpc: %w", err)
@@ -96,5 +107,8 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, tokenFile, 
 	srv.GracefulStop()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if metricsSrv != nil {
+		_ = metricsSrv.Shutdown(shutdownCtx)
+	}
 	return probes.Shutdown(shutdownCtx)
 }
