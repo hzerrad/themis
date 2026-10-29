@@ -50,7 +50,27 @@ jobs:
             go.sum
             tools/go.sum
       - run: make lint-go lint-proto
-      - run: make test-go
+
+  go-test:
+    name: Go tests (Kubernetes ${{ matrix.kubernetes }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Every supported minor: keep in step with the README's "Supported versions".
+        kubernetes: ["1.35", "1.36", "1.37"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # setup-envtest picks the newest patch release of the minor.
+      - run: make test-go ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}.x
 
   generated:
     name: Generated code
