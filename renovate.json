@@ -1,0 +1,103 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Dependency updates for Themis. Every commit is signed off for the DCO check.",
+  "extends": ["config:best-practices", ":semanticCommitTypeAll(build)"],
+  "commitBody": "Signed-off-by: renovate[bot] <29139614+renovate[bot]@users.noreply.github.com>",
+  "timezone": "UTC",
+  "schedule": ["before 6am on monday"],
+  "minimumReleaseAge": "3 days",
+  "labels": ["dependencies"],
+  "postUpdateOptions": ["gomodTidy"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null
+  },
+  "packageRules": [
+    {
+      "description": "Patch and digest updates merge themselves once every check passes.",
+      "matchUpdateTypes": ["patch", "digest", "pin", "pinDigest"],
+      "automerge": true
+    },
+    {
+      "description": "Kubernetes libraries move together, and only with a controller-runtime that supports them (see the release checklist).",
+      "groupName": "Kubernetes libraries",
+      "matchPackageNames": ["k8s.io/**", "sigs.k8s.io/controller-runtime"]
+    },
+    {
+      "description": "A new Kubernetes minor moves the supported window: CI matrix, kubeVersion, README and kubectl together. Opened only on request from the dependency dashboard.",
+      "matchPackageNames": ["k8s.io/**", "sigs.k8s.io/controller-runtime"],
+      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "kubectl stays inside the supported window, so its minor moves with the window too.",
+      "matchDepNames": ["kubectl"],
+      "matchUpdateTypes": ["major", "minor"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "go.mod's go line is the minimum Go version Themis builds with, raised by hand; the toolchain line is updated.",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["golang"],
+      "enabled": false
+    },
+    {
+      "description": "One Go version everywhere: go.mod's toolchain, mise.toml and the build image.",
+      "groupName": "Go toolchain",
+      "matchDepNames": ["go", "golang"]
+    },
+    {
+      "description": "The policy engine changes behaviour on minor versions; review those by hand.",
+      "matchPackageNames": ["github.com/google/cel-go"],
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false
+    },
+    {
+      "groupName": "OpenTelemetry",
+      "matchPackageNames": ["go.opentelemetry.io/**", "opentelemetry-*"]
+    },
+    {
+      "groupName": "gRPC and protobuf",
+      "matchPackageNames": ["google.golang.org/grpc", "google.golang.org/protobuf", "google.golang.org/genproto/**", "grpcio", "grpcio-*", "protobuf", "types-grpcio", "types-protobuf"]
+    },
+    {
+      "groupName": "River",
+      "matchPackageNames": ["github.com/riverqueue/**"]
+    },
+    {
+      "description": "Developer tools run through go tool.",
+      "groupName": "Go developer tools",
+      "matchFileNames": ["tools/go.mod"]
+    },
+    {
+      "groupName": "Python developer tools",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["dependency-groups"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "The Prometheus chart the local monitoring stack installs.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": ["PROMETHEUS_CHART := (?<currentValue>\\S+)"],
+      "depNameTemplate": "prometheus",
+      "registryUrlTemplate": "https://prometheus-community.github.io/helm-charts",
+      "datasourceTemplate": "helm"
+    },
+    {
+      "description": "Trivy in the Security workflow, kept in step with mise.toml.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/security\\.yml$/"],
+      "matchStrings": ["version: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases"
+    }
+  ]
+}
