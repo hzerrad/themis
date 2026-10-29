@@ -77,6 +77,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `image.repository` | `""` | Registry and path of the images |
 | `image.tag` | `dev` | Image tag |
 | `image.pullPolicy` | `IfNotPresent` | |
+| `logLevel` | `info` | Least severe level the core and executor log: `debug`, `info`, `warn` or `error` |
 | `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |

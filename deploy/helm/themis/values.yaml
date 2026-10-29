@@ -4,6 +4,9 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
+# Least severe level the core and executor log: debug, info, warn or error.
+logLevel: info
+
 # Namespaces Themis may read, and with the executor, write. Each gets its own
 # Role: Themis never creates RBAC at runtime.
 enrolledNamespaces:
