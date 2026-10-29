@@ -11,7 +11,10 @@ COPY intelligence/gen gen
 RUN uv sync --frozen --no-dev
 
 FROM python:3.13-slim
-RUN useradd --uid 65532 --no-create-home themis
+# pip is not needed at runtime, and the copies of urllib3 and msgpack it
+# bundles carry vulnerabilities of their own.
+RUN python -m pip uninstall --yes --quiet pip \
+    && useradd --uid 65532 --no-create-home themis
 COPY --from=build /app /app
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
 USER 65532
