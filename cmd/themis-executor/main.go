@@ -28,18 +28,22 @@ import (
 	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/kubewarn"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 func main() {
 	var grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string
+	var level slog.Level
 	flag.StringVar(&grpcAddr, "grpc-addr", ":9091", "address of the ExecutorService")
 	flag.StringVar(&probeAddr, "probe-addr", ":8081", "address of /healthz and /readyz")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8082", `address of /metrics; "0" disables it`)
 	flag.StringVar(&tokenFile, "token-file", "/var/run/secrets/themis/executor-token", "file holding the token the core must send")
 	flag.StringVar(&kubeContext, "kube-context", "", "kubeconfig context to use; empty for the current one")
+	flag.TextVar(&level, "log-level", slog.LevelInfo, "least severe level logged: debug, info, warn or error")
 	flag.Parse()
 
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	log := telemetry.NewLogger(os.Stdout, "executor", level)
+	slog.SetDefault(log)
 	if err := run(ctrl.SetupSignalHandler(), log, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext); err != nil {
 		log.Error("themis-executor stopped", "error", err)
 		os.Exit(1)
