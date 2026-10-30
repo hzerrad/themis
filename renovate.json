@@ -39,6 +39,12 @@
       "dependencyDashboardApproval": true
     },
     {
+      "description": "A new Postgres major cannot start on the previous major's data directory, so the chart's database moves only on request from the dependency dashboard.",
+      "matchDepNames": ["postgres"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
       "description": "go.mod's go line is the minimum Go version Themis builds with, raised by hand; the toolchain line is updated.",
       "matchManagers": ["gomod"],
       "matchDepTypes": ["golang"],
