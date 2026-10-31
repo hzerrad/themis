@@ -24,6 +24,7 @@ import (
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 	"github.com/hzerrad/themis/internal/verify"
 )
@@ -335,5 +336,39 @@ func TestExecutor_LogsCarryTheRecordsIncidentID(t *testing.T) {
 	}
 	if n := strings.Count(buf.String(), `"incident_id"`); n != 1 {
 		t.Errorf("incident_id logged %d times", n)
+	}
+}
+
+func actions(t *testing.T, result string) func() float64 {
+	t.Helper()
+	return metrictest.Delta(t, "themis_actions_total", map[string]string{"capability": "deployment.rollback-to-revision", "result": result})
+}
+
+// An action runs once: a repeated call reports the recorded outcome, uncounted.
+func TestMetrics_ActionCountedOnce(t *testing.T) {
+	e, a := approved(t)
+	succeeded := actions(t, "succeeded")
+	x := e.executor(k8s.Client)
+	for range 2 {
+		if _, err := x.Execute(t.Context(), a.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := succeeded(); got != 1 {
+		t.Errorf("counted %v successes, want 1", got)
+	}
+}
+
+func TestMetrics_DryRunFailureCounted(t *testing.T) {
+	e, a := approved(t)
+	dryRun, failed := actions(t, "dry_run_failed"), actions(t, "failed")
+	if _, err := e.executor(failing(t, true, errors.New("admission webhook denied the request"))).Execute(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := dryRun(); got != 1 {
+		t.Errorf("counted %v dry-run failures, want 1", got)
+	}
+	if got := failed(); got != 0 {
+		t.Errorf("counted %v other failures, want 0", got)
 	}
 }

@@ -96,9 +96,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 
 	var metricsSrv *http.Server
 	if metricsAddr != "0" {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
-		metricsSrv = &http.Server{Addr: metricsAddr, ReadHeaderTimeout: 5 * time.Second, Handler: mux}
+		metricsSrv = &http.Server{Addr: metricsAddr, ReadHeaderTimeout: 5 * time.Second, Handler: metricsHandler()}
 		go func() { _ = metricsSrv.ListenAndServe() }()
 	}
 
@@ -117,4 +115,11 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 		_ = metricsSrv.Shutdown(shutdownCtx)
 	}
 	return probes.Shutdown(shutdownCtx)
+}
+
+// metricsHandler serves the executor's metrics on /metrics.
+func metricsHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
+	return mux
 }
