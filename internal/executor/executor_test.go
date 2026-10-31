@@ -157,8 +157,8 @@ func TestExecute_RestoresPriorTemplate(t *testing.T) {
 	if got := e.incidentState(t, a.IncidentID); got != incident.Verifying {
 		t.Errorf("incident = %s, want verifying", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2`, verify.VerifyArgs{}.Kind(), a.ID); n != 1 {
-		t.Errorf("%d verify jobs, want 1", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, verify.VerifyArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
+		t.Errorf("%d verify jobs for the action and its incident, want 1", n)
 	}
 }
 

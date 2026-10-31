@@ -185,8 +185,8 @@ func TestApprove_TransitionsToAuthorizedAndEnqueuesExecute(t *testing.T) {
 	if got := e.state(t, a.IncidentID); got != incident.Authorized {
 		t.Errorf("state = %s, want authorized", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2`, governance.ExecuteArgs{}.Kind(), a.ID); n != 1 {
-		t.Errorf("%d execute jobs, want 1", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, governance.ExecuteArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
+		t.Errorf("%d execute jobs for the action and its incident, want 1", n)
 	}
 }
 

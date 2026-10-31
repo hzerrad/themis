@@ -134,7 +134,7 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 				if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Diagnosed); err != nil {
 					return err
 				}
-				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID})
+				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 			}
 		}
 		return s.advance(ctx, tx, inv.IncidentID, "no accepted proposal", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)

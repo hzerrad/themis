@@ -6,6 +6,7 @@ linters:
     - bodyclose
     - errorlint
     - exhaustive
+    - forbidigo
     - gochecksumtype
     - gosec
     - misspell
@@ -14,12 +15,21 @@ linters:
   settings:
     exhaustive:
       default-signifies-exhaustive: false
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^river\.AddWorker$
+          pkg: ^github.com/riverqueue/river$
+          msg: register with telemetry.AddIncidentWorker or telemetry.AddUnscopedWorker, so the job's logs carry its kind and incident
     sloglint:
       context: scope
       static-msg: true
       key-naming-case: snake
   exclusions:
     generated: strict
+    rules:
+      - path: internal/telemetry/river\.go|_test\.go
+        linters: [forbidigo]
     paths:
       - gen/
 

@@ -82,8 +82,8 @@ func TestComplete_Proposed_EnqueuesGovernInSameTx(t *testing.T) {
 	if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
 		t.Errorf("state = %s, want diagnosed", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'proposalID' = $2`, governance.GovernArgs{}.Kind(), accepted.GetProposalId()); n != 1 {
-		t.Errorf("%d govern jobs for the proposal, want 1", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'proposalID' = $2 AND args->>'incidentID' = $3`, governance.GovernArgs{}.Kind(), accepted.GetProposalId(), inv.GetIncidentId()); n != 1 {
+		t.Errorf("%d govern jobs for the proposal and its incident, want 1", n)
 	}
 }
 
