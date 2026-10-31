@@ -103,7 +103,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		}
 	}
 	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{p}}
-	registry := evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents())
+	registry := evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents(), evidence.NewContainerLogsTail(nil))
 	clk := &clock{now: time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC)}
 
 	logs := &syncBuffer{}
