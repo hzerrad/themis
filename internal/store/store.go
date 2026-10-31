@@ -54,8 +54,34 @@ func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
 }
 
+// InTx runs fn in a transaction, and then the functions given to AfterCommit
+// if it committed.
 func (s *Store) InTx(ctx context.Context, fn func(pgx.Tx) error) error {
-	return pgx.BeginFunc(ctx, s.pool, fn)
+	h := &hookedTx{}
+	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		h.Tx = tx
+		return fn(h)
+	})
+	if err != nil {
+		return err
+	}
+	for _, f := range h.after {
+		f()
+	}
+	return nil
+}
+
+type hookedTx struct {
+	pgx.Tx
+	after []func()
+}
+
+// AfterCommit runs f once tx commits, and never if it rolls back. Only a
+// transaction of InTx has the hook; f is dropped for any other.
+func AfterCommit(tx pgx.Tx, f func()) {
+	if h, ok := tx.(*hookedTx); ok {
+		h.after = append(h.after, f)
+	}
 }
 
 func (s *Store) EnqueueTx(ctx context.Context, tx pgx.Tx, args river.JobArgs) error {
