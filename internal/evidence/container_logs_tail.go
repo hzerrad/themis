@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -74,6 +75,35 @@ type LogsView struct {
 // emptyLogsNote is the Note of a container that wrote nothing.
 const emptyLogsNote = "the container wrote no output; processes killed for memory often log nothing, so this neither confirms nor contradicts a hypothesis"
 
+// The kubelet streams these, as if they were the logs, when it no longer has
+// a run's logs: its container is gone, or its log file is.
+var (
+	goneContainer = regexp.MustCompile(`\Aunable to retrieve container logs for (\S+)\s*\z`)
+	goneLogFile   = regexp.MustCompile(`\A(?:failed to resolve log path|failed to open log file|failed to try resolving symlinks in path) "([^"]+)"[^\n]*\s*\z`)
+)
+
+// logsGone reports whether raw is the kubelet saying it no longer has logs
+// of this container. A container that prints the same words about another
+// container is read as logs.
+func logsGone(raw []byte, pod *corev1.Pod, status corev1.ContainerStatus) bool {
+	if m := goneContainer.FindSubmatch(raw); m != nil {
+		id := string(m[1])
+		last := status.LastTerminationState.Terminated
+		return id == status.ContainerID || (last != nil && id == last.ContainerID)
+	}
+	if m := goneLogFile.FindSubmatch(raw); m != nil {
+		return strings.Contains(string(m[1]), "_"+string(pod.UID)+"/"+status.Name+"/")
+	}
+	return false
+}
+
+func goneNote(previous bool) string {
+	if previous {
+		return "the kubelet no longer has the logs of the run that last ended"
+	}
+	return "the kubelet no longer has the logs of the current run"
+}
+
 type containerLogsTail struct {
 	logs LogReader
 }
@@ -122,18 +152,32 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 		return Item{}, fmt.Errorf("%w: previous must be true or false", ErrInvalidParams)
 	}
 
-	stream, err := l.logs.Logs(ctx, LogRequest{
+	req := LogRequest{
 		Namespace: t.Namespace, Pod: pod.Name, Container: status.Name, Previous: previous,
 		TailLines: logTailLines,
-	})
-	if err != nil {
-		return Item{}, fmt.Errorf("read logs of %s/%s: %w", pod.Name, status.Name, err)
 	}
-	defer func() { _ = stream.Close() }()
-	var tail tailBuffer
-	read, err := io.Copy(&tail, io.LimitReader(stream, maxLogReadBytes))
+	raw, read, err := l.read(ctx, req)
 	if err != nil {
-		return Item{}, fmt.Errorf("read logs of %s/%s: %w", pod.Name, status.Name, err)
+		return Item{}, err
+	}
+	gone := logsGone(raw, pod, status)
+	var notes []string
+	// Without a run asked for, the current one stands in for a gone one.
+	if gone && previous && params["previous"] == "" {
+		req.Previous, previous = false, false
+		if raw, read, err = l.read(ctx, req); err != nil {
+			return Item{}, err
+		}
+		if gone = logsGone(raw, pod, status); gone {
+			notes = append(notes, goneNote(true)+", nor of the current run")
+		} else {
+			notes = append(notes, goneNote(true)+", so these are the current run's")
+		}
+	} else if gone {
+		notes = append(notes, goneNote(previous))
+	}
+	if gone {
+		raw, read = nil, 0
 	}
 
 	// The pod was picked by name: drop logs of another pod since recreated
@@ -146,11 +190,11 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 		return Item{}, fmt.Errorf("%w: pod %s was recreated", ErrTargetGone, pod.Name)
 	}
 
-	logs := tailUTF8(strings.ToValidUTF8(string(tail.buf), "\uFFFD"), MaxLogBytes)
-	view := LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs}
-	if strings.TrimSpace(logs) == "" {
-		view.Note = emptyLogsNote
+	logs := tailUTF8(strings.ToValidUTF8(string(raw), "\uFFFD"), MaxLogBytes)
+	if !gone && strings.TrimSpace(logs) == "" {
+		notes = append(notes, emptyLogsNote)
 	}
+	view := LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs, Note: strings.Join(notes, "; ")}
 	data, err := json.Marshal(view)
 	if err != nil {
 		return Item{}, err
@@ -161,6 +205,21 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 		OriginalBytes:  int(read),
 		Classification: ClassificationSensitive,
 	}, nil
+}
+
+// read returns the end of a container's logs and how many bytes were read.
+func (l containerLogsTail) read(ctx context.Context, req LogRequest) ([]byte, int64, error) {
+	stream, err := l.logs.Logs(ctx, req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read logs of %s/%s: %w", req.Pod, req.Container, err)
+	}
+	defer func() { _ = stream.Close() }()
+	var tail tailBuffer
+	read, err := io.Copy(&tail, io.LimitReader(stream, maxLogReadBytes))
+	if err != nil {
+		return nil, 0, fmt.Errorf("read logs of %s/%s: %w", req.Pod, req.Container, err)
+	}
+	return tail.buf, read, nil
 }
 
 // pickPod returns the named pod, which must be the target's, or the one
