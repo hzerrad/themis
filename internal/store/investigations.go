@@ -227,7 +227,7 @@ func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, reaso
 func (s *Store) ExpireInvestigations(ctx context.Context, tx pgx.Tx, now time.Time) ([]string, error) {
 	rows, err := tx.Query(ctx, `
 	UPDATE investigations
-	SET state = 'failed', failure = 'lease expired on the last attempt', lease_id = NULL, updated_at = now()
+	SET state = 'failed', failure = 'The investigator stopped responding during its last attempt', lease_id = NULL, updated_at = now()
 	WHERE state = 'leased' AND lease_deadline < $1 AND attempts >= $2
 	RETURNING incident_id::text
 `, now, MaxInvestigationAttempts)

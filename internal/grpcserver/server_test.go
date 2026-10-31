@@ -454,3 +454,21 @@ func TestFail_EscalationReasonIsPlain(t *testing.T) {
 		})
 	}
 }
+
+// The investigation's failure is stored as a sentence, shown as it is.
+func TestFail_StoredAsASentence(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	if _, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+		LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE, Message: "connection refused",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var failure string
+	if err := e.pool.QueryRow(t.Context(), `SELECT failure FROM investigations WHERE incident_id = $1`, inv.GetIncidentId()).Scan(&failure); err != nil {
+		t.Fatal(err)
+	}
+	if want := "The investigation failed because the model couldn't be reached: connection refused"; failure != want {
+		t.Errorf("failure = %q, want %q", failure, want)
+	}
+}
