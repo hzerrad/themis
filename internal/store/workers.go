@@ -36,6 +36,7 @@ func (s *Store) NewWorkerRunner(workers *river.Workers, queues map[string]int, p
 		PeriodicJobs: periodic,
 		Workers:      workers,
 		Logger:       logger,
+		Middleware:   riverMiddleware(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create river worker client: %w", err)
