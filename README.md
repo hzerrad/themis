@@ -42,6 +42,7 @@ To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README
 | PostgreSQL | | Durable state, the audit trail, and the job queue |
 
 More in [docs/architecture.md](docs/architecture.md). Configuration, including profiles and policy, is described in [docs/configuration.md](docs/configuration.md).
+Logs, metrics and traces, and how to follow one incident across the components, are in [docs/observability.md](docs/observability.md).
 
 ## Supported versions
 
