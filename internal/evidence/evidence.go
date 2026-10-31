@@ -65,6 +65,7 @@ func NewRegistry(templates ...Template) Registry {
 	r := make(Registry, len(templates))
 	for _, t := range templates {
 		r[t.Name()] = t
+		initMetrics(t.Name())
 	}
 	return r
 }
@@ -93,6 +94,7 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, t i
 	if item.Classification == "" {
 		item.Classification = ClassificationInternal
 	}
+	countItem(item)
 	return item, nil
 }
 
