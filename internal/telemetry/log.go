@@ -29,9 +29,17 @@ const (
 type attrsKey struct{}
 
 // WithAttrs returns a context whose log lines carry attrs, after those of ctx.
+// An attr replaces one of ctx with the same key.
 func WithAttrs(ctx context.Context, attrs ...slog.Attr) context.Context {
-	prev, _ := ctx.Value(attrsKey{}).([]slog.Attr)
-	return context.WithValue(ctx, attrsKey{}, append(slices.Clip(prev), attrs...))
+	kept := slices.DeleteFunc(slices.Clone(contextAttrs(ctx)), func(prev slog.Attr) bool {
+		return slices.ContainsFunc(attrs, func(a slog.Attr) bool { return a.Key == prev.Key })
+	})
+	return context.WithValue(ctx, attrsKey{}, append(kept, attrs...))
+}
+
+func contextAttrs(ctx context.Context) []slog.Attr {
+	attrs, _ := ctx.Value(attrsKey{}).([]slog.Attr)
+	return attrs
 }
 
 // NewLogger returns a JSON logger for component. Its *Context methods add the
@@ -44,9 +52,7 @@ func NewLogger(w io.Writer, component string, level slog.Leveler) *slog.Logger {
 type handler struct{ slog.Handler }
 
 func (h handler) Handle(ctx context.Context, r slog.Record) error {
-	if attrs, ok := ctx.Value(attrsKey{}).([]slog.Attr); ok {
-		r.AddAttrs(attrs...)
-	}
+	r.AddAttrs(contextAttrs(ctx)...)
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
 		r.AddAttrs(slog.String(FieldTraceID, sc.TraceID().String()), slog.String(FieldSpanID, sc.SpanID().String()))
 	}

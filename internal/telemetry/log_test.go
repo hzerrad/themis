@@ -73,6 +73,22 @@ func TestLogger_SiblingContextsDoNotShareFields(t *testing.T) {
 	}
 }
 
+// A field set again is logged once, with its latest value.
+func TestLogger_LaterFieldReplacesEarlier(t *testing.T) {
+	var buf bytes.Buffer
+	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo)
+
+	ctx := telemetry.WithAttrs(context.Background(), slog.String(telemetry.FieldIncidentID, "from-caller"))
+	log.InfoContext(telemetry.WithAttrs(ctx, slog.String(telemetry.FieldIncidentID, "from-record")), "replaced")
+
+	if n := strings.Count(buf.String(), `"incident_id"`); n != 1 {
+		t.Fatalf("incident_id logged %d times: %s", n, buf.String())
+	}
+	if got := lines(t, &buf)[0][telemetry.FieldIncidentID]; got != "from-record" {
+		t.Errorf("incident_id = %v, want from-record", got)
+	}
+}
+
 func TestLogger_AddsTraceIDs_OnlyWithActiveSpan(t *testing.T) {
 	var buf bytes.Buffer
 	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo)
