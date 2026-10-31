@@ -65,6 +65,12 @@ func (w *Worker) Notify(ctx context.Context, n store.EscalationArgs) error {
 	if hook == nil {
 		return nil
 	}
+	err := w.post(ctx, hook, n)
+	countNotification(err)
+	return err
+}
+
+func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.EscalationArgs) error {
 	in, err := w.Store.Incident(ctx, n.IncidentID)
 	if err != nil {
 		return err
