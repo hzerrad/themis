@@ -41,6 +41,7 @@ spec:
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
+            {{- include "themis.otlpEnv" . | nindent 12 }}
           ports:
             - {name: grpc, containerPort: 9091}
             - {name: probes, containerPort: 8081}
