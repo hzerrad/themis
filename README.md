@@ -9,7 +9,7 @@ Models propose; deterministic controls decide. A Kubernetes write is never consi
 ## What it does
 
 1. **Alertmanager fires** (for example `KubePodCrashLooping`). Themis resolves the alert to the workload it is about, deduplicates it into an incident, and records why it ignores the alerts it ignores.
-2. **Evidence and facts.** Themis reads the target through named, read-only templates (rollout history, pod states, events, log tails), redacts secrets, and computes deterministic predicates such as *the new revision was OOMKilled* or *the failure started after the rollout*. Each is `true`, `false` or `unknown`, and cites the evidence it rests on.
+2. **Evidence and facts.** Themis reads the target through named, read-only templates (rollout history, pod states, events, log tails), hides secrets, and checks facts in code, such as *the new revision runs out of memory* or *the failures started after the rollout*. Each answer is yes, no or can't tell, and points to the evidence behind it.
 3. **Investigation.** A model, any OpenAI-compatible endpoint you choose, reads that evidence and may ask for more. It proposes a fix from the profile's allowed capabilities, citing evidence. Its output is untrusted: a proposal for another target, an unknown capability, or made-up evidence is rejected and recorded as a safety event.
 4. **Governance.** Themis derives the action from the live cluster rather than from the proposal, checks ownership (a GitOps-managed target is never changed behind Argo CD's or Flux's back), evaluates your CEL policy, and binds everything that matters into a digest.
 5. **Approval.** In the UI you compare the proposal with the action derived from the cluster, see exactly what changes, and approve the digest you were shown, or deny it.
