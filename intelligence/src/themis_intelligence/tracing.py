@@ -43,4 +43,4 @@ def _exporter() -> SpanExporter:
         )
 
         return HTTPSpanExporter()
-    raise SystemExit("OTEL_EXPORTER_OTLP_PROTOCOL must be grpc or http/protobuf")
+    raise SystemExit("OTEL_EXPORTER_OTLP_PROTOCOL must be grpc or http/protobuf.")

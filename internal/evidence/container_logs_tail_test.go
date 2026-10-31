@@ -121,7 +121,7 @@ func TestLogsTail_IsSensitive(t *testing.T) {
 func TestLogsTail_EmptyLogsAreExplained(t *testing.T) {
 	logs := fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": ""}
 	data := string(collectLogs(t, logs, loadScenario1(t), nil).Data)
-	if !strings.Contains(data, "neither confirms nor contradicts") {
+	if !strings.Contains(data, "proves nothing either way") {
 		t.Errorf("empty logs carry no note: %s", data)
 	}
 }
@@ -196,7 +196,7 @@ func TestLogsTail_EmptyCurrentRunAfterFallbackIsExplained(t *testing.T) {
 		"checkout-7d9f8b6c4-x2kqp/app/previous": previousGone,
 		"checkout-7d9f8b6c4-x2kqp/app":          "",
 	}, nil)
-	if !strings.Contains(view.Note, "the run that last ended") || !strings.Contains(view.Note, "neither confirms nor contradicts") {
+	if !strings.Contains(view.Note, "the run that last ended") || !strings.Contains(view.Note, "proves nothing either way") {
 		t.Errorf("Note = %q, want the fallback and the empty-logs notes", view.Note)
 	}
 }

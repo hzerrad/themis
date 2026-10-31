@@ -51,7 +51,7 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 		capability = CapabilityRollback
 		params = map[string]any{"revision": c.RollbackToRevision.GetRevision()}
 		if c.RollbackToRevision.GetRevision() <= 0 {
-			invalid = "revision must be positive"
+			invalid = "The revision must be a positive number."
 		}
 	default:
 		return nil, status.Error(codes.InvalidArgument, "a capability is required")
@@ -128,14 +128,14 @@ func (s *Server) judge(ctx context.Context, tx pgx.Tx, inv store.Investigation, 
 	if !slices.Contains(profile.Capabilities, p.Capability) {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED,
-			fmt.Sprintf("profile %s does not allow %s", profile.Name, p.Capability),
+			fmt.Sprintf("The %s profile doesn't allow this kind of fix (%s).", profile.Name, p.Capability),
 		}, nil
 	}
 	if p.Target != inv.Target {
 		t := p.Target
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH,
-			fmt.Sprintf("proposed %s %s/%s (uid %s), but the incident is about %s/%s (uid %s)",
+			fmt.Sprintf("It names %s %s/%s (uid %s), but the incident is about %s/%s (uid %s).",
 				t.Kind, t.Namespace, t.Name, t.UID, inv.Target.Namespace, inv.Target.Name, inv.Target.UID),
 		}, nil
 	}
@@ -143,7 +143,7 @@ func (s *Server) judge(ctx context.Context, tx pgx.Tx, inv store.Investigation, 
 		return &rejection{themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, invalid}, nil
 	}
 	if len(p.CitedEvidenceIDs) == 0 {
-		return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, "a proposal must cite evidence"}, nil
+		return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, "It cites no evidence."}, nil
 	}
 	missing, err := s.Store.MissingEvidence(ctx, tx, inv.IncidentID, p.CitedEvidenceIDs)
 	if err != nil {
@@ -152,12 +152,12 @@ func (s *Server) judge(ctx context.Context, tx pgx.Tx, inv store.Investigation, 
 	if len(missing) > 0 {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
-			"unknown evidence: " + strings.Join(missing, ", "),
+			"It cites evidence Themis never collected: " + strings.Join(missing, ", ") + ".",
 		}, nil
 	}
 	for _, name := range p.CitedPredicates {
 		if !slices.Contains(predicateNames, name) {
-			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "unknown predicate: " + name}, nil
+			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "It cites a check that doesn't exist: " + name + "."}, nil
 		}
 	}
 	return nil, nil
