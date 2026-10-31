@@ -20,6 +20,13 @@ const (
 	RequireApproval Outcome = "require_approval"
 )
 
+// ruleVerbs say what a matching rule does to the fix.
+var ruleVerbs = map[Outcome]string{
+	Allow:           "allows this fix",
+	Deny:            "forbids this fix",
+	RequireApproval: "requires a person's approval",
+}
+
 // Decision is a policy's verdict on an action, and which rule gave it.
 type Decision struct {
 	Outcome      Outcome
@@ -109,22 +116,25 @@ func (p *Policy) Evaluate(in PolicyInput) Decision {
 		"predicates": in.Predicates,
 		"mode":       p.mode,
 	}
-	d := Decision{Outcome: RequireApproval, Reason: "no rule matched", PolicyDigest: p.digest}
+	d := Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}
 	for _, r := range p.rules {
 		val, _, err := r.program.Eval(vars)
 		if err != nil {
-			return Decision{Outcome: Deny, Reason: fmt.Sprintf("rule %s failed: %v", r.Name, err), PolicyID: r.Name, PolicyDigest: p.digest, Failed: true}
+			return Decision{
+				Outcome: Deny, PolicyID: r.Name, PolicyDigest: p.digest, Failed: true,
+				Reason: fmt.Sprintf("Policy rule %s couldn't be evaluated (%v), so the fix is forbidden.", r.Name, err),
+			}
 		}
 		if matched, ok := val.Value().(bool); ok && matched {
-			d = Decision{Outcome: Outcome(r.Decision), Reason: "rule " + r.Name + " matched", PolicyID: r.Name, PolicyDigest: p.digest}
+			d = Decision{Outcome: Outcome(r.Decision), Reason: fmt.Sprintf("Policy rule %s %s.", r.Name, ruleVerbs[Outcome(r.Decision)]), PolicyID: r.Name, PolicyDigest: p.digest}
 			break
 		}
 	}
 	switch {
 	case p.mode == config.ModeObserve && d.Outcome != Deny:
-		d.Outcome, d.Reason = Deny, d.Reason+"; observe mode never acts"
+		d.Outcome, d.Reason = Deny, d.Reason+" Themis is in observe mode, so it never makes changes."
 	case p.mode == config.ModeGuarded && d.Outcome == Allow:
-		d.Outcome, d.Reason = RequireApproval, d.Reason+"; guarded mode requires approval"
+		d.Outcome, d.Reason = RequireApproval, d.Reason+" In guarded mode, a person must approve every fix."
 	}
 	return d
 }

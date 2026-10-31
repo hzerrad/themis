@@ -2,6 +2,7 @@ package rollback_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -160,5 +161,18 @@ func TestApply_ConcurrentChangeConflicts(t *testing.T) {
 	}
 	if _, err := rollback.Apply(t.Context(), k8s.Client, live, false); err == nil {
 		t.Error("Apply overwrote a concurrent change")
+	}
+}
+
+// A refused rollback is explained to the operator in words, never as an error.
+func TestExplain(t *testing.T) {
+	for err, want := range map[error]string{
+		fmt.Errorf("%w: Deployment checkout is gone", rollback.ErrStale): "The workload was deleted or replaced, so the fix no longer applies.",
+		fmt.Errorf("%w: 1", rollback.ErrNoSuchRevision):                  "Revision 1 no longer exists, so Themis can't roll back to it.",
+		fmt.Errorf("%w: 1", rollback.ErrAlreadyCurrent):                  "The workload already runs revision 1, so there's nothing to roll back.",
+	} {
+		if got := rollback.Explain(err, 1); got != want {
+			t.Errorf("Explain(%v) = %q, want %q", err, got, want)
+		}
 	}
 }

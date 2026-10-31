@@ -68,16 +68,16 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	}
 	profile, ok := w.Config.Profile(in.Profile)
 	if !ok {
-		return w.close(ctx, in.ID, fmt.Sprintf("profile %q is no longer configured", in.Profile))
+		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
 	}
 	revision, ok := revisionOf(p.Params)
 	if !ok || p.Capability != rollback.Name {
-		return w.close(ctx, in.ID, "the proposal names no executable rollback")
+		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
 
 	live, err := rollback.Read(ctx, w.Reader, in.Target, revision)
 	if errors.Is(err, rollback.ErrStale) || errors.Is(err, rollback.ErrNoSuchRevision) || errors.Is(err, rollback.ErrAlreadyCurrent) {
-		return w.close(ctx, in.ID, err.Error())
+		return w.close(ctx, in.ID, rollback.Explain(err, revision))
 	}
 	if err != nil {
 		return err
@@ -107,10 +107,10 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
 		if errors.Is(err, store.ErrActiveAction) {
-			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, "another action is active on the target"); err != nil {
+			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, "Another fix is already in progress on this workload."); err != nil {
 				return err
 			}
-			return w.advance(ctx, tx, in.ID, "another action is active on the target", incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+			return w.advance(ctx, tx, in.ID, "Another fix is already in progress on this workload.", incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
 		}
 		if err != nil {
 			return err
@@ -120,7 +120,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
 		if decision.Outcome == Deny {
-			return w.advance(ctx, tx, in.ID, "denied: "+decision.Reason, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
+			return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
 		return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
