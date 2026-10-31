@@ -13,6 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/client-go/kubernetes"
@@ -77,6 +78,12 @@ func Run(ctx context.Context, o Options) error {
 		log = slog.Default()
 	}
 	ctrl.SetLogger(logr.FromSlogHandler(log.Handler()))
+
+	shutdownTracing, err := telemetry.SetupTracing(ctx, "core")
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	defer func() { _ = telemetry.StopTracing(shutdownTracing) }()
 
 	cfg, err := config.Load(o.ConfigPath)
 	if err != nil {
@@ -175,7 +182,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 
 	investigators := &grpcserver.Server{Store: s, Config: cfg, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}
-	rpc := grpc.NewServer(grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
+	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
@@ -196,7 +203,7 @@ func Run(ctx context.Context, o Options) error {
 	if err := mgr.Add(runner); err != nil {
 		return err
 	}
-	if err := mgr.Add(&server{addr: o.HTTPAddr, handler: mux, log: log}); err != nil {
+	if err := mgr.Add(&server{addr: o.HTTPAddr, handler: otelhttp.NewHandler(mux, "http"), log: log}); err != nil {
 		return err
 	}
 	if err := mgr.Add(&grpcRunnable{addr: o.GRPCAddr, server: rpc}); err != nil {
@@ -276,7 +283,8 @@ func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
 	conn, err := grpc.NewClient(cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithPerRPCCredentials(grpcserver.BearerToken(token)),
-		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()))
+		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()),
+		telemetry.GRPCClientTracing())
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial executor: %w", err)
 	}

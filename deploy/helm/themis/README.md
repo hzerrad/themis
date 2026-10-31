@@ -78,6 +78,9 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `image.tag` | `dev` | Image tag |
 | `image.pullPolicy` | `IfNotPresent` | |
 | `logLevel` | `info` | Least severe level every component logs: `debug`, `info`, `warn` or `error` |
+| `telemetry.otlp.endpoint` | `""` | Where every component sends its traces over OTLP; empty, nothing is traced |
+| `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
+| `telemetry.otlp.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the collector, on ports 4317 and 4318 |
 | `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |

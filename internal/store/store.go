@@ -16,6 +16,8 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
+	"github.com/riverqueue/river/rivertype"
+	"github.com/riverqueue/rivercontrib/otelriver"
 )
 
 //go:embed migrations/*.sql
@@ -27,7 +29,7 @@ type Store struct {
 }
 
 func New(pool *pgxpool.Pool) (*Store, error) {
-	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{})
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{Middleware: riverMiddleware()})
 	if err != nil {
 		return nil, fmt.Errorf("create river client: %w", err)
 	}
@@ -52,6 +54,16 @@ func (s *Store) DB() Querier {
 // Ping reports whether the database answers.
 func (s *Store) Ping(ctx context.Context) error {
 	return s.pool.Ping(ctx)
+}
+
+// riverMiddleware traces jobs. A job's metadata, never its args, carries the
+// traceparent of the span that queued it; the span working it links there,
+// since a job may run long after.
+func riverMiddleware() []rivertype.Middleware {
+	return []rivertype.Middleware{otelriver.NewMiddleware(&otelriver.MiddlewareConfig{
+		EnableTracePropagation:      true,
+		EnableWorkSpanJobKindSuffix: true,
+	})}
 }
 
 // InTx runs fn in a transaction, and then the functions given to AfterCommit

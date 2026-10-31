@@ -18,6 +18,10 @@ spec:
             matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 14 }}
       ports: [{port: 9090, protocol: TCP}]
     - to: [{ipBlock: {cidr: {{ .Values.model.egressCIDR }}}}]
+    {{- if .Values.telemetry.otlp.endpoint }}
+    - to: [{ipBlock: {cidr: {{ .Values.telemetry.otlp.egressCIDR }}}}]
+      ports: [{port: 4317, protocol: TCP}, {port: 4318, protocol: TCP}]
+    {{- end }}
     - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
 # The core's gRPC API serves the investigator; its HTTP API anyone with a token.

@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 
 import grpc
+from opentelemetry import propagate, trace
+from opentelemetry.trace import SpanKind, Status, StatusCode
 
 from themis.v1 import (
     evidence_pb2,
@@ -13,7 +15,7 @@ from themis.v1 import (
     proposal_pb2,
     proposal_pb2_grpc,
 )
-from themis_intelligence import telemetry
+from themis_intelligence import telemetry, tracing
 
 CALL_TIMEOUT_S = 30.0
 
@@ -81,9 +83,49 @@ class _CountCalls(grpc.aio.UnaryUnaryClientInterceptor):  # pyright: ignore[repo
         return call
 
 
+class _TraceCalls(grpc.aio.UnaryUnaryClientInterceptor):  # pyright: ignore[reportMissingTypeArgument]
+    """Traces calls made inside a span, and sends its trace to the core. Idle lease
+    polls run outside any span, so they make no trace."""
+
+    async def intercept_unary_unary(
+        self,
+        continuation: Callable[[grpc.aio.ClientCallDetails, Any], Any],
+        client_call_details: grpc.aio.ClientCallDetails,
+        request: Any,
+    ) -> Any:
+        if not trace.get_current_span().get_span_context().is_valid:
+            return await continuation(client_call_details, request)
+        method = client_call_details.method
+        if isinstance(method, bytes):
+            method = method.decode()
+        service, _, name = method.lstrip("/").rpartition("/")
+        with tracing.tracer.start_as_current_span(
+            method.lstrip("/"),
+            kind=SpanKind.CLIENT,
+            attributes={"rpc.system": "grpc", "rpc.service": service, "rpc.method": name},
+        ) as span:
+            carrier: dict[str, str] = {}
+            propagate.inject(carrier)
+            details = grpc.aio.ClientCallDetails(
+                client_call_details.method,
+                client_call_details.timeout,
+                (*(client_call_details.metadata or ()), *carrier.items()),  # pyright: ignore[reportArgumentType]
+                client_call_details.credentials,
+                client_call_details.wait_for_ready,
+            )
+            call = await continuation(details, request)
+            code = await call.code()
+            span.set_attribute("rpc.grpc.status_code", code.value[0])
+            if code != grpc.StatusCode.OK:
+                span.set_status(Status(StatusCode.ERROR, code.name))
+            return call
+
+
 class CoreClient:
     def __init__(self, target: str, token: str) -> None:
-        self.channel = grpc.aio.insecure_channel(target, interceptors=[_CountCalls()])
+        self.channel = grpc.aio.insecure_channel(
+            target, interceptors=[_TraceCalls(), _CountCalls()]
+        )
         self.metadata: Metadata = (("authorization", f"Bearer {token}"),)
         self.investigations = cast(
             _Investigations,
