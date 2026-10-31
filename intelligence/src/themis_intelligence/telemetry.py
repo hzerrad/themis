@@ -9,6 +9,7 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
+from opentelemetry import trace
 from prometheus_client import Counter, Histogram, start_http_server
 
 COMPONENT = "intelligence"
@@ -55,6 +56,8 @@ class JSONFormatter(logging.Formatter):
         for name, var in _CONTEXT:
             if (value := var.get()) is not None:
                 line[name] = value
+        if (sc := trace.get_current_span().get_span_context()).is_valid:
+            line["trace_id"], line["span_id"] = f"{sc.trace_id:032x}", f"{sc.span_id:016x}"
         for key, value in vars(record).items():
             if key not in _RECORD_ATTRS:
                 line[key] = value
