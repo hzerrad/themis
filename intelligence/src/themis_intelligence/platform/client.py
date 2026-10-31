@@ -6,9 +6,10 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
+from opentelemetry.trace import SpanKind, Status, StatusCode
 from pydantic import BaseModel, ValidationError
 
-from themis_intelligence import telemetry
+from themis_intelligence import telemetry, tracing
 from themis_intelligence.platform.budget import Budget, BudgetExceededError
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
@@ -74,9 +75,23 @@ class ModelClient:
 
     async def complete[T: BaseModel](self, req: ModelRequest, schema: type[T]) -> ModelResult[T]:
         started = time.monotonic()
-        result = await self._complete(req, schema)
         route = telemetry.route_label(self.route)
-        telemetry.model_requests.labels(route, result.error.kind if result.error else "ok").inc()
+        with tracing.tracer.start_as_current_span("model.request", kind=SpanKind.CLIENT) as span:
+            result = await self._complete(req, schema)
+            outcome = result.error.kind if result.error else "ok"
+            # Never the prompt or the reply: either can quote evidence.
+            span.set_attributes(
+                {
+                    "themis.model.route": route,
+                    "themis.model.outcome": outcome,
+                    "gen_ai.request.model": self.endpoint.model,
+                    "gen_ai.usage.input_tokens": result.usage.input_tokens,
+                    "gen_ai.usage.output_tokens": result.usage.output_tokens,
+                }
+            )
+            if result.error:
+                span.set_status(Status(StatusCode.ERROR, outcome))
+        telemetry.model_requests.labels(route, outcome).inc()
         telemetry.model_request_duration.labels(route).observe(time.monotonic() - started)
         telemetry.model_tokens.labels(route, "input").inc(result.usage.input_tokens)
         telemetry.model_tokens.labels(route, "output").inc(result.usage.output_tokens)

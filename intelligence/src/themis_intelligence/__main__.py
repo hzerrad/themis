@@ -21,7 +21,7 @@ import asyncio
 import os
 from pathlib import Path
 
-from themis_intelligence import telemetry
+from themis_intelligence import telemetry, tracing
 from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price
@@ -98,10 +98,12 @@ async def main() -> None:
             adapter=adapter, endpoint=endpoint, budget=Budget(budget), route=ROUTE, price=price
         ),
     )
+    stop_tracing = tracing.setup_tracing()
     try:
         await worker.run()
     finally:
         await core.close()
+        stop_tracing()
 
 
 if __name__ == "__main__":

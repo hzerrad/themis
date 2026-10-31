@@ -10,7 +10,7 @@ from typing import Protocol, cast
 import grpc
 
 from themis.v1 import investigation_pb2
-from themis_intelligence import telemetry
+from themis_intelligence import telemetry, tracing
 from themis_intelligence.investigation.loop import Core, InvestigationError, Model, investigate
 
 log = logging.getLogger(__name__)
@@ -80,7 +80,13 @@ class Worker:
         if job is None:
             return False
         # Set before the investigation's tasks are created, which copy them.
-        with telemetry.fields(incident=job.incident_id, lease=job.lease_id):
+        with (
+            telemetry.fields(incident=job.incident_id, lease=job.lease_id),
+            tracing.tracer.start_as_current_span(
+                "investigation",
+                attributes={"themis.incident.id": job.incident_id, "themis.lease.id": job.lease_id},
+            ),
+        ):
             await self._investigate(job)
         return True
 
