@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/hzerrad/themis/internal/approval"
@@ -108,6 +109,11 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
+	states := store.NewStateCollector(ctx, s)
+	if err := metrics.Registry.Register(states); err != nil {
+		return fmt.Errorf("register state metrics: %w", err)
+	}
+	defer metrics.Registry.Unregister(states)
 
 	mgr, err := ctrl.NewManager(o.Kubernetes, ctrl.Options{
 		Logger:                 logr.FromSlogHandler(log.Handler()),
