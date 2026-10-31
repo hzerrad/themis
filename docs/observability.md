@@ -2,19 +2,19 @@
 
 ## Logs
 
-The core and the executor log JSON to stdout, one object per line. Set the least severe level with `logLevel` in the Helm chart, or `--log-level`: `debug`, `info` (the default), `warn` or `error`.
+The core, the executor and the investigator log JSON to stdout, one object per line. Set the least severe level with `logLevel` in the Helm chart, or `--log-level`: `debug`, `info` (the default), `warn` or `error`.
 
-Every line has `time`, `level`, `msg` and `component` (`core` or `executor`). Messages are fixed strings, so you can search for them; values are in fields:
+Every line has `time`, `level`, `msg` and `component` (`core`, `executor` or `intelligence`). Messages are fixed strings, so you can search for them; values are in fields:
 
 | Field | Meaning |
 |---|---|
 | `incident_id` | The incident a line is about |
 | `action_id` | The action a line is about |
-| `lease_id` | The investigation lease of an investigator's request |
+| `lease_id` | The investigation lease of an investigator's request, or of the investigator's own lines |
 | `job` | The kind of background job that logged the line |
 | `error` | The error, as text |
 
-To follow one incident, filter on its `incident_id`. Its jobs, the investigator's requests, the API calls about it and the executor's work on its action all carry it; the executor takes it from the action it loads. At `debug`, every investigator request and API call is logged with its outcome, including those refused for a missing token.
+To follow one incident, filter on its `incident_id`. Its jobs, the investigator's lines and requests, the API calls about it and the executor's work on its action all carry it; the executor takes it from the action it loads. At `debug`, every investigator request and API call is logged with its outcome, including those refused for a missing token.
 
 | Level | Means |
 |---|---|
@@ -27,7 +27,7 @@ Logs never contain evidence, log tails, prompts, model output, alert annotations
 
 ## Metrics
 
-The core and the executor serve Prometheus metrics on port 8082 at `/metrics`. Labels take closed sets of values only: never an incident ID, namespace, workload name, alert name or error text. Follow one incident in the logs.
+The core, the executor and the investigator serve Prometheus metrics on port 8082 at `/metrics`; the investigator's `--metrics-port 0` turns its server off. Labels take closed sets of values only: never an incident ID, namespace, workload name, alert name or error text. Follow one incident in the logs.
 
 Counters count what was committed: a change the database rolled back is never counted. Each event is counted by the process that decided it, so sum a counter across the core and the executor. `themis_incident_transitions_total` and `themis_escalations_total` have series in both.
 
@@ -57,3 +57,16 @@ What waits now is read from the database at each scrape, with one query and a ti
 | `themis_metrics_collection_errors_total` | | Scrapes whose query failed; they report none of the three above |
 
 The intake's `themis_intake_*` metrics count alerts received and processed.
+
+The investigator reports its use of the model, by `route`: the configured route, or `other`.
+
+| Metric | Labels | Counts |
+|---|---|---|
+| `themis_model_requests_total` | `route`, `outcome` | Model requests: `ok`, `validation_failed`, `budget_exceeded`, `ineligible`, `deadline_exceeded`, `unavailable` |
+| `themis_model_request_duration_seconds` (histogram) | `route` | Time to a request's result, repairs included |
+| `themis_model_tokens_total` | `route`, `kind` | Tokens the model reported, `input` and `output` |
+| `themis_model_cost_usd_total` | `route` | Cost at the route's configured price (`model.price`); a route without a price reports nothing, since a guessed price would be wrong |
+| `themis_model_validation_failures_total` | `route` | Replies that did not match the schema, repaired or not |
+| `themis_investigation_steps` (histogram) | | Model steps an investigation used before concluding |
+| `themis_budget_exhausted_total` | `kind` | Investigations out of `tokens`, `steps`, `evidence` or `deadline` |
+| `themis_core_requests_total` | `method`, `code` | Calls to the core, by gRPC method and status code |
