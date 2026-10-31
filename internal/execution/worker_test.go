@@ -119,7 +119,7 @@ func TestExecute_AlreadyClaimed(t *testing.T) {
 func TestExecute_UnusableApproval_Cancels(t *testing.T) {
 	s, _ := pgtest.NewStore(t)
 	a := authorized(t, s)
-	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, "the approval is consumed or bound to another digest")}}
+	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, store.ErrApprovalUnusable.Error())}}
 	if err := w.Execute(t.Context(), a.ID); err != nil {
 		t.Fatal(err)
 	}

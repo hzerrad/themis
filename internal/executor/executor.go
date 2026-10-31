@@ -69,7 +69,7 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 	started := e.now()
 	if a.State == store.ActionExecuting {
 		// Claimed, but the executor stopped before recording an outcome.
-		res := Result{Status: Ambiguous, Message: "the execution was interrupted; the write may or may not have happened"}
+		res := Result{Status: Ambiguous, Message: "The executor stopped while applying the fix, so it's unknown whether the change was made."}
 		return res, e.record(ctx, a, res, started)
 	}
 
@@ -95,39 +95,39 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	recomputed, err := digest.Compute(a.Fields())
 	if err != nil || recomputed != a.Digest {
-		return Result{Status: Stale, Message: "the stored action does not match its digest"}
+		return Result{Status: Stale, Message: "Not applied: the stored fix was altered after it was approved."}
 	}
 	revision, ok := revisionOf(a.Params)
 	if a.Capability != rollback.Name || !ok {
-		return Result{Status: Failed, Message: "unknown capability or parameters"}
+		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
 	}
 
 	target := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
 	live, err := rollback.Read(ctx, e.Client, target, revision)
 	if err != nil {
 		if errors.Is(err, rollback.ErrStale) || errors.Is(err, rollback.ErrNoSuchRevision) || errors.Is(err, rollback.ErrAlreadyCurrent) {
-			return Result{Status: Stale, Message: err.Error()}
+			return Result{Status: Stale, Message: "Not applied. " + rollback.Explain(err, revision)}
 		}
-		return Result{Status: Failed, Message: "read target: " + err.Error()}
+		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error()}
 	}
 	current, err := digest.Compute(rollback.Fields(a.IncidentID, live, revision, a.PolicyID, a.PolicyDigest))
 	if err != nil || current != a.Digest {
-		return Result{Status: Stale, Message: "the target changed since the action was approved"}
+		return Result{Status: Stale, Message: "Not applied: the workload changed after the fix was approved."}
 	}
 
 	if _, err := rollback.Apply(ctx, e.Client, live, true); err != nil {
-		return Result{Status: Failed, Message: "dry run refused: " + err.Error(), dryRunFailed: true}
+		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change in a trial run: " + err.Error(), dryRunFailed: true}
 	}
 	gen, err := rollback.Apply(ctx, e.Client, live, false)
 	switch {
 	case err == nil:
-		return Result{Status: Succeeded, Message: fmt.Sprintf("restored revision %d", revision), PostGeneration: gen}
+		return Result{Status: Succeeded, Message: fmt.Sprintf("Rolled back to revision %d.", revision), PostGeneration: gen}
 	case apierrors.IsConflict(err):
-		return Result{Status: Stale, Message: "the target changed during execution: " + err.Error()}
+		return Result{Status: Stale, Message: "Not applied: the workload changed while the fix was being applied: " + err.Error()}
 	case isRejected(err):
-		return Result{Status: Failed, Message: err.Error()}
+		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change: " + err.Error()}
 	default:
-		return Result{Status: Ambiguous, Message: "the write may or may not have happened: " + err.Error()}
+		return Result{Status: Ambiguous, Message: "Unknown whether the change was made: " + err.Error()}
 	}
 }
 
@@ -160,7 +160,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		store.AfterCommit(tx, actionsTotal.WithLabelValues(capabilities.Value(a.Capability), res.label()).Inc)
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
-			return e.advance(ctx, tx, a.IncidentID, string(res.Status)+": "+res.Message, incident.Executing, incident.Escalated)
+			return e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Escalated)
 		}
 		if err := e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Verifying); err != nil {
 			return err

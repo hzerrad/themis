@@ -51,7 +51,7 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	final, err := w.Verify(ctx, job.Args)
 	if err != nil && job.Attempt >= job.MaxAttempts {
 		// A write happened: never leave the incident in verifying.
-		return w.escalate(ctx, job.Args.ActionID, "verification could not observe the target: "+err.Error())
+		return w.escalate(ctx, job.Args.ActionID, "Couldn't check whether the fix worked: "+err.Error())
 	}
 	if err != nil || final {
 		return err
@@ -119,10 +119,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 		}
 		final = true
 		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(outcome)).Inc)
-		reason := fmt.Sprintf("verification: %s (%d/%d ready, %d new OOM kills)", outcome, obs.ReadyReplicas, obs.DesiredReplicas, obs.NewOOMKills)
-		if obs.ForeignSpecChange {
-			reason = "verification: inconclusive, the target was changed outside Themis during the window"
-		}
+		reason := Explain(outcome, obs)
 		return w.Store.Transition(ctx, tx, store.TransitionArgs{
 			ID: in.ID, From: incident.Verifying, To: outcomes[outcome], Reason: reason, Actor: "verify",
 		})
