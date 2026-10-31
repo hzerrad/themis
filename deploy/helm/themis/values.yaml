@@ -4,7 +4,7 @@ image:
   tag: dev
   pullPolicy: IfNotPresent
 
-# Least severe level the core and executor log: debug, info, warn or error.
+# Least severe level every component logs: debug, info, warn or error.
 logLevel: info
 
 # Namespaces Themis may read, and with the executor, write. Each gets its own
@@ -37,6 +37,10 @@ model:
   # CIDR the investigator may reach the model at, for the NetworkPolicy.
   egressCIDR: 0.0.0.0/0
   tokenBudget: 200000
+  # The endpoint's price in US dollars per million tokens, so the investigator
+  # reports themis_model_cost_usd_total; for example
+  # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is reported.
+  price: {}
 
 # The executor is the only component that writes to workloads. Off by
 # default: Themis then diagnoses and proposes, and never acts.
