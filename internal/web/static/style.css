@@ -148,8 +148,8 @@ ol.timeline li::before {
 }
 
 details summary { cursor: pointer; }
-.hypothesis { padding: 10px 0; border-bottom: 1px solid var(--line); }
-.hypothesis:last-child { border-bottom: 0; }
+.cause { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cause:last-child { border-bottom: 0; }
 
 .callout.quiet { border-left-color: var(--accent); }
 .callout .lead { margin: 0 0 6px; font-weight: 600; }
