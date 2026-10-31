@@ -55,7 +55,10 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	}
 
 	now := w.now()
-	var items []evidence.Item
+	var (
+		items []evidence.Item
+		gaps  []store.EvidenceGap
+	)
 	for _, name := range profile.Evidence.Initial {
 		item, err := w.Registry.Collect(ctx, w.Reader, name, in.Target, nil, now)
 		if errors.Is(err, evidence.ErrTargetGone) {
@@ -63,8 +66,11 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		}
 		if err != nil {
 			// Missing evidence makes predicates unknown; it does not stop the
-			// investigation.
+			// investigation, and the incident says why it is missing.
 			w.logger().WarnContext(ctx, "cannot collect initial evidence", "template", name, telemetry.FieldError, err)
+			gaps = append(gaps, store.EvidenceGap{
+				IncidentID: in.ID, Template: name, Cause: evidence.CauseOf(err), Detail: err.Error(), At: now,
+			})
 			continue
 		}
 		items = append(items, item)
@@ -89,6 +95,11 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		}
 		if _, err := w.Store.CreateInvestigation(ctx, tx, in.ID, items, results); err != nil {
 			return err
+		}
+		for _, g := range gaps {
+			if err := w.Store.InsertEvidenceGap(ctx, tx, g); err != nil {
+				return err
+			}
 		}
 		return w.Store.SetObservedSpec(ctx, tx, in.ID, snap.SpecHash)
 	})

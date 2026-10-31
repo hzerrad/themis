@@ -7,10 +7,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -46,6 +46,7 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 		return nil
 	}
 	if err := s.Store.InTx(ctx, check); err != nil {
+		s.refused(ctx, inv, req, err)
 		return nil, s.internal(ctx, err)
 	}
 
@@ -54,6 +55,7 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 		if errors.Is(err, evidence.ErrInvalidParams) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
+		s.recordGap(ctx, inv, req, evidence.CauseOf(err), err.Error())
 		return &themisv1.CollectEvidenceResponse{
 			Failures:          []*themisv1.CollectionFailure{{Target: targetToProto(inv.Target), Reason: failureReason(err), Message: err.Error()}},
 			RemainingRequests: int32Ptr(remaining),
@@ -67,6 +69,7 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 		return s.Store.InsertEvidence(ctx, tx, inv.IncidentID, inv.LeaseID, req.GetParams(), item)
 	})
 	if err != nil {
+		s.refused(ctx, inv, req, err)
 		return nil, s.internal(ctx, err)
 	}
 	return &themisv1.CollectEvidenceResponse{
@@ -75,17 +78,50 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 	}, nil
 }
 
-func failureReason(err error) themisv1.CollectionFailureReason {
-	switch {
-	case errors.Is(err, evidence.ErrTargetGone):
-		return themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_NOT_FOUND
-	case apierrors.IsForbidden(err):
-		return themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_FORBIDDEN
-	case errors.Is(err, context.DeadlineExceeded):
-		return themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_TIMEOUT
-	default:
-		return themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_NOT_AVAILABLE
+// refused records a request the profile or the budget turned down. The check
+// rolled back with its transaction, so the gap is recorded in another.
+func (s *Server) refused(ctx context.Context, inv store.Investigation, req *themisv1.CollectEvidenceRequest, err error) {
+	cause, ok := refusals[status.Code(err)]
+	// A template Themis does not have is not evidence it could have collected.
+	if _, exists := s.Registry[req.GetTemplate()]; !ok || (cause == evidence.GapNotInProfile && !exists) {
+		return
 	}
+	s.recordGap(ctx, inv, req, cause, "")
+}
+
+// refusals are the checks that keep evidence from an investigation.
+var refusals = map[codes.Code]evidence.GapCause{
+	codes.PermissionDenied:  evidence.GapNotInProfile,
+	codes.ResourceExhausted: evidence.GapBudgetSpent,
+}
+
+// recordGap keeps why the evidence is missing. Failing to keep it does not
+// change the investigator's answer, only what the incident can tell later.
+func (s *Server) recordGap(ctx context.Context, inv store.Investigation, req *themisv1.CollectEvidenceRequest, cause evidence.GapCause, detail string) {
+	if inv.IncidentID == "" {
+		return
+	}
+	g := store.EvidenceGap{
+		IncidentID: inv.IncidentID, LeaseID: inv.LeaseID, Template: req.GetTemplate(), Params: req.GetParams(),
+		Cause: cause, Detail: detail, At: s.now(),
+	}
+	if err := s.Store.InTx(ctx, func(tx pgx.Tx) error { return s.Store.InsertEvidenceGap(ctx, tx, g) }); err != nil {
+		s.logger().WarnContext(ctx, "cannot record why evidence is missing", "cause", string(cause), telemetry.FieldError, err)
+	}
+}
+
+// failureReasons tell the investigator why a collection failed.
+var failureReasons = map[evidence.GapCause]themisv1.CollectionFailureReason{
+	evidence.GapNotFound:  themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_NOT_FOUND,
+	evidence.GapForbidden: themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_FORBIDDEN,
+	evidence.GapTimeout:   themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_TIMEOUT,
+}
+
+func failureReason(err error) themisv1.CollectionFailureReason {
+	if r, ok := failureReasons[evidence.CauseOf(err)]; ok {
+		return r
+	}
+	return themisv1.CollectionFailureReason_COLLECTION_FAILURE_REASON_NOT_AVAILABLE
 }
 
 func int32Ptr(n int) *int32 {
