@@ -10,6 +10,7 @@ import grpc
 from pydantic import BaseModel
 
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
+from themis_intelligence import telemetry
 from themis_intelligence.investigation.schemas import (
     SCHEMA_VERSION,
     HypothesisOut,
@@ -205,6 +206,7 @@ async def investigate(
     logs_read = LOGS_TEMPLATE not in allowed
     usage = Usage()
     provenance = common_pb2.Provenance(source="themis-intelligence", prompt_version=PROMPT_VERSION)
+    evidence_spent = False
     invalid = 0
     invalid_in_a_row = 0
     hypotheses: list[HypothesisOut] = []
@@ -216,6 +218,7 @@ async def investigate(
     def done(
         conclusion: Literal["proposed", "inconclusive"], steps: int, ids: list[str]
     ) -> InvestigationResult:
+        telemetry.investigation_steps.observe(steps)
         return InvestigationResult(
             conclusion=conclusion,
             summary=summary,
@@ -230,6 +233,7 @@ async def investigate(
 
     for step in range(1, max_steps + 1):
         if deadline is not None and time.time() >= deadline:
+            telemetry.budget_exhausted.labels("deadline").inc()
             raise InvestigationError(
                 "deadline_exceeded", "the investigation budget's deadline passed"
             )
@@ -259,8 +263,10 @@ async def investigate(
                     tell("Your last reply was not a valid decision. Reply with one JSON decision.")
                     continue
                 case "budget_exceeded":
+                    telemetry.budget_exhausted.labels("tokens").inc()
                     raise InvestigationError("budget_exhausted", result.error.message)
                 case "deadline_exceeded":
+                    telemetry.budget_exhausted.labels("deadline").inc()
                     raise InvestigationError("deadline_exceeded", result.error.message)
                 case "unavailable" | "ineligible":
                     raise InvestigationError("model_unavailable", result.error.message)
@@ -292,7 +298,9 @@ async def investigate(
                     )
                 except grpc.RpcError as e:
                     if e.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
-                        logs_read = True
+                        if not evidence_spent:
+                            telemetry.budget_exhausted.labels("evidence").inc()
+                        evidence_spent = logs_read = True
                         tell("The evidence budget is spent. Decide with the evidence you have.")
                         continue
                     if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
@@ -330,4 +338,5 @@ async def investigate(
                 tell(f"The proposal was rejected ({reason}): {fence(resp.message)}{hint}")
             case "conclude_inconclusive":
                 return done("inconclusive", step, [])
+    telemetry.budget_exhausted.labels("steps").inc()
     return done("inconclusive", max_steps, [])
