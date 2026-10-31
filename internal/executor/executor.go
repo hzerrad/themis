@@ -59,6 +59,8 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 	if err != nil {
 		return Result{}, err
 	}
+	// The record, not the caller, says which incident the action is for.
+	ctx = telemetry.WithAttrs(ctx, slog.String(telemetry.FieldIncidentID, a.IncidentID))
 	if rec, err := e.Store.ActionExecution(ctx, e.Store.DB(), a.ID); err == nil {
 		return Result{Status: Status(rec.Status), Message: rec.Message, PostGeneration: rec.PostGeneration}, nil
 	}

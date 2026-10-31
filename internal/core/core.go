@@ -269,7 +269,8 @@ func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
 	}
 	conn, err := grpc.NewClient(cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(grpcserver.BearerToken(token)))
+		grpc.WithPerRPCCredentials(grpcserver.BearerToken(token)),
+		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()))
 	if err != nil {
 		return nil, nil, fmt.Errorf("dial executor: %w", err)
 	}

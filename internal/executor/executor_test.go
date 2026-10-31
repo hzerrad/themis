@@ -1,8 +1,12 @@
 package executor_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +23,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 	"github.com/hzerrad/themis/internal/verify"
 )
@@ -303,5 +308,32 @@ func TestExecute_InterruptedClaim_Ambiguous(t *testing.T) {
 	}
 	if got := e.incidentState(t, a.IncidentID); got != incident.Escalated {
 		t.Errorf("incident = %s, want escalated", got)
+	}
+}
+
+// The executor logs the incident of the action it loaded, whatever the
+// caller sent.
+func TestExecutor_LogsCarryTheRecordsIncidentID(t *testing.T) {
+	e, a := approved(t)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET params = jsonb_set(params, '{revision}', '2') WHERE id = $1`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	x := e.executor(k8s.Client)
+	x.Logger = telemetry.NewLogger(&buf, "executor", slog.LevelInfo)
+	ctx := telemetry.WithAttrs(t.Context(), slog.String(telemetry.FieldIncidentID, "01a18d24-9ab1-7c3c-b65f-1ee86ac42758"))
+	if _, err := x.Execute(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	var line map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &line); err != nil {
+		t.Fatalf("want one JSON line: %q", buf.String())
+	}
+	if line["msg"] != "action not executed" || line[telemetry.FieldIncidentID] != a.IncidentID {
+		t.Errorf("got %v, want the refusal with incident_id %s", line, a.IncidentID)
+	}
+	if n := strings.Count(buf.String(), `"incident_id"`); n != 1 {
+		t.Errorf("incident_id logged %d times", n)
 	}
 }
