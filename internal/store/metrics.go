@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -23,7 +24,21 @@ var stageOf = map[incident.State]string{
 	incident.Verifying:        stageVerification,
 }
 
+// How an investigation's lease ended.
+const (
+	InvestigationProposed        = "proposed"
+	InvestigationAbstained       = "abstained"
+	InvestigationFailed          = "failed"
+	InvestigationLeaseLost       = "lease_lost"
+	InvestigationBudgetExhausted = "budget_exhausted"
+)
+
 var (
+	investigationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_investigations_total",
+		Help: "Investigation leases ended, by outcome: proposed, abstained (inconclusive), failed, budget_exhausted, or lease_lost when the lease expired.",
+	}, []string{"outcome"})
+
 	transitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_incident_transitions_total",
 		Help: "Committed incident state changes, by state left and state entered.",
@@ -43,7 +58,10 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(transitionsTotal, escalationsTotal, stageDuration)
+	metrics.Registry.MustRegister(investigationsTotal, transitionsTotal, escalationsTotal, stageDuration)
+	for _, o := range []string{InvestigationProposed, InvestigationAbstained, InvestigationFailed, InvestigationLeaseLost, InvestigationBudgetExhausted} {
+		investigationsTotal.WithLabelValues(o)
+	}
 	for _, from := range incident.States() {
 		for _, to := range incident.States() {
 			if incident.CanTransition(from, to) {
@@ -57,6 +75,11 @@ func init() {
 	for _, s := range []string{stageToProposal, stageApprovalWait, stageExecution, stageVerification, stageToClose} {
 		stageDuration.WithLabelValues(s)
 	}
+}
+
+// CountInvestigation counts a lease that ended with outcome, once tx commits.
+func CountInvestigation(tx pgx.Tx, outcome string) {
+	AfterCommit(tx, investigationsTotal.WithLabelValues(outcome).Inc)
 }
 
 // observeTransition records a committed transition, which spent sinceChange

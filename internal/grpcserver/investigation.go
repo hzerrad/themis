@@ -122,9 +122,11 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 			return err
 		}
 		if conclusion == "inconclusive" {
+			store.CountInvestigation(tx, store.InvestigationAbstained)
 			return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
+		store.CountInvestigation(tx, store.InvestigationProposed)
 		proposals, err := s.Store.Proposals(ctx, tx, inv.IncidentID)
 		if err != nil {
 			return err
@@ -177,8 +179,16 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		}
 		retryAt := s.now().Add(retryBackoff << (inv.Attempts - 1))
 		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, req.GetReason().String(), req.GetMessage(), retryAt)
-		if err != nil || !exhausted {
+		if err != nil {
 			return err
+		}
+		if budgetReasons[req.GetReason()] {
+			store.CountInvestigation(tx, store.InvestigationBudgetExhausted)
+		} else {
+			store.CountInvestigation(tx, store.InvestigationFailed)
+		}
+		if !exhausted {
+			return nil
 		}
 		return s.escalate(ctx, tx, inv.IncidentID, fmt.Sprintf("investigation failed: %s", req.GetReason()))
 	})

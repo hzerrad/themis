@@ -86,8 +86,12 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 
 		var created bool
 		stored, created, err = s.Store.InsertProposal(ctx, tx, p)
-		if err != nil || !created || r == nil || r.reason != themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH {
+		if err != nil || !created {
 			return err
+		}
+		countProposal(tx, r)
+		if r == nil || r.reason != themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH {
+			return nil
 		}
 		return s.Store.RecordSafetyEvent(ctx, tx, store.SafetyEvent{
 			IncidentID: inv.IncidentID, ProposalID: stored.ID, Kind: store.SafetyTargetMismatch, Detail: r.message,
@@ -103,6 +107,19 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 		resp.RejectionReason = themisv1.RejectionReason(themisv1.RejectionReason_value[stored.RejectionReason])
 	}
 	return resp, nil
+}
+
+// countProposal counts a stored proposal, and a rejection that is a safety
+// event, once tx commits.
+func countProposal(tx pgx.Tx, r *rejection) {
+	if r == nil {
+		store.AfterCommit(tx, proposalsTotal.WithLabelValues("accepted").Inc)
+		return
+	}
+	store.AfterCommit(tx, proposalsTotal.WithLabelValues("rejected").Inc)
+	if kind, ok := safetyKinds[r.reason]; ok {
+		store.AfterCommit(tx, safetyEventsTotal.WithLabelValues(kind).Inc)
+	}
 }
 
 // judge returns why a proposal must be rejected, or nil. The target must be
