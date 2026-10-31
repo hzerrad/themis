@@ -3,6 +3,7 @@ package approval_test
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -28,6 +30,7 @@ const token = "admin-s3cret"
 var now = time.Date(2026, 10, 27, 9, 30, 0, 0, time.UTC)
 
 type env struct {
+	logs    bytes.Buffer
 	store   *store.Store
 	pool    *pgxpool.Pool
 	handler http.Handler
@@ -43,7 +46,10 @@ func newEnv(t *testing.T) *env {
 	}
 	e := &env{store: s, pool: pool, clock: now}
 	mux := http.NewServeMux()
-	(&approval.API{Store: s, TokenFile: file, Now: func() time.Time { return e.clock }}).Register(mux)
+	(&approval.API{
+		Store: s, TokenFile: file, Now: func() time.Time { return e.clock },
+		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
+	}).Register(mux)
 	e.handler = mux
 	return e
 }
@@ -312,5 +318,47 @@ func TestExpire_ToleratesAnIncidentThatMovedOn(t *testing.T) {
 	}
 	if got, _ := e.store.Action(t.Context(), e.store.DB(), a.ID); got.State != store.ActionExpired {
 		t.Errorf("action = %s, want expired", got.State)
+	}
+}
+
+// requestLog returns the debug line of the last request.
+func (e *env) requestLog(t *testing.T) map[string]any {
+	t.Helper()
+	ls := strings.Split(strings.TrimSpace(e.logs.String()), "\n")
+	var m map[string]any
+	if err := json.Unmarshal([]byte(ls[len(ls)-1]), &m); err != nil || m["msg"] != "API request served" {
+		t.Fatalf("last line is not a request line: %q", ls[len(ls)-1])
+	}
+	return m
+}
+
+func TestApprovalAPI_LogsCarryIncidentID(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+
+	e.approve(t, a, "sha256:stale")
+	l := e.requestLog(t)
+	if l[telemetry.FieldActionID] != a.ID || l[telemetry.FieldIncidentID] != a.IncidentID || l["status"] != float64(http.StatusConflict) {
+		t.Errorf("approve: %v, want action_id, incident_id and 409", l)
+	}
+
+	e.do(t, http.MethodGet, "/v1/incidents/"+a.IncidentID, token, nil)
+	if l := e.requestLog(t); l[telemetry.FieldIncidentID] != a.IncidentID || l["route"] != "GET /v1/incidents/{id}" {
+		t.Errorf("detail: %v, want incident_id and the route", l)
+	}
+}
+
+// The path is the caller's: only IDs are logged, and only once authorized.
+func TestApprovalAPI_LogsNoUntrustedPath(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+
+	e.do(t, http.MethodGet, "/v1/incidents/not-an-id", token, nil)
+	if l := e.requestLog(t); l[telemetry.FieldIncidentID] != nil {
+		t.Errorf("malformed id logged: %v", l)
+	}
+	e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/approve", "guess", map[string]string{"digest": a.Digest})
+	if l := e.requestLog(t); l[telemetry.FieldActionID] != nil || l["status"] != float64(http.StatusUnauthorized) {
+		t.Errorf("unauthorized request: %v, want no action_id and 401", l)
 	}
 }

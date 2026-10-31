@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	corev1 "k8s.io/api/core/v1"
 
@@ -33,14 +34,20 @@ type API struct {
 }
 
 func (a *API) Register(mux *http.ServeMux) {
-	mux.Handle("GET /v1/incidents", a.authed(a.list))
-	mux.Handle("GET /v1/incidents/{id}", a.authed(a.detail))
-	mux.Handle("POST /v1/actions/{id}/approve", a.authed(a.approve))
-	mux.Handle("POST /v1/actions/{id}/deny", a.authed(a.deny))
+	mux.Handle("GET /v1/incidents", a.authed(a.list, nil))
+	mux.Handle("GET /v1/incidents/{id}", a.authed(a.detail, incidentFields))
+	mux.Handle("POST /v1/actions/{id}/approve", a.authed(a.approve, a.actionFields))
+	mux.Handle("POST /v1/actions/{id}/deny", a.authed(a.deny, a.actionFields))
 }
 
-func (a *API) authed(h http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// authed serves h to the admin, with the log fields of the request's path,
+// and logs the request at debug level.
+func (a *API) authed(h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		w := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
+		defer func() {
+			a.logger().DebugContext(r.Context(), "API request served", "route", r.Pattern, "status", w.status)
+		}()
 		want, err := auth.ReadToken(a.TokenFile)
 		if err != nil {
 			a.logger().ErrorContext(r.Context(), "cannot read the admin token", "file", a.TokenFile, telemetry.FieldError, err)
@@ -51,9 +58,46 @@ func (a *API) authed(h http.HandlerFunc) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		if fields != nil {
+			r = r.WithContext(telemetry.WithAttrs(r.Context(), fields(r)...))
+		}
 		h(w, r)
 	})
 }
+
+func incidentFields(r *http.Request) []slog.Attr {
+	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		return nil
+	}
+	return []slog.Attr{slog.String(telemetry.FieldIncidentID, id)}
+}
+
+func (a *API) actionFields(r *http.Request) []slog.Attr {
+	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		return nil
+	}
+	attrs := []slog.Attr{slog.String(telemetry.FieldActionID, id)}
+	if act, err := a.Store.Action(r.Context(), a.Store.DB(), id); err == nil {
+		attrs = append(attrs, slog.String(telemetry.FieldIncidentID, act.IncidentID))
+	}
+	return attrs
+}
+
+// statusWriter records the status of a response.
+type statusWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusWriter) WriteHeader(code int) {
+	w.status = code
+	w.ResponseWriter.WriteHeader(code)
+}
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 func (a *API) list(w http.ResponseWriter, r *http.Request) {
 	incidents, err := a.Store.ListIncidents(r.Context(), 100)
