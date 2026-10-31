@@ -1,7 +1,7 @@
 """themis-core's gRPC API, with the investigator's bearer token on every call."""
 
-from collections.abc import Awaitable
-from typing import Protocol, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol, cast
 
 import grpc
 
@@ -13,6 +13,7 @@ from themis.v1 import (
     proposal_pb2,
     proposal_pb2_grpc,
 )
+from themis_intelligence import telemetry
 
 CALL_TIMEOUT_S = 30.0
 
@@ -62,9 +63,27 @@ class _Proposals(Protocol):
     ) -> Awaitable[proposal_pb2.SubmitProposalResponse]: ...
 
 
+class _CountCalls(grpc.aio.UnaryUnaryClientInterceptor):  # pyright: ignore[reportMissingTypeArgument]
+    """Counts each call by method and status code."""
+
+    async def intercept_unary_unary(
+        self,
+        continuation: Callable[[grpc.aio.ClientCallDetails, Any], Any],
+        client_call_details: grpc.aio.ClientCallDetails,
+        request: Any,
+    ) -> Any:
+        method = client_call_details.method
+        if isinstance(method, bytes):
+            method = method.decode()
+        call = await continuation(client_call_details, request)
+        code = await call.code()
+        telemetry.core_requests.labels(method.rsplit("/", 1)[-1], code.name).inc()
+        return call
+
+
 class CoreClient:
     def __init__(self, target: str, token: str) -> None:
-        self.channel = grpc.aio.insecure_channel(target)
+        self.channel = grpc.aio.insecure_channel(target, interceptors=[_CountCalls()])
         self.metadata: Metadata = (("authorization", f"Bearer {token}"),)
         self.investigations = cast(
             _Investigations,

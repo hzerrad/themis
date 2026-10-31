@@ -8,6 +8,7 @@ from typing import Protocol
 import httpx
 from pydantic import BaseModel, ValidationError
 
+from themis_intelligence import telemetry
 from themis_intelligence.platform.budget import Budget, BudgetExceededError
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
@@ -35,6 +36,20 @@ class Endpoint:
     ceiling: Classification
 
 
+@dataclass(frozen=True)
+class Price:
+    """A route's price, in US dollars per million tokens."""
+
+    input_usd_per_mtok: float
+    output_usd_per_mtok: float
+
+    def cost(self, usage: Usage) -> float:
+        return (
+            usage.input_tokens * self.input_usd_per_mtok
+            + usage.output_tokens * self.output_usd_per_mtok
+        ) / 1_000_000
+
+
 def estimate_tokens(messages: list[Message]) -> int:
     """A rough input estimate: about four characters per token."""
     return sum(len(m.content) for m in messages) // 4 + 1
@@ -48,14 +63,28 @@ class ModelClient:
         budget: Budget,
         max_repairs: int = 1,
         route: str = "default",
+        price: Price | None = None,
     ) -> None:
         self.adapter = adapter
         self.endpoint = endpoint
         self.budget = budget
         self.max_repairs = max_repairs
         self.route = route
+        self.price = price
 
     async def complete[T: BaseModel](self, req: ModelRequest, schema: type[T]) -> ModelResult[T]:
+        started = time.monotonic()
+        result = await self._complete(req, schema)
+        route = telemetry.route_label(self.route)
+        telemetry.model_requests.labels(route, result.error.kind if result.error else "ok").inc()
+        telemetry.model_request_duration.labels(route).observe(time.monotonic() - started)
+        telemetry.model_tokens.labels(route, "input").inc(result.usage.input_tokens)
+        telemetry.model_tokens.labels(route, "output").inc(result.usage.output_tokens)
+        if self.price is not None:
+            telemetry.model_cost.labels(route).inc(self.price.cost(result.usage))
+        return result
+
+    async def _complete[T: BaseModel](self, req: ModelRequest, schema: type[T]) -> ModelResult[T]:
         result = ModelResult[T](
             model=self.endpoint.model,
             endpoint=self.endpoint.name,
@@ -107,6 +136,9 @@ class ModelClient:
                         result.output = schema.model_validate_json(resp.content)
                         return result
                     except ValidationError as e:
+                        telemetry.model_validation_failures.labels(
+                            telemetry.route_label(self.route)
+                        ).inc()
                         if not req.allow_repair or result.repair_attempts >= self.max_repairs:
                             return fail("validation_failed", str(e))
                         result.repair_attempts += 1

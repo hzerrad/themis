@@ -9,8 +9,11 @@ Configuration comes from the environment:
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
+    MODEL_PRICE_INPUT_USD_PER_MTOK, MODEL_PRICE_OUTPUT_USD_PER_MTOK
+                             the route's price in US dollars per million tokens, both
+                             or neither; without one, no cost is reported
 
-Flags: --log-level (info).
+Flags: --metrics-port (8082; 0 disables /metrics) and --log-level (info).
 """
 
 import argparse
@@ -21,7 +24,7 @@ from pathlib import Path
 from themis_intelligence import telemetry
 from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
 from themis_intelligence.platform.budget import Budget
-from themis_intelligence.platform.client import Endpoint, ModelClient
+from themis_intelligence.platform.client import Endpoint, ModelClient, Price
 from themis_intelligence.platform.contract import CLASSIFICATION_RANK
 from themis_intelligence.rpc.core_client import CoreClient
 from themis_intelligence.worker import Worker
@@ -34,8 +37,25 @@ def read_secret(path: str) -> str:
     return token
 
 
+ROUTE = "default"
+
+
+def read_price() -> Price | None:
+    env = os.environ.get
+    prices = env("MODEL_PRICE_INPUT_USD_PER_MTOK"), env("MODEL_PRICE_OUTPUT_USD_PER_MTOK")
+    if prices == (None, None):
+        return None
+    if None in prices:
+        raise SystemExit("set both MODEL_PRICE_INPUT_USD_PER_MTOK and _OUTPUT_, or neither")
+    try:
+        return Price(float(prices[0] or ""), float(prices[1] or ""))
+    except ValueError:
+        raise SystemExit("model prices must be numbers of US dollars per million tokens") from None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="themis_intelligence")
+    p.add_argument("--metrics-port", type=int, default=8082, help="port of /metrics; 0 disables it")
     p.add_argument(
         "--log-level",
         default="info",
@@ -63,6 +83,10 @@ async def main() -> None:
         ceiling=ceiling,
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
+    price = read_price()
+    telemetry.configure_routes([ROUTE])
+    telemetry.init_route(ROUTE, priced=price is not None)
+    telemetry.serve_metrics(args.metrics_port)
 
     core = CoreClient(
         env("THEMIS_CORE_ADDR", "localhost:9090"),
@@ -70,7 +94,9 @@ async def main() -> None:
     )
     worker = Worker(
         core=core,
-        new_model=lambda: ModelClient(adapter=adapter, endpoint=endpoint, budget=Budget(budget)),
+        new_model=lambda: ModelClient(
+            adapter=adapter, endpoint=endpoint, budget=Budget(budget), route=ROUTE, price=price
+        ),
     )
     try:
         await worker.run()
