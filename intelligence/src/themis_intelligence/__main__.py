@@ -33,7 +33,7 @@ from themis_intelligence.worker import Worker
 def read_secret(path: str) -> str:
     token = Path(path).read_text().strip()
     if not token:
-        raise SystemExit(f"{path} is empty")
+        raise SystemExit(f"{path} is empty, but it must hold a secret.")
     return token
 
 
@@ -46,11 +46,14 @@ def read_price() -> Price | None:
     if prices == (None, None):
         return None
     if None in prices:
-        raise SystemExit("set both MODEL_PRICE_INPUT_USD_PER_MTOK and _OUTPUT_, or neither")
+        raise SystemExit(
+            "Set both MODEL_PRICE_INPUT_USD_PER_MTOK and MODEL_PRICE_OUTPUT_USD_PER_MTOK,"
+            " or neither."
+        )
     try:
         return Price(float(prices[0] or ""), float(prices[1] or ""))
     except ValueError:
-        raise SystemExit("model prices must be numbers of US dollars per million tokens") from None
+        raise SystemExit("Model prices must be numbers: US dollars per million tokens.") from None
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -71,7 +74,7 @@ async def main() -> None:
     env = os.environ.get
     ceiling = env("MODEL_CEILING", "sensitive")
     if ceiling not in CLASSIFICATION_RANK:
-        raise SystemExit(f"MODEL_CEILING must be one of {', '.join(CLASSIFICATION_RANK)}")
+        raise SystemExit(f"MODEL_CEILING must be one of {', '.join(CLASSIFICATION_RANK)}.")
     key_file = env("MODEL_API_KEY_FILE")
     adapter = OpenAICompatAdapter(
         base_url=env("MODEL_BASE_URL", "http://localhost:11434/v1"),
