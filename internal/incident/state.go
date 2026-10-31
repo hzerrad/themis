@@ -53,6 +53,14 @@ var terminal = []State{
 	Canceled,
 }
 
+// States returns every state.
+func States() []State {
+	return []State{
+		Received, Investigating, Diagnosed, Inconclusive, Recommended, Proposed, AwaitingApproval, Authorized, Executing, Verifying,
+		Resolved, ContainedEscalated, Escalated, ClosedNoAction, SelfResolved, Rejected, Canceled,
+	}
+}
+
 // Terminal reports whether s ends the incident.
 func (s State) Terminal() bool {
 	return slices.Contains(terminal, s)

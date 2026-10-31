@@ -80,19 +80,29 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, ErrIllegalTransition)
 	}
 
+	// The last transition entered tst.From; updated_at also moves when an
+	// alert joins, so it cannot say how long the incident spent there.
 	sql := `
-	UPDATE incidents
+	WITH prev AS (
+		SELECT i.created_at,
+		       coalesce((SELECT at FROM transitions t WHERE t.incident_id = i.id ORDER BY t.id DESC LIMIT 1), i.created_at) AS entered
+		FROM incidents i WHERE i.id = $2 AND i.state = $3 FOR UPDATE OF i
+	)
+	UPDATE incidents i
 	SET state = $1, updated_at = now()
-	WHERE id = $2 AND state = $3
+	FROM prev
+	WHERE i.id = $2 AND i.state = $3
+	RETURNING greatest(extract(epoch FROM now() - prev.entered), 0)::float8, greatest(extract(epoch FROM now() - prev.created_at), 0)::float8
 `
-	tag, err := tx.Exec(ctx, sql, tst.To, tst.ID, tst.From)
+	var sinceChange, sinceCreated float64
+	err := tx.QueryRow(ctx, sql, tst.To, tst.ID, tst.From).Scan(&sinceChange, &sinceCreated)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, ErrStateConflict)
+	}
 	if err != nil {
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
-
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, ErrStateConflict)
-	}
+	AfterCommit(tx, func() { observeTransition(tst.From, tst.To, sinceChange, sinceCreated) })
 
 	sql = `
 	INSERT INTO transitions (incident_id, from_state, to_state, reason, actor)

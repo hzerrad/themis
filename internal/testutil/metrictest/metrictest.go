@@ -61,3 +61,45 @@ func Delta(t *testing.T, name string, labels map[string]string) func() float64 {
 		return Value(t, name, labels) - before
 	}
 }
+
+// Count returns how many observations the histogram name has with exactly
+// labels, or 0 if that series does not exist yet.
+func Count(t *testing.T, name string, labels map[string]string) uint64 {
+	t.Helper()
+	families, err := metrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			if matches(m.GetLabel(), labels) {
+				return m.GetHistogram().GetSampleCount()
+			}
+		}
+	}
+	return 0
+}
+
+// Sum returns the sum of the observations of the histogram name with exactly
+// labels, or 0 if that series does not exist yet.
+func Sum(t *testing.T, name string, labels map[string]string) float64 {
+	t.Helper()
+	families, err := metrics.Registry.Gather()
+	if err != nil {
+		t.Fatalf("gather metrics: %v", err)
+	}
+	for _, f := range families {
+		if f.GetName() != name {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			if matches(m.GetLabel(), labels) {
+				return m.GetHistogram().GetSampleSum()
+			}
+		}
+	}
+	return 0
+}

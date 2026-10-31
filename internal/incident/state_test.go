@@ -192,3 +192,29 @@ func TestGraph_EveryStateCanReachTerminal(t *testing.T) {
 		}
 	}
 }
+
+// States must list every state the graph knows, once.
+func TestStates_ListsEveryState(t *testing.T) {
+	listed := map[incident.State]bool{}
+	for _, s := range incident.States() {
+		if listed[s] {
+			t.Errorf("%s listed twice", s)
+		}
+		listed[s] = true
+	}
+	for _, s := range incident.TerminalStates() {
+		if !listed[s] {
+			t.Errorf("terminal state %s not listed", s)
+		}
+	}
+	for _, from := range incident.States() {
+		for _, to := range incident.States() {
+			if incident.CanTransition(from, to) && !listed[to] {
+				t.Errorf("%s->%s leads to an unlisted state", from, to)
+			}
+		}
+	}
+	if n := len(incident.States()); n != 17 {
+		t.Errorf("%d states, want 17: update States when adding one", n)
+	}
+}
