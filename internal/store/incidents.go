@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/hzerrad/themis/internal/incident"
 )
@@ -104,11 +105,15 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 	}
 	AfterCommit(tx, func() { observeTransition(tst.From, tst.To, sinceChange, sinceCreated) })
 
+	var traceID *string
+	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
+		traceID = new(sc.TraceID().String())
+	}
 	sql = `
-	INSERT INTO transitions (incident_id, from_state, to_state, reason, actor)
-	VALUES ($1, $2, $3, $4, $5)
+	INSERT INTO transitions (incident_id, from_state, to_state, reason, actor, trace_id)
+	VALUES ($1, $2, $3, $4, $5, $6)
 `
-	_, err = tx.Exec(ctx, sql, tst.ID, tst.From, tst.To, tst.Reason, tst.Actor)
+	_, err = tx.Exec(ctx, sql, tst.ID, tst.From, tst.To, tst.Reason, tst.Actor, traceID)
 	if err != nil {
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
@@ -197,17 +202,20 @@ type Transition struct {
 	Reason string
 	Actor  string
 	At     time.Time
+
+	// TraceID is the trace of the work that made the change, if it was traced.
+	TraceID string
 }
 
 // Transitions returns an incident's audit trail in order.
 func (s *Store) Transitions(ctx context.Context, incidentID string) ([]Transition, error) {
-	rows, err := s.pool.Query(ctx, `SELECT from_state, to_state, reason, actor, at FROM transitions WHERE incident_id = $1 ORDER BY id`, incidentID)
+	rows, err := s.pool.Query(ctx, `SELECT from_state, to_state, reason, actor, at, coalesce(trace_id, '') FROM transitions WHERE incident_id = $1 ORDER BY id`, incidentID)
 	if err != nil {
 		return nil, fmt.Errorf("transitions of incident %s: %w", incidentID, err)
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Transition, error) {
 		var t Transition
-		err := row.Scan(&t.From, &t.To, &t.Reason, &t.Actor, &t.At)
+		err := row.Scan(&t.From, &t.To, &t.Reason, &t.Actor, &t.At, &t.TraceID)
 		return t, err
 	})
 }
