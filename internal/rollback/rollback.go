@@ -41,6 +41,21 @@ const (
 	hashLabel          = appsv1.DefaultDeploymentUniqueLabelKey
 )
 
+// Explain says in words why a rollback to revision cannot go ahead, for err
+// one of ErrStale, ErrNoSuchRevision and ErrAlreadyCurrent.
+func Explain(err error, revision int64) string {
+	switch {
+	case errors.Is(err, ErrStale):
+		return "The workload was deleted or replaced, so the fix no longer applies."
+	case errors.Is(err, ErrNoSuchRevision):
+		return fmt.Sprintf("Revision %d no longer exists, so Themis can't roll back to it.", revision)
+	case errors.Is(err, ErrAlreadyCurrent):
+		return fmt.Sprintf("The workload already runs revision %d, so there's nothing to roll back.", revision)
+	default:
+		return err.Error()
+	}
+}
+
 // gitOpsManagers maps field managers and marker prefixes to the GitOps tool.
 var gitOpsManagers = map[string]string{
 	"argocd-controller":             "argocd",

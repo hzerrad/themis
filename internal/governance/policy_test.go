@@ -48,7 +48,7 @@ func TestPolicy_FirstMatchingRuleDecides(t *testing.T) {
 
 func TestPolicy_RequiresApprovalInGuarded(t *testing.T) {
 	p := compile(t, config.ModeGuarded, rule("allow-all", "true", config.DecisionAllow))
-	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval || !strings.Contains(d.Reason, "guarded") {
+	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval || !strings.Contains(d.Reason, "guarded mode") {
 		t.Errorf("decision = %+v, want require_approval in guarded mode", d)
 	}
 }
@@ -113,5 +113,26 @@ func TestPolicy_DigestFollowsRules(t *testing.T) {
 	b := compile(t, config.ModeGuarded, rule("r", "false", config.DecisionDeny))
 	if a.Evaluate(input()).PolicyDigest == b.Evaluate(input()).PolicyDigest {
 		t.Error("different rules share a digest")
+	}
+}
+
+// A decision's reason is what the approver reads: which rule decided, in words.
+func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
+	for _, c := range []struct {
+		mode     string
+		decision string
+		want     string
+	}{
+		{config.ModeGuarded, config.DecisionDeny, "Policy rule r forbids this fix."},
+		{config.ModeGuarded, config.DecisionRequireApproval, "Policy rule r requires a person's approval."},
+		{config.ModeGuarded, config.DecisionAllow, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
+		{config.ModeObserve, config.DecisionAllow, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
+	} {
+		if got := compile(t, c.mode, rule("r", `true`, c.decision)).Evaluate(input()).Reason; got != c.want {
+			t.Errorf("%s, %s: reason = %q, want %q", c.mode, c.decision, got, c.want)
+		}
+	}
+	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched, so a person must approve this fix." {
+		t.Errorf("no rule: reason = %q", got)
 	}
 }
