@@ -74,7 +74,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 		return fmt.Errorf("kubernetes client: %w", err)
 	}
 
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.RequireToken(tokenFile)))
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.RequireToken(tokenFile), telemetry.UnaryServerFields()))
 	(&executor.Server{Executor: &executor.Executor{Store: s, Client: c, Logger: log}}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {
