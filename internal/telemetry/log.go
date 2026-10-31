@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -29,8 +30,16 @@ const (
 type attrsKey struct{}
 
 // WithAttrs returns a context whose log lines carry attrs, after those of ctx.
-// An attr replaces one of ctx with the same key.
+// An attr replaces one of ctx with the same key. The IDs among them are also
+// set on the context's span.
 func WithAttrs(ctx context.Context, attrs ...slog.Attr) context.Context {
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		for _, a := range attrs {
+			if name, ok := spanAttributes[a.Key]; ok {
+				span.SetAttributes(attribute.String(name, a.Value.String()))
+			}
+		}
+	}
 	kept := slices.DeleteFunc(slices.Clone(contextAttrs(ctx)), func(prev slog.Attr) bool {
 		return slices.ContainsFunc(attrs, func(a slog.Attr) bool { return a.Key == prev.Key })
 	})

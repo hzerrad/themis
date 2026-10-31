@@ -31,16 +31,27 @@ func (h loggingHealth) Check(ctx context.Context, _ *healthpb.HealthCheckRequest
 // serve returns a client of a server using the interceptors, and its log.
 func serve(t *testing.T) (healthpb.HealthClient, *bytes.Buffer) {
 	t.Helper()
+	return serveWith(t, nil, nil)
+}
+
+// serveTraced is serve, with tracing on both sides.
+func serveTraced(t *testing.T, untraced ...string) (healthpb.HealthClient, *bytes.Buffer) {
+	t.Helper()
+	return serveWith(t, []grpc.ServerOption{telemetry.GRPCServerTracing(untraced...)}, []grpc.DialOption{telemetry.GRPCClientTracing()})
+}
+
+func serveWith(t *testing.T, srvOpts []grpc.ServerOption, dialOpts []grpc.DialOption) (healthpb.HealthClient, *bytes.Buffer) {
+	t.Helper()
 	var buf bytes.Buffer
 	lis := bufconn.Listen(1 << 20)
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerFields()))
+	srv := grpc.NewServer(append(srvOpts, grpc.ChainUnaryInterceptor(telemetry.UnaryServerFields()))...)
 	healthpb.RegisterHealthServer(srv, loggingHealth{log: telemetry.NewLogger(&buf, "executor", slog.LevelInfo)})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
-	conn, err := grpc.NewClient("passthrough:///bufnet",
+	conn, err := grpc.NewClient("passthrough:///bufnet", append(dialOpts,
 		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()))
+		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()))...)
 	if err != nil {
 		t.Fatal(err)
 	}

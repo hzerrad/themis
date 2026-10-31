@@ -3,11 +3,28 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"path"
+	"slices"
 	"strings"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/stats"
 )
+
+// GRPCServerTracing traces each call a server receives, in the caller's trace,
+// but those to the untraced methods: polls that would fill traces with noise.
+func GRPCServerTracing(untraced ...string) grpc.ServerOption {
+	return grpc.StatsHandler(otelgrpc.NewServerHandler(otelgrpc.WithFilter(func(info *stats.RPCTagInfo) bool {
+		return !slices.Contains(untraced, path.Base(info.FullMethodName))
+	})))
+}
+
+// GRPCClientTracing traces each call a client makes and sends its trace along.
+func GRPCClientTracing() grpc.DialOption {
+	return grpc.WithStatsHandler(otelgrpc.NewClientHandler())
+}
 
 // propagated are the context's fields a gRPC call carries to its server.
 // They correlate logs and are never trusted for anything else. An action ID
