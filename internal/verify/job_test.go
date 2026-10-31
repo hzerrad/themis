@@ -20,6 +20,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 	"github.com/hzerrad/themis/internal/verify"
 )
@@ -264,5 +265,36 @@ func TestJob_UnobservableOnTheLastAttempt_Escalates(t *testing.T) {
 	}
 	if got := e.state(t); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
+	}
+}
+
+func outcomes(t *testing.T, outcome verify.Outcome) func() float64 {
+	t.Helper()
+	return metrictest.Delta(t, "themis_verification_outcomes_total", map[string]string{"outcome": string(outcome)})
+}
+
+// Only the final outcome is counted, not each observation.
+func TestMetrics_FinalOutcomeCountedOnce(t *testing.T) {
+	e := executed(t)
+	resolved := outcomes(t, verify.Resolved)
+	e.rolledBack(t)
+	e.verify(t)
+	e.clock = windowStart.Add(3 * time.Minute)
+	e.verify(t)
+	if got := resolved(); got != 1 {
+		t.Errorf("counted %v resolved outcomes, want 1", got)
+	}
+}
+
+func TestMetrics_UnobservableCountsAsInconclusive(t *testing.T) {
+	e := executed(t)
+	inconclusive := outcomes(t, verify.Inconclusive)
+	w := &verify.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Now: func() time.Time { return windowStart }}
+	job := &river.Job[verify.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 10, MaxAttempts: 10}, Args: e.args}
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatal(err)
+	}
+	if got := inconclusive(); got != 1 {
+		t.Errorf("counted %v inconclusive outcomes, want 1", got)
 	}
 }
