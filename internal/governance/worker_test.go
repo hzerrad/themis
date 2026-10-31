@@ -199,10 +199,11 @@ func TestOwnership_ArgoManaged_Denied(t *testing.T) {
 	}
 }
 
+var unknownPredicates = []predicate.Result{{Name: predicate.NameGitOpsManaged, Version: "1", Value: predicate.False, Reason: "x"}, {Name: predicate.NameOOMKilledNewRevision, Version: "1", Value: predicate.Unknown, Reason: "x"}}
+
 func TestPolicy_UnknownPredicateDenies(t *testing.T) {
 	e := newEnv(t)
-	unknown := []predicate.Result{{Name: predicate.NameGitOpsManaged, Version: "1", Value: predicate.False, Reason: "x"}, {Name: predicate.NameOOMKilledNewRevision, Version: "1", Value: predicate.Unknown, Reason: "x"}}
-	id, p := e.diagnosed(t, "rollout-regression", 1, unknown)
+	id, p := e.diagnosed(t, "rollout-regression", 1, unknownPredicates)
 	e.govern(t, p)
 	if a := e.action(t, id); a.State != store.ActionDenied {
 		t.Errorf("action = %s, want denied", a.State)
