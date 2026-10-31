@@ -69,24 +69,24 @@ What happens next, and roughly when:
 | After | You see |
 |---|---|
 | ~1 min | A checkout pod crash-loops. Alertmanager posts the alert and an incident appears, **investigating**. |
-| ~1–5 min | The investigator reads the evidence, including the failing pod's logs, and proposes a fix. The incident becomes **awaiting approval**. |
+| ~1–5 min | Themis and the model read the evidence, including the failing pod's logs, and suggest a fix. The incident **needs your approval**. |
 
 Open the incident. From the top:
 
 - **The summary** says what Themis found and what it expects from you.
-- **Proposal** (left) is what the model suggested, with its rationale and the evidence it cites. It is untrusted.
-- **Governed action** (right) is what Themis derived from the live cluster: the exact target, how many replicas it affects, which policy rule decided, and the **digest** that binds it. *What changes* lists every field the rollback changes, here `env MODE: leak → healthy`. Values that look secret are hidden.
-- **Rejected attempts**, if any, are proposals the core refused, such as the wrong target or made-up evidence, kept as safety records.
-- **Investigation**, **Predicates**, **Timeline** and **Evidence** are the work behind it: the model's hypotheses, the facts computed by code, every state change and who made it, and the raw, redacted evidence.
+- **What the model suggested** (left): the fix, why, and the evidence it cites. Themis doesn't trust it.
+- **The change Themis would make** (right), read from the live cluster: the exact workload, how many pods it affects, which policy rule decided, and a change ID. *What changes* lists every field the rollback changes, here `env MODE: leak → healthy`. Values that look like secrets are hidden.
+- **Suggestions Themis refused**, if any, such as one naming the wrong workload or citing evidence that doesn't exist.
+- **Investigation**, **What Themis checked**, **Timeline** and **Evidence** are the work behind it: the possible causes the model weighed, the facts Themis checked itself, every step and who took it, and the evidence with secrets hidden.
 
 ## 6. Approve
 
-Click **Approve this digest**. The approval carries the digest you were shown, never the server's current one.
+Click **Approve this change**. You approve exactly the change you were shown: if the workload changes first, the approval no longer applies.
 
 | After | You see |
 |---|---|
-| seconds | **authorized**, **executing**: the executor rechecks the digest and the live Deployment, dry-runs the rollback, writes it. |
-| ~2–5 min | **verifying**, then **resolved**: every replica ready, no new OOMKills, stable for the whole stability period. |
+| seconds | **approved**, **applying the fix**: the executor checks that the Deployment still matches what you approved, tries the rollback in a dry run, then applies it. |
+| ~2–5 min | **checking the fix**, then **fixed**: every pod ready, no new out-of-memory kills, and stable for the whole check. |
 
 The timeline holds the whole audit trail, from the alert to the verified outcome.
 
@@ -95,9 +95,9 @@ The timeline holds the whole audit trail, from the alert to the verified outcome
 Run `make demo-fix` to heal checkout between runs, then `make demo-break` again.
 
 - **Deny.** Enter a reason and click **Deny**. The incident closes without action, with your reason in the timeline.
-- **Change the target after the proposal.** While it awaits approval, run `kubectl --context kind-themis-dev -n shop set env deploy/checkout EXTRA=x`. That doesn't fix anything, so within about a minute and a half Themis closes the incident as superseded and opens a new one for the target's new state.
-- **Fix it yourself.** While it awaits approval, run `make demo-fix`. Within about a minute and a half the incident self-resolves: "fixed outside Themis by kubectl-rollout", the field manager of `kubectl rollout undo`.
-- **Edit during verification.** Approve, then edit the Deployment while it is verifying. The outcome is **inconclusive** and the incident is escalated: Themis never claims a success it can't attribute.
+- **Change the workload after the suggestion.** While it waits for approval, run `kubectl --context kind-themis-dev -n shop set env deploy/checkout EXTRA=x`. That doesn't fix anything, so within about a minute and a half Themis replaces the incident with a new one for the workload as it is now.
+- **Fix it yourself.** While it awaits approval, run `make demo-fix`. Within about a minute and a half the incident resolves on its own: "Fixed outside Themis, by kubectl-rollout.", the name `kubectl rollout undo` writes with.
+- **Edit during verification.** Approve, then edit the Deployment while it is verifying. Themis says it can't tell whether the fix worked and hands the incident to a person: it never claims a success it can't prove.
 - **GitOps.** `kubectl --context kind-themis-dev -n shop annotate deploy/checkout argocd.argoproj.io/tracking-id=x`, then break it. Policy denies any change, so the incident closes without action.
 - **Escalation webhook.** Put a `url` key, and optionally a `token` key, in a Secret in namespace `themis`, then `helm upgrade` with `--reuse-values --set notifications.webhookSecret=<name>`. Every escalation is POSTed there as JSON.
 
