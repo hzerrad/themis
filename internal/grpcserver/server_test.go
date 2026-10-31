@@ -1,8 +1,15 @@
 package grpcserver_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +27,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -32,7 +40,30 @@ type clock struct{ now time.Time }
 
 func (c *clock) Now() time.Time { return c.now }
 
+// syncBuffer is a buffer the server's goroutines may log to.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// token is the investigators' bearer token in tests.
+const token = "investigator-s3cret"
+
 type env struct {
+	lis    *bufconn.Listener
+	logs   *syncBuffer
 	store  *store.Store
 	pool   *pgxpool.Pool
 	clock  *clock
@@ -75,21 +106,24 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 	registry := evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents())
 	clk := &clock{now: time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC)}
 
-	srv := grpc.NewServer()
-	(&grpcserver.Server{Store: s, Config: cfg, Registry: registry, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute}).Register(srv)
+	logs := &syncBuffer{}
+	gs := &grpcserver.Server{
+		Store: s, Config: cfg, Registry: registry, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
+		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
+	}
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte(token), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(gs.Interceptor(tokenFile)))
+	gs.Register(srv)
 	lis := bufconn.Listen(1 << 20)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := dial(t, lis, grpc.WithPerRPCCredentials(grpcserver.BearerToken(token)))
 
 	e := &env{
-		store: s, pool: pool, clock: clk, target: target,
+		lis: lis, logs: logs, store: s, pool: pool, clock: clk, target: target,
 		investigations: themisv1.NewInvestigationServiceClient(conn),
 		evidence:       themisv1.NewEvidenceServiceClient(conn),
 		proposals:      themisv1.NewProposalServiceClient(conn),
@@ -99,6 +133,18 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		t.Fatalf("Prepare: %v", err)
 	}
 	return e
+}
+
+func dial(t *testing.T, lis *bufconn.Listener, opts ...grpc.DialOption) *grpc.ClientConn {
+	t.Helper()
+	conn, err := grpc.NewClient("passthrough:///bufnet", append(opts,
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return conn
 }
 
 func (e *env) newIncident(t *testing.T) string {
@@ -307,5 +353,76 @@ func TestEvidence_StaleLease(t *testing.T) {
 	_, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: "0192f0c1-0000-7000-8000-0000000000ff", Template: evidence.PodStates})
 	if code(err) != codes.FailedPrecondition {
 		t.Errorf("err = %v, want FailedPrecondition", err)
+	}
+}
+
+// logLines decodes the lines logged with msg.
+func (e *env) logLines(t *testing.T, msg string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(e.logs.String()), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("not JSON: %q: %v", l, err)
+		}
+		if m[slog.MessageKey] == msg {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func TestGRPC_LeaseRequests_LogIncidentID(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	if _, err := e.investigations.RenewLease(t.Context(), &themisv1.RenewLeaseRequest{LeaseId: inv.GetLeaseId()}); err != nil {
+		t.Fatal(err)
+	}
+	// A lease that expired is still named with its incident.
+	e.clock.now = e.clock.now.Add(time.Hour)
+	if _, err := e.investigations.RenewLease(t.Context(), &themisv1.RenewLeaseRequest{LeaseId: inv.GetLeaseId()}); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("renewing an expired lease: %v", err)
+	}
+
+	got := e.logLines(t, "gRPC request served")
+	if len(got) != 3 {
+		t.Fatalf("got %d request lines, want 3", len(got))
+	}
+	for i, l := range got {
+		if l[telemetry.FieldIncidentID] != inv.GetIncidentId() || l[telemetry.FieldLeaseID] != inv.GetLeaseId() {
+			t.Errorf("line %d: %v, want incident_id and lease_id", i, l)
+		}
+	}
+	if got[2]["code"] != codes.FailedPrecondition.String() {
+		t.Errorf("code = %v, want FailedPrecondition", got[2]["code"])
+	}
+}
+
+// The caller chooses the lease ID: only one that is a UUID is logged.
+func TestGRPC_MalformedLeaseIDNotLogged(t *testing.T) {
+	e := newEnv(t)
+	_, _ = e.investigations.RenewLease(t.Context(), &themisv1.RenewLeaseRequest{LeaseId: `x","level":"ERROR`})
+	for _, l := range e.logLines(t, "gRPC request served") {
+		if _, ok := l[telemetry.FieldLeaseID]; ok {
+			t.Errorf("lease_id logged: %v", l)
+		}
+	}
+}
+
+// A rejected request is logged too, without looking its lease up.
+func TestGRPC_RejectedRequestIsLogged(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	anonymous := themisv1.NewInvestigationServiceClient(dial(t, e.lis))
+	if _, err := anonymous.RenewLease(t.Context(), &themisv1.RenewLeaseRequest{LeaseId: inv.GetLeaseId()}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("RenewLease without a token: %v", err)
+	}
+	got := e.logLines(t, "gRPC request served")
+	last := got[len(got)-1]
+	if last["code"] != codes.Unauthenticated.String() {
+		t.Errorf("code = %v, want Unauthenticated", last["code"])
+	}
+	if _, ok := last[telemetry.FieldLeaseID]; ok {
+		t.Errorf("a rejected request was resolved to its lease: %v", last)
 	}
 }

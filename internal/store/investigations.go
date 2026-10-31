@@ -143,6 +143,23 @@ func (s *Store) LeasedInvestigation(ctx context.Context, tx pgx.Tx, leaseID stri
 	return inv, nil
 }
 
+// LeaseIncident returns the incident of an investigation's current lease,
+// live or not, or ErrNotFound.
+func (s *Store) LeaseIncident(ctx context.Context, leaseID string) (string, error) {
+	if _, err := uuid.Parse(leaseID); err != nil {
+		return "", fmt.Errorf("lease %q: %w", leaseID, ErrNotFound)
+	}
+	var id string
+	err := s.pool.QueryRow(ctx, `SELECT incident_id::text FROM investigations WHERE lease_id = $1`, leaseID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("lease %s: %w", leaseID, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("find lease %s: %w", leaseID, err)
+	}
+	return id, nil
+}
+
 // RenewLease extends a live lease to now+leaseFor.
 func (s *Store) RenewLease(ctx context.Context, tx pgx.Tx, leaseID string, now time.Time, leaseFor time.Duration) (time.Time, error) {
 	if _, err := s.LeasedInvestigation(ctx, tx, leaseID, now); err != nil {

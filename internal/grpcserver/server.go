@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,6 +54,41 @@ func (s *Server) Register(g *grpc.Server) {
 	themisv1.RegisterInvestigationServiceServer(g, s)
 	themisv1.RegisterEvidenceServiceServer(g, s)
 	themisv1.RegisterProposalServiceServer(g, s)
+}
+
+// Interceptor requires the bearer token in tokenFile, adds an authenticated
+// request's lease and the incident it was granted for to the context, and
+// logs every request at debug level.
+func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
+	authenticate := RequireToken(tokenFile)
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		logCtx := ctx
+		resp, err := authenticate(ctx, req, info, func(ctx context.Context, req any) (any, error) {
+			if r, ok := req.(interface{ GetLeaseId() string }); ok {
+				ctx = s.leaseFields(ctx, r.GetLeaseId())
+			}
+			resp, err := handler(ctx, req)
+			if r, ok := resp.(*themisv1.LeaseInvestigationResponse); ok && r.GetInvestigation() != nil {
+				inv := r.GetInvestigation()
+				ctx = telemetry.WithAttrs(ctx, slog.String(telemetry.FieldLeaseID, inv.GetLeaseId()), slog.String(telemetry.FieldIncidentID, inv.GetIncidentId()))
+			}
+			logCtx = ctx
+			return resp, err
+		})
+		s.logger().DebugContext(logCtx, "gRPC request served", "method", info.FullMethod, "code", status.Code(err).String())
+		return resp, err
+	}
+}
+
+func (s *Server) leaseFields(ctx context.Context, leaseID string) context.Context {
+	if _, err := uuid.Parse(leaseID); err != nil {
+		return ctx
+	}
+	attrs := []slog.Attr{slog.String(telemetry.FieldLeaseID, leaseID)}
+	if id, err := s.Store.LeaseIncident(ctx, leaseID); err == nil {
+		attrs = append(attrs, slog.String(telemetry.FieldIncidentID, id))
+	}
+	return telemetry.WithAttrs(ctx, attrs...)
 }
 
 func (s *Server) now() time.Time {
