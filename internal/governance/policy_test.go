@@ -84,8 +84,15 @@ func TestPolicy_EvaluationErrorDenies(t *testing.T) {
 	p := compile(t, config.ModeGuarded,
 		rule("missing-key", `predicates.not_computed == "true"`, config.DecisionAllow),
 	)
-	if d := p.Evaluate(input()); d.Outcome != governance.Deny || !strings.Contains(d.Reason, "missing-key") {
-		t.Errorf("decision = %+v, want deny", d)
+	if d := p.Evaluate(input()); d.Outcome != governance.Deny || !d.Failed || !strings.Contains(d.Reason, "missing-key") {
+		t.Errorf("decision = %+v, want a failed deny", d)
+	}
+}
+
+func TestPolicy_MatchedRuleIsNotFailed(t *testing.T) {
+	p := compile(t, config.ModeGuarded, rule("deny-all", `true`, config.DecisionDeny))
+	if d := p.Evaluate(input()); d.Outcome != governance.Deny || d.Failed {
+		t.Errorf("decision = %+v, want a deny that did not fail", d)
 	}
 }
 

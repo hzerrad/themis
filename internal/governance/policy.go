@@ -26,6 +26,9 @@ type Decision struct {
 	Reason       string
 	PolicyID     string
 	PolicyDigest string
+
+	// Failed means a rule could not be evaluated, which denies.
+	Failed bool
 }
 
 // PolicyInput is what rules see.
@@ -110,7 +113,7 @@ func (p *Policy) Evaluate(in PolicyInput) Decision {
 	for _, r := range p.rules {
 		val, _, err := r.program.Eval(vars)
 		if err != nil {
-			return Decision{Outcome: Deny, Reason: fmt.Sprintf("rule %s failed: %v", r.Name, err), PolicyID: r.Name, PolicyDigest: p.digest}
+			return Decision{Outcome: Deny, Reason: fmt.Sprintf("rule %s failed: %v", r.Name, err), PolicyID: r.Name, PolicyDigest: p.digest, Failed: true}
 		}
 		if matched, ok := val.Value().(bool); ok && matched {
 			d = Decision{Outcome: Outcome(r.Decision), Reason: "rule " + r.Name + " matched", PolicyID: r.Name, PolicyDigest: p.digest}

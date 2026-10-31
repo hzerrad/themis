@@ -115,6 +115,10 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		if err != nil {
 			return err
 		}
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decision.label()).Inc)
+		if decision.Outcome == Deny && live.ManagedBy != "" {
+			store.AfterCommit(tx, gitOpsRefusals.Inc)
+		}
 		if decision.Outcome == Deny {
 			return w.advance(ctx, tx, in.ID, "denied: "+decision.Reason, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
