@@ -51,11 +51,11 @@ func (a *API) authed(h http.HandlerFunc, fields func(*http.Request) []slog.Attr)
 		want, err := auth.ReadToken(a.TokenFile)
 		if err != nil {
 			a.logger().ErrorContext(r.Context(), "cannot read the admin token", "file", a.TokenFile, telemetry.FieldError, err)
-			http.Error(w, "API temporarily unavailable", http.StatusServiceUnavailable)
+			http.Error(w, "Themis can't check sign-ins right now. Try again shortly.", http.StatusServiceUnavailable)
 			return
 		}
 		if !auth.BearerMatches(r.Header.Get("Authorization"), want) {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			http.Error(w, "Sign in with the admin token.", http.StatusUnauthorized)
 			return
 		}
 		if fields != nil {
@@ -240,7 +240,7 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxBodyBytes), v); err != nil {
-		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -256,16 +256,16 @@ func (a *API) reply(w http.ResponseWriter, r *http.Request, v any) {
 func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		http.Error(w, "not found", http.StatusNotFound)
+		http.Error(w, "No such incident or fix.", http.StatusNotFound)
 	case errors.Is(err, store.ErrDigestMismatch):
-		http.Error(w, "the action changed since it was shown: reload and review it", http.StatusConflict)
+		http.Error(w, "This fix changed since you opened it. Reload the page and review it again.", http.StatusConflict)
 	case errors.Is(err, store.ErrAlreadyDecided), errors.Is(err, store.ErrStateConflict):
-		http.Error(w, "the action is no longer awaiting approval", http.StatusConflict)
+		http.Error(w, "This fix was already approved, denied or canceled.", http.StatusConflict)
 	case errors.Is(err, store.ErrExpired):
-		http.Error(w, "the approval window has passed", http.StatusGone)
+		http.Error(w, "The time to approve this fix has run out.", http.StatusGone)
 	default:
 		a.logger().ErrorContext(r.Context(), "API request failed", telemetry.FieldError, err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		http.Error(w, "Something went wrong in Themis. The core's logs have the details.", http.StatusInternalServerError)
 	}
 }
 

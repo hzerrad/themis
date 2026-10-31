@@ -362,3 +362,24 @@ func TestApprovalAPI_LogsNoUntrustedPath(t *testing.T) {
 		t.Errorf("unauthorized request: %v, want no action_id and 401", l)
 	}
 }
+
+// The page shows these answers as they are: they must read as advice.
+func TestErrors_ArePlainSentences(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+	for name, c := range map[string]struct {
+		rec  *httptest.ResponseRecorder
+		want string
+	}{
+		"stale digest": {e.approve(t, a, "sha256:stale"), "This fix changed since you opened it. Reload the page and review it again."},
+		"unknown":      {e.do(t, http.MethodPost, "/v1/actions/0192f0c1-0000-7000-8000-0000000000ff/approve", token, map[string]string{"digest": "x"}), "No such incident or fix."},
+	} {
+		if got := strings.TrimSpace(c.rec.Body.String()); got != c.want {
+			t.Errorf("%s: body = %q, want %q", name, got, c.want)
+		}
+	}
+	e.approve(t, a, a.Digest)
+	if got := strings.TrimSpace(e.approve(t, a, a.Digest).Body.String()); got != "This fix was already approved, denied or canceled." {
+		t.Errorf("approved twice: body = %q", got)
+	}
+}
