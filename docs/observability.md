@@ -70,3 +70,17 @@ The investigator reports its use of the model, by `route`: the configured route,
 | `themis_investigation_steps` (histogram) | | Model steps an investigation used before concluding |
 | `themis_budget_exhausted_total` | `kind` | Investigations out of `tokens`, `steps`, `evidence` or `deadline` |
 | `themis_core_requests_total` | `method`, `code` | Calls to the core, by gRPC method and status code |
+
+## Traces
+
+Every component exports traces over OTLP when `telemetry.otlp.endpoint` is set in the chart; the standard `OTEL_*` variables configure the rest, sampling included. Without an endpoint nothing is traced: no exporter runs and no connection is made.
+
+A trace is one unit of work, not one incident: processing an alert, an investigation, an approval, executing an action, a verification check. Incidents last minutes to hours across restarts, which long traces do not survive. To find all of one incident's work, search spans for `themis.incident.id`.
+
+- A background job runs in a trace of its own, with a link to the span that queued it. The link travels in the job's metadata; its arguments never carry trace context.
+- A call from the investigator to the core, or from the core to the executor, continues the caller's trace. The investigator's idle polls for a lease are not traced.
+- An investigation is one trace in the investigator, with a span per model request. Model spans carry the route, the model and the token counts, never the prompt or the reply.
+- Each transition in an incident's audit trail records the trace of the work that made it, so `GET /v1/incidents/{id}` leads from a state change to its trace.
+- Log lines written inside a span carry its `trace_id` and `span_id`.
+
+Spans carry the IDs a log line would: `themis.incident.id`, `themis.lease.id`, `themis.action.id`, `themis.proposal.id` and `themis.job.kind`.
