@@ -29,3 +29,11 @@ capabilities:
 seccompProfile:
   type: RuntimeDefault
 {{- end }}
+
+{{/* OTLP export, when an endpoint is set; without one, nothing is traced. */}}
+{{- define "themis.otlpEnv" -}}
+{{- with .Values.telemetry.otlp.endpoint }}
+- {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ . | quote }}}
+- {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ $.Values.telemetry.otlp.protocol | quote }}}
+{{- end }}
+{{- end }}

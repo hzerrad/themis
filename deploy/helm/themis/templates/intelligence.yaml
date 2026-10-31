@@ -49,6 +49,7 @@ spec:
             - {name: MODEL_PRICE_INPUT_USD_PER_MTOK, value: {{ required "model.price.inputUSDPerMTok is required with a price" .inputUSDPerMTok | quote }}}
             - {name: MODEL_PRICE_OUTPUT_USD_PER_MTOK, value: {{ required "model.price.outputUSDPerMTok is required with a price" .outputUSDPerMTok | quote }}}
             {{- end }}
+            {{- include "themis.otlpEnv" . | nindent 12 }}
           resources: {{- toYaml .Values.resources.intelligence | nindent 12 }}
           securityContext: {{- include "themis.securityContext" . | nindent 12 }}
           volumeMounts:

@@ -7,6 +7,16 @@ image:
 # Least severe level every component logs: debug, info, warn or error.
 logLevel: info
 
+telemetry:
+  otlp:
+    # Where every component sends its traces, for example
+    # http://otel-collector.observability:4317. Empty: nothing is traced.
+    endpoint: ""
+    # grpc or http/protobuf.
+    protocol: grpc
+    # CIDR the investigator may reach the collector at, on 4317 and 4318.
+    egressCIDR: 0.0.0.0/0
+
 # Namespaces Themis may read, and with the executor, write. Each gets its own
 # Role: Themis never creates RBAC at runtime.
 enrolledNamespaces:
