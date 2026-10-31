@@ -77,7 +77,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `image.repository` | `""` | Registry and path of the images |
 | `image.tag` | `dev` | Image tag |
 | `image.pullPolicy` | `IfNotPresent` | |
-| `logLevel` | `info` | Least severe level the core and executor log: `debug`, `info`, `warn` or `error` |
+| `logLevel` | `info` | Least severe level every component logs: `debug`, `info`, `warn` or `error` |
 | `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
@@ -88,6 +88,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
 | `model.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
 | `model.tokenBudget` | `200000` | Tokens per investigation |
+| `model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |
 | `executor.enabled` | `false` | Install the executor and its write Roles |
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |

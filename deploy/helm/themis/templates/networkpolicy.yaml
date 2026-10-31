@@ -9,6 +9,9 @@ spec:
   podSelector:
     matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 6 }}
   policyTypes: [Ingress, Egress]
+  # Only its metrics are served.
+  ingress:
+    - ports: [{port: 8082, protocol: TCP}]
   egress:
     - to:
         - podSelector:

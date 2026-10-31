@@ -1,3 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-intelligence
+  labels: {{- include "themis.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 4 }}
+  ports:
+    - {name: metrics, port: 8082, targetPort: metrics}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,6 +30,11 @@ spec:
         - name: intelligence
           image: {{ include "themis.image" (dict "root" . "component" "intelligence") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [--log-level={{ .Values.logLevel }}]
+          ports:
+            - {name: metrics, containerPort: 8082}
+          # The investigator serves nothing else; /metrics answers once it runs.
+          readinessProbe: {httpGet: {path: /metrics, port: metrics}, periodSeconds: 10}
           env:
             - {name: THEMIS_CORE_ADDR, value: "{{ .Release.Name }}-core:9090"}
             - {name: THEMIS_TOKEN_FILE, value: /var/run/secrets/themis/investigator}
@@ -29,6 +44,10 @@ spec:
             - {name: MODEL_TOKEN_BUDGET, value: {{ .Values.model.tokenBudget | quote }}}
             {{- if .Values.model.apiKeySecret }}
             - {name: MODEL_API_KEY_FILE, value: /var/run/secrets/model/apiKey}
+            {{- end }}
+            {{- with .Values.model.price }}
+            - {name: MODEL_PRICE_INPUT_USD_PER_MTOK, value: {{ required "model.price.inputUSDPerMTok is required with a price" .inputUSDPerMTok | quote }}}
+            - {name: MODEL_PRICE_OUTPUT_USD_PER_MTOK, value: {{ required "model.price.outputUSDPerMTok is required with a price" .outputUSDPerMTok | quote }}}
             {{- end }}
           resources: {{- toYaml .Values.resources.intelligence | nindent 12 }}
           securityContext: {{- include "themis.securityContext" . | nindent 12 }}
