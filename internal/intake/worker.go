@@ -199,7 +199,7 @@ func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[Process
 			}
 			err := w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: inc.IncidentID, From: inc.State, To: incident.SelfResolved,
-				Reason: "all alerts resolved", Actor: actor,
+				Reason: "All of its alerts stopped firing.", Actor: actor,
 			})
 			if err != nil {
 				return err

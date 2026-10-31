@@ -426,3 +426,31 @@ func TestGRPC_RejectedRequestIsLogged(t *testing.T) {
 		t.Errorf("a rejected request was resolved to its lease: %v", last)
 	}
 }
+
+// The timeline says why the investigation gave up, in words.
+func TestFail_EscalationReasonIsPlain(t *testing.T) {
+	for reason := range themisv1.InvestigationFailureReason_name {
+		t.Run(themisv1.InvestigationFailureReason(reason).String(), func(t *testing.T) {
+			e := newEnv(t)
+			var incidentID string
+			for range store.MaxInvestigationAttempts {
+				inv := e.lease(t)
+				incidentID = inv.GetIncidentId()
+				if _, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+					LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason(reason),
+				}); err != nil {
+					t.Fatal(err)
+				}
+				e.clock.now = e.clock.now.Add(10 * time.Minute)
+			}
+			trail, err := e.store.Transitions(t.Context(), incidentID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := trail[len(trail)-1].Reason
+			if !strings.HasPrefix(got, "The investigation failed 3 times. The last time, ") || strings.Contains(got, "REASON") || strings.Contains(got, "%!") {
+				t.Errorf("reason = %q", got)
+			}
+		})
+	}
+}

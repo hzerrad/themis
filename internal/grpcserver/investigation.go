@@ -31,7 +31,7 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 			return err
 		}
 		for _, id := range expired {
-			if err := s.escalate(ctx, tx, id, "the investigator abandoned its last lease"); err != nil {
+			if err := s.escalate(ctx, tx, id, "The investigator stopped responding during its last attempt."); err != nil {
 				return err
 			}
 		}
@@ -139,7 +139,7 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 			}
 		}
-		return s.advance(ctx, tx, inv.IncidentID, "no accepted proposal", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
+		return s.advance(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
 	if err != nil {
 		return nil, s.internal(ctx, err)
@@ -190,12 +190,22 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		if !exhausted {
 			return nil
 		}
-		return s.escalate(ctx, tx, inv.IncidentID, fmt.Sprintf("investigation failed: %s", req.GetReason()))
+		return s.escalate(ctx, tx, inv.IncidentID, fmt.Sprintf("The investigation failed %d times. The last time, %s", store.MaxInvestigationAttempts, failures[req.GetReason()]))
 	})
 	if err != nil {
 		return nil, s.internal(ctx, err)
 	}
 	return &themisv1.FailInvestigationResponse{}, nil
+}
+
+// failures say why an investigation failed, as the end of a sentence.
+var failures = map[themisv1.InvestigationFailureReason]string{
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_UNSPECIFIED:          "the investigator gave no reason.",
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE:    "the model couldn't be reached.",
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT: "the model's answers weren't in the required format.",
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED:     "it used up its token budget.",
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED:    "it ran out of time.",
+	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_INTERNAL:             "the investigator hit an internal error.",
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
