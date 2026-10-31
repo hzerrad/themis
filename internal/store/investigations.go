@@ -77,11 +77,14 @@ const investigationColumns = `
 	v.id::text, v.incident_id::text, i.profile, i.target_group, i.target_kind, i.target_namespace, i.target_name, i.target_uid,
 	coalesce(v.lease_id::text, ''), coalesce(v.lease_deadline, 'epoch'), v.attempts`
 
-func scanInvestigation(row pgx.Row) (Investigation, error) {
+// scanInvestigation scans investigationColumns, then extra.
+func scanInvestigation(row pgx.Row, extra ...any) (Investigation, error) {
 	var inv Investigation
 	t := &inv.Target
-	err := row.Scan(&inv.ID, &inv.IncidentID, &inv.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID,
-		&inv.LeaseID, &inv.LeaseDeadline, &inv.Attempts)
+	err := row.Scan(append([]any{
+		&inv.ID, &inv.IncidentID, &inv.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID,
+		&inv.LeaseID, &inv.LeaseDeadline, &inv.Attempts,
+	}, extra...)...)
 	return inv, err
 }
 
@@ -95,7 +98,7 @@ func (s *Store) LeaseInvestigation(ctx context.Context, tx pgx.Tx, workerID stri
 	}
 	row := tx.QueryRow(ctx, `
 	WITH next AS (
-		SELECT id FROM investigations
+		SELECT id, state = 'leased' AS expired FROM investigations
 		WHERE (state = 'pending' OR (state = 'leased' AND lease_deadline < $1)) AND attempts < $2 AND lease_after <= $1
 		  AND EXISTS (SELECT 1 FROM incidents i WHERE i.id = investigations.incident_id AND i.state = 'investigating')
 		ORDER BY created_at
@@ -108,15 +111,19 @@ func (s *Store) LeaseInvestigation(ctx context.Context, tx pgx.Tx, workerID stri
 		WHERE id = (SELECT id FROM next)
 		RETURNING *
 	)
-	SELECT `+investigationColumns+`
+	SELECT `+investigationColumns+`, (SELECT expired FROM next)
 	FROM v JOIN incidents i ON i.id = v.incident_id
 `, now, MaxInvestigationAttempts, leaseID, leaseFor, workerID)
-	inv, err := scanInvestigation(row)
+	var expired bool
+	inv, err := scanInvestigation(row, &expired)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Investigation{}, false, nil
 	}
 	if err != nil {
 		return Investigation{}, false, fmt.Errorf("lease investigation: %w", err)
+	}
+	if expired {
+		CountInvestigation(tx, InvestigationLeaseLost)
 	}
 	return inv, true, nil
 }
@@ -230,6 +237,9 @@ func (s *Store) ExpireInvestigations(ctx context.Context, tx pgx.Tx, now time.Ti
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
 		return nil, fmt.Errorf("expire investigations: %w", err)
+	}
+	for range ids {
+		CountInvestigation(tx, InvestigationLeaseLost)
 	}
 	return ids, nil
 }
