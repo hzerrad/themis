@@ -295,6 +295,7 @@ status:
       ready: false
       started: false
       restartCount: 7
+      containerID: containerd://cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
       state:
         waiting:
           reason: CrashLoopBackOff
@@ -305,6 +306,7 @@ status:
           exitCode: 137
           startedAt: "2026-10-27T09:14:01Z"
           finishedAt: "2026-10-27T09:14:02Z"
+          containerID: containerd://pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
 ---
 # Another app in the same namespace.
 apiVersion: v1
