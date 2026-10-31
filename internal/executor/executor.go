@@ -41,6 +41,8 @@ type Result struct {
 	Status         Status
 	Message        string
 	PostGeneration int64
+
+	dryRunFailed bool
 }
 
 type Executor struct {
@@ -114,7 +116,7 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	}
 
 	if _, err := rollback.Apply(ctx, e.Client, live, true); err != nil {
-		return Result{Status: Failed, Message: "dry run refused: " + err.Error()}
+		return Result{Status: Failed, Message: "dry run refused: " + err.Error(), dryRunFailed: true}
 	}
 	gen, err := rollback.Apply(ctx, e.Client, live, false)
 	switch {
@@ -155,6 +157,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		if err := e.Store.SetActionState(ctx, tx, a.ID, store.ActionExecuting, actionStates[res.Status]); err != nil {
 			return err
 		}
+		store.AfterCommit(tx, actionsTotal.WithLabelValues(capabilities.Value(a.Capability), res.label()).Inc)
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
 			return e.advance(ctx, tx, a.IncidentID, string(res.Status)+": "+res.Message, incident.Executing, incident.Escalated)
