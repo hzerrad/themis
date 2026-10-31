@@ -3,6 +3,7 @@ package core_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -118,6 +120,45 @@ func eventually(t *testing.T, what string, exited <-chan error, cond func() bool
 	t.Fatalf("timed out waiting for %s", what)
 }
 
+// start runs themis-core until cancel or the end of the test, and waits until
+// it is ready. A port freeAddr found can be taken before the core binds it,
+// so start tries again with new ports.
+func start(t *testing.T, options func() core.Options) (core.Options, <-chan error, context.CancelFunc) {
+	t.Helper()
+	for attempt := 1; ; attempt++ {
+		o := options()
+		ctx, cancel := context.WithCancel(context.Background())
+		exited := make(chan error, 1)
+		go func() { exited <- core.Run(ctx, o) }()
+		ready, err := waitReady(o, exited)
+		if ready {
+			t.Cleanup(cancel)
+			return o, exited, cancel
+		}
+		cancel()
+		if !errors.Is(err, syscall.EADDRINUSE) || attempt == 3 {
+			t.Fatalf("themis-core did not become ready: %v", err)
+		}
+	}
+}
+
+// waitReady reports whether the core became ready, or why it exited.
+func waitReady(o core.Options, exited <-chan error) (bool, error) {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-exited:
+			return false, err
+		default:
+		}
+		if code, _ := get("http://" + o.ProbeAddr + "/readyz"); code == http.StatusOK {
+			return true, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return false, errors.New("timed out")
+}
+
 func get(url string) (int, string) {
 	resp, err := http.Get(url) //nolint:gosec,noctx // a test request to a local server
 	if err != nil {
@@ -134,25 +175,19 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	_, pod := k8s.NewRollout(t, ns, "checkout")
 	dbURL := pgtest.NewDatabase(t)
-	o := core.Options{
-		ConfigPath:  writeConfig(t, ns),
-		DatabaseURL: dbURL,
-		Kubernetes:  k8s.Config,
-		HTTPAddr:    freeAddr(t),
-		ProbeAddr:   freeAddr(t),
-		MetricsAddr: freeAddr(t),
-		GRPCAddr:    freeAddr(t),
-		Workers:     2,
-		Logger:      slog.New(slog.DiscardHandler),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	exited := make(chan error, 1)
-	go func() { exited <- core.Run(ctx, o) }()
-	defer cancel()
-
-	eventually(t, "readiness", exited, func() bool {
-		code, _ := get("http://" + o.ProbeAddr + "/readyz")
-		return code == http.StatusOK
+	configPath := writeConfig(t, ns)
+	o, exited, cancel := start(t, func() core.Options {
+		return core.Options{
+			ConfigPath:  configPath,
+			DatabaseURL: dbURL,
+			Kubernetes:  k8s.Config,
+			HTTPAddr:    freeAddr(t),
+			ProbeAddr:   freeAddr(t),
+			MetricsAddr: freeAddr(t),
+			GRPCAddr:    freeAddr(t),
+			Workers:     2,
+			Logger:      slog.New(slog.DiscardHandler),
+		}
 	})
 	if code, _ := get("http://" + o.ProbeAddr + "/healthz"); code != http.StatusOK {
 		t.Errorf("/healthz = %d, want 200", code)
