@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
@@ -178,7 +179,7 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 			return err
 		}
 		retryAt := s.now().Add(retryBackoff << (inv.Attempts - 1))
-		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, req.GetReason().String(), req.GetMessage(), retryAt)
+		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, failed(req.GetReason()), req.GetMessage(), retryAt)
 		if err != nil {
 			return err
 		}
@@ -206,6 +207,12 @@ var failures = map[themisv1.InvestigationFailureReason]string{
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED:     "it used up its token budget.",
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED:    "it ran out of time.",
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_INTERNAL:             "the investigator hit an internal error.",
+}
+
+// failed says why an investigation failed, as a sentence of its own.
+func failed(r themisv1.InvestigationFailureReason) string {
+	why := strings.TrimSuffix(failures[r], ".")
+	return "The investigation failed because " + why
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
