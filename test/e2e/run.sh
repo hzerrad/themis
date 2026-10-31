@@ -182,6 +182,7 @@ check "the action shows that MODE changes" [ "$(action "$ID" '["Changes"][0]["fi
 check "approving the shown digest is accepted" [ "$(approve "$ID")" = 200 ]
 check "the rollback is verified as resolved" [ "$(wait_state "$ID" 300 resolved escalated contained_escalated)" = resolved ]
 check "checkout runs the healthy revision again" [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].env[0].value}')" = healthy ]
+RESOLVED=$ID
 
 log "2. a denied action is never executed"
 ID=$(incident_after_break)
@@ -265,6 +266,54 @@ for c in "$CANARY_SECRET" "$CANARY_LOG" "$CANARY_INJECTION" "$CANARY_ANNOTATION"
   where=$(leaks "$c" | paste -sd, -)
   check "${c%-"$RUN"} is in no log or metric${where:+ (found in: $where)}" [ -z "$where" ]
 done
+
+log "telemetry is correlated"
+# lifecycle_logged <deployment> <incident> <message...> passes when every line
+# with one of the messages names an incident, and one names this incident.
+lifecycle_logged() {
+  local d=$1 id=$2; shift 2
+  $K -n themis logs deploy/"$d" --all-containers 2>/dev/null | python3 -c '
+import json, sys
+id, msgs = sys.argv[1], set(sys.argv[2:])
+found = False
+for raw in sys.stdin:
+    try:
+        line = json.loads(raw)
+    except ValueError:
+        continue
+    if line.get("msg") not in msgs:
+        continue
+    if "incident_id" not in line:
+        sys.exit("a lifecycle line has no incident_id: " + raw.strip())
+    found = found or line["incident_id"] == id
+sys.exit(0 if found else "no lifecycle line names incident " + id)' "$id" "$@"
+}
+check "the core's transitions of the resolved incident carry its ID" lifecycle_logged themis-core "$RESOLVED" "incident transitioned"
+check "the executor's transitions of the resolved incident carry its ID" lifecycle_logged themis-executor "$RESOLVED" "incident transitioned"
+check "the investigator's lines about the resolved incident carry its ID" lifecycle_logged themis-intelligence "$RESOLVED" "investigation started" "investigation completed"
+
+# serves <port> <metric...> passes when /metrics on port has every family.
+serves() {
+  local p=$1 body m; shift
+  body=$(curl -sf "http://127.0.0.1:$p/metrics") || return 1
+  for m in "$@"; do grep -q "^# TYPE $m " <<<"$body" || { echo "  missing $m on :$p"; return 1; }; done
+}
+check "the core serves the lifecycle and trust metrics" serves 18182 \
+  themis_incident_transitions_total themis_escalations_total themis_stage_duration_seconds \
+  themis_investigations_total themis_proposals_total themis_safety_events_total \
+  themis_policy_decisions_total themis_gitops_refusals_total themis_approvals_total \
+  themis_verification_outcomes_total themis_notifications_total themis_evidence_collected_total \
+  themis_evidence_truncated_total themis_redactions_total themis_incidents \
+  themis_approvals_pending themis_oldest_pending_approval_age_seconds themis_metrics_collection_errors_total
+check "the executor serves the action metrics" serves 18183 themis_actions_total themis_incident_transitions_total
+check "the investigator serves the model metrics" serves 18184 \
+  themis_model_requests_total themis_model_request_duration_seconds themis_model_tokens_total \
+  themis_model_validation_failures_total themis_investigation_steps themis_budget_exhausted_total \
+  themis_core_requests_total
+check "the resolved incident is counted in themis_incidents" bash -c \
+  "curl -sf http://127.0.0.1:18182/metrics | awk '/^themis_incidents\\{state=\"resolved\"\\}/ { found = \$2 >= 1 } END { exit !found }'"
+check "the GitOps scenario's denial was counted" bash -c \
+  "curl -sf http://127.0.0.1:18182/metrics | awk '/^themis_gitops_refusals_total / { found = \$2 >= 1 } END { exit !found }'"
 
 heal
 [ "$FAILED" -eq 0 ]
