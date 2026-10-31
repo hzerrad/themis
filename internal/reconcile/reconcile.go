@@ -69,7 +69,7 @@ func (w *Worker) Reconcile(ctx context.Context) error {
 func (w *Worker) one(ctx context.Context, in store.Incident) error {
 	snap, err := rollback.Snapshot(ctx, w.Reader, in.Target)
 	if errors.Is(err, rollback.ErrStale) {
-		return w.close(ctx, in, incident.Canceled, "the target was deleted or recreated outside Themis")
+		return w.close(ctx, in, incident.Canceled, "The workload was deleted or replaced outside Themis.")
 	}
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (w *Worker) one(ctx context.Context, in store.Incident) error {
 		if !incident.CanTransition(in.State, to) {
 			to = incident.Canceled
 		}
-		return w.close(ctx, in, to, "fixed outside Themis by "+by)
+		return w.close(ctx, in, to, "Fixed outside Themis, by "+by+".")
 	}
 	return w.supersede(ctx, in, by)
 }
@@ -109,7 +109,7 @@ func (w *Worker) close(ctx context.Context, in store.Incident, to incident.State
 // now, to be investigated from scratch.
 func (w *Worker) supersede(ctx context.Context, in store.Incident, by string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		reason := fmt.Sprintf("superseded: the target was changed outside Themis by %s and still fails", by)
+		reason := fmt.Sprintf("Replaced by a new incident: the workload was changed outside Themis, by %s, and still fails.", by)
 		if err := w.transition(ctx, tx, in, incident.Canceled, reason); err != nil {
 			return err
 		}

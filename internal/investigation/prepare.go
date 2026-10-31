@@ -79,7 +79,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
 			ID: in.ID, From: incident.Received, To: incident.Investigating,
-			Reason: fmt.Sprintf("collected %d initial evidence items", len(items)), Actor: actor,
+			Reason: evidenceCollected(len(items)), Actor: actor,
 		})
 		if errors.Is(err, store.ErrStateConflict) {
 			return nil
@@ -118,4 +118,11 @@ func (w *PrepareWorker) logger() *slog.Logger {
 		return w.Logger
 	}
 	return slog.Default()
+}
+
+func evidenceCollected(n int) string {
+	if n == 1 {
+		return "Investigation started with 1 piece of evidence."
+	}
+	return fmt.Sprintf("Investigation started with %d pieces of evidence.", n)
 }

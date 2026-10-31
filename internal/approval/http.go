@@ -184,7 +184,7 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		}
 		err = a.Store.Transition(ctx, tx, store.TransitionArgs{
 			ID: act.IncidentID, From: incident.AwaitingApproval, To: incident.Authorized,
-			Reason: "approved digest " + req.Digest, Actor: approver,
+			Reason: "Approved by " + approver + ".", Actor: approver,
 		})
 		if err != nil {
 			return err
@@ -218,9 +218,9 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 		if err := a.Store.SetActionState(ctx, tx, act.ID, store.ActionAwaitingApproval, store.ActionDenied); err != nil {
 			return store.ErrAlreadyDecided
 		}
-		reason := "denied by " + approver
+		reason := "Denied by " + approver + "."
 		if req.Reason != "" {
-			reason += ": " + req.Reason
+			reason = "Denied by " + approver + ": " + req.Reason
 		}
 		for _, step := range [][2]incident.State{{incident.AwaitingApproval, incident.Recommended}, {incident.Recommended, incident.ClosedNoAction}} {
 			if err := a.Store.Transition(ctx, tx, store.TransitionArgs{ID: act.IncidentID, From: step[0], To: step[1], Reason: reason, Actor: approver}); err != nil {
