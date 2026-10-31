@@ -189,9 +189,11 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultApproved).Inc)
 		return a.Store.EnqueueTx(ctx, tx, governance.ExecuteArgs{ActionID: act.ID, IncidentID: act.IncidentID})
 	})
 	if err != nil {
+		countRefusal(err)
 		a.fail(w, r, err)
 		return
 	}
@@ -225,9 +227,11 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultDenied).Inc)
 		return nil
 	})
 	if err != nil {
+		countRefusal(err)
 		a.fail(w, r, err)
 		return
 	}
