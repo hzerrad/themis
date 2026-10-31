@@ -118,6 +118,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 			return err
 		}
 		final = true
+		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(outcome)).Inc)
 		reason := fmt.Sprintf("verification: %s (%d/%d ready, %d new OOM kills)", outcome, obs.ReadyReplicas, obs.DesiredReplicas, obs.NewOOMKills)
 		if obs.ForeignSpecChange {
 			reason = "verification: inconclusive, the target was changed outside Themis during the window"
@@ -219,6 +220,9 @@ func (w *Worker) escalate(ctx context.Context, actionID, reason string) error {
 		})
 		if errors.Is(err, store.ErrStateConflict) {
 			return nil
+		}
+		if err == nil {
+			store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(Inconclusive)).Inc)
 		}
 		return err
 	})
