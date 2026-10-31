@@ -117,7 +117,7 @@ leaks() {
   for d in themis-core themis-executor themis-intelligence; do
     $K -n themis logs deploy/$d --all-containers 2>/dev/null | grep -qF "$1" && echo "$d logs"
   done
-  for p in 18182 18183; do
+  for p in 18182 18183 18184; do
     curl -sf "http://127.0.0.1:$p/metrics" | grep -qF "$1" && echo "metrics on :$p"
   done
   return 0
@@ -147,6 +147,8 @@ $K -n themis rollout status deploy/fake-model deploy/webhook-sink --timeout=180s
 $K -n themis port-forward svc/themis-core $PORT:8080 18182:8082 >/dev/null 2>&1 &
 PF=$!
 $K -n themis port-forward svc/themis-executor 18183:8082 >/dev/null 2>&1 &
+PF="$PF $!"
+$K -n themis port-forward svc/themis-intelligence 18184:8082 >/dev/null 2>&1 &
 PF="$PF $!"
 sleep 3
 ADMIN=$(token admin)
@@ -232,7 +234,7 @@ log "telemetry leaks no workload data"
 for d in themis-core themis-executor themis-intelligence; do
   check "$d logs are readable" bash -c "$K -n themis logs deploy/$d --all-containers | grep -q ."
 done
-for p in 18182 18183; do
+for p in 18182 18183 18184; do
   check "metrics on :$p are readable" bash -c "curl -sf http://127.0.0.1:$p/metrics | grep -q '^themis_'"
 done
 # log_evidence summarises each incident's container_logs_tail evidence.
