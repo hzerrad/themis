@@ -254,7 +254,8 @@ for e in json.load(sys.stdin)["Evidence"] or []:
 EVIDENCE=$(log_evidence)
 printf '%s\n' "$EVIDENCE" | sed 's/^/  /'
 # Without these, the leak checks below would pass for the wrong reason.
-check "the canary log line reached the evidence" grep -q ' canary ' <<<"$EVIDENCE"
+# shellcheck disable=SC2016 # $1 expands in the inner shell.
+check "the canary log line reached every incident's evidence" bash -c 'grep -q " canary " <<<"$1" && ! grep -q " no-canary " <<<"$1"' _ "$EVIDENCE"
 # shellcheck disable=SC2016 # $1 expands in the inner shell.
 check "the canary secret is redacted in all evidence" bash -c '! grep -q " SECRET " <<<"$1"' _ "$EVIDENCE"
 check "the canary alert was processed" bash -c "curl -sf http://127.0.0.1:18182/metrics | grep -q '^themis_intake_alerts_processed_total{outcome=\"rejected\",reason=\"no_profile\"}'"
