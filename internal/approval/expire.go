@@ -41,6 +41,7 @@ func (w *ExpireWorker) Expire(ctx context.Context) error {
 			return err
 		}
 		for _, a := range expired {
+			store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultExpired).Inc)
 			err := w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: a.IncidentID, From: incident.AwaitingApproval, To: incident.Escalated,
 				Reason: "nobody approved the action in time", Actor: "approval",
