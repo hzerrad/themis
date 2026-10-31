@@ -1,13 +1,18 @@
 package store_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
 
@@ -86,5 +91,43 @@ func TestTransition_StageDurationSurvivesJoins(t *testing.T) {
 	advance(t, s, id, incident.AwaitingApproval, incident.Authorized)
 	if got := metrictest.Sum(t, "themis_stage_duration_seconds", labels) - before; got < 100 || got > 200 {
 		t.Errorf("approval_wait observed %vs, want about 100", got)
+	}
+}
+
+// Each committed transition is one info line with its incident; a rolled-back
+// one logs nothing.
+func TestTransition_Logged(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(telemetry.NewLogger(&buf, "core", slog.LevelInfo))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	s, _ := newStore(t)
+	id, _ := createOrJoin(t, s, newIncident("fp-logged"))
+	_ = s.InTx(t.Context(), func(tx pgx.Tx) error {
+		if err := s.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.Investigating, Reason: "rolled back", Actor: "test"}); err != nil {
+			return err
+		}
+		return errors.New("abort")
+	})
+	advance(t, s, id, incident.Received, incident.Investigating)
+
+	var lines []map[string]any
+	for _, l := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(l), &m); err != nil {
+			t.Fatalf("not JSON: %q", l)
+		}
+		lines = append(lines, m)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("got %d lines, want 1: %s", len(lines), buf.String())
+	}
+	l := lines[0]
+	if l["msg"] != "incident transitioned" || l[telemetry.FieldIncidentID] != id || l["from"] != "received" || l["to"] != "investigating" {
+		t.Errorf("line = %v", l)
+	}
+	if strings.Contains(buf.String(), "reason") {
+		t.Error("the reason was logged")
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 var (
@@ -103,7 +105,12 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 	if err != nil {
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
-	AfterCommit(tx, func() { observeTransition(tst.From, tst.To, sinceChange, sinceCreated) })
+	AfterCommit(tx, func() {
+		observeTransition(tst.From, tst.To, sinceChange, sinceCreated)
+		// Never the reason: an investigation's summary, written by the model, can be one.
+		slog.InfoContext(telemetry.WithAttrs(ctx, slog.String(telemetry.FieldIncidentID, tst.ID)),
+			"incident transitioned", "from", tst.From, "to", tst.To, "actor", tst.Actor)
+	})
 
 	var traceID *string
 	if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
