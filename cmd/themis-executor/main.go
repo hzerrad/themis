@@ -55,6 +55,11 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	if url == "" {
 		return errors.New("no database URL: set DATABASE_URL")
 	}
+	shutdownTracing, err := telemetry.SetupTracing(ctx, "executor")
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	defer func() { _ = telemetry.StopTracing(shutdownTracing) }()
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
@@ -74,7 +79,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 		return fmt.Errorf("kubernetes client: %w", err)
 	}
 
-	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(grpcserver.RequireToken(tokenFile), telemetry.UnaryServerFields()))
+	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(grpcserver.RequireToken(tokenFile), telemetry.UnaryServerFields()))
 	(&executor.Server{Executor: &executor.Executor{Store: s, Client: c, Logger: log}}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {
