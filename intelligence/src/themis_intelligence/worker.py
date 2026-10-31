@@ -5,11 +5,12 @@ import contextlib
 import logging
 import socket
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from typing import Protocol, cast
 
 import grpc
 
 from themis.v1 import investigation_pb2
+from themis_intelligence import telemetry
 from themis_intelligence.investigation.loop import Core, InvestigationError, Model, investigate
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,12 @@ _FAILURES = {
     "budget_exhausted": investigation_pb2.INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED,
     "deadline_exceeded": investigation_pb2.INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED,
 }
+
+
+def rpc_error(e: grpc.RpcError) -> str:
+    """A gRPC error as its code and the core's message."""
+    call = cast(grpc.Call, e)
+    return f"{call.code().name}: {call.details()}"
 
 
 class WorkerCore(Core, Protocol):
@@ -62,7 +69,7 @@ class Worker:
             try:
                 worked = await self.run_once()
             except grpc.RpcError as e:
-                log.warning("the core is unavailable: %s", e)
+                log.warning("core unavailable", extra={"error": rpc_error(e)})
                 worked = False
             if not worked:
                 await asyncio.sleep(idle_s)
@@ -72,7 +79,13 @@ class Worker:
         job = await self.core.lease(self.worker_id)
         if job is None:
             return False
-        log.info("investigating incident %s", job.incident_id)
+        # Set before the investigation's tasks are created, which copy them.
+        with telemetry.fields(incident=job.incident_id, lease=job.lease_id):
+            await self._investigate(job)
+        return True
+
+    async def _investigate(self, job: investigation_pb2.Investigation) -> None:
+        log.info("investigation started")
         deadline = job.budget.deadline.ToSeconds() if job.budget.HasField("deadline") else None
         task = asyncio.create_task(
             investigate(
@@ -90,19 +103,20 @@ class Worker:
         except asyncio.CancelledError:
             if not lost.is_set():
                 raise
-            log.warning("lease of incident %s lost; investigation abandoned", job.incident_id)
-            return True
+            log.warning("lease lost, investigation abandoned")
+            return
         except InvestigationError as e:
-            log.warning("investigation of %s failed: %s", job.incident_id, e)
+            # The reason only: a model error's message can quote model output.
+            log.warning("investigation failed", extra={"reason": e.reason})
             await self._report(
                 self.core.fail,
                 investigation_pb2.FailInvestigationRequest(
                     lease_id=job.lease_id, reason=_FAILURES[e.reason], message=str(e)
                 ),
             )
-            return True
+            return
         except Exception as e:
-            log.exception("investigation of %s crashed", job.incident_id)
+            log.exception("investigation crashed")
             await self._report(
                 self.core.fail,
                 investigation_pb2.FailInvestigationRequest(
@@ -111,7 +125,7 @@ class Worker:
                     message=f"{type(e).__name__}: {e}",
                 ),
             )
-            return True
+            return
         finally:
             heartbeat.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -128,8 +142,7 @@ class Worker:
                 provenance=result.provenance,
             ),
         )
-        log.info("incident %s: %s", job.incident_id, result.conclusion)
-        return True
+        log.info("investigation completed", extra={"conclusion": result.conclusion})
 
     async def _report[R](self, call: Callable[[R], Awaitable[None]], req: R) -> None:
         """Retries transient errors, so a finished result is not lost to one."""
@@ -139,7 +152,7 @@ class Worker:
                 return
             except grpc.RpcError as e:
                 if e.code() not in _TRANSIENT or attempt == REPORT_ATTEMPTS - 1:
-                    log.warning("cannot report to the core: %s", e)
+                    log.warning("cannot report to the core", extra={"error": rpc_error(e)})
                     return
                 await asyncio.sleep(self.retry_s * (attempt + 1))
 
@@ -153,7 +166,7 @@ class Worker:
                 await self.core.renew_lease(lease_id)
             except grpc.RpcError as e:
                 if e.code() in _TRANSIENT:
-                    log.warning("cannot renew lease %s, retrying: %s", lease_id, e)
+                    log.warning("cannot renew the lease, retrying", extra={"error": rpc_error(e)})
                     continue
                 lost.set()
                 task.cancel()

@@ -9,13 +9,16 @@ Configuration comes from the environment:
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
+
+Flags: --log-level (info).
 """
 
+import argparse
 import asyncio
-import logging
 import os
 from pathlib import Path
 
+from themis_intelligence import telemetry
 from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient
@@ -31,8 +34,20 @@ def read_secret(path: str) -> str:
     return token
 
 
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="themis_intelligence")
+    p.add_argument(
+        "--log-level",
+        default="info",
+        choices=["debug", "info", "warn", "error"],
+        help="least severe level logged",
+    )
+    return p.parse_args(argv)
+
+
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    args = parse_args()
+    telemetry.configure_logging("WARNING" if args.log_level == "warn" else args.log_level.upper())
     env = os.environ.get
     ceiling = env("MODEL_CEILING", "sensitive")
     if ceiling not in CLASSIFICATION_RANK:
