@@ -127,6 +127,21 @@ func TestLeasedInvestigation_ExpiredLease(t *testing.T) {
 	}
 }
 
+func TestLeaseIncident(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	inv, _ := lease(t, s, t0)
+
+	if got, err := s.LeaseIncident(t.Context(), inv.LeaseID); err != nil || got != id {
+		t.Errorf("LeaseIncident = %q, %v; want %q", got, err, id)
+	}
+	for _, unknown := range []string{"01a18d24-9ab1-7c3c-b65f-1ee86ac42758", "not-a-lease"} {
+		if _, err := s.LeaseIncident(t.Context(), unknown); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("LeaseIncident(%q): err = %v, want ErrNotFound", unknown, err)
+		}
+	}
+}
+
 func TestRenewLease(t *testing.T) {
 	s, _ := newStore(t)
 	investigating(t, s)
