@@ -14,6 +14,8 @@ type InvestigateArgs struct {
 // Kind is persisted with each job and must never change.
 func (InvestigateArgs) Kind() string { return "investigate" }
 
+func (a InvestigateArgs) Incident() string { return a.IncidentID }
+
 // InsertOpts puts every investigate job on Queue.
 func (InvestigateArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{Queue: Queue}

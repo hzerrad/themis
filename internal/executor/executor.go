@@ -160,7 +160,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		if err := e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Verifying); err != nil {
 			return err
 		}
-		return e.Store.EnqueueTx(ctx, tx, verify.VerifyArgs{ActionID: a.ID, WindowStart: e.now()})
+		return e.Store.EnqueueTx(ctx, tx, verify.VerifyArgs{ActionID: a.ID, WindowStart: e.now(), IncidentID: a.IncidentID})
 	})
 }
 

@@ -12,10 +12,13 @@ import (
 type VerifyArgs struct {
 	ActionID    string    `json:"actionID"`
 	WindowStart time.Time `json:"windowStart"`
+	IncidentID  string    `json:"incidentID"`
 }
 
 // Kind is persisted with each job and must never change.
 func (VerifyArgs) Kind() string { return "verify" }
+
+func (a VerifyArgs) Incident() string { return a.IncidentID }
 
 // InsertOpts give up observing after about 4 hours of failures; snoozes do
 // not count.

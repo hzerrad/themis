@@ -145,7 +145,7 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return a.Store.EnqueueTx(ctx, tx, governance.ExecuteArgs{ActionID: act.ID})
+		return a.Store.EnqueueTx(ctx, tx, governance.ExecuteArgs{ActionID: act.ID, IncidentID: act.IncidentID})
 	})
 	if err != nil {
 		a.fail(w, r, err)

@@ -122,6 +122,8 @@ type EscalationArgs struct {
 // Kind is persisted with each job and must never change.
 func (EscalationArgs) Kind() string { return "notify_escalation" }
 
+func (a EscalationArgs) Incident() string { return a.IncidentID }
+
 // InsertOpts keep trying a receiver for about a day.
 func (EscalationArgs) InsertOpts() river.InsertOpts { return river.InsertOpts{MaxAttempts: 12} }
 

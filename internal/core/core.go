@@ -35,6 +35,7 @@ import (
 	"github.com/hzerrad/themis/internal/notify"
 	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
 	"github.com/hzerrad/themis/internal/web"
 
@@ -119,14 +120,14 @@ func Run(ctx context.Context, o Options) error {
 	}
 
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &intake.ProcessAlertWorker{
+	telemetry.AddUnscopedWorker(workers, &intake.ProcessAlertWorker{
 		Config: cfg,
 		Store:  s,
 		// Uncached: a few gets per alert need no watch permission.
 		Reader: mgr.GetAPIReader(),
 		Mapper: mgr.GetRESTMapper(),
 	})
-	river.AddWorker(workers, &investigation.PrepareWorker{
+	telemetry.AddIncidentWorker(workers, &investigation.PrepareWorker{
 		Config:   cfg,
 		Store:    s,
 		Reader:   mgr.GetAPIReader(),
@@ -137,17 +138,17 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
-	river.AddWorker(workers, govern)
-	river.AddWorker(workers, &approval.ExpireWorker{Store: s})
+	telemetry.AddIncidentWorker(workers, govern)
+	telemetry.AddUnscopedWorker(workers, &approval.ExpireWorker{Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
 		return err
 	}
 	defer closeExecutor()
-	river.AddWorker(workers, &execution.Worker{Store: s, Executor: executor})
-	river.AddWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
-	river.AddWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
-	river.AddWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications})
+	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
+	telemetry.AddIncidentWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
+	telemetry.AddUnscopedWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
+	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications})
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
