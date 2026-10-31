@@ -3,6 +3,7 @@ package web_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -33,5 +34,38 @@ func TestLeavesOtherPathsToTheAPI(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/intake/alertmanager", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("GET on a POST route = %d, want 405", rec.Code)
+	}
+}
+
+// internalWords are Themis's own terms. The page speaks to operators, who read
+// it under pressure: it uses plain words, and Kubernetes' where they fit.
+var internalWords = []string{
+	"governance", "governed", "predicate", "hypothes", "capability", "digest", "lease",
+	"blast radius", "safety event", "abstain", "proposal", "remediation", "derived",
+}
+
+// literal matches the string literals of the script, and the text of the page.
+var literal = regexp.MustCompile("\"[^\"\\n]*\"|`[^`]*`|>[^<]+<")
+
+// interpolation matches the code inside a template literal.
+var interpolation = regexp.MustCompile(`\$\{[^}]*\}`)
+
+func TestPage_SpeaksPlainly(t *testing.T) {
+	mux := http.NewServeMux()
+	web.Register(mux)
+	for _, path := range []string{"/", "/app.js"} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+		for _, lit := range literal.FindAllString(rec.Body.String(), -1) {
+			if strings.HasPrefix(lit, "\"/") || strings.HasPrefix(lit, "`/") {
+				continue // API paths
+			}
+			text := interpolation.ReplaceAllString(lit, "")
+			for _, w := range internalWords {
+				if strings.Contains(strings.ToLower(text), w) {
+					t.Errorf("%s shows %q, which uses the internal word %q", path, lit, w)
+				}
+			}
+		}
 	}
 }
