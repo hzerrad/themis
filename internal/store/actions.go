@@ -34,8 +34,8 @@ var (
 	ErrDigestMismatch   = errors.New("the approval names another digest")
 	ErrExpired          = errors.New("the approval window has passed")
 	ErrAlreadyDecided   = errors.New("the action is no longer awaiting approval")
-	ErrNotAuthorized    = errors.New("the action is not authorized")
-	ErrApprovalUnusable = errors.New("the approval is consumed or bound to another digest")
+	ErrNotAuthorized    = errors.New("the fix was not approved")
+	ErrApprovalUnusable = errors.New("its approval was already used, or was for another version of the fix")
 )
 
 // Action is a governed action, derived from live state, never from proposal

@@ -55,7 +55,7 @@ func (w *Worker) Execute(ctx context.Context, actionID string) error {
 // executor reached by the last attempt. Nothing was written then.
 func (w *Worker) execute(ctx context.Context, actionID string, last bool) error {
 	if w.Executor == nil {
-		return w.cancel(ctx, actionID, "no executor is enabled: Themis does not write to the cluster")
+		return w.cancel(ctx, actionID, "Not applied: the executor is turned off, so Themis can't change workloads. Turn it on with executor.enabled in the Helm values.")
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -66,7 +66,7 @@ func (w *Worker) execute(ctx context.Context, actionID string, last bool) error 
 	}
 	if c == codes.FailedPrecondition {
 		// Claimed by an earlier attempt, or refused before anything ran.
-		return w.cancel(ctx, actionID, "the executor refused the action: "+status.Convert(err).Message())
+		return w.cancel(ctx, actionID, "Not applied: the executor refused it, because "+status.Convert(err).Message()+".")
 	}
 	// The reply may be lost after the executor acted: its record decides.
 	if _, recErr := w.Store.ActionExecution(ctx, w.Store.DB(), actionID); recErr == nil {
@@ -75,7 +75,7 @@ func (w *Worker) execute(ctx context.Context, actionID string, last bool) error 
 		return recErr
 	}
 	if last {
-		return w.cancel(ctx, actionID, "the executor could not be reached: "+err.Error())
+		return w.cancel(ctx, actionID, "Not applied: the executor couldn't be reached: "+err.Error())
 	}
 	return err
 }

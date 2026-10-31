@@ -1,6 +1,7 @@
 package verify_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -54,4 +55,29 @@ func TestEvaluate_ReadyButUnstable_Contained(t *testing.T) {
 	o := healthy()
 	o.RestartDelta, o.StableFor = 2, 0
 	evaluate(t, o, criteria.Window, verify.Contained, true)
+}
+
+// What verification found reads as a sentence about pods, never as a code.
+func TestExplain(t *testing.T) {
+	o := verify.Observation{DesiredReplicas: 3, ReadyReplicas: 1, ReadyBefore: 2, RestartDelta: 4, NewOOMKills: 2}
+	for outcome, want := range map[verify.Outcome]string{
+		verify.Resolved:     "The fix worked: 1 of 3 pods are ready and stayed healthy.",
+		verify.Worsened:     "The fix made things worse: 1 of 3 pods are ready, down from 2.",
+		verify.Unchanged:    "The fix didn't help: 1 of 3 pods are ready, and containers ran out of memory 2 times since.",
+		verify.Inconclusive: "Can't tell whether the fix worked: the workload was changed outside Themis while Themis was checking it.",
+	} {
+		if got := verify.Explain(outcome, o); got != want {
+			t.Errorf("%s: %q, want %q", outcome, got, want)
+		}
+	}
+	if got := verify.Explain(verify.Unchanged, verify.Observation{DesiredReplicas: 3, ReadyReplicas: 1, NewOOMKills: 1}); !strings.HasSuffix(got, "ran out of memory once since.") {
+		t.Errorf("one kill: %q", got)
+	}
+	healthy := verify.Observation{DesiredReplicas: 3, ReadyReplicas: 3, RestartDelta: 2}
+	if got, want := verify.Explain(verify.Contained, healthy), "The fix helped, but the workload isn't stable: all 3 pods are ready, yet containers restarted 2 times since."; got != want {
+		t.Errorf("contained: %q, want %q", got, want)
+	}
+	if got := verify.Explain(verify.Unchanged, healthy); strings.Contains(got, "memory") {
+		t.Errorf("unchanged without memory kills mentions them: %q", got)
+	}
 }

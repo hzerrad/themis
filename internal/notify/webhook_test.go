@@ -36,7 +36,7 @@ func escalated(t *testing.T, s *store.Store) store.EscalationArgs {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store.EscalationArgs{IncidentID: id, From: incident.Verifying, To: incident.Escalated, Reason: "verification: unchanged", At: at}
+	return store.EscalationArgs{IncidentID: id, From: incident.Verifying, To: incident.Escalated, Reason: "The fix didn't help: 1 of 3 pods are ready.", At: at}
 }
 
 type received struct {
@@ -84,7 +84,7 @@ func TestWebhook_PostsTheEscalation(t *testing.T) {
 	}
 	b := r.body
 	inc, _ := b["incident"].(map[string]any)
-	if b["event"] != "incident.escalated" || inc["id"] != notice.IncidentID || inc["from"] != "verifying" || inc["reason"] != "verification: unchanged" {
+	if b["event"] != "incident.escalated" || inc["id"] != notice.IncidentID || inc["from"] != "verifying" || inc["reason"] != "The fix didn't help: 1 of 3 pods are ready." {
 		t.Errorf("payload = %v", b)
 	}
 	if inc["url"] != "https://themis.example.com/#/incidents/"+notice.IncidentID {
