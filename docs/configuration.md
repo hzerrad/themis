@@ -1,6 +1,6 @@
 # Configuration
 
-Themis reads one YAML file, `themis.yaml`. The Helm chart renders it from its values; for a local run, see [`scripts/dev/themis.yaml`](../scripts/dev/themis.yaml). A commented example is in [`deploy/config/themis.example.yaml`](../deploy/config/themis.example.yaml), and [`deploy/config/themis.schema.json`](../deploy/config/themis.schema.json) is its JSON Schema: editors with YAML language support complete and validate the file as you type.
+Themis reads one YAML file, `themis.yaml`, for how it is installed, and with the Helm chart takes its profiles and global settings from [custom resources](#configuration-resources) that apply without a restart. The chart renders the file from its values; for a local run, see [`scripts/dev/themis.yaml`](../scripts/dev/themis.yaml). A commented example is in [`deploy/config/themis.example.yaml`](../deploy/config/themis.example.yaml), and [`deploy/config/themis.schema.json`](../deploy/config/themis.schema.json) is its JSON Schema: editors with YAML language support complete and validate the file as you type.
 
 Unknown keys are errors, and Themis reports every problem at once and refuses to start rather than run half-configured.
 
@@ -16,7 +16,61 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `notifications.webhook.url` or `.urlFile` | no | Where escalations are POSTed. Use `urlFile` when the URL embeds a key. |
 | `notifications.webhook.bearerTokenFile` | no | A token sent with each notice. |
 | `notifications.externalURL` | no | Where people reach the UI, used for links in notices. |
-| `profiles` | yes | Incident classes, below. |
+| `resources.namespace` | no | Read profiles and global settings from custom resources, with this as Themis's own namespace. The chart sets it. |
+| `profiles` | without `resources` | Incident classes, below. Set either this or `resources`, not both. |
+
+## Configuration resources
+
+With the chart, configuration lives in two custom resources, so it can be applied with `kubectl` or kept in Git. Changes apply without a restart.
+
+### IncidentProfile
+
+Its spec is a [profile](#profiles), without `name`: the resource's name is the profile's. Where it lives decides what it applies to:
+
+| Namespace | Applies to | An incident records it as |
+|---|---|---|
+| Themis's own | Every enrolled namespace | `rollout-regression` |
+| An enrolled namespace | Only that namespace. On equal priority, it beats a profile from Themis's namespace. | `shop/rollout-regression` |
+| Any other | Nothing, and its status says so | |
+
+Anyone who can write an `IncidentProfile` in a namespace chooses what Themis may read and propose there, so grant it with Kubernetes RBAC as you would other write access. A team can't reach another namespace, and it can't go past the `ThemisConfig` ceiling.
+
+The chart's `profiles` value installs resources in Themis's namespace.
+
+### ThemisConfig
+
+One per cluster, named `themis`, and optional. The chart's `themisConfig` value installs it.
+
+```yaml
+apiVersion: themis.dev/v1alpha1
+kind: ThemisConfig
+metadata:
+  name: themis
+spec:
+  enrolledNamespaces: [shop]   # narrows the chart's list; it can't widen it
+  autonomyCeiling: observe     # stops Themis making changes anywhere
+```
+
+`enrolledNamespaces` can only narrow the chart's list, because that list is what grants Themis its permissions, and Themis never creates permissions while running. A namespace outside it is ignored and the status says so.
+
+### Status
+
+Each resource says whether it is in use:
+
+```bash
+kubectl get incidentprofiles -A
+kubectl -n shop get incidentprofile rollout-regression -o jsonpath='{.status.conditions}'
+```
+
+A resource that fails validation, such as a policy rule that doesn't compile or an unknown evidence template, is refused with the reason in its status. Its previous version keeps applying until the core restarts. Two profiles with the same priority in the same place can't both apply: the older one stays.
+
+What a change does to work already under way:
+
+- A new investigation or decision uses the configuration in force at that moment, and records the digest of the policy it used.
+- A fix already waiting for approval keeps the decision it got.
+- If a profile is removed, an incident using it that hasn't reached a decision stops and says so.
+
+`helm upgrade` doesn't update custom resource definitions. When a release changes them, apply them first: `kubectl apply -f deploy/helm/themis/crds`.
 
 ## Profiles
 
