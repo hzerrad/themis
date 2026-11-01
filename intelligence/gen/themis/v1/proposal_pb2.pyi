@@ -22,7 +22,6 @@ class RejectionReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     REJECTION_REASON_INVALID_PARAMS: _ClassVar[RejectionReason]
     REJECTION_REASON_UNKNOWN_EVIDENCE: _ClassVar[RejectionReason]
     REJECTION_REASON_UNKNOWN_PREDICATE: _ClassVar[RejectionReason]
-    REJECTION_REASON_OUT_OF_SCOPE: _ClassVar[RejectionReason]
     REJECTION_REASON_INCIDENT_CLOSED: _ClassVar[RejectionReason]
 PROPOSAL_STATUS_UNSPECIFIED: ProposalStatus
 PROPOSAL_STATUS_ACCEPTED: ProposalStatus
@@ -33,7 +32,6 @@ REJECTION_REASON_CAPABILITY_NOT_ALLOWED: RejectionReason
 REJECTION_REASON_INVALID_PARAMS: RejectionReason
 REJECTION_REASON_UNKNOWN_EVIDENCE: RejectionReason
 REJECTION_REASON_UNKNOWN_PREDICATE: RejectionReason
-REJECTION_REASON_OUT_OF_SCOPE: RejectionReason
 REJECTION_REASON_INCIDENT_CLOSED: RejectionReason
 
 class SubmitProposalRequest(_message.Message):

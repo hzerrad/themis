@@ -262,7 +262,6 @@ func TestExternal_RefusedSuggestionsAreKeptWithWhy(t *testing.T) {
 		change func(*themisv1.SubmitProposalRequest)
 		reason themisv1.RejectionReason
 	}{
-		{"another namespace", func(x *config.ExternalProposals) { x.Sources[0].Namespaces = []string{"elsewhere"} }, nil, themisv1.RejectionReason_REJECTION_REASON_OUT_OF_SCOPE},
 		{"a capability it may not suggest", func(x *config.ExternalProposals) { x.Sources[0].Capabilities = []string{"something.else"} }, nil, themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED},
 		{"evidence never collected", nil, func(r *themisv1.SubmitProposalRequest) {
 			r.CitedEvidenceIds = []string{"00000000-0000-7000-8000-000000000000"}
@@ -439,5 +438,24 @@ func TestKubeTokenReviewer(t *testing.T) {
 				t.Errorf("asked for audiences %v", asked)
 			}
 		})
+	}
+}
+
+// Outside its scope, an incident looks just like one that doesn't exist, and
+// a source can't leave anything on it.
+func TestExternal_IncidentOutOfScopeLooksMissing(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t, func(x *config.ExternalProposals) { x.Sources[0].Namespaces = []string{"elsewhere"} })
+	inv := e.lease(t)
+	_, outside := agent.SubmitProposal(t.Context(), suggestion(inv, "c1"))
+	wantCode(t, outside, codes.NotFound)
+	missing := suggestion(inv, "c2")
+	missing.IncidentId = "00000000-0000-7000-8000-000000000000"
+	_, absent := agent.SubmitProposal(t.Context(), missing)
+	if status.Convert(outside).Message() != status.Convert(absent).Message() {
+		t.Errorf("answers differ: %q, %q", status.Convert(outside).Message(), status.Convert(absent).Message())
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM proposals WHERE incident_id = $1`, inv.GetIncidentId()); n != 0 {
+		t.Errorf("%d proposals stored, want none", n)
 	}
 }

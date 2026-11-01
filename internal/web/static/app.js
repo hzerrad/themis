@@ -80,7 +80,6 @@ const REJECTION_LABEL = {
   REJECTION_REASON_INVALID_PARAMS: "Its details were invalid.",
   REJECTION_REASON_UNKNOWN_EVIDENCE: "It cited evidence Themis never collected.",
   REJECTION_REASON_UNKNOWN_PREDICATE: "It cited a check that doesn't exist.",
-  REJECTION_REASON_OUT_OF_SCOPE: "Whoever suggested it may not suggest fixes here.",
   REJECTION_REASON_INCIDENT_CLOSED: "The incident was already past taking suggestions.",
 };
 const EVIDENCE_LABEL = {

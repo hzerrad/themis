@@ -22,6 +22,7 @@ import (
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -177,7 +178,8 @@ func (c Caller) inScope(namespace string) bool {
 
 // submitExternal stores a suggestion from outside and, if the incident is
 // waiting for one, sends it on to governance. It passes the same checks as
-// the investigator's. What is out of scope or refused is kept, with why.
+// the investigator's. What is refused is kept, with why. An incident outside
+// the caller's scope looks missing, so it learns nothing and leaves nothing.
 func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
 	if req.GetLeaseId() != "" {
 		return nil, status.Error(codes.PermissionDenied, "a lease belongs to the investigator")
@@ -198,6 +200,10 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 		return nil, status.Error(codes.ResourceExhausted, "too many suggestions: wait a minute and try again")
 	}
 	in, err := s.Store.Incident(ctx, req.GetIncidentId())
+	if err == nil && !caller.inScope(in.Target.Namespace) {
+		s.logger().WarnContext(ctx, "a caller named an incident outside its scope", "source", caller.Source, telemetry.FieldIncidentID, in.ID)
+		return nil, status.Error(codes.NotFound, "no such incident")
+	}
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, status.Error(codes.NotFound, "no such incident")
 	}
@@ -269,12 +275,6 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 
 // judgeExternal adds to judge what only a caller from outside can get wrong.
 func (s *Server) judgeExternal(ctx context.Context, tx pgx.Tx, c Caller, in store.Incident, state incident.State, p store.Proposal, invalid string) (*rejection, error) {
-	if !c.inScope(in.Target.Namespace) {
-		return &rejection{
-			themisv1.RejectionReason_REJECTION_REASON_OUT_OF_SCOPE,
-			fmt.Sprintf("%s may not suggest fixes in %s.", c.Source, in.Target.Namespace),
-		}, nil
-	}
 	if state != incident.Investigating && state != incident.Inconclusive {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED,
