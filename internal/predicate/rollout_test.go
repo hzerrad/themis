@@ -215,8 +215,8 @@ func TestEvaluate_EveryResultCitesEvidence(t *testing.T) {
 			t.Errorf("%s = %s cites no evidence", r.Name, r.Value)
 		}
 	}
-	if len(results) != 5 {
-		t.Errorf("Evaluate returned %d results, want 5", len(results))
+	if len(results) != 6 {
+		t.Errorf("Evaluate returned %d results, want 6", len(results))
 	}
 }
 
