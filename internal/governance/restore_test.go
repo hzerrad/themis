@@ -161,3 +161,52 @@ func TestRestore_AlreadyBack(t *testing.T) {
 		t.Errorf("state = %s: %q", got, e.lastReason(t, id))
 	}
 }
+
+// Someone deployed after the verdict: rolling back now would undo their
+// change, with nobody asked. Themis leaves it alone and hands over.
+func TestRestore_LeavesAChangeMadeAfterTheFix(t *testing.T) {
+	e := shipped(t)
+	id, fix := e.restoring(t)
+	var d appsv1.Deployment
+	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout"}, &d); err != nil {
+		t.Fatal(err)
+	}
+	d.Spec.Template.Spec.Containers[0].Image = "example/checkout:hotfix"
+	if err := k8s.Update(t.Context(), &d); err != nil {
+		t.Fatal(err)
+	}
+	e.restore(t, fix)
+
+	if n := len(e.actions(t, id)); n != 1 {
+		t.Errorf("%d actions, want the fix alone", n)
+	}
+	if got := e.state(t, id); got != incident.Escalated {
+		t.Errorf("state = %s, want escalated", got)
+	}
+	if got := e.lastReason(t, id); !strings.Contains(got, "changed after Themis's fix") {
+		t.Errorf("reason = %q", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1`, governance.ExecuteArgs{}.Kind()); n != 0 {
+		t.Errorf("%d execute jobs, want none", n)
+	}
+}
+
+// A change that doesn't touch the template isn't someone else's fix: scaling
+// is no reason to leave a fix that didn't help in place.
+func TestRestore_ScalingDoesNotStopIt(t *testing.T) {
+	e := shipped(t)
+	id, fix := e.restoring(t)
+	var d appsv1.Deployment
+	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout"}, &d); err != nil {
+		t.Fatal(err)
+	}
+	replicas := int32(5)
+	d.Spec.Replicas = &replicas
+	if err := k8s.Update(t.Context(), &d); err != nil {
+		t.Fatal(err)
+	}
+	e.restore(t, fix)
+	if n := len(e.actions(t, id)); n != 2 {
+		t.Errorf("%d actions, want the fix and its restore", n)
+	}
+}
