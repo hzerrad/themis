@@ -128,6 +128,11 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 			if result.Blind, err = s.blind(ctx, inv.IncidentID, reported); err != nil {
 				return err
 			}
+			kind := "ambiguous"
+			if result.Blind {
+				kind = "blind"
+			}
+			store.AfterCommit(tx, abstentionsTotal.WithLabelValues(kind).Inc)
 		}
 		if err := s.Store.CompleteInvestigation(ctx, tx, inv.LeaseID, result); err != nil {
 			return err

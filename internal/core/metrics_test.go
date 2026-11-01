@@ -18,6 +18,7 @@ import (
 // themisMetrics are the metrics the core and executor serve from the start.
 // Intake's appear with its first request, and are checked then.
 var themisMetrics = []string{
+	"themis_abstentions_total",
 	"themis_actions_total",
 	"themis_approvals_pending",
 	"themis_approvals_total",
@@ -29,6 +30,7 @@ var themisMetrics = []string{
 	"themis_incidents",
 	"themis_investigations_total",
 	"themis_metrics_collection_errors_total",
+	"themis_missing_evidence_total",
 	"themis_notifications_total",
 	"themis_oldest_pending_approval_age_seconds",
 	"themis_policy_decisions_total",
