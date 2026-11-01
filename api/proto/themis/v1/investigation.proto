@@ -57,6 +57,8 @@ message CompleteInvestigationRequest {
   repeated Hypothesis hypotheses = 4;
   Usage usage = 5;
   Provenance provenance = 6;
+  // Evidence the investigator wanted and could not have.
+  repeated EvidenceGap gaps = 7;
 }
 
 message CompleteInvestigationResponse {}
@@ -65,6 +67,25 @@ message FailInvestigationRequest {
   string lease_id = 1;
   InvestigationFailureReason reason = 2;
   string message = 3;
+  repeated EvidenceGap gaps = 4;
+}
+
+// EvidenceGap is evidence the investigator wanted and could not have. The
+// core sees the other causes itself.
+message EvidenceGap {
+  string template = 1;
+  EvidenceGapCause cause = 2;
+  string detail = 3;
+}
+
+enum EvidenceGapCause {
+  EVIDENCE_GAP_CAUSE_UNSPECIFIED = 0;
+  // The profile does not allow the template.
+  EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE = 1;
+  // The model endpoint may not see data this sensitive, so it was withheld.
+  EVIDENCE_GAP_CAUSE_DATA_CEILING = 2;
+  // The investigation used all its evidence requests.
+  EVIDENCE_GAP_CAUSE_BUDGET_SPENT = 3;
 }
 
 message FailInvestigationResponse {}
