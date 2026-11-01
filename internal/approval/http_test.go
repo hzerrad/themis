@@ -2,6 +2,7 @@ package approval_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/approval"
 	"github.com/hzerrad/themis/internal/digest"
@@ -24,6 +27,8 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+
+	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
 const token = "admin-s3cret"
@@ -423,5 +428,67 @@ func TestIncidentDetail_HeadlineForAStopWithoutConclusion(t *testing.T) {
 	}
 	if got := e.detail(t, a.IncidentID)["Headline"]; got != remedy.HeadlineBlind {
 		t.Errorf("Headline = %v, want %q", got, remedy.HeadlineBlind)
+	}
+}
+
+type fakeSuggestions struct {
+	got  *themisv1.SubmitProposalRequest
+	resp *themisv1.SubmitProposalResponse
+	err  error
+}
+
+func (f *fakeSuggestions) SubmitFromPerson(_ context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
+	f.got = req
+	return f.resp, f.err
+}
+
+func TestSuggest(t *testing.T) {
+	const incidentID = "01890000-0000-7000-8000-000000000000"
+	body := `{"clientProposalId":"c1","rollbackToRevision":{"revision":"1"},"rationale":"why"}`
+	tests := []struct {
+		name string
+		f    *fakeSuggestions
+		body string
+		want int
+	}{
+		{"accepted", &fakeSuggestions{resp: &themisv1.SubmitProposalResponse{ProposalId: "p1"}}, body, http.StatusOK},
+		{"not JSON", &fakeSuggestions{}, "nope", http.StatusBadRequest},
+		{"too many", &fakeSuggestions{err: status.Error(codes.ResourceExhausted, "wait")}, body, http.StatusTooManyRequests},
+		{"no such incident", &fakeSuggestions{err: status.Error(codes.NotFound, "no such incident")}, body, http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenFile := filepath.Join(t.TempDir(), "token")
+			if err := os.WriteFile(tokenFile, []byte("s3cret"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			mux := http.NewServeMux()
+			(&approval.API{TokenFile: tokenFile, Suggestions: tt.f}).Register(mux)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/incidents/"+incidentID+"/proposals", strings.NewReader(tt.body))
+			req.Header.Set("Authorization", "Bearer s3cret")
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("status = %d (%s), want %d", rec.Code, rec.Body, tt.want)
+			}
+			if tt.want == http.StatusOK && (tt.f.got.GetIncidentId() != incidentID || tt.f.got.GetRollbackToRevision().GetRevision() != 1) {
+				t.Errorf("request = %v", tt.f.got)
+			}
+		})
+	}
+}
+
+func TestSuggest_NeedsTheToken(t *testing.T) {
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(tokenFile, []byte("s3cret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	f := &fakeSuggestions{}
+	(&approval.API{TokenFile: tokenFile, Suggestions: f}).Register(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/incidents/x/proposals", strings.NewReader("{}")))
+	if rec.Code != http.StatusUnauthorized || f.got != nil {
+		t.Errorf("status = %d, got = %v", rec.Code, f.got)
 	}
 }

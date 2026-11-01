@@ -71,6 +71,7 @@ const CHECK_LABEL = {
   prior_revision_was_healthy: "The previous version was healthy",
   oom_killed_new_revision: "The new version runs out of memory",
   gitops_managed: "Managed by GitOps (Argo CD or Flux)",
+  config_changed_before_failure: "Its config changed before the failures began",
 };
 const ANSWER_LABEL = { true: "yes", false: "no", unknown: "can't tell" };
 const REJECTION_LABEL = {
@@ -79,9 +80,11 @@ const REJECTION_LABEL = {
   REJECTION_REASON_INVALID_PARAMS: "Its details were invalid.",
   REJECTION_REASON_UNKNOWN_EVIDENCE: "It cited evidence Themis never collected.",
   REJECTION_REASON_UNKNOWN_PREDICATE: "It cited a check that doesn't exist.",
+  REJECTION_REASON_OUT_OF_SCOPE: "Whoever suggested it may not suggest fixes here.",
+  REJECTION_REASON_INCIDENT_CLOSED: "The incident was already past taking suggestions.",
 };
 const EVIDENCE_LABEL = {
-  rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs",
+  rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs", referenced_config: "Config it refers to",
 };
 const ACTOR_LABEL = {
   intake: "alert intake", investigation: "Themis", investigator: "the investigation", governance: "policy check",
@@ -149,9 +152,19 @@ function changesTable(changes) {
     h("caption", { class: "muted" }, "Values that look like secrets are hidden. For commands and arguments, only the fact that they change is shown."));
 }
 
+// suggestedBy names who suggested a fix, and whether that is proven. Themis's
+// own investigator holds a lease; a person shares the admin token, so it
+// proves the token and not which person.
+function suggestedBy(p) {
+  const source = (p.Provenance && p.Provenance.source) || "";
+  if (p.LeaseID) return "Themis's investigator";
+  if (source === "admin-token") return "A person with the admin token";
+  return p.Authenticated ? `${source} (identity checked)` : `${source || "Unknown"} (identity not checked)`;
+}
+
 function proposalPanel(p) {
   return h("div", { class: "panel" },
-    h("h3", {}, "What the model suggested"),
+    h("h3", {}, "What was suggested"),
     h("dl", {},
       h("dt", {}, "Status"), h("dd", {}, h("span", { class: `state ${p.Status === "rejected" ? "bad" : "neutral"}` }, label(SUGGESTION_LABEL, p.Status)), p.RejectionReason ? h("div", {}, label(REJECTION_LABEL, p.RejectionReason)) : null),
       h("dt", {}, "Fix"), h("dd", {}, fix(p.Capability, p.Params)),
@@ -160,6 +173,7 @@ function proposalPanel(p) {
       h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
       h("dt", {}, "Checks cited"), h("dd", {}, (p.CitedPredicates || []).map((c) => label(CHECK_LABEL, c)).join("; ") || "—"),
+      h("dt", {}, "Suggested by"), h("dd", {}, suggestedBy(p)),
       h("dt", {}, "Model"), h("dd", {}, (p.Provenance && p.Provenance.model) || "—"),
       p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null));
 }
