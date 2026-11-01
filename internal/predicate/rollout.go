@@ -11,11 +11,12 @@ import (
 )
 
 const (
-	NameRolloutRecent            = "rollout_recent"
-	NameFailureOnsetAfterRollout = "failure_onset_after_rollout"
-	NamePriorRevisionWasHealthy  = "prior_revision_was_healthy"
-	NameOOMKilledNewRevision     = "oom_killed_new_revision"
-	NameGitOpsManaged            = "gitops_managed"
+	NameRolloutRecent              = "rollout_recent"
+	NameFailureOnsetAfterRollout   = "failure_onset_after_rollout"
+	NamePriorRevisionWasHealthy    = "prior_revision_was_healthy"
+	NameOOMKilledNewRevision       = "oom_killed_new_revision"
+	NameGitOpsManaged              = "gitops_managed"
+	NameConfigChangedBeforeFailure = "config_changed_before_failure"
 )
 
 // gitOpsManagers are field managers of GitOps controllers.
@@ -255,4 +256,85 @@ func GitOpsManaged(b evidence.Bundle) Result {
 		}
 	}
 	return result(NameGitOpsManaged, False, "no GitOps markers or managers", id)
+}
+
+// releaseSpread is how long after a rollout a ConfigMap write still counts as
+// part of the same release: tools apply a release's objects in any order.
+const releaseSpread = time.Minute
+
+// ConfigChangedBeforeFailure: a ConfigMap the target refers to changed after
+// the current revision rolled out and no later than the first failure, so
+// rolling back the revision might not undo the cause. Secrets are never read,
+// so a change to one cannot be seen, and the reason says so.
+func ConfigChangedBeforeFailure(b evidence.Bundle) Result {
+	var cfg evidence.ReferencedConfigView
+	cid, ok := latest(b, evidence.ReferencedConfig, &cfg)
+	if !ok {
+		return result(NameConfigChangedBeforeFailure, Unknown, "no list of referenced configuration")
+	}
+	unseen := ""
+	if secrets := countSecrets(cfg); secrets > 0 {
+		unseen = fmt.Sprintf("; %d referenced Secret(s) can't be checked", secrets)
+	}
+	for _, r := range cfg.Refs {
+		if r.Kind == evidence.ConfigKindConfigMap && r.Missing && !r.Optional {
+			return result(NameConfigChangedBeforeFailure, Unknown, "ConfigMap "+r.Name+" is referenced but doesn't exist", cid)
+		}
+	}
+	var h evidence.RolloutHistoryView
+	hid, ok := latest(b, evidence.RolloutHistory, &h)
+	if !ok {
+		return result(NameConfigChangedBeforeFailure, Unknown, "no rollout history")
+	}
+	cur, ok := currentRevision(h)
+	at := rolloutAt(h, cur)
+	if !ok || at.IsZero() {
+		return result(NameConfigChangedBeforeFailure, Unknown, "the rollout time is unknown")
+	}
+	first, ok := firstFailure(b)
+	if !ok {
+		return result(NameConfigChangedBeforeFailure, Unknown, "no failure with a known time")
+	}
+	for _, r := range cfg.Refs {
+		if r.Kind != evidence.ConfigKindConfigMap || r.Missing {
+			continue
+		}
+		if r.ChangedAt.IsZero() {
+			return result(NameConfigChangedBeforeFailure, Unknown, "ConfigMap "+r.Name+" doesn't say when it last changed", cid)
+		}
+		if r.ChangedAt.After(at.Add(releaseSpread)) && !r.ChangedAt.After(first.at) {
+			return result(NameConfigChangedBeforeFailure, True,
+				fmt.Sprintf("ConfigMap %s changed at %s, after revision %s and before %s", r.Name, r.ChangedAt.Format(time.RFC3339), cur.Revision, first.what), cid, hid, first.id)
+		}
+	}
+	return result(NameConfigChangedBeforeFailure, False, "no referenced ConfigMap changed between the rollout and the first failure"+unseen, cid, hid, first.id)
+}
+
+func countSecrets(cfg evidence.ReferencedConfigView) int {
+	n := 0
+	for _, r := range cfg.Refs {
+		if r.Kind == evidence.ConfigKindSecret {
+			n++
+		}
+	}
+	return n
+}
+
+// firstFailure is the earliest failure, if every failure has a time: one
+// without could be earlier still.
+func firstFailure(b evidence.Bundle) (failure, bool) {
+	fs := failures(b)
+	if len(fs) == 0 {
+		return failure{}, false
+	}
+	first := fs[0]
+	for _, f := range fs {
+		if f.at.IsZero() {
+			return failure{}, false
+		}
+		if f.at.Before(first.at) {
+			first = f
+		}
+	}
+	return first, true
 }
