@@ -230,6 +230,20 @@ NEXT=$(api "/v1/incidents/$ID" | field 'd["Incident"].get("supersededBy","")')
 check "a new incident takes its place" [ -n "$NEXT" ]
 check "the new incident is investigated" [ "$(wait_state "$NEXT" 300 awaiting_approval escalated closed_no_action)" = awaiting_approval ]
 
+log "7. evidence Themis may not read is named, with how to allow it"
+READ_ROLE="role/themis-core-read"
+CORE_RULE=$($K -n shop get "$READ_ROLE" -o jsonpath='{.rules[0].resources}')
+WITHOUT_EVENTS=$(python3 -c 'import json,sys; print(json.dumps([r for r in json.loads(sys.argv[1]) if r != "events"]))' "$CORE_RULE")
+$K -n shop patch "$READ_ROLE" --type=json -p "[{\"op\":\"replace\",\"path\":\"/rules/0/resources\",\"value\":$WITHOUT_EVENTS}]" >/dev/null
+ID=$(incident_after_break)
+check "an incident opens though Themis may not read events" [ -n "$ID" ]
+wait_state "$ID" 300 awaiting_approval closed_no_action escalated >/dev/null
+MISSING=$(api "/v1/incidents/$ID" | field '"\n".join(d.get("Missing") or [])')
+printf '%s\n' "$MISSING" | sed 's/^/  /'
+check "the incident says Themis may not read the events, and which Role to check" \
+  grep -q "The events couldn't be read: Themis isn't allowed to read them in shop, though shop is enrolled. Check the Role Themis has in shop." <<<"$MISSING"
+$K -n shop patch "$READ_ROLE" --type=json -p "[{\"op\":\"replace\",\"path\":\"/rules/0/resources\",\"value\":$CORE_RULE}]" >/dev/null
+
 log "telemetry leaks no workload data"
 # An unreadable source would hide a leak.
 for d in themis-core themis-executor themis-intelligence; do
