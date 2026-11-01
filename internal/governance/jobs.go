@@ -22,3 +22,14 @@ type ExecuteArgs struct {
 func (ExecuteArgs) Kind() string { return "execute" }
 
 func (a ExecuteArgs) Incident() string { return a.IncidentID }
+
+// RestoreArgs put back what action changed, after it didn't help.
+type RestoreArgs struct {
+	ActionID   string `json:"actionID"`
+	IncidentID string `json:"incidentID"`
+}
+
+// Kind is persisted with each job and must never change.
+func (RestoreArgs) Kind() string { return "restore" }
+
+func (a RestoreArgs) Incident() string { return a.IncidentID }

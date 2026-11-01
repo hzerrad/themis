@@ -153,6 +153,7 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	telemetry.AddIncidentWorker(workers, govern)
+	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &approval.ExpireWorker{Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
