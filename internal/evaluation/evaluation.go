@@ -24,7 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
 )
@@ -158,18 +160,35 @@ func Load(dir string) (Scenario, error) {
 // Bundle is what a replay needs, with nothing random in it, so a stale one
 // shows as a changed file.
 type Bundle struct {
-	Scenario string `json:"scenario"`
-	Version  int    `json:"version"`
+	Scenario      string `json:"scenario"`
+	Version       int    `json:"version"`
+	Difficulty    string `json:"difficulty"`
+	IncidentClass string `json:"incident_class"`
+
+	// Truth is for the scorer: the replay never shows it to the model.
+	Truth Truth `json:"truth"`
 
 	Target incident.TargetRef `json:"target"`
+
+	Capabilities        []string `json:"capabilities"`
+	MaxSteps            int      `json:"max_steps"`
+	MaxEvidenceRequests int      `json:"max_evidence_requests"`
 
 	// Initial is what the investigation starts with; Requestable is what it
 	// may ask for, by template.
 	Initial     []Item          `json:"initial"`
 	Requestable map[string]Item `json:"requestable"`
-	Allowed     []string        `json:"allowed"`
+	Templates   []Template      `json:"templates"`
 
 	Predicates []Check `json:"predicates"`
+}
+
+// Template is an evidence template, described as the core describes it to an
+// investigator.
+type Template struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Params      []string `json:"params,omitempty"`
 }
 
 // Item is one piece of evidence, redacted as the core would send it.
@@ -203,7 +222,12 @@ func Build(ctx context.Context, dir string, s Scenario) (Bundle, error) {
 		evidence.NewReferencedConfig(), evidence.NewContainerLogsTail(fileLogs{dir: filepath.Join(dir, "logs")}),
 	)
 
-	b := Bundle{Scenario: s.Name, Version: s.Version, Target: target, Requestable: map[string]Item{}, Allowed: s.Evidence.Allowed}
+	b := Bundle{
+		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
+		Truth: s.Truth, Target: target, Capabilities: config.KnownCapabilities,
+		MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
+		Requestable: map[string]Item{},
+	}
 	var initial evidence.Bundle
 	initial.Target = target
 	for _, name := range s.Evidence.Allowed {
@@ -212,6 +236,8 @@ func Build(ctx context.Context, dir string, s Scenario) (Bundle, error) {
 			return Bundle{}, fmt.Errorf("%s: %w", name, err)
 		}
 		item.ID = "ev-" + name
+		about := grpcserver.Templates[name]
+		b.Templates = append(b.Templates, Template{Name: name, Description: about.GetDescription(), Params: about.GetParams()})
 		out := Item{
 			ID: item.ID, Template: name, Data: string(item.Data), Truncated: item.Truncated,
 			OriginalBytes: item.OriginalBytes, Redactions: item.Redactions, Classification: string(item.Classification),
