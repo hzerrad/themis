@@ -426,8 +426,17 @@ func TestIncidentDetail_HeadlineForAStopWithoutConclusion(t *testing.T) {
 	if _, err := e.pool.Exec(t.Context(), `UPDATE investigations SET conclusion = 'inconclusive', blind = true WHERE incident_id = $1`, a.IncidentID); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.detail(t, a.IncidentID)["Headline"]; got != remedy.HeadlineBlind {
-		t.Errorf("Headline = %v, want %q", got, remedy.HeadlineBlind)
+	// Someone's suggestion moved it on: what's next matters more now.
+	if got := e.detail(t, a.IncidentID)["Headline"]; got != nil {
+		t.Errorf("an incident awaiting approval has headline %v", got)
+	}
+	for _, state := range []incident.State{incident.Inconclusive, incident.ClosedNoAction} {
+		if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = $2 WHERE id = $1`, a.IncidentID, state); err != nil {
+			t.Fatal(err)
+		}
+		if got := e.detail(t, a.IncidentID)["Headline"]; got != remedy.HeadlineBlind {
+			t.Errorf("%s: Headline = %v, want %q", state, got, remedy.HeadlineBlind)
+		}
 	}
 }
 

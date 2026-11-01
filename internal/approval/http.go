@@ -157,7 +157,8 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 	}
 	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
 		d.Investigation = &inv
-		if inv.Conclusion == "inconclusive" {
+		// Once someone's suggestion moves it on, what's next matters more.
+		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction) {
 			d.Headline = remedy.Headline(inv.Blind)
 		}
 	} else if !errors.Is(err, store.ErrNotFound) {
