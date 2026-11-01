@@ -308,3 +308,35 @@ func waitFor(t *testing.T, what string, done func() bool) {
 		time.Sleep(50 * time.Millisecond)
 	}
 }
+
+// An agent can be let in, or shut out, with no restart.
+func TestThemisConfigNamesWhoMaySuggestFixes(t *testing.T) {
+	f := newFixture(t)
+	tc := themisConfig(map[string]any{"externalProposals": map[string]any{"sources": []any{map[string]any{
+		"serviceAccount": "agents/triage", "namespaces": []any{f.team}, "capabilities": []any{config.KnownCapabilities[0]},
+	}}}})
+	apply(t, tc)
+	if _, ok := f.refresh(t).ExternalProposals.Source("agents/triage"); !ok {
+		t.Error("the agent wasn't let in")
+	}
+	if err := k8s.Delete(t.Context(), tc); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.refresh(t).ExternalProposals.Source("agents/triage"); ok {
+		t.Error("the agent is still let in")
+	}
+}
+
+func TestThemisConfigWithAnInvalidSourceIsRefused(t *testing.T) {
+	f := newFixture(t)
+	tc := themisConfig(map[string]any{"externalProposals": map[string]any{"sources": []any{map[string]any{
+		"serviceAccount": "not-an-account", "namespaces": []any{f.team}, "capabilities": []any{"x"},
+	}}}})
+	apply(t, tc)
+	if cfg := f.refresh(t); len(cfg.ExternalProposals.Sources) != 0 {
+		t.Errorf("sources = %+v, want none", cfg.ExternalProposals.Sources)
+	}
+	if status, _, _ := accepted(t, tc); status != "False" {
+		t.Errorf("Accepted = %s", status)
+	}
+}

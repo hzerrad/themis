@@ -49,6 +49,12 @@ type PolicyInput struct {
 	// Restore is set when the action puts back what Themis changed, after
 	// a fix that didn't help. Rules see it as action.restore.
 	Restore bool
+
+	// Source says who suggested the action and whether that is proven: only
+	// that, so a source can't argue its way past a rule.
+	Source        string
+	Authenticated bool
+	External      bool
 }
 
 // costLimit bounds a rule's evaluation.
@@ -76,6 +82,7 @@ func CompilePolicy(p config.Policy) (*Policy, error) {
 		cel.Variable("action", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("target", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("predicates", cel.MapType(cel.StringType, cel.StringType)),
+		cel.Variable("proposal", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("mode", cel.StringType),
 	)
 	if err != nil {
@@ -118,6 +125,7 @@ func (p *Policy) Evaluate(in PolicyInput) Decision {
 		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
 		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},
 		"predicates": in.Predicates,
+		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
 		"mode":       p.mode,
 	}
 	d := Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}

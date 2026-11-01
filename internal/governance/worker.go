@@ -121,6 +121,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	decision := policy.Evaluate(PolicyInput{
 		Capability: rollback.Name, Risk: "medium", Namespace: in.Target.Namespace,
 		ManagedBy: live.ManagedBy, Predicates: predicates,
+		Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == "",
 	})
 
 	a, err := w.action(in, p, live, revision, decision, profile.EffectivePolicy())

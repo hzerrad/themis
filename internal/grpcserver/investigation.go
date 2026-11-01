@@ -120,6 +120,10 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		if err != nil {
 			return err
 		}
+		// Holds off a suggestion from outside until the outcome is decided.
+		if _, err := s.Store.LockIncident(ctx, tx, inv.IncidentID); err != nil {
+			return err
+		}
 		reported, err := s.recordReportedGaps(ctx, tx, inv, req.GetGaps())
 		if err != nil {
 			return err
@@ -139,6 +143,20 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		}
 		if conclusion == "inconclusive" {
 			store.CountInvestigation(tx, store.InvestigationAbstained)
+			proposals, err := s.Store.Proposals(ctx, tx, inv.IncidentID)
+			if err != nil {
+				return err
+			}
+			if p, ok := nextProposal(proposals, inv.LeaseID); ok {
+				if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
+					return err
+				}
+				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
+			}
+			// Someone may yet suggest a fix: an expiry job closes it if not.
+			if s.Config.Current().ExternalProposals.EffectiveWindow() > 0 {
+				return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive)
+			}
 			return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
@@ -147,13 +165,11 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		if err != nil {
 			return err
 		}
-		for _, p := range proposals {
-			if p.LeaseID == inv.LeaseID && p.Status == store.ProposalAccepted {
-				if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Diagnosed); err != nil {
-					return err
-				}
-				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
+		if p, ok := nextProposal(proposals, inv.LeaseID); ok {
+			if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Diagnosed); err != nil {
+				return err
 			}
+			return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 		}
 		return s.advance(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
@@ -161,6 +177,22 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		return nil, s.internal(ctx, err)
 	}
 	return &themisv1.CompleteInvestigationResponse{}, nil
+}
+
+// nextProposal picks the accepted proposal to govern: the investigation's own
+// first, then the first suggested from outside.
+func nextProposal(proposals []store.Proposal, leaseID string) (store.Proposal, bool) {
+	for _, own := range []bool{true, false} {
+		for _, p := range proposals {
+			if p.Status != store.ProposalAccepted {
+				continue
+			}
+			if (own && p.LeaseID == leaseID) || (!own && p.LeaseID == "") {
+				return p, true
+			}
+		}
+	}
+	return store.Proposal{}, false
 }
 
 func investigationResult(conclusion string, req *themisv1.CompleteInvestigationRequest) (store.InvestigationResult, error) {

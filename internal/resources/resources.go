@@ -142,6 +142,10 @@ func (l *Live) read(ctx context.Context) (config.Config, []report, error) {
 		cfg.EnrolledNamespaces = keepEnrolled(settings.EnrolledNamespaces, l.base.EnrolledNamespaces)
 	}
 
+	if settings.ExternalProposals.Window.Duration != 0 || len(settings.ExternalProposals.Sources) > 0 {
+		cfg.ExternalProposals = settings.ExternalProposals
+	}
+
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(IncidentProfileKind.GroupVersion().WithKind(IncidentProfileKind.Kind + "List"))
 	if err := l.Reader.List(ctx, list); err != nil {
@@ -202,6 +206,9 @@ func (l *Live) parseSettings(u *unstructured.Unstructured) (config.ThemisConfigS
 	var spec config.ThemisConfigSpec
 	if err := decodeSpec(u, &spec); err != nil {
 		return spec, nil, err
+	}
+	if err := spec.ExternalProposals.Validate(); err != nil {
+		return spec, nil, fmt.Errorf("externalProposals: %w", err)
 	}
 	if m := spec.AutonomyCeiling; m != "" && m != config.ModeGuarded && m != config.ModeObserve {
 		return spec, nil, fmt.Errorf("autonomyCeiling must be guarded or observe, got %q", m)
