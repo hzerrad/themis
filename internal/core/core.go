@@ -176,6 +176,7 @@ func Run(ctx context.Context, o Options) error {
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &approval.ExpireWorker{Store: s})
+	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
 		return err
@@ -199,17 +200,20 @@ func Run(ctx context.Context, o Options) error {
 		river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) {
 			return reconcile.Args{}, nil
 		}, nil),
+		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
+			return investigation.CloseUndecidedArgs{}, nil
+		}, nil),
 	}, log)
 	if err != nil {
 		return err
 	}
 
-	investigators := &grpcserver.Server{Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}
+	investigators := &grpcserver.Server{Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcserver.KubeTokenReviewer{Clientset: clientset}}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: current}}).Register(mux)
+	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators}).Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),

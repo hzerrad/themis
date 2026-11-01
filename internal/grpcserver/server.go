@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,12 @@ type Server struct {
 	Logger   *slog.Logger
 	Now      func() time.Time
 	LeaseFor time.Duration
+
+	// Reviewer proves who a caller outside Themis is. Without one, there are
+	// no such callers.
+	Reviewer TokenReviewer
+
+	limiters sync.Map
 }
 
 // Register serves every service of s on g.
@@ -62,6 +69,14 @@ func (s *Server) Register(g *grpc.Server) {
 func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
 	authenticate := RequireToken(tokenFile)
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if caller, external, err := s.externalCaller(ctx, tokenFile, info.FullMethod); err != nil {
+			return nil, err
+		} else if external {
+			ctx = withCaller(ctx, caller)
+			resp, err := handler(ctx, req)
+			s.logger().DebugContext(ctx, "gRPC request served", "method", info.FullMethod, "code", status.Code(err).String(), "source", caller.Source)
+			return resp, err
+		}
 		logCtx := ctx
 		resp, err := authenticate(ctx, req, info, func(ctx context.Context, req any) (any, error) {
 			if r, ok := req.(interface{ GetLeaseId() string }); ok {
