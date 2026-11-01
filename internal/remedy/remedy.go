@@ -35,6 +35,7 @@ var nouns = map[string]noun{
 	evidence.PodStates:         {"The pod states", true},
 	evidence.TargetEvents:      {"The events", true},
 	evidence.ContainerLogsTail: {"Container logs", true},
+	evidence.ReferencedConfig:  {"The list of referenced configuration", false},
 }
 
 func nounOf(template string) noun {
