@@ -93,13 +93,14 @@ externalProposals:
 
 **People** send the same request as JSON to `POST /v1/incidents/{id}/proposals` with the admin token. That token is shared, so the record proves the token was used, not who used it.
 
-**When a suggestion is taken:** while Themis investigates, and for `window` after it couldn't decide. `window` defaults to 15 minutes with sources and to none without. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own.
+**When a suggestion is taken:** while Themis investigates, and for `window` after it couldn't decide. `window` defaults to 15 minutes with sources and to none without. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
 
 **What policy sees:** rules can read `proposal.source`, `proposal.authenticated` and `proposal.external`, all strings. To send every outside suggestion to a person, or refuse them, write a rule on `proposal.external == "true"`.
 
 **Limits:**
 
 - Themis governs what is suggested through it, not what an agent does with its own credentials.
+- An incident outside a source's `namespaces` looks the same as one that doesn't exist: the source gets "not found", nothing is stored on the incident, and the core logs the attempt.
 - `SubmitProposal` must cite evidence Themis collected and name the incident's exact target, UID included. Naming another target is recorded as a safety event.
 - Evidence an agent reads is already redacted. Anything above its `ceiling` is withheld, and the response says how many items.
 - In-cluster gRPC isn't encrypted yet, so these tokens rely on the NetworkPolicy, like the investigator's. Tokens issued for `themis` can't be replayed against other services.
