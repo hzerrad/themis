@@ -35,6 +35,7 @@ func facts(onset predicate.Truth) []predicate.Result {
 		{Name: predicate.NameOOMKilledNewRevision, Version: "1", Value: predicate.True, Reason: "x"},
 		{Name: predicate.NameGitOpsManaged, Version: "1", Value: predicate.False, Reason: "x"},
 		{Name: predicate.NameFailureOnsetAfterRollout, Version: "1", Value: onset, Reason: "x"},
+		{Name: predicate.NameConfigChangedBeforeFailure, Version: "1", Value: predicate.False, Reason: "x"},
 	}
 }
 
@@ -54,6 +55,19 @@ func TestScenario_MissingEvidenceAllowsNoAction(t *testing.T) {
 	id, p := e.diagnosed(t, "rollout-regression", 1, facts(predicate.Unknown))
 	e.govern(t, p)
 	assertNotActed(t, e, id)
+}
+
+// A referenced ConfigMap changed between the rollout and the failures, so the
+// rollout may not be to blame, and rolling back wouldn't undo the change.
+func TestScenario_ConfigChangeBeforeTheFailureIsNotRolledBack(t *testing.T) {
+	for _, config := range []predicate.Truth{predicate.True, predicate.Unknown} {
+		e := shipped(t)
+		results := facts(predicate.True)
+		results[3].Value = config
+		id, p := e.diagnosed(t, "rollout-regression", 1, results)
+		e.govern(t, p)
+		assertNotActed(t, e, id)
+	}
 }
 
 // The control: a bad rollout, with every fact known, waits for approval.

@@ -78,7 +78,8 @@ spec:
               {{- end }}
 {{- range .Values.enrolledNamespaces }}
 ---
-# Read-only: workloads, pods, their logs and events. Never Secrets.
+# Read-only: workloads, pods, their logs and events, and when the ConfigMaps
+# they refer to changed. Never Secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -87,7 +88,7 @@ metadata:
   labels: {{- include "themis.labels" $ | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: [pods, pods/log, events, persistentvolumeclaims]
+    resources: [pods, pods/log, events, persistentvolumeclaims, configmaps]
     verbs: [get, list]
   - apiGroups: [apps]
     resources: [deployments, replicasets, statefulsets, daemonsets]
