@@ -232,6 +232,7 @@ var allStates = []incident.State{
 	incident.Authorized,
 	incident.Executing,
 	incident.Verifying,
+	incident.Restoring,
 	incident.Resolved,
 	incident.ContainedEscalated,
 	incident.Escalated,
