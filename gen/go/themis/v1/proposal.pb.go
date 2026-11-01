@@ -79,7 +79,6 @@ const (
 	RejectionReason_REJECTION_REASON_INVALID_PARAMS         RejectionReason = 3
 	RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE       RejectionReason = 4
 	RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE      RejectionReason = 5
-	RejectionReason_REJECTION_REASON_OUT_OF_SCOPE           RejectionReason = 6
 	RejectionReason_REJECTION_REASON_INCIDENT_CLOSED        RejectionReason = 7
 )
 
@@ -92,7 +91,6 @@ var (
 		3: "REJECTION_REASON_INVALID_PARAMS",
 		4: "REJECTION_REASON_UNKNOWN_EVIDENCE",
 		5: "REJECTION_REASON_UNKNOWN_PREDICATE",
-		6: "REJECTION_REASON_OUT_OF_SCOPE",
 		7: "REJECTION_REASON_INCIDENT_CLOSED",
 	}
 	RejectionReason_value = map[string]int32{
@@ -102,7 +100,6 @@ var (
 		"REJECTION_REASON_INVALID_PARAMS":         3,
 		"REJECTION_REASON_UNKNOWN_EVIDENCE":       4,
 		"REJECTION_REASON_UNKNOWN_PREDICATE":      5,
-		"REJECTION_REASON_OUT_OF_SCOPE":           6,
 		"REJECTION_REASON_INCIDENT_CLOSED":        7,
 	}
 )
@@ -688,16 +685,15 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"\x0eProposalStatus\x12\x1f\n" +
 	"\x1bPROPOSAL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PROPOSAL_STATUS_ACCEPTED\x10\x01\x12\x1c\n" +
-	"\x18PROPOSAL_STATUS_REJECTED\x10\x02*\xc3\x02\n" +
+	"\x18PROPOSAL_STATUS_REJECTED\x10\x02*\xa6\x02\n" +
 	"\x0fRejectionReason\x12 \n" +
 	"\x1cREJECTION_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" REJECTION_REASON_TARGET_MISMATCH\x10\x01\x12+\n" +
 	"'REJECTION_REASON_CAPABILITY_NOT_ALLOWED\x10\x02\x12#\n" +
 	"\x1fREJECTION_REASON_INVALID_PARAMS\x10\x03\x12%\n" +
 	"!REJECTION_REASON_UNKNOWN_EVIDENCE\x10\x04\x12&\n" +
-	"\"REJECTION_REASON_UNKNOWN_PREDICATE\x10\x05\x12!\n" +
-	"\x1dREJECTION_REASON_OUT_OF_SCOPE\x10\x06\x12$\n" +
-	" REJECTION_REASON_INCIDENT_CLOSED\x10\a2\x8a\x02\n" +
+	"\"REJECTION_REASON_UNKNOWN_PREDICATE\x10\x05\x12$\n" +
+	" REJECTION_REASON_INCIDENT_CLOSED\x10\a\"\x04\b\x06\x10\x062\x8a\x02\n" +
 	"\x0fProposalService\x12U\n" +
 	"\x0eSubmitProposal\x12 .themis.v1.SubmitProposalRequest\x1a!.themis.v1.SubmitProposalResponse\x12R\n" +
 	"\rListIncidents\x12\x1f.themis.v1.ListIncidentsRequest\x1a .themis.v1.ListIncidentsResponse\x12L\n" +
