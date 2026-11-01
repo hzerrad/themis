@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,27 +27,45 @@ const actor = "governance"
 type Worker struct {
 	river.WorkerDefaults[GovernArgs]
 
-	Config   config.Config
-	Store    *store.Store
-	Reader   client.Reader
-	Now      func() time.Time
-	policies map[string]*Policy
+	Config config.Provider
+	Store  *store.Store
+	Reader client.Reader
+	Now    func() time.Time
+
+	// policies holds compiled policies by digest of their source: profiles
+	// can change while Themis runs.
+	policies sync.Map
 }
 
-// NewWorker compiles every profile's policy, so an invalid rule stops the
-// core from starting.
-func NewWorker(cfg config.Config, s *store.Store, r client.Reader) (*Worker, error) {
-	w := &Worker{Config: cfg, Store: s, Reader: r, policies: map[string]*Policy{}}
+// NewWorker compiles the policy of every profile configured now, so an
+// invalid rule stops the core from starting.
+func NewWorker(cfg config.Provider, s *store.Store, r client.Reader) (*Worker, error) {
+	w := &Worker{Config: cfg, Store: s, Reader: r}
 	var errs []error
-	for _, p := range cfg.Profiles {
-		compiled, err := CompilePolicy(p.EffectivePolicy())
-		if err != nil {
+	for _, p := range cfg.Current().Profiles {
+		if _, err := w.policy(p); err != nil {
 			errs = append(errs, fmt.Errorf("profile %s: %w", p.Name, err))
-			continue
 		}
-		w.policies[p.Name] = compiled
 	}
 	return w, errors.Join(errs...)
+}
+
+// policy returns p's compiled policy.
+func (w *Worker) policy(p config.Profile) (*Policy, error) {
+	pol := p.EffectivePolicy()
+	key, err := json.Marshal(pol)
+	if err != nil {
+		return nil, err
+	}
+	if c, ok := w.policies.Load(string(key)); ok {
+		return c.(*Policy), nil //nolint:forcetypeassert // only *Policy is stored
+	}
+	compiled, err := CompilePolicy(pol)
+	if err != nil {
+		return nil, err
+	}
+	w.policies.Store(string(key), compiled)
+	return compiled, nil
 }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
@@ -66,7 +85,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if in.State != incident.Diagnosed || p.Status != store.ProposalAccepted {
 		return nil
 	}
-	profile, ok := w.Config.Profile(in.Profile)
+	profile, ok := w.Config.Current().Profile(in.Profile)
 	if !ok {
 		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
 	}
@@ -95,7 +114,11 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if live.ManagedBy != "" {
 		predicates[predicate.NameGitOpsManaged] = predicate.True.String()
 	}
-	decision := w.policies[profile.Name].Evaluate(PolicyInput{
+	policy, err := w.policy(profile)
+	if err != nil {
+		return err
+	}
+	decision := policy.Evaluate(PolicyInput{
 		Capability: rollback.Name, Risk: "medium", Namespace: in.Target.Namespace,
 		ManagedBy: live.ManagedBy, Predicates: predicates,
 	})

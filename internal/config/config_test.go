@@ -370,3 +370,34 @@ func TestProfile_PolicyAndVerificationDefaults(t *testing.T) {
 		t.Errorf("verification = %+v", v)
 	}
 }
+
+func TestValidate_ProfilesComeFromOnePlace(t *testing.T) {
+	c := mustParse(t, validYAML)
+	c.Resources = &config.Resources{Namespace: "themis"}
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "IncidentProfile") {
+		t.Errorf("both sources: %v", err)
+	}
+	c.Profiles = nil
+	if err := c.Validate(); err != nil {
+		t.Errorf("resources alone: %v", err)
+	}
+	c.Resources = nil
+	if err := c.Validate(); err == nil {
+		t.Error("no profiles and no resources passed")
+	}
+}
+
+func TestMatchProfile_ScopeLimitsAProfileToItsNamespace(t *testing.T) {
+	c := mustParse(t, validYAML)
+	p := c.Profiles[0]
+	p.Scope = "team"
+	c.Profiles = []config.Profile{p}
+	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "other"}
+	if _, ok := c.MatchProfile(p.Match.AlertNames[0], p.Match.Labels, target); ok {
+		t.Error("a scoped profile matched outside its namespace")
+	}
+	target.Namespace = "team"
+	if _, ok := c.MatchProfile(p.Match.AlertNames[0], p.Match.Labels, target); !ok {
+		t.Error("a scoped profile didn't match in its namespace")
+	}
+}

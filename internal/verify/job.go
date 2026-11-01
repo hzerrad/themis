@@ -41,7 +41,7 @@ var outcomes = map[Outcome]incident.State{
 type Worker struct {
 	river.WorkerDefaults[VerifyArgs]
 
-	Config config.Config
+	Config config.Provider
 	Store  *store.Store
 	Reader client.Reader
 	Now    func() time.Time
@@ -81,7 +81,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 		return true, nil
 	}
 	applied, _ := a.Params["templateHash"].(string)
-	profile, _ := w.Config.Profile(in.Profile)
+	profile, _ := w.Config.Current().Profile(in.Profile)
 	v := profile.EffectiveVerification()
 	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
 
@@ -263,7 +263,7 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	if err != nil {
 		return false, err
 	}
-	profile, _ := w.Config.Profile(in.Profile)
+	profile, _ := w.Config.Current().Profile(in.Profile)
 	window := profile.EffectiveVerification().Window.Duration
 	pods := fmt.Sprintf("%d of %d pods are ready", obs.ReadyReplicas, obs.DesiredReplicas)
 	var reason string
