@@ -3,14 +3,19 @@
 package approval
 
 import (
+	"context"
 	"encoding/json/v2"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/hzerrad/themis/internal/auth"
@@ -20,6 +25,8 @@ import (
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+
+	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
 // approver is the identity of the bootstrap admin token.
@@ -34,11 +41,20 @@ type API struct {
 	Now       func() time.Time
 	// Remedy says what Themis couldn't see and how to let it.
 	Remedy remedy.Writer
+	// Suggestions takes fixes people suggest. Without it, they can't.
+	Suggestions Suggestions
+}
+
+// Suggestions takes a fix suggested by a person. The core checks it exactly
+// as it checks the investigator's.
+type Suggestions interface {
+	SubmitFromPerson(ctx context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error)
 }
 
 func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("GET /v1/incidents", a.authed(a.list, nil))
 	mux.Handle("GET /v1/incidents/{id}", a.authed(a.detail, incidentFields))
+	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(a.suggest, incidentFields))
 	mux.Handle("POST /v1/actions/{id}/approve", a.authed(a.approve, a.actionFields))
 	mux.Handle("POST /v1/actions/{id}/deny", a.authed(a.deny, a.actionFields))
 }
@@ -248,6 +264,51 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.reply(w, r, map[string]string{"state": string(store.ActionDenied)})
+}
+
+// suggest takes the same request as the gRPC API, in its JSON form.
+func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
+	if a.Suggestions == nil {
+		http.NotFound(w, r)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	if err != nil {
+		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var req themisv1.SubmitProposalRequest
+	if err := protojson.Unmarshal(body, &req); err != nil {
+		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	req.IncidentId = r.PathValue("id")
+	resp, err := a.Suggestions.SubmitFromPerson(r.Context(), &req)
+	if err != nil {
+		st := status.Convert(err)
+		http.Error(w, st.Message(), suggestionStatuses[st.Code()])
+		return
+	}
+	data, err := protojson.Marshal(resp)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(data)
+}
+
+// suggestionStatuses map what the core says about a suggestion to HTTP.
+var suggestionStatuses = map[codes.Code]int{
+	codes.InvalidArgument:    http.StatusBadRequest,
+	codes.PermissionDenied:   http.StatusForbidden,
+	codes.NotFound:           http.StatusNotFound,
+	codes.ResourceExhausted:  http.StatusTooManyRequests,
+	codes.FailedPrecondition: http.StatusConflict,
+	codes.Internal:           http.StatusInternalServerError,
+	codes.Unavailable:        http.StatusServiceUnavailable,
+	codes.Canceled:           http.StatusServiceUnavailable,
+	codes.DeadlineExceeded:   http.StatusServiceUnavailable,
 }
 
 func (a *API) decode(w http.ResponseWriter, r *http.Request, v any) bool {
