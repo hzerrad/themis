@@ -93,6 +93,7 @@ class Worker:
     async def _investigate(self, job: investigation_pb2.Investigation) -> None:
         log.info("investigation started")
         deadline = job.budget.deadline.ToSeconds() if job.budget.HasField("deadline") else None
+        gaps: list[investigation_pb2.EvidenceGap] = []
         task = asyncio.create_task(
             investigate(
                 job,
@@ -100,6 +101,7 @@ class Worker:
                 self.new_model(),
                 job.budget.max_steps or DEFAULT_MAX_STEPS,
                 deadline,
+                gaps,
             )
         )
         lost = asyncio.Event()
@@ -117,7 +119,7 @@ class Worker:
             await self._report(
                 self.core.fail,
                 investigation_pb2.FailInvestigationRequest(
-                    lease_id=job.lease_id, reason=_FAILURES[e.reason], message=str(e)
+                    lease_id=job.lease_id, reason=_FAILURES[e.reason], message=str(e), gaps=gaps
                 ),
             )
             return
@@ -129,6 +131,7 @@ class Worker:
                     lease_id=job.lease_id,
                     reason=investigation_pb2.INVESTIGATION_FAILURE_REASON_INTERNAL,
                     message=f"{type(e).__name__}: {e}",
+                    gaps=gaps,
                 ),
             )
             return
@@ -146,6 +149,7 @@ class Worker:
                 hypotheses=result.hypotheses,
                 usage=result.usage,
                 provenance=result.provenance,
+                gaps=gaps,
             ),
         )
         log.info("investigation completed", extra={"conclusion": result.conclusion})
