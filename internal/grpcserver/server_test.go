@@ -196,8 +196,8 @@ func TestLease_ReturnsJobWithInitialEvidenceAndPredicates(t *testing.T) {
 	if inv.GetTarget().GetUid() != e.target.UID {
 		t.Errorf("target = %v, want %v", inv.GetTarget(), e.target)
 	}
-	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 5 {
-		t.Errorf("%d items and %d predicates, want 2 and 5", len(inv.GetInitialEvidence()), len(inv.GetPredicates()))
+	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 6 {
+		t.Errorf("%d items and %d predicates, want 2 and 6", len(inv.GetInitialEvidence()), len(inv.GetPredicates()))
 	}
 	if len(inv.GetAllowedTemplates()) != 3 || inv.GetAllowedTemplates()[0].GetDescription() == "" {
 		t.Errorf("allowed templates = %v", inv.GetAllowedTemplates())
