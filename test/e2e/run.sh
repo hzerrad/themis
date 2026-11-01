@@ -259,6 +259,26 @@ check "coredns is untouched" [ "$($K -n kube-system get deploy coredns -o jsonpa
 check "the attempt was counted as a safety event" bash -c \
   "curl -sf http://127.0.0.1:18182/metrics | awk '/^themis_safety_events_total\\{kind=\"wrong_target\"\\}/ { found = \$2 >= 1 } END { exit !found }'"
 
+log "9. a fix that doesn't help is put back, and a person takes over"
+BEFORE=$(latest)
+heal
+# Two broken revisions: the rollback lands on another broken one.
+$K -n shop set env deploy/checkout MODE=leak >/dev/null
+$K -n shop set env deploy/checkout EXTRA=both-broken >/dev/null
+DEADLINE=$((SECONDS + 240)); ID=$BEFORE
+while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(latest); done
+check "the rollback to the other broken revision awaits approval" [ "$(wait_state "$ID" 300 awaiting_approval closed_no_action escalated)" = awaiting_approval ]
+approve "$ID" >/dev/null
+check "the fix that didn't help is put back and the incident escalated" [ "$(wait_state "$ID" 600 escalated resolved contained_escalated)" = escalated ]
+RESTORED=$(api "/v1/incidents/$ID" | field 'any(t["To"] == "restoring" for t in d["Transitions"]) and len(d["Actions"]) == 2 and d["Actions"][1]["Params"].get("restores") == d["Actions"][0]["ID"] and d["Actions"][1]["Decision"] == "allow"')
+check "the restore was its own action, allowed by policy without approval" [ "$RESTORED" = True ]
+check "checkout runs the revision from before Themis acted" [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="EXTRA")].value}')" = both-broken ]
+LAST=$(api "/v1/incidents/$ID" | field 'd["Transitions"][-1]["Reason"]')
+printf '  %s\n' "$LAST"
+# Its pods can't start, so Kubernetes may never finish the rollout: either way
+# the timeline says the workload was put back.
+check "the timeline says it was put back" grep -q "^Themis put the workload back" <<<"$LAST"
+
 log "telemetry leaks no workload data"
 # An unreadable source would hide a leak.
 for d in themis-core themis-executor themis-intelligence; do
