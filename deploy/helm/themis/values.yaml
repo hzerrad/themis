@@ -69,10 +69,14 @@ notifications:
 
 networkPolicy:
   enabled: true
+  # Namespaces whose pods may reach the core's gRPC API, for agents that suggest
+  # fixes (themisConfig.externalProposals.sources).
+  agentNamespaces: []
 
 # Global settings, installed as the ThemisConfig resource when set:
 #   enrolledNamespaces: a subset of enrolledNamespaces above
 #   autonomyCeiling: observe stops Themis making changes anywhere
+#   externalProposals: who outside Themis may suggest fixes; see the docs
 themisConfig: {}
 
 # Incident profiles, installed as IncidentProfile resources in this release's

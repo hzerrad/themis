@@ -103,6 +103,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
 | `profiles` | one profile | Incident classes, policy and verification, installed as `IncidentProfile` resources; see [Configuration](../../../docs/configuration.md#configuration-resources) |
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
+| `networkPolicy.agentNamespaces` | `[]` | Namespaces whose pods may reach the core's gRPC API, for [agents that suggest fixes](../../../docs/configuration.md#fixes-suggested-from-outside) |
 | `resources.{core,executor,intelligence}` | small | Container resources |
 
 ## Uninstall
