@@ -98,16 +98,17 @@ policy:
       decision: deny
     - name: rollback-needs-a-bad-rollout
       when: >-
-        predicates.oom_killed_new_revision != "true" ||
-        predicates.failure_onset_after_rollout != "true"
+        action.restore != "true" &&
+        (predicates.oom_killed_new_revision != "true" ||
+         predicates.failure_onset_after_rollout != "true")
       decision: deny
     - name: rollback-needs-approval
-      when: action.capability == "deployment.rollback-to-revision"
+      when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
       decision: require_approval
 ```
 
-- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), and `mode`.
-- The first rule that matches decides. When none match, the action needs approval.
+- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), and `mode`.
+- The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
 - A rule that fails to evaluate denies. Policy never fails open.
 - In **guarded** mode `allow` still needs approval: no action runs without a human. In **observe** mode every action is denied, so Themis only diagnoses and recommends.
 - An approval not given within `approvalTimeout` expires, and the incident is escalated.

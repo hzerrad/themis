@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/google/cel-go/cel"
 
@@ -45,6 +46,9 @@ type PolicyInput struct {
 	Namespace  string
 	ManagedBy  string
 	Predicates map[string]string
+	// Restore is set when the action puts back what Themis changed, after
+	// a fix that didn't help. Rules see it as action.restore.
+	Restore bool
 }
 
 // costLimit bounds a rule's evaluation.
@@ -111,12 +115,17 @@ func CompilePolicy(p config.Policy) (*Policy, error) {
 // mode never allows without approval.
 func (p *Policy) Evaluate(in PolicyInput) Decision {
 	vars := map[string]any{
-		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk},
+		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
 		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},
 		"predicates": in.Predicates,
 		"mode":       p.mode,
 	}
 	d := Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}
+	if in.Restore {
+		// Putting back what Themis changed needs no approval unless a rule
+		// asks for one: it returns the workload to how a person left it.
+		d = Decision{Outcome: Allow, Reason: "No policy rule matched, so Themis may put the workload back as it was.", PolicyDigest: p.digest}
+	}
 	for _, r := range p.rules {
 		val, _, err := r.program.Eval(vars)
 		if err != nil {
@@ -133,7 +142,7 @@ func (p *Policy) Evaluate(in PolicyInput) Decision {
 	switch {
 	case p.mode == config.ModeObserve && d.Outcome != Deny:
 		d.Outcome, d.Reason = Deny, d.Reason+" Themis is in observe mode, so it never makes changes."
-	case p.mode == config.ModeGuarded && d.Outcome == Allow:
+	case p.mode == config.ModeGuarded && d.Outcome == Allow && !in.Restore:
 		d.Outcome, d.Reason = RequireApproval, d.Reason+" In guarded mode, a person must approve every fix."
 	}
 	return d

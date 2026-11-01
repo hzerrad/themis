@@ -39,12 +39,12 @@ profiles:
           decision: deny
         - name: rollback-needs-a-bad-rollout
           when: >-
-            action.capability == "deployment.rollback-to-revision" &&
+            action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
             (predicates.oom_killed_new_revision != "true" ||
              predicates.failure_onset_after_rollout != "true")
           decision: deny
         - name: rollback-needs-approval
-          when: action.capability == "deployment.rollback-to-revision"
+          when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
           decision: require_approval
     verification:
       window: 5m
