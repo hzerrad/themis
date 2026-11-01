@@ -1,0 +1,115 @@
+{
+  "scenario": "rollout-oom",
+  "version": 1,
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "checkout",
+    "UID": "uid-deployment-checkout"
+  },
+  "initial": [
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":1,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:00:14Z\",\"lastTransitionTime\":\"2026-10-20T08:00:14Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"checkout-7d9f8b6c4\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"limits\":{\"memory\":\"64Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"checkout-7d9f8b6c4-x2kqp\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":false,\"startedAt\":\"2026-10-27T09:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"ready\":false,\"restartCount\":7,\"state\":{\"status\":\"waiting\",\"reason\":\"CrashLoopBackOff\"},\"lastTermination\":{\"status\":\"terminated\",\"reason\":\"OOMKilled\",\"exitCode\":137,\"startedAt\":\"2026-10-27T09:14:01Z\",\"finishedAt\":\"2026-10-27T09:14:02Z\"}}]},{\"name\":\"checkout-5c6a1e2f3-a1b2c\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:05Z\"}}]},{\"name\":\"checkout-5c6a1e2f3-d3e4f\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:06Z\"}}]},{\"name\":\"checkout-5c6a1e2f3-g5h6i\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:05Z\"}}]}],\"totalPods\":4}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/checkout-7d9f8b6c4-x2kqp\",\"type\":\"Warning\",\"reason\":\"BackOff\",\"message\":\"Back-off restarting failed container app in pod checkout-7d9f8b6c4-x2kqp\",\"count\":14,\"firstSeen\":\"2026-10-27T09:01:30Z\",\"lastSeen\":\"2026-10-27T09:14:05Z\"},{\"object\":\"Deployment/checkout\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set checkout-7d9f8b6c4 from 0 to 1\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"checkout-7d9f8b6c4-x2kqp\",\"container\":\"app\",\"previousRun\":true,\"logs\":\"2026-10-27T09:14:01Z INFO starting checkout 2.4.0\\n2026-10-27T09:14:01Z INFO connecting with password=[REDACTED]\\n2026-10-27T09:14:02Z INFO loading catalog into memory\\n\"}",
+      "original_bytes": 182,
+      "redactions": 1,
+      "classification": "sensitive"
+    }
+  },
+  "allowed": [
+    "rollout_history",
+    "pod_states",
+    "target_events",
+    "referenced_config",
+    "container_logs_tail"
+  ],
+  "predicates": [
+    {
+      "name": "rollout_recent",
+      "version": "1",
+      "value": "true",
+      "reason": "revision 2 rolled out 20m0s ago",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failure_onset_after_rollout",
+      "version": "1",
+      "value": "true",
+      "reason": "all 2 failures follow revision 2 at 2026-10-27T09:00:00Z",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-target_events",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "prior_revision_was_healthy",
+      "version": "1",
+      "value": "true",
+      "reason": "3 pods of revision 1 are ready and never failed",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "oom_killed_new_revision",
+      "version": "1",
+      "value": "true",
+      "reason": "checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "config_changed_before_failure",
+      "version": "1",
+      "value": "false",
+      "reason": "no referenced ConfigMap changed between the rollout and the first failure",
+      "evidence_ids": [
+        "ev-referenced_config",
+        "ev-rollout_history",
+        "ev-target_events"
+      ]
+    }
+  ]
+}

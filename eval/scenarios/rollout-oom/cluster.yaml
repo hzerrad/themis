@@ -1,0 +1,386 @@
+# A bad rollout: revision 2 lowered the memory limit, so its first pod is
+# OOMKilled on every start and the rollout is stuck. A cart pod in the same
+# namespace must not be mistaken for a checkout pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  creationTimestamp: "2026-10-20T08:00:00Z"
+  labels:
+    app: checkout
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.4.0
+          env:
+            - name: DB_PASSWORD
+              value: fixture-s3cr3t-do-not-leak
+          resources:
+            limits:
+              memory: 64Mi
+status:
+  observedGeneration: 1
+  replicas: 4
+  updatedReplicas: 1
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 1
+  conditions:
+    - type: Available
+      status: "True"
+      reason: MinimumReplicasAvailable
+      lastUpdateTime: "2026-10-20T08:00:14Z"
+      lastTransitionTime: "2026-10-20T08:00:14Z"
+    - type: Progressing
+      status: "False"
+      reason: ProgressDeadlineExceeded
+      message: ReplicaSet "checkout-7d9f8b6c4" has timed out progressing.
+      lastUpdateTime: "2026-10-27T09:10:00Z"
+      lastTransitionTime: "2026-10-27T09:10:00Z"
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-5c6a1e2f3
+  creationTimestamp: "2026-10-20T08:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: checkout
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 5c6a1e2f3
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 5c6a1e2f3
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.3.1
+          env:
+            - name: DB_PASSWORD
+              value: fixture-s3cr3t-do-not-leak
+          resources:
+            limits:
+              memory: 256Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-7d9f8b6c4
+  creationTimestamp: "2026-10-27T09:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: checkout
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 7d9f8b6c4
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 7d9f8b6c4
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.4.0
+          env:
+            - name: DB_PASSWORD
+              value: fixture-s3cr3t-do-not-leak
+          resources:
+            limits:
+              memory: 64Mi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+---
+# Revision 1: healthy.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-a1b2c
+  creationTimestamp: "2026-10-20T08:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-5c6a1e2f3
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.3.1
+      env:
+        - name: DB_PASSWORD
+          value: fixture-s3cr3t-do-not-leak
+status:
+  phase: Running
+  startTime: "2026-10-20T08:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      lastTransitionTime: "2026-10-20T08:00:12Z"
+  containerStatuses:
+    - name: app
+      image: example/checkout:2.3.1
+      imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      ready: true
+      started: true
+      restartCount: 0
+      state:
+        running:
+          startedAt: "2026-10-20T08:00:05Z"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-d3e4f
+  creationTimestamp: "2026-10-20T08:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-5c6a1e2f3
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.3.1
+      env:
+        - name: DB_PASSWORD
+          value: fixture-s3cr3t-do-not-leak
+status:
+  phase: Running
+  startTime: "2026-10-20T08:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      lastTransitionTime: "2026-10-20T08:00:14Z"
+  containerStatuses:
+    - name: app
+      image: example/checkout:2.3.1
+      imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      ready: true
+      started: true
+      restartCount: 0
+      state:
+        running:
+          startedAt: "2026-10-20T08:00:06Z"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-g5h6i
+  creationTimestamp: "2026-10-20T08:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-5c6a1e2f3
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.3.1
+      env:
+        - name: DB_PASSWORD
+          value: fixture-s3cr3t-do-not-leak
+status:
+  phase: Running
+  startTime: "2026-10-20T08:00:00Z"
+  conditions:
+    - type: Ready
+      status: "True"
+      lastTransitionTime: "2026-10-20T08:00:13Z"
+  containerStatuses:
+    - name: app
+      image: example/checkout:2.3.1
+      imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      ready: true
+      started: true
+      restartCount: 0
+      state:
+        running:
+          startedAt: "2026-10-20T08:00:05Z"
+---
+# Revision 2: OOMKilled on every start, now backing off.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp
+  creationTimestamp: "2026-10-27T09:00:00Z"
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-7d9f8b6c4
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.4.0
+      env:
+        - name: DB_PASSWORD
+          value: fixture-s3cr3t-do-not-leak
+status:
+  phase: Running
+  startTime: "2026-10-27T09:00:00Z"
+  conditions:
+    - type: Ready
+      status: "False"
+      reason: ContainersNotReady
+      lastTransitionTime: "2026-10-27T09:00:00Z"
+  containerStatuses:
+    - name: app
+      image: example/checkout:2.4.0
+      imageID: example/checkout@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      ready: false
+      started: false
+      restartCount: 7
+      containerID: containerd://cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      state:
+        waiting:
+          reason: CrashLoopBackOff
+          message: back-off 5m0s restarting failed container=app pod=checkout-7d9f8b6c4-x2kqp
+      lastState:
+        terminated:
+          reason: OOMKilled
+          exitCode: 137
+          startedAt: "2026-10-27T09:14:01Z"
+          finishedAt: "2026-10-27T09:14:02Z"
+          containerID: containerd://pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+---
+# Another app in the same namespace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cart-6b7c8d9e0-z9y8x
+  creationTimestamp: "2026-10-01T00:00:00Z"
+  labels:
+    app: cart
+spec:
+  containers:
+    - name: app
+      image: example/cart:1.0.0
+status:
+  phase: Running
+  containerStatuses:
+    - name: app
+      image: example/cart:1.0.0
+      imageID: example/cart@sha256:3333333333333333333333333333333333333333333333333333333333333333
+      ready: true
+      started: true
+      restartCount: 0
+      state:
+        running:
+          startedAt: "2026-10-01T00:00:00Z"
+---
+# Events, as the Deployment controller and the kubelet record them.
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout.scaled-up
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: checkout
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set checkout-7d9f8b6c4 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: "2026-10-27T09:00:00Z"
+lastTimestamp: "2026-10-27T09:00:00Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-x2kqp
+type: Warning
+reason: BackOff
+message: Back-off restarting failed container app in pod checkout-7d9f8b6c4-x2kqp
+source:
+  component: kubelet
+count: 14
+firstTimestamp: "2026-10-27T09:01:30Z"
+lastTimestamp: "2026-10-27T09:14:05Z"
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: cart-6b7c8d9e0-z9y8x.pulled
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: cart-6b7c8d9e0-z9y8x
+type: Normal
+reason: Pulled
+message: Container image "example/cart:1.0.0" already present on machine
+source:
+  component: kubelet
+count: 1
+firstTimestamp: "2026-10-01T00:00:00Z"
+lastTimestamp: "2026-10-01T00:00:00Z"
