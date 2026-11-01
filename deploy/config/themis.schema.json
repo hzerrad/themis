@@ -104,6 +104,21 @@
       "type": "object",
       "description": "Notifications announce escalations to humans."
     },
+    "resources": {
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Namespace is Themis's own. An IncidentProfile here applies to every\nenrolled namespace; one elsewhere applies only to its own namespace."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "namespace"
+      ],
+      "description": "Resources reads profiles and global settings from custom resources,\ninstead of the profiles below."
+    },
     "profiles": {
       "items": {
         "properties": {
@@ -287,8 +302,7 @@
         "description": "Profile is one incident class and the alerts that belong to it."
       },
       "type": "array",
-      "minItems": 1,
-      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins."
+      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins. Required unless resources is set."
     }
   },
   "additionalProperties": false,
@@ -297,8 +311,7 @@
     "enrolledNamespaces",
     "intake",
     "investigators",
-    "api",
-    "profiles"
+    "api"
   ],
   "title": "Themis configuration",
   "description": "Config is the root of the configuration file."
