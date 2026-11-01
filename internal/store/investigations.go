@@ -40,6 +40,7 @@ type InvestigationResult struct {
 	Hypotheses []byte
 	Usage      []byte
 	Provenance []byte
+	Blind      bool
 }
 
 // CreateInvestigation records an incident's initial evidence and predicates
@@ -197,9 +198,9 @@ func (s *Store) RenewLease(ctx context.Context, tx pgx.Tx, leaseID string, now t
 func (s *Store) CompleteInvestigation(ctx context.Context, tx pgx.Tx, leaseID string, r InvestigationResult) error {
 	tag, err := tx.Exec(ctx, `
 	UPDATE investigations
-	SET state = 'completed', conclusion = $2, summary = $3, hypotheses = $4, usage = $5, provenance = $6, updated_at = now()
+	SET state = 'completed', conclusion = $2, summary = $3, hypotheses = $4, usage = $5, provenance = $6, blind = $7, updated_at = now()
 	WHERE lease_id = $1 AND state = 'leased'
-`, leaseID, r.Conclusion, r.Summary, jsonOr(r.Hypotheses, "[]"), jsonOr(r.Usage, "{}"), jsonOr(r.Provenance, "{}"))
+`, leaseID, r.Conclusion, r.Summary, jsonOr(r.Hypotheses, "[]"), jsonOr(r.Usage, "{}"), jsonOr(r.Provenance, "{}"), r.Blind)
 	if err != nil {
 		return fmt.Errorf("complete investigation of lease %s: %w", leaseID, err)
 	}
@@ -376,15 +377,18 @@ type InvestigationRecord struct {
 	Usage      json.RawMessage
 	Provenance json.RawMessage
 	Failure    string
+	// Blind is set when an investigation that couldn't decide was missing
+	// evidence Themis could have had.
+	Blind bool
 }
 
 // IncidentInvestigation returns the investigation of an incident.
 func (s *Store) IncidentInvestigation(ctx context.Context, incidentID string) (InvestigationRecord, error) {
 	var r InvestigationRecord
 	err := s.pool.QueryRow(ctx, `
-	SELECT state::text, attempts, conclusion, summary, hypotheses, usage, provenance, failure
+	SELECT state::text, attempts, conclusion, summary, hypotheses, usage, provenance, failure, blind
 	FROM investigations WHERE incident_id = $1
-`, incidentID).Scan(&r.State, &r.Attempts, &r.Conclusion, &r.Summary, &r.Hypotheses, &r.Usage, &r.Provenance, &r.Failure)
+`, incidentID).Scan(&r.State, &r.Attempts, &r.Conclusion, &r.Summary, &r.Hypotheses, &r.Usage, &r.Provenance, &r.Failure, &r.Blind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return InvestigationRecord{}, fmt.Errorf("investigation of %s: %w", incidentID, ErrNotFound)
 	}

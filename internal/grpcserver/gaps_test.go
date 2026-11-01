@@ -1,6 +1,7 @@
 package grpcserver_test
 
 import (
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -118,5 +119,83 @@ func TestEvidence_UnknownTemplateRecordsNoGap(t *testing.T) {
 	}
 	if gaps, _ := e.store.EvidenceGaps(t.Context(), inv.GetIncidentId()); len(gaps) != 0 {
 		t.Errorf("gaps = %+v, want none", gaps)
+	}
+}
+
+func (e *env) complete(t *testing.T, inv *themisv1.Investigation, gaps ...*themisv1.EvidenceGap) {
+	t.Helper()
+	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
+		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_INCONCLUSIVE,
+		Summary: "the evidence doesn't point to one cause", Gaps: gaps,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An investigation that couldn't decide because the model may not see the
+// logs was blind: the operator can change that.
+func TestComplete_Inconclusive_StoresGapsAndKind(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	e.complete(t, inv, &themisv1.EvidenceGap{
+		Template: evidence.ContainerLogsTail, Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_DATA_CEILING,
+		Detail: "logs are sensitive; this model may see internal data",
+	})
+	g := e.gap(t, inv.GetIncidentId())
+	if g.Cause != evidence.GapDataCeiling || g.Template != evidence.ContainerLogsTail || g.LeaseID != inv.GetLeaseId() {
+		t.Errorf("gap = %+v", g)
+	}
+	rec, err := e.store.IncidentInvestigation(t.Context(), inv.GetIncidentId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.Blind {
+		t.Error("an investigation missing evidence Themis could have had is not blind")
+	}
+}
+
+// Seeing everything and finding no clear answer is not blind.
+func TestComplete_InconclusiveWithoutGapsIsAmbiguous(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	e.complete(t, inv)
+	rec, err := e.store.IncidentInvestigation(t.Context(), inv.GetIncidentId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Blind {
+		t.Error("an investigation with nothing missing is blind")
+	}
+}
+
+func TestFail_StoresReportedGaps(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	_, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+		LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT,
+		Gaps: []*themisv1.EvidenceGap{{Template: evidence.ContainerLogsTail, Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := e.gap(t, inv.GetIncidentId()); g.Cause != evidence.GapNotInProfile {
+		t.Errorf("gap = %+v", g)
+	}
+}
+
+// The investigator chooses the template and the cause: only templates Themis
+// has, with causes it may report, are kept.
+func TestComplete_ReportedGapsAreBounded(t *testing.T) {
+	e := newEnv(t)
+	inv := e.lease(t)
+	e.complete(t, inv,
+		&themisv1.EvidenceGap{Template: "made_up", Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE},
+		&themisv1.EvidenceGap{Template: evidence.PodStates, Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_UNSPECIFIED},
+		&themisv1.EvidenceGap{Template: evidence.PodStates, Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_BUDGET_SPENT, Detail: strings.Repeat("x", 5000)},
+	)
+	g := e.gap(t, inv.GetIncidentId())
+	if g.Template != evidence.PodStates || g.Cause != evidence.GapBudgetSpent || len(g.Detail) > 1024 {
+		t.Errorf("gap = %+v (detail %d bytes)", g.Cause, len(g.Detail))
 	}
 }
