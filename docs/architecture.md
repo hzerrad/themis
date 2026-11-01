@@ -27,8 +27,10 @@ Each API is behind its own bearer token: Alertmanager's, the investigator's, the
 received → investigating → diagnosed → proposed → awaiting_approval → authorized → executing → verifying → resolved
     │            │             │           │              │                                      │
  rejected   escalated    closed_no_action  recommended   escalated (expired)        escalated / contained_escalated
-            canceled     self_resolved     closed_no_action  closed_no_action (denied)
+            canceled     self_resolved     closed_no_action  closed_no_action (denied)      restoring → escalated
 ```
+
+When a fix is applied and the workload is unchanged or worse at the end of the verification window, Themis puts it back as it was before it acted (`restoring`), checks that Kubernetes rolled that version out, and hands the incident to a person (`escalated`). People then investigate the workload as they left it, not a mix of the incident and Themis's attempt. Putting it back is an action of its own: a rollback to the revision the fix replaced, with every check a fix has, decided by policy. It needs no approval unless a rule matching `action.restore == "true"` asks for one; then, or when Kubernetes no longer keeps that revision, Themis leaves its change in place and escalates at once. A fix that partly helped (`contained_escalated`) is kept, and an outcome changed by someone else during the window (`inconclusive`) is never put back.
 
 Every transition is stored with its time, reason and actor, together with the job it starts, in one transaction: a crash never leaves a state change without its follow-up, or the reverse. Jobs run at least once, and every job is safe to repeat.
 
