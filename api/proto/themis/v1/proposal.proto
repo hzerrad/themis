@@ -6,6 +6,11 @@ import "themis/v1/common.proto";
 
 service ProposalService {
   rpc SubmitProposal(SubmitProposalRequest) returns (SubmitProposalResponse);
+
+  // For callers outside Themis: the incidents they may suggest a fix for, and
+  // what Themis knows about one.
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse);
+  rpc GetIncident(GetIncidentRequest) returns (GetIncidentResponse);
 }
 
 message SubmitProposalRequest {
@@ -23,6 +28,9 @@ message SubmitProposalRequest {
   oneof capability {
     RollbackToRevisionParams rollback_to_revision = 11;
   }
+
+  // Set instead of lease_id by a caller outside Themis.
+  string incident_id = 12;
 }
 
 message RollbackToRevisionParams {
@@ -34,6 +42,30 @@ message SubmitProposalResponse {
   ProposalStatus status = 2;
   RejectionReason rejection_reason = 3;
   string message = 4;
+}
+
+message ListIncidentsRequest {}
+
+message ListIncidentsResponse {
+  repeated OpenIncident incidents = 1;
+}
+
+message OpenIncident {
+  string id = 1;
+  TargetRef target = 2;
+  string state = 3;
+}
+
+message GetIncidentRequest {
+  string incident_id = 1;
+}
+
+message GetIncidentResponse {
+  OpenIncident incident = 1;
+  repeated EvidenceItem evidence = 2;
+  repeated PredicateResult predicates = 3;
+  // How many items this caller may not see.
+  int32 withheld = 4;
 }
 
 enum ProposalStatus {
@@ -49,4 +81,6 @@ enum RejectionReason {
   REJECTION_REASON_INVALID_PARAMS = 3;
   REJECTION_REASON_UNKNOWN_EVIDENCE = 4;
   REJECTION_REASON_UNKNOWN_PREDICATE = 5;
+  REJECTION_REASON_OUT_OF_SCOPE = 6;
+  REJECTION_REASON_INCIDENT_CLOSED = 7;
 }

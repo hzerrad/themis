@@ -36,7 +36,7 @@ var transitions = map[State][]State{
 	Received:         {Investigating, Rejected, SelfResolved, Canceled},
 	Investigating:    {Diagnosed, Inconclusive, Escalated, SelfResolved, Canceled},
 	Diagnosed:        {Proposed, Recommended, ClosedNoAction, SelfResolved, Canceled},
-	Inconclusive:     {ClosedNoAction, SelfResolved, Canceled},
+	Inconclusive:     {Diagnosed, ClosedNoAction, SelfResolved, Canceled},
 	Recommended:      {ClosedNoAction, SelfResolved, Canceled},
 	Proposed:         {AwaitingApproval, Authorized, Recommended, SelfResolved, Canceled},
 	AwaitingApproval: {Authorized, Recommended, Escalated, SelfResolved, Canceled},

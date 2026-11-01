@@ -115,6 +115,8 @@ func TestCanTransition_SideExits(t *testing.T) {
 		{incident.Authorized, incident.Canceled, true},
 		{incident.Executing, incident.Canceled, false}, // write may have happened
 		{incident.Verifying, incident.Canceled, false},
+		{incident.Inconclusive, incident.Diagnosed, true}, // someone suggested a fix
+		{incident.Inconclusive, incident.Authorized, false},
 	}
 	for _, tt := range tests {
 		if got := incident.CanTransition(tt.from, tt.to); got != tt.want {
