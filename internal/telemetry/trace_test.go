@@ -3,9 +3,11 @@ package telemetry_test
 import (
 	"log/slog"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -14,13 +16,18 @@ import (
 	"github.com/hzerrad/themis/internal/telemetry"
 )
 
-// record installs a provider that keeps every span in memory.
+// record installs a provider that keeps every span in memory, and the
+// propagator SetupTracing installs, so a call carries its trace.
 func record(t *testing.T) *tracetest.SpanRecorder {
 	t.Helper()
 	rec := tracetest.NewSpanRecorder()
-	prev := otel.GetTracerProvider()
+	prev, prevProp := otel.GetTracerProvider(), otel.GetTextMapPropagator()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec)))
-	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prev)
+		otel.SetTextMapPropagator(prevProp)
+	})
 	return rec
 }
 
@@ -90,13 +97,16 @@ func TestGRPC_Call_SharesTrace(t *testing.T) {
 	}
 	parent.End()
 
+	// The server may end its span just after the reply reaches the client.
 	var server, clientSpan sdktrace.ReadOnlySpan
-	for _, s := range rec.Ended() {
-		if s.SpanKind() == trace.SpanKindServer {
-			server = s
-		}
-		if s.SpanKind() == trace.SpanKindClient {
-			clientSpan = s
+	for deadline := time.Now().Add(5 * time.Second); server == nil && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		for _, s := range rec.Ended() {
+			if s.SpanKind() == trace.SpanKindServer {
+				server = s
+			}
+			if s.SpanKind() == trace.SpanKindClient {
+				clientSpan = s
+			}
 		}
 	}
 	if server == nil || clientSpan == nil {
