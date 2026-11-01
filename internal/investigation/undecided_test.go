@@ -60,3 +60,22 @@ func TestCloseUndecided_WithoutAWindowClosesAtOnce(t *testing.T) {
 		t.Errorf("state = %s, want closed", got)
 	}
 }
+
+// Alerts that keep firing don't keep an incident open: the window runs from
+// when Themis couldn't decide.
+func TestCloseUndecided_RepeatAlertsDontExtendTheWindow(t *testing.T) {
+	e := newEnv(t)
+	id := e.undecided(t)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE transitions SET at = now() - interval '2 hours' WHERE incident_id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	e.newIncident(t, "p", e.target) // joins it, as a repeat alert does
+	window := config.Config{ExternalProposals: config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}}
+	w := &investigation.CloseUndecidedWorker{Config: window, Store: e.store}
+	if err := w.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.ClosedNoAction {
+		t.Errorf("state = %s, want closed", got)
+	}
+}
