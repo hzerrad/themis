@@ -100,8 +100,8 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1 AND lease_id IS NULL`, id); n != 3 {
 		t.Errorf("%d initial items, want 3", n)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 5 {
-		t.Errorf("%d predicates, want 5", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 6 {
+		t.Errorf("%d predicates, want 6", n)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1 AND name = 'oom_killed_new_revision' AND value = 'true'`, id); n != 1 {
 		t.Error("oom_killed_new_revision is not true on the scenario 1 cluster")
