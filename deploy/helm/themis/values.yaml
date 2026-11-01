@@ -70,7 +70,14 @@ notifications:
 networkPolicy:
   enabled: true
 
-# Incident profiles, as in deploy/config/themis.example.yaml.
+# Global settings, installed as the ThemisConfig resource when set:
+#   enrolledNamespaces: a subset of enrolledNamespaces above
+#   autonomyCeiling: observe stops Themis making changes anywhere
+themisConfig: {}
+
+# Incident profiles, installed as IncidentProfile resources in this release's
+# namespace, where they apply to every enrolled namespace. Teams can add their
+# own in their namespace.
 profiles:
   - name: rollout-regression
     priority: 100

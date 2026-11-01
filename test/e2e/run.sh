@@ -279,6 +279,41 @@ printf '  %s\n' "$LAST"
 # the timeline says the workload was put back.
 check "the timeline says it was put back" grep -q "^Themis put the workload back" <<<"$LAST"
 
+log "10. configuration resources apply without a restart, and bad ones are refused"
+restarts() { $K -n themis get pods -l app.kubernetes.io/component=core -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}'; }
+# accepted_within <namespace> <profile> <seconds> <True|False>
+accepted_within() {
+  local deadline=$((SECONDS + $3)) got=""
+  while [ $SECONDS -lt $deadline ]; do
+    got=$($K -n "$1" get incidentprofile "$2" -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null)
+    [ "$got" = "$4" ] && return 0
+    sleep 2
+  done
+  echo "  $1/$2 Accepted=$got"
+  return 1
+}
+team_profile() { # team_profile <name> <when>
+  cat <<YAML
+apiVersion: themis.dev/v1alpha1
+kind: IncidentProfile
+metadata: {name: $1, namespace: shop}
+spec:
+  priority: 50
+  match: {alertNames: [NoSuchAlert], targetKinds: [Deployment.apps]}
+  evidence: {allowed: [pod_states]}
+  policy:
+    rules: [{name: r, when: '$2', decision: deny}]
+YAML
+}
+BEFORE_RESTARTS=$(restarts)
+check "the installed profile is accepted" accepted_within themis rollout-regression 60 True
+team_profile team-good 'action.capability == "x"' | $K apply -f - >/dev/null
+check "a team's profile is accepted with no restart" accepted_within shop team-good 60 True
+team_profile team-bad 'this is not a rule' | $K apply -f - >/dev/null
+check "a profile whose rule doesn't compile is refused" accepted_within shop team-bad 60 False
+$K -n shop delete incidentprofile team-good team-bad >/dev/null
+check "the core didn't restart" [ "$(restarts)" = "$BEFORE_RESTARTS" ]
+
 log "telemetry leaks no workload data"
 # An unreadable source would hide a leak.
 for d in themis-core themis-executor themis-intelligence; do
