@@ -59,10 +59,18 @@ func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID s
 		if ids == nil {
 			ids = []string{}
 		}
-		_, err := tx.Exec(ctx, `
-	INSERT INTO predicate_results (incident_id, name, version, value, reason, evidence_ids)
-	VALUES ($1, $2, $3, $4, $5, $6)
-`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids)
+		gaps := r.Gaps
+		if gaps == nil {
+			gaps = []predicate.Gap{}
+		}
+		g, err := json.Marshal(gaps)
+		if err != nil {
+			return "", err
+		}
+		_, err = tx.Exec(ctx, `
+	INSERT INTO predicate_results (incident_id, name, version, value, reason, evidence_ids, gaps, blind)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids, g, r.Blind)
 		if err != nil {
 			return "", fmt.Errorf("record predicate %s: %w", r.Name, err)
 		}
@@ -325,7 +333,7 @@ func (s *Store) MissingEvidence(ctx context.Context, tx pgx.Tx, incidentID strin
 // Predicates returns an incident's predicate results.
 func (s *Store) Predicates(ctx context.Context, incidentID string) ([]predicate.Result, error) {
 	rows, err := s.pool.Query(ctx, `
-	SELECT name, version, value::text, reason, evidence_ids::text[]
+	SELECT name, version, value::text, reason, evidence_ids::text[], gaps, blind
 	FROM predicate_results WHERE incident_id = $1 ORDER BY id
 `, incidentID)
 	if err != nil {
@@ -335,10 +343,19 @@ func (s *Store) Predicates(ctx context.Context, incidentID string) ([]predicate.
 		var (
 			r     predicate.Result
 			value string
+			gaps  []byte
 		)
-		err := row.Scan(&r.Name, &r.Version, &value, &r.Reason, &r.EvidenceIDs)
+		if err := row.Scan(&r.Name, &r.Version, &value, &r.Reason, &r.EvidenceIDs, &gaps, &r.Blind); err != nil {
+			return predicate.Result{}, err
+		}
 		r.Value = predicate.ParseTruth(value)
-		return r, err
+		if err := json.Unmarshal(gaps, &r.Gaps); err != nil {
+			return predicate.Result{}, err
+		}
+		if len(r.Gaps) == 0 {
+			r.Gaps = nil
+		}
+		return r, nil
 	})
 }
 
