@@ -75,6 +75,13 @@ type detailView struct {
 	Investigation *store.InvestigationRecord `json:",omitempty"`
 	Proposals     []store.Proposal
 	Actions       []actionView
+
+	// Headline opens an investigation that couldn't decide: whether Themis
+	// couldn't see enough, or saw it all and found no clear answer.
+	Headline string `json:",omitempty"`
+	// Missing says, in plain words, what Themis couldn't see, why, and how
+	// to let it see next time.
+	Missing []string `json:",omitempty"`
 }
 
 func viewAction(a store.Action) actionView {

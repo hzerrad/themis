@@ -36,6 +36,7 @@ import (
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/notify"
 	"github.com/hzerrad/themis/internal/reconcile"
+	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
@@ -161,7 +162,7 @@ func Run(ctx context.Context, o Options) error {
 	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
 	telemetry.AddIncidentWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
 	telemetry.AddUnscopedWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
-	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications})
+	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications, Remedy: remedy.Writer{Config: cfg}})
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
@@ -186,7 +187,7 @@ func Run(ctx context.Context, o Options) error {
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log}).Register(mux)
+	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: cfg}}).Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
