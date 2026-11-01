@@ -19,6 +19,8 @@ const (
 	Authorized       State = "authorized"
 	Executing        State = "executing"
 	Verifying        State = "verifying"
+	// Restoring puts back what Themis changed, after a fix that didn't help.
+	Restoring State = "restoring"
 
 	Resolved           State = "resolved"
 	ContainedEscalated State = "contained_escalated"
@@ -40,7 +42,8 @@ var transitions = map[State][]State{
 	AwaitingApproval: {Authorized, Recommended, Escalated, SelfResolved, Canceled},
 	Authorized:       {Executing, Canceled},
 	Executing:        {Verifying, Escalated},
-	Verifying:        {Resolved, ContainedEscalated, Escalated},
+	Verifying:        {Resolved, ContainedEscalated, Escalated, Restoring},
+	Restoring:        {Escalated},
 }
 
 var terminal = []State{
@@ -56,7 +59,7 @@ var terminal = []State{
 // States returns every state.
 func States() []State {
 	return []State{
-		Received, Investigating, Diagnosed, Inconclusive, Recommended, Proposed, AwaitingApproval, Authorized, Executing, Verifying,
+		Received, Investigating, Diagnosed, Inconclusive, Recommended, Proposed, AwaitingApproval, Authorized, Executing, Verifying, Restoring,
 		Resolved, ContainedEscalated, Escalated, ClosedNoAction, SelfResolved, Rejected, Canceled,
 	}
 }
