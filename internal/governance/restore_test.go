@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -208,5 +210,40 @@ func TestRestore_ScalingDoesNotStopIt(t *testing.T) {
 	e.restore(t, fix)
 	if n := len(e.actions(t, id)); n != 2 {
 		t.Errorf("%d actions, want the fix and its restore", n)
+	}
+}
+
+func restoreJob(attempt int, actionID string) *river.Job[governance.RestoreArgs] {
+	return &river.Job[governance.RestoreArgs]{
+		JobRow: &rivertype.JobRow{Attempt: attempt, MaxAttempts: 25},
+		Args:   governance.RestoreArgs{ActionID: actionID},
+	}
+}
+
+// A restore that keeps failing retries, and on its last attempt hands the
+// incident to a person: never left in restoring with nobody told.
+func TestRestoreWorker_EscalatesOnTheLastAttempt(t *testing.T) {
+	e := shipped(t)
+	id, fix := e.restoring(t)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET pre_state = '[]' WHERE id = $1`, fix.ID); err != nil {
+		t.Fatal(err)
+	}
+	w := &governance.RestoreWorker{Governor: e.worker}
+
+	if err := w.Work(t.Context(), restoreJob(1, fix.ID)); err == nil {
+		t.Fatal("an early attempt reported no error, so it won't be retried")
+	}
+	if got := e.state(t, id); got != incident.Restoring {
+		t.Fatalf("state = %s, want restoring while it retries", got)
+	}
+
+	if err := w.Work(t.Context(), restoreJob(25, fix.ID)); err != nil {
+		t.Fatalf("last attempt: %v", err)
+	}
+	if got := e.state(t, id); got != incident.Escalated {
+		t.Errorf("state = %s, want escalated", got)
+	}
+	if got := e.lastReason(t, id); !strings.Contains(got, "couldn't put the workload back") || !strings.Contains(got, "still in place") {
+		t.Errorf("reason = %q", got)
 	}
 }

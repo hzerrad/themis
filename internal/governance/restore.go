@@ -25,7 +25,12 @@ type RestoreWorker struct {
 }
 
 func (w *RestoreWorker) Work(ctx context.Context, job *river.Job[RestoreArgs]) error {
-	return w.Governor.Restore(ctx, job.Args.ActionID)
+	err := w.Governor.Restore(ctx, job.Args.ActionID)
+	if err != nil && job.Attempt >= job.MaxAttempts {
+		// The fix is still applied: never leave the incident in restoring.
+		return w.Governor.escalateAction(ctx, job.Args.ActionID, "Themis couldn't put the workload back, so its change is still in place: "+err.Error())
+	}
+	return err
 }
 
 // Restore puts back what action changed, so people investigate the workload
@@ -150,6 +155,14 @@ func (w *Worker) restoreAction(in store.Incident, fix store.Action, live rollbac
 		Decision:    string(Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
 		Digest: dg, State: store.ActionAuthorized,
 	}, nil
+}
+
+func (w *Worker) escalateAction(ctx context.Context, actionID, reason string) error {
+	fix, err := w.Store.Action(ctx, w.Store.DB(), actionID)
+	if err != nil {
+		return err
+	}
+	return w.escalate(ctx, fix.IncidentID, reason)
 }
 
 func (w *Worker) escalateDecided(ctx context.Context, incidentID string, d Decision, reason string) error {
