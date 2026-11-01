@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 PredicateName = Literal[
     "rollout_recent",
@@ -12,6 +12,7 @@ PredicateName = Literal[
     "prior_revision_was_healthy",
     "oom_killed_new_revision",
     "gitops_managed",
+    "config_changed_before_failure",
 ]
 
 
