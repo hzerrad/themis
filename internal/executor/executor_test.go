@@ -372,3 +372,83 @@ func TestMetrics_DryRunFailureCounted(t *testing.T) {
 		t.Errorf("counted %v other failures, want 0", got)
 	}
 }
+
+// restorePlanned applies a, which doesn't help, and has governance plan
+// putting the workload back. It returns the restore.
+func restorePlanned(t *testing.T, e *env, a store.Action) store.Action {
+	t.Helper()
+	ctx := t.Context()
+	if _, err := e.executor(k8s.Client).Execute(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The Deployment controller would number the restored template anew.
+	d := deployment(t, e.target.Namespace)
+	d.Annotations["deployment.kubernetes.io/revision"] = "3"
+	if err := k8s.Update(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.store.InTx(ctx, func(tx pgx.Tx) error {
+		return e.store.Transition(ctx, tx, store.TransitionArgs{ID: a.IncidentID, From: incident.Verifying, To: incident.Restoring, Reason: "test", Actor: "test"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	gov, err := governance.NewWorker(config.Config{Profiles: []config.Profile{profile()}}, e.store, k8s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gov.Restore(ctx, a.ID); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	actions, err := e.store.IncidentActions(ctx, e.store.DB(), a.IncidentID)
+	if err != nil || len(actions) != 2 {
+		t.Fatalf("actions = %v, %v; want the fix and its restore", actions, err)
+	}
+	return actions[1]
+}
+
+// A restore runs with the same checks as a fix, without an approval to
+// consume, and leaves the incident restoring until it is checked.
+func TestExecute_RestorePutsTheTemplateBack(t *testing.T) {
+	e, a := approved(t)
+	r := restorePlanned(t, e, a)
+	if r.State != store.ActionAuthorized {
+		t.Fatalf("restore = %s, want authorized", r.State)
+	}
+
+	res, err := e.executor(k8s.Client).Execute(t.Context(), r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != executor.Succeeded || e.image(t) != "example/checkout:2.4.0" {
+		t.Errorf("result = %+v, image = %s; want the template from before the fix", res, e.image(t))
+	}
+	if got := e.incidentState(t, a.IncidentID); got != incident.Restoring {
+		t.Errorf("incident = %s, want restoring until the restore is checked", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2`, verify.VerifyArgs{}.Kind(), r.ID); n != 1 {
+		t.Errorf("%d checks of the restore, want 1", n)
+	}
+}
+
+// A restore whose workload changed since it was planned writes nothing, and
+// the incident goes to a person.
+func TestExecute_StaleRestoreEscalates(t *testing.T) {
+	e, a := approved(t)
+	r := restorePlanned(t, e, a)
+	d := deployment(t, e.target.Namespace)
+	d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
+	if err := k8s.Update(t.Context(), d); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := e.executor(k8s.Client).Execute(t.Context(), r.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Status != executor.Stale {
+		t.Errorf("result = %+v, want stale", res)
+	}
+	if got := e.incidentState(t, a.IncidentID); got != incident.Escalated {
+		t.Errorf("incident = %s, want escalated", got)
+	}
+}
