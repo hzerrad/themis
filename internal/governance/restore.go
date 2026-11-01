@@ -75,6 +75,12 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		return err
 	}
 
+	// Anything else is someone's later change, not Themis's to undo. From here
+	// the digest binds this template, so the executor refuses any later one.
+	if hash, ok := fix.Params["templateHash"].(string); !ok || hash != live.Target.SpecHash {
+		return w.escalate(ctx, in.ID, "The workload changed after Themis's fix, so Themis left it as it is. A person needs to take over.")
+	}
+
 	results, err := w.Store.Predicates(ctx, in.ID)
 	if err != nil {
 		return err
