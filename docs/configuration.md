@@ -16,6 +16,7 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `notifications.webhook.url` or `.urlFile` | no | Where escalations are POSTed. Use `urlFile` when the URL embeds a key. |
 | `notifications.webhook.bearerTokenFile` | no | A token sent with each notice. |
 | `notifications.externalURL` | no | Where people reach the UI, used for links in notices. |
+| `externalProposals` | no | Who outside Themis may suggest fixes; see [below](#fixes-suggested-from-outside). |
 | `resources.namespace` | no | Read profiles and global settings from custom resources, with this as Themis's own namespace. The chart sets it. |
 | `profiles` | without `resources` | Incident classes, below. Set either this or `resources`, not both. |
 
@@ -49,6 +50,7 @@ metadata:
 spec:
   enrolledNamespaces: [shop]   # narrows the chart's list; it can't widen it
   autonomyCeiling: observe     # stops Themis making changes anywhere
+  externalProposals: {}        # see "Fixes suggested from outside"
 ```
 
 `enrolledNamespaces` can only narrow the chart's list, because that list is what grants Themis its permissions, and Themis never creates permissions while running. A namespace outside it is ignored and the status says so.
@@ -71,6 +73,36 @@ What a change does to work already under way:
 - If a profile is removed, an incident using it that hasn't reached a decision stops and says so.
 
 `helm upgrade` doesn't update custom resource definitions. When a release changes them, apply them first: `kubectl apply -f deploy/helm/themis/crds`.
+
+## Fixes suggested from outside
+
+An agent or a person can suggest a fix for an incident. A suggestion authorizes nothing: it passes the same checks as the investigator's own, then policy and approval. What fails a check is kept, with the reason.
+
+```yaml
+externalProposals:
+  window: 15m
+  sources:
+    - serviceAccount: sre-agents/triage   # namespace/name
+      namespaces: [shop]                  # incidents it may read and suggest fixes for
+      capabilities: [deployment.rollback-to-revision]
+      perMinute: 6
+      ceiling: internal                   # sensitive also lets it read container logs
+```
+
+**Agents** call the `ProposalService` gRPC API on port 9090: `ListIncidents`, `GetIncident`, and `SubmitProposal` with `incident_id` instead of `lease_id`. Each sends a Kubernetes ServiceAccount token issued for the audience `themis`, for example from a [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/#serviceaccounttoken), and Themis checks it with the API server. A token for another audience is refused. Add the agent's namespace to the chart's `networkPolicy.agentNamespaces`.
+
+**People** send the same request as JSON to `POST /v1/incidents/{id}/proposals` with the admin token. That token is shared, so the record proves the token was used, not who used it.
+
+**When a suggestion is taken:** while Themis investigates, and for `window` after it couldn't decide. `window` defaults to 15 minutes with sources and to none without. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own.
+
+**What policy sees:** rules can read `proposal.source`, `proposal.authenticated` and `proposal.external`, all strings. To send every outside suggestion to a person, or refuse them, write a rule on `proposal.external == "true"`.
+
+**Limits:**
+
+- Themis governs what is suggested through it, not what an agent does with its own credentials.
+- `SubmitProposal` must cite evidence Themis collected and name the incident's exact target, UID included. Naming another target is recorded as a safety event.
+- Evidence an agent reads is already redacted. Anything above its `ceiling` is withheld, and the response says how many items.
+- In-cluster gRPC isn't encrypted yet, so these tokens rely on the NetworkPolicy, like the investigator's. Tokens issued for `themis` can't be replayed against other services.
 
 ## Profiles
 
@@ -164,7 +196,7 @@ policy:
       decision: require_approval
 ```
 
-- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), and `mode`.
+- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
 - A rule that fails to evaluate denies. Policy never fails open.
 - In **guarded** mode `allow` still needs approval: no action runs without a human. In **observe** mode every action is denied, so Themis only diagnoses and recommends.

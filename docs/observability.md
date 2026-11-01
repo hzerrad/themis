@@ -45,6 +45,7 @@ A counter counts what was committed: a change the database rolled back is never 
 | `themis_stage_duration_seconds` (histogram) | `stage` | Time from an incident's start to a proposal (`to_proposal`) and to its end (`to_close`), and time spent in `approval_wait`, `execution` and `verification` |
 | `themis_investigations_total` | `outcome` | Investigation leases ended: `proposed`, `abstained`, `failed`, `budget_exhausted`, or `lease_lost` when the investigator stopped renewing |
 | `themis_proposals_total` | `result` | Proposals `accepted` or `rejected` |
+| `themis_external_proposals_total` | `result` | Of those, the ones from outside Themis |
 | `themis_abstentions_total` | `kind` | Investigations that couldn't decide: `blind` when evidence Themis could have had was missing, `ambiguous` when it saw everything and found no clear answer. Blind ones should be rare on a well-configured install |
 | `themis_missing_evidence_total` | `template`, `cause` | Evidence an investigation needed and couldn't have, counted once per lease: `forbidden`, `not_in_profile`, `expired`, `not_found`, `budget_spent`, `data_ceiling`, `timeout`, `unavailable`, or `absent` when there was nothing |
 | `themis_safety_events_total` | `kind` | Proposals naming another target (`wrong_target`), a capability the profile does not allow (`unknown_capability`), or evidence that was never collected (`unknown_evidence`) |
