@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
@@ -73,6 +74,9 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if _, ok := a.Params["restores"].(string); ok {
+		return w.verifyRestore(ctx, a, in, args)
+	}
 	if in.State != incident.Verifying {
 		return true, nil
 	}
@@ -120,6 +124,16 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 		final = true
 		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(outcome)).Inc)
 		reason := Explain(outcome, obs)
+		if outcome == Unchanged || outcome == Worsened {
+			// Put back what the fix changed, so people find the workload as
+			// they left it (design §6.7).
+			if err := w.Store.Transition(ctx, tx, store.TransitionArgs{
+				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: reason + " Themis is putting the workload back as it was.", Actor: "verify",
+			}); err != nil {
+				return err
+			}
+			return w.Store.EnqueueTx(ctx, tx, governance.RestoreArgs{ActionID: a.ID, IncidentID: in.ID})
+		}
 		return w.Store.Transition(ctx, tx, store.TransitionArgs{
 			ID: in.ID, From: incident.Verifying, To: outcomes[outcome], Reason: reason, Actor: "verify",
 		})
@@ -153,6 +167,7 @@ func Observe(ctx context.Context, c client.Reader, t incident.TargetRef, since t
 		ReadyReplicas:   s.ReadyReplicas,
 		RolloutComplete: s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == desired &&
 			s.AvailableReplicas == desired && s.Replicas == desired,
+		Updated:           s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == desired,
 		ForeignSpecChange: live != applied,
 	}
 
@@ -211,9 +226,13 @@ func (w *Worker) escalate(ctx context.Context, actionID, reason string) error {
 	if err != nil {
 		return err
 	}
+	from := incident.Verifying
+	if _, ok := a.Params["restores"].(string); ok {
+		from = incident.Restoring
+	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: a.IncidentID, From: incident.Verifying, To: incident.Escalated, Reason: reason, Actor: "verify",
+			ID: a.IncidentID, From: from, To: incident.Escalated, Reason: reason, Actor: "verify",
 		})
 		if errors.Is(err, store.ErrStateConflict) {
 			return nil
@@ -230,4 +249,40 @@ func (w *Worker) now() time.Time {
 		return w.Now()
 	}
 	return time.Now()
+}
+
+// verifyRestore checks that the workload is back as it was before Themis
+// acted, then hands the incident to a person: what was failing then is
+// failing again, and the fix didn't help.
+func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Incident, args VerifyArgs) (bool, error) {
+	if in.State != incident.Restoring {
+		return true, nil
+	}
+	applied, _ := a.Params["templateHash"].(string)
+	obs, _, err := Observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
+	if err != nil {
+		return false, err
+	}
+	profile, _ := w.Config.Profile(in.Profile)
+	window := profile.EffectiveVerification().Window.Duration
+	pods := fmt.Sprintf("%d of %d pods are ready", obs.ReadyReplicas, obs.DesiredReplicas)
+	var reason string
+	switch {
+	case obs.ForeignSpecChange:
+		reason = "Themis put the workload back, but it was then changed outside Themis. A person needs to take over."
+	case obs.Updated:
+		reason = "Themis put the workload back as it was before it acted: " + pods + ". A person needs to take over."
+	case w.now().Sub(args.WindowStart) >= window:
+		reason = "Themis put the workload back, but Kubernetes didn't finish rolling it out in time: " + pods + ". A person needs to take over."
+	default:
+		return false, nil
+	}
+	err = w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		err := w.Store.Transition(ctx, tx, store.TransitionArgs{ID: in.ID, From: incident.Restoring, To: incident.Escalated, Reason: reason, Actor: "verify"})
+		if errors.Is(err, store.ErrStateConflict) {
+			return nil
+		}
+		return err
+	})
+	return err == nil, err
 }
