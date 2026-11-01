@@ -7,5 +7,6 @@ go = "1.27.3"
 helm = "4.3.1"
 # Inside the supported Kubernetes window (README, "Supported versions").
 kubectl = "1.37.2"
+ollama = "0.40.13"
 trivy = "0.76.0"
 uv = "0.13.6"
