@@ -37,6 +37,12 @@ type Result struct {
 	Value       Truth
 	Reason      string
 	EvidenceIDs []string
+
+	// Gaps are the missing evidence behind an unknown result; Blind is set
+	// when one of them means Themis could not see, rather than that the
+	// evidence did not settle the question.
+	Gaps  []Gap `json:",omitempty"`
+	Blind bool  `json:",omitempty"`
 }
 
 // RolloutWindow is how recent a rollout must be to be suspected.
