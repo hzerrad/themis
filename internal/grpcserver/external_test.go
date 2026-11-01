@@ -459,3 +459,95 @@ func TestExternal_IncidentOutOfScopeLooksMissing(t *testing.T) {
 		t.Errorf("%d proposals stored, want none", n)
 	}
 }
+
+func (e *env) failEveryAttempt(t *testing.T, agent themisv1.ProposalServiceClient) (string, *themisv1.SubmitProposalResponse) {
+	t.Helper()
+	var (
+		id   string
+		resp *themisv1.SubmitProposalResponse
+	)
+	for i := range store.MaxInvestigationAttempts {
+		inv := e.lease(t)
+		id = inv.GetIncidentId()
+		if i == 0 {
+			var err error
+			if resp, err = agent.SubmitProposal(t.Context(), suggestion(inv, "c1")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+			LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.clock.now = e.clock.now.Add(10 * time.Minute)
+	}
+	return id, resp
+}
+
+// An agent was told its suggestion was accepted: the investigator failing
+// doesn't lose it.
+func TestExternal_SuggestionIsUsedWhenTheInvestigationFails(t *testing.T) {
+	e := newEnv(t)
+	id, resp := e.failEveryAttempt(t, e.external(t))
+	if got := e.state(t, id); got != incident.Diagnosed {
+		t.Errorf("state = %s, want diagnosed", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern' AND args ->> 'proposalID' = $1`, resp.GetProposalId()); n != 1 {
+		t.Errorf("%d govern jobs, want 1", n)
+	}
+}
+
+func TestExternal_SuggestionIsUsedWhenTheInvestigatorStopsResponding(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t)
+	var (
+		id   string
+		resp *themisv1.SubmitProposalResponse
+	)
+	for i := range store.MaxInvestigationAttempts {
+		inv := e.lease(t)
+		id = inv.GetIncidentId()
+		if i == 0 {
+			var err error
+			if resp, err = agent.SubmitProposal(t.Context(), suggestion(inv, "c1")); err != nil {
+				t.Fatal(err)
+			}
+		}
+		e.clock.now = e.clock.now.Add(10 * time.Minute)
+	}
+	if _, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.Diagnosed {
+		t.Errorf("state = %s, want diagnosed", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern' AND args ->> 'proposalID' = $1`, resp.GetProposalId()); n != 1 {
+		t.Errorf("%d govern jobs, want 1", n)
+	}
+}
+
+// With no suggestion to fall back on, a failed investigation still escalates:
+// the investigator's own fix, from a lease that failed, isn't used.
+func TestExternal_FailureWithOnlyTheInvestigatorsFixEscalates(t *testing.T) {
+	e := newEnv(t)
+	e.external(t)
+	var id string
+	for i := range store.MaxInvestigationAttempts {
+		inv := e.lease(t)
+		id = inv.GetIncidentId()
+		if i == 0 {
+			e.submit(t, rollback(inv, "ours"))
+		}
+		if _, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
+			LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		e.clock.now = e.clock.now.Add(10 * time.Minute)
+	}
+	if got := e.state(t, id); got != incident.Escalated {
+		t.Errorf("state = %s, want escalated", got)
+	}
+}
