@@ -33,7 +33,7 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 			return err
 		}
 		for _, id := range expired {
-			if err := s.escalate(ctx, tx, id, "The investigator stopped responding during its last attempt."); err != nil {
+			if err := s.abandon(ctx, tx, id, "The investigator stopped responding during its last attempt."); err != nil {
 				return err
 			}
 		}
@@ -241,7 +241,7 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		if !exhausted {
 			return nil
 		}
-		return s.escalate(ctx, tx, inv.IncidentID, fmt.Sprintf("The investigation failed %d times. The last time, %s", store.MaxInvestigationAttempts, failures[req.GetReason()]))
+		return s.abandon(ctx, tx, inv.IncidentID, fmt.Sprintf("The investigation failed %d times. The last time, %s", store.MaxInvestigationAttempts, failures[req.GetReason()]))
 	})
 	if err != nil {
 		return nil, s.internal(ctx, err)
@@ -321,6 +321,31 @@ var failures = map[themisv1.InvestigationFailureReason]string{
 func failed(r themisv1.InvestigationFailureReason) string {
 	why := strings.TrimSuffix(failures[r], ".")
 	return "The investigation failed because " + why
+}
+
+// abandon ends an investigation that won't finish. A fix suggested from
+// outside was accepted and is still worth checking; otherwise a person takes
+// over.
+func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
+	if _, err := s.Store.LockIncident(ctx, tx, incidentID); err != nil {
+		return err
+	}
+	proposals, err := s.Store.Proposals(ctx, tx, incidentID)
+	if err != nil {
+		return err
+	}
+	p, ok := nextProposal(proposals, "")
+	if !ok {
+		return s.escalate(ctx, tx, incidentID, reason)
+	}
+	err = s.advance(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", incident.Investigating, incident.Diagnosed)
+	if errors.Is(err, store.ErrStateConflict) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: incidentID})
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
