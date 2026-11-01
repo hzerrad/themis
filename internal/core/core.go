@@ -98,6 +98,7 @@ func Run(ctx context.Context, o Options) error {
 		evidence.NewRolloutHistory(),
 		evidence.NewPodStates(),
 		evidence.NewTargetEvents(),
+		evidence.NewReferencedConfig(),
 		evidence.NewContainerLogsTail(evidence.ClientsetLogs{Clientset: clientset}),
 	)
 	if err := checkTemplates(cfg, registry); err != nil {

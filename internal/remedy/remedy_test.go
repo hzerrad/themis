@@ -24,7 +24,7 @@ func message(cause evidence.GapCause, template string) string {
 	return writer.Message(checkout, store.EvidenceGap{Template: template, Cause: cause, Detail: "connection refused"})
 }
 
-var templates = []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents, evidence.ContainerLogsTail}
+var templates = []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents, evidence.ContainerLogsTail, evidence.ReferencedConfig}
 
 // internalWords are Themis's own terms: what an operator reads never uses them.
 var internalWords = []string{
