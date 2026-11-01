@@ -42,6 +42,59 @@ spec:
                 items:
                   type: string
                 type: array
+              externalProposals:
+                description: ExternalProposals lets callers outside Themis suggest
+                  fixes.
+                properties:
+                  sources:
+                    description: Sources are the agents allowed to suggest fixes.
+                    items:
+                      description: ProposalSource is one agent, known by its Kubernetes
+                        ServiceAccount.
+                      properties:
+                        capabilities:
+                          description: Capabilities are the fixes it may suggest.
+                          items:
+                            type: string
+                          minItems: 1
+                          type: array
+                        ceiling:
+                          description: |-
+                            Ceiling is the most sensitive evidence it may read: internal, or
+                            sensitive to include container logs. Defaults to internal.
+                          enum:
+                          - internal
+                          - sensitive
+                          type: string
+                        namespaces:
+                          description: Namespaces are those whose incidents it may
+                            read and suggest fixes for.
+                          items:
+                            type: string
+                          minItems: 1
+                          type: array
+                        perMinute:
+                          description: PerMinute bounds its requests to suggest a
+                            fix. Defaults to 6.
+                          minimum: 1
+                          type: integer
+                        serviceAccount:
+                          description: ServiceAccount is its identity, as namespace/name.
+                          minLength: 3
+                          type: string
+                      required:
+                      - serviceAccount
+                      - namespaces
+                      - capabilities
+                      type: object
+                    type: array
+                  window:
+                    description: |-
+                      Window is how long an incident Themis couldn't decide stays open for a
+                      suggestion. Defaults to 15m with sources, and to none without.
+                    pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
+                    type: string
+                type: object
             type: object
           status:
             properties:

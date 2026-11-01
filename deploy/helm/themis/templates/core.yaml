@@ -90,6 +90,10 @@ rules:
   - apiGroups: [themis.dev]
     resources: [themisconfigs/status, incidentprofiles/status]
     verbs: [patch]
+  # To prove who an agent suggesting a fix is.
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

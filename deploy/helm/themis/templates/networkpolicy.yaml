@@ -24,7 +24,8 @@ spec:
     {{- end }}
     - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
-# The core's gRPC API serves the investigator; its HTTP API anyone with a token.
+# The core's gRPC API serves the investigator and agents in the namespaces
+# allowed to reach it; its HTTP API anyone with a token.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -38,6 +39,10 @@ spec:
     - from:
         - podSelector:
             matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 14 }}
+        {{- range .Values.networkPolicy.agentNamespaces }}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ . }}}
+        {{- end }}
       ports: [{port: 9090, protocol: TCP}]
     - ports: [{port: 8080, protocol: TCP}, {port: 8081, protocol: TCP}, {port: 8082, protocol: TCP}]
 {{- if .Values.executor.enabled }}

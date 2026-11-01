@@ -314,6 +314,35 @@ check "a profile whose rule doesn't compile is refused" accepted_within shop tea
 $K -n shop delete incidentprofile team-good team-bad >/dev/null
 check "the core didn't restart" [ "$(restarts)" = "$BEFORE_RESTARTS" ]
 
+log "11. only an agent named in the configuration may call in, with its own token"
+$K -n themis port-forward svc/themis-core 19090:9090 >/dev/null 2>&1 &
+AGENT_PF=$!
+sleep 2
+agent() { go run ./test/e2e/agent 127.0.0.1:19090 "$1"; }
+$K -n shop create serviceaccount triage --dry-run=client -o yaml | $K apply -f - >/dev/null
+TOKEN=$($K -n shop create token triage --audience themis)
+check "an agent nobody named is refused" [ "$(agent "$TOKEN")" = PermissionDenied ]
+cat <<YAML | $K apply -f - >/dev/null
+apiVersion: themis.dev/v1alpha1
+kind: ThemisConfig
+metadata: {name: themis}
+spec:
+  externalProposals:
+    sources:
+      - {serviceAccount: shop/triage, namespaces: [shop], capabilities: [deployment.rollback-to-revision]}
+YAML
+named_agent_allowed() {
+  local deadline=$((SECONDS + 60))
+  while [ $SECONDS -lt $deadline ]; do [ "$(agent "$TOKEN")" = OK ] && return 0; sleep 2; done
+  return 1
+}
+check "the same agent is let in once named, with no restart" named_agent_allowed
+check "a token issued for another audience is refused" [ "$(agent "$($K -n shop create token triage --audience other)")" = Unauthenticated ]
+check "no token at all is refused" [ "$(agent "")" = Unauthenticated ]
+$K delete themisconfig themis >/dev/null
+$K -n shop delete serviceaccount triage >/dev/null
+kill "$AGENT_PF" 2>/dev/null || true
+
 log "telemetry leaks no workload data"
 # An unreadable source would hide a leak.
 for d in themis-core themis-executor themis-intelligence; do
@@ -384,7 +413,7 @@ serves() {
 }
 check "the core serves the lifecycle and trust metrics" serves 18182 \
   themis_incident_transitions_total themis_escalations_total themis_stage_duration_seconds \
-  themis_investigations_total themis_proposals_total themis_safety_events_total \
+  themis_investigations_total themis_proposals_total themis_external_proposals_total themis_safety_events_total \
   themis_policy_decisions_total themis_gitops_refusals_total themis_approvals_total \
   themis_verification_outcomes_total themis_notifications_total themis_evidence_collected_total \
   themis_evidence_truncated_total themis_redactions_total themis_incidents \
