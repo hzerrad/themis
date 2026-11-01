@@ -2,6 +2,7 @@ package predicate_test
 
 import (
 	"encoding/json/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -248,4 +249,60 @@ func TestRolloutTime_ReusedReplicaSet(t *testing.T) {
 
 	assertTruth(t, predicate.RolloutRecent(b, time.Hour, now), predicate.True)
 	assertTruth(t, predicate.FailureOnsetAfterRollout(b), predicate.True)
+}
+
+func TestConfigChangedBeforeFailure(t *testing.T) {
+	cm := func(at time.Time) evidence.ConfigRefView {
+		return evidence.ConfigRefView{Kind: evidence.ConfigKindConfigMap, Name: "settings", ChangedAt: at}
+	}
+	failedAt := rolloutAt.Add(10 * time.Minute)
+	crashed := evidence.PodStatesView{Pods: []evidence.PodView{{Name: "p", Revision: "2", Containers: []evidence.ContainerView{
+		{Name: "app", LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: failedAt}},
+	}}}}
+	tests := []struct {
+		name string
+		refs []evidence.ConfigRefView
+		want predicate.Truth
+	}{
+		{"nothing referenced", nil, predicate.False},
+		{"changed before the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(-time.Hour))}, predicate.False},
+		{"written with the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(30 * time.Second))}, predicate.False},
+		{"changed between the rollout and the failure", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, predicate.True},
+		{"changed after the failure", []evidence.ConfigRefView{cm(failedAt.Add(time.Minute))}, predicate.False},
+		{"doesn't say when", []evidence.ConfigRefView{cm(time.Time{})}, predicate.Unknown},
+		{"required and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true}}, predicate.Unknown},
+		{"optional and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true, Optional: true}}, predicate.False},
+		{"a Secret can't be checked", []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}, predicate.False},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := evidence.Bundle{Items: []evidence.Item{
+				item(t, "cfg", evidence.ReferencedConfig, evidence.ReferencedConfigView{Refs: tt.refs}),
+				item(t, "h", evidence.RolloutHistory, history()),
+				item(t, "p", evidence.PodStates, crashed),
+			}}
+			if got := predicate.ConfigChangedBeforeFailure(b); got.Value != tt.want {
+				t.Errorf("value = %s (%s), want %s", got.Value, got.Reason, tt.want)
+			}
+		})
+	}
+}
+
+func TestConfigChangedBeforeFailure_SaysSecretsCannotBeChecked(t *testing.T) {
+	b := evidence.Bundle{Items: []evidence.Item{
+		item(t, "cfg", evidence.ReferencedConfig, evidence.ReferencedConfigView{Refs: []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}}),
+		item(t, "h", evidence.RolloutHistory, history()),
+		item(t, "p", evidence.PodStates, evidence.PodStatesView{Pods: []evidence.PodView{{Name: "p", Revision: "2", Containers: []evidence.ContainerView{
+			{Name: "app", LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: now}},
+		}}}}),
+	}}
+	if got := predicate.ConfigChangedBeforeFailure(b); !strings.Contains(got.Reason, "1 referenced Secret(s) can't be checked") {
+		t.Errorf("reason = %q", got.Reason)
+	}
+}
+
+func TestConfigChangedBeforeFailure_WithoutTheListIsUnknown(t *testing.T) {
+	if got := predicate.ConfigChangedBeforeFailure(evidence.Bundle{}); got.Value != predicate.Unknown {
+		t.Errorf("value = %s, want unknown", got.Value)
+	}
 }

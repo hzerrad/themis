@@ -56,6 +56,7 @@ func Evaluate(b evidence.Bundle, now time.Time) []Result {
 		PriorRevisionWasHealthy(b),
 		OOMKilledNewRevision(b),
 		GitOpsManaged(b),
+		ConfigChangedBeforeFailure(b),
 	}
 }
 

@@ -8,11 +8,12 @@ import (
 
 // Needs names the evidence each check reads.
 var Needs = map[string][]string{
-	NameRolloutRecent:            {evidence.RolloutHistory},
-	NameFailureOnsetAfterRollout: {evidence.RolloutHistory, evidence.PodStates},
-	NamePriorRevisionWasHealthy:  {evidence.RolloutHistory, evidence.PodStates},
-	NameOOMKilledNewRevision:     {evidence.PodStates},
-	NameGitOpsManaged:            {evidence.RolloutHistory},
+	NameRolloutRecent:              {evidence.RolloutHistory},
+	NameFailureOnsetAfterRollout:   {evidence.RolloutHistory, evidence.PodStates},
+	NamePriorRevisionWasHealthy:    {evidence.RolloutHistory, evidence.PodStates},
+	NameOOMKilledNewRevision:       {evidence.PodStates},
+	NameGitOpsManaged:              {evidence.RolloutHistory},
+	NameConfigChangedBeforeFailure: {evidence.ReferencedConfig, evidence.RolloutHistory, evidence.PodStates},
 }
 
 // Gap is evidence a check needed and could not have, and why.

@@ -25,7 +25,7 @@ const (
 
 var predicateNames = []string{
 	predicate.NameRolloutRecent, predicate.NameFailureOnsetAfterRollout, predicate.NamePriorRevisionWasHealthy,
-	predicate.NameOOMKilledNewRevision, predicate.NameGitOpsManaged,
+	predicate.NameOOMKilledNewRevision, predicate.NameGitOpsManaged, predicate.NameConfigChangedBeforeFailure,
 }
 
 // rejection is why a proposal is stored as rejected.
