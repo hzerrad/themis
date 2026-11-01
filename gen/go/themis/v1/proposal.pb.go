@@ -79,6 +79,8 @@ const (
 	RejectionReason_REJECTION_REASON_INVALID_PARAMS         RejectionReason = 3
 	RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE       RejectionReason = 4
 	RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE      RejectionReason = 5
+	RejectionReason_REJECTION_REASON_OUT_OF_SCOPE           RejectionReason = 6
+	RejectionReason_REJECTION_REASON_INCIDENT_CLOSED        RejectionReason = 7
 )
 
 // Enum value maps for RejectionReason.
@@ -90,6 +92,8 @@ var (
 		3: "REJECTION_REASON_INVALID_PARAMS",
 		4: "REJECTION_REASON_UNKNOWN_EVIDENCE",
 		5: "REJECTION_REASON_UNKNOWN_PREDICATE",
+		6: "REJECTION_REASON_OUT_OF_SCOPE",
+		7: "REJECTION_REASON_INCIDENT_CLOSED",
 	}
 	RejectionReason_value = map[string]int32{
 		"REJECTION_REASON_UNSPECIFIED":            0,
@@ -98,6 +102,8 @@ var (
 		"REJECTION_REASON_INVALID_PARAMS":         3,
 		"REJECTION_REASON_UNKNOWN_EVIDENCE":       4,
 		"REJECTION_REASON_UNKNOWN_PREDICATE":      5,
+		"REJECTION_REASON_OUT_OF_SCOPE":           6,
+		"REJECTION_REASON_INCIDENT_CLOSED":        7,
 	}
 )
 
@@ -141,7 +147,9 @@ type SubmitProposalRequest struct {
 	// Types that are valid to be assigned to Capability:
 	//
 	//	*SubmitProposalRequest_RollbackToRevision
-	Capability    isSubmitProposalRequest_Capability `protobuf_oneof:"capability"`
+	Capability isSubmitProposalRequest_Capability `protobuf_oneof:"capability"`
+	// Set instead of lease_id by a caller outside Themis.
+	IncidentId    string `protobuf:"bytes,12,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,6 +254,13 @@ func (x *SubmitProposalRequest) GetRollbackToRevision() *RollbackToRevisionParam
 		}
 	}
 	return nil
+}
+
+func (x *SubmitProposalRequest) GetIncidentId() string {
+	if x != nil {
+		return x.IncidentId
+	}
+	return ""
 }
 
 type isSubmitProposalRequest_Capability interface {
@@ -370,11 +385,264 @@ func (x *SubmitProposalResponse) GetMessage() string {
 	return ""
 }
 
+type ListIncidentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIncidentsRequest) Reset() {
+	*x = ListIncidentsRequest{}
+	mi := &file_themis_v1_proposal_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIncidentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIncidentsRequest) ProtoMessage() {}
+
+func (x *ListIncidentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_proposal_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIncidentsRequest.ProtoReflect.Descriptor instead.
+func (*ListIncidentsRequest) Descriptor() ([]byte, []int) {
+	return file_themis_v1_proposal_proto_rawDescGZIP(), []int{3}
+}
+
+type ListIncidentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Incidents     []*OpenIncident        `protobuf:"bytes,1,rep,name=incidents,proto3" json:"incidents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIncidentsResponse) Reset() {
+	*x = ListIncidentsResponse{}
+	mi := &file_themis_v1_proposal_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIncidentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIncidentsResponse) ProtoMessage() {}
+
+func (x *ListIncidentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_proposal_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIncidentsResponse.ProtoReflect.Descriptor instead.
+func (*ListIncidentsResponse) Descriptor() ([]byte, []int) {
+	return file_themis_v1_proposal_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListIncidentsResponse) GetIncidents() []*OpenIncident {
+	if x != nil {
+		return x.Incidents
+	}
+	return nil
+}
+
+type OpenIncident struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Target        *TargetRef             `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenIncident) Reset() {
+	*x = OpenIncident{}
+	mi := &file_themis_v1_proposal_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenIncident) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenIncident) ProtoMessage() {}
+
+func (x *OpenIncident) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_proposal_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenIncident.ProtoReflect.Descriptor instead.
+func (*OpenIncident) Descriptor() ([]byte, []int) {
+	return file_themis_v1_proposal_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *OpenIncident) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OpenIncident) GetTarget() *TargetRef {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *OpenIncident) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+type GetIncidentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IncidentId    string                 `protobuf:"bytes,1,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIncidentRequest) Reset() {
+	*x = GetIncidentRequest{}
+	mi := &file_themis_v1_proposal_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIncidentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIncidentRequest) ProtoMessage() {}
+
+func (x *GetIncidentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_proposal_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIncidentRequest.ProtoReflect.Descriptor instead.
+func (*GetIncidentRequest) Descriptor() ([]byte, []int) {
+	return file_themis_v1_proposal_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetIncidentRequest) GetIncidentId() string {
+	if x != nil {
+		return x.IncidentId
+	}
+	return ""
+}
+
+type GetIncidentResponse struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Incident   *OpenIncident          `protobuf:"bytes,1,opt,name=incident,proto3" json:"incident,omitempty"`
+	Evidence   []*EvidenceItem        `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
+	Predicates []*PredicateResult     `protobuf:"bytes,3,rep,name=predicates,proto3" json:"predicates,omitempty"`
+	// How many items this caller may not see.
+	Withheld      int32 `protobuf:"varint,4,opt,name=withheld,proto3" json:"withheld,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIncidentResponse) Reset() {
+	*x = GetIncidentResponse{}
+	mi := &file_themis_v1_proposal_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIncidentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIncidentResponse) ProtoMessage() {}
+
+func (x *GetIncidentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_proposal_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIncidentResponse.ProtoReflect.Descriptor instead.
+func (*GetIncidentResponse) Descriptor() ([]byte, []int) {
+	return file_themis_v1_proposal_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *GetIncidentResponse) GetIncident() *OpenIncident {
+	if x != nil {
+		return x.Incident
+	}
+	return nil
+}
+
+func (x *GetIncidentResponse) GetEvidence() []*EvidenceItem {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+func (x *GetIncidentResponse) GetPredicates() []*PredicateResult {
+	if x != nil {
+		return x.Predicates
+	}
+	return nil
+}
+
+func (x *GetIncidentResponse) GetWithheld() int32 {
+	if x != nil {
+		return x.Withheld
+	}
+	return 0
+}
+
 var File_themis_v1_proposal_proto protoreflect.FileDescriptor
 
 const file_themis_v1_proposal_proto_rawDesc = "" +
 	"\n" +
-	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x16themis/v1/common.proto\"\xd8\x03\n" +
+	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x16themis/v1/common.proto\"\xf9\x03\n" +
 	"\x15SubmitProposalRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12,\n" +
 	"\x12client_proposal_id\x18\x02 \x01(\tR\x10clientProposalId\x12,\n" +
@@ -387,7 +655,9 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"provenance\x18\n" +
 	" \x01(\v2\x15.themis.v1.ProvenanceR\n" +
 	"provenance\x12W\n" +
-	"\x14rollback_to_revision\x18\v \x01(\v2#.themis.v1.RollbackToRevisionParamsH\x00R\x12rollbackToRevisionB\f\n" +
+	"\x14rollback_to_revision\x18\v \x01(\v2#.themis.v1.RollbackToRevisionParamsH\x00R\x12rollbackToRevision\x12\x1f\n" +
+	"\vincident_id\x18\f \x01(\tR\n" +
+	"incidentIdB\f\n" +
 	"\n" +
 	"capabilityJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"6\n" +
 	"\x18RollbackToRevisionParams\x12\x1a\n" +
@@ -397,20 +667,41 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"proposalId\x121\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x19.themis.v1.ProposalStatusR\x06status\x12E\n" +
 	"\x10rejection_reason\x18\x03 \x01(\x0e2\x1a.themis.v1.RejectionReasonR\x0frejectionReason\x12\x18\n" +
-	"\amessage\x18\x04 \x01(\tR\amessage*m\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"\x16\n" +
+	"\x14ListIncidentsRequest\"N\n" +
+	"\x15ListIncidentsResponse\x125\n" +
+	"\tincidents\x18\x01 \x03(\v2\x17.themis.v1.OpenIncidentR\tincidents\"b\n" +
+	"\fOpenIncident\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
+	"\x06target\x18\x02 \x01(\v2\x14.themis.v1.TargetRefR\x06target\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\"5\n" +
+	"\x12GetIncidentRequest\x12\x1f\n" +
+	"\vincident_id\x18\x01 \x01(\tR\n" +
+	"incidentId\"\xd7\x01\n" +
+	"\x13GetIncidentResponse\x123\n" +
+	"\bincident\x18\x01 \x01(\v2\x17.themis.v1.OpenIncidentR\bincident\x123\n" +
+	"\bevidence\x18\x02 \x03(\v2\x17.themis.v1.EvidenceItemR\bevidence\x12:\n" +
+	"\n" +
+	"predicates\x18\x03 \x03(\v2\x1a.themis.v1.PredicateResultR\n" +
+	"predicates\x12\x1a\n" +
+	"\bwithheld\x18\x04 \x01(\x05R\bwithheld*m\n" +
 	"\x0eProposalStatus\x12\x1f\n" +
 	"\x1bPROPOSAL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PROPOSAL_STATUS_ACCEPTED\x10\x01\x12\x1c\n" +
-	"\x18PROPOSAL_STATUS_REJECTED\x10\x02*\xfa\x01\n" +
+	"\x18PROPOSAL_STATUS_REJECTED\x10\x02*\xc3\x02\n" +
 	"\x0fRejectionReason\x12 \n" +
 	"\x1cREJECTION_REASON_UNSPECIFIED\x10\x00\x12$\n" +
 	" REJECTION_REASON_TARGET_MISMATCH\x10\x01\x12+\n" +
 	"'REJECTION_REASON_CAPABILITY_NOT_ALLOWED\x10\x02\x12#\n" +
 	"\x1fREJECTION_REASON_INVALID_PARAMS\x10\x03\x12%\n" +
 	"!REJECTION_REASON_UNKNOWN_EVIDENCE\x10\x04\x12&\n" +
-	"\"REJECTION_REASON_UNKNOWN_PREDICATE\x10\x052h\n" +
+	"\"REJECTION_REASON_UNKNOWN_PREDICATE\x10\x05\x12!\n" +
+	"\x1dREJECTION_REASON_OUT_OF_SCOPE\x10\x06\x12$\n" +
+	" REJECTION_REASON_INCIDENT_CLOSED\x10\a2\x8a\x02\n" +
 	"\x0fProposalService\x12U\n" +
-	"\x0eSubmitProposal\x12 .themis.v1.SubmitProposalRequest\x1a!.themis.v1.SubmitProposalResponseB\x98\x01\n" +
+	"\x0eSubmitProposal\x12 .themis.v1.SubmitProposalRequest\x1a!.themis.v1.SubmitProposalResponse\x12R\n" +
+	"\rListIncidents\x12\x1f.themis.v1.ListIncidentsRequest\x1a .themis.v1.ListIncidentsResponse\x12L\n" +
+	"\vGetIncident\x12\x1d.themis.v1.GetIncidentRequest\x1a\x1e.themis.v1.GetIncidentResponseB\x98\x01\n" +
 	"\rcom.themis.v1B\rProposalProtoP\x01Z3github.com/hzerrad/themis/gen/go/themis/v1;themisv1\xa2\x02\x03TXX\xaa\x02\tThemis.V1\xca\x02\tThemis\\V1\xe2\x02\x15Themis\\V1\\GPBMetadata\xea\x02\n" +
 	"Themis::V1b\x06proto3"
 
@@ -427,29 +718,45 @@ func file_themis_v1_proposal_proto_rawDescGZIP() []byte {
 }
 
 var file_themis_v1_proposal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_themis_v1_proposal_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_themis_v1_proposal_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_themis_v1_proposal_proto_goTypes = []any{
 	(ProposalStatus)(0),              // 0: themis.v1.ProposalStatus
 	(RejectionReason)(0),             // 1: themis.v1.RejectionReason
 	(*SubmitProposalRequest)(nil),    // 2: themis.v1.SubmitProposalRequest
 	(*RollbackToRevisionParams)(nil), // 3: themis.v1.RollbackToRevisionParams
 	(*SubmitProposalResponse)(nil),   // 4: themis.v1.SubmitProposalResponse
-	(*TargetRef)(nil),                // 5: themis.v1.TargetRef
-	(*Provenance)(nil),               // 6: themis.v1.Provenance
+	(*ListIncidentsRequest)(nil),     // 5: themis.v1.ListIncidentsRequest
+	(*ListIncidentsResponse)(nil),    // 6: themis.v1.ListIncidentsResponse
+	(*OpenIncident)(nil),             // 7: themis.v1.OpenIncident
+	(*GetIncidentRequest)(nil),       // 8: themis.v1.GetIncidentRequest
+	(*GetIncidentResponse)(nil),      // 9: themis.v1.GetIncidentResponse
+	(*TargetRef)(nil),                // 10: themis.v1.TargetRef
+	(*Provenance)(nil),               // 11: themis.v1.Provenance
+	(*EvidenceItem)(nil),             // 12: themis.v1.EvidenceItem
+	(*PredicateResult)(nil),          // 13: themis.v1.PredicateResult
 }
 var file_themis_v1_proposal_proto_depIdxs = []int32{
-	5, // 0: themis.v1.SubmitProposalRequest.target:type_name -> themis.v1.TargetRef
-	6, // 1: themis.v1.SubmitProposalRequest.provenance:type_name -> themis.v1.Provenance
-	3, // 2: themis.v1.SubmitProposalRequest.rollback_to_revision:type_name -> themis.v1.RollbackToRevisionParams
-	0, // 3: themis.v1.SubmitProposalResponse.status:type_name -> themis.v1.ProposalStatus
-	1, // 4: themis.v1.SubmitProposalResponse.rejection_reason:type_name -> themis.v1.RejectionReason
-	2, // 5: themis.v1.ProposalService.SubmitProposal:input_type -> themis.v1.SubmitProposalRequest
-	4, // 6: themis.v1.ProposalService.SubmitProposal:output_type -> themis.v1.SubmitProposalResponse
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	10, // 0: themis.v1.SubmitProposalRequest.target:type_name -> themis.v1.TargetRef
+	11, // 1: themis.v1.SubmitProposalRequest.provenance:type_name -> themis.v1.Provenance
+	3,  // 2: themis.v1.SubmitProposalRequest.rollback_to_revision:type_name -> themis.v1.RollbackToRevisionParams
+	0,  // 3: themis.v1.SubmitProposalResponse.status:type_name -> themis.v1.ProposalStatus
+	1,  // 4: themis.v1.SubmitProposalResponse.rejection_reason:type_name -> themis.v1.RejectionReason
+	7,  // 5: themis.v1.ListIncidentsResponse.incidents:type_name -> themis.v1.OpenIncident
+	10, // 6: themis.v1.OpenIncident.target:type_name -> themis.v1.TargetRef
+	7,  // 7: themis.v1.GetIncidentResponse.incident:type_name -> themis.v1.OpenIncident
+	12, // 8: themis.v1.GetIncidentResponse.evidence:type_name -> themis.v1.EvidenceItem
+	13, // 9: themis.v1.GetIncidentResponse.predicates:type_name -> themis.v1.PredicateResult
+	2,  // 10: themis.v1.ProposalService.SubmitProposal:input_type -> themis.v1.SubmitProposalRequest
+	5,  // 11: themis.v1.ProposalService.ListIncidents:input_type -> themis.v1.ListIncidentsRequest
+	8,  // 12: themis.v1.ProposalService.GetIncident:input_type -> themis.v1.GetIncidentRequest
+	4,  // 13: themis.v1.ProposalService.SubmitProposal:output_type -> themis.v1.SubmitProposalResponse
+	6,  // 14: themis.v1.ProposalService.ListIncidents:output_type -> themis.v1.ListIncidentsResponse
+	9,  // 15: themis.v1.ProposalService.GetIncident:output_type -> themis.v1.GetIncidentResponse
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_themis_v1_proposal_proto_init() }
@@ -467,7 +774,7 @@ func file_themis_v1_proposal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_themis_v1_proposal_proto_rawDesc), len(file_themis_v1_proposal_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   3,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -22,6 +22,8 @@ class RejectionReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     REJECTION_REASON_INVALID_PARAMS: _ClassVar[RejectionReason]
     REJECTION_REASON_UNKNOWN_EVIDENCE: _ClassVar[RejectionReason]
     REJECTION_REASON_UNKNOWN_PREDICATE: _ClassVar[RejectionReason]
+    REJECTION_REASON_OUT_OF_SCOPE: _ClassVar[RejectionReason]
+    REJECTION_REASON_INCIDENT_CLOSED: _ClassVar[RejectionReason]
 PROPOSAL_STATUS_UNSPECIFIED: ProposalStatus
 PROPOSAL_STATUS_ACCEPTED: ProposalStatus
 PROPOSAL_STATUS_REJECTED: ProposalStatus
@@ -31,9 +33,11 @@ REJECTION_REASON_CAPABILITY_NOT_ALLOWED: RejectionReason
 REJECTION_REASON_INVALID_PARAMS: RejectionReason
 REJECTION_REASON_UNKNOWN_EVIDENCE: RejectionReason
 REJECTION_REASON_UNKNOWN_PREDICATE: RejectionReason
+REJECTION_REASON_OUT_OF_SCOPE: RejectionReason
+REJECTION_REASON_INCIDENT_CLOSED: RejectionReason
 
 class SubmitProposalRequest(_message.Message):
-    __slots__ = ("lease_id", "client_proposal_id", "target", "expected_effect", "rationale", "cited_evidence_ids", "cited_predicates", "provenance", "rollback_to_revision")
+    __slots__ = ("lease_id", "client_proposal_id", "target", "expected_effect", "rationale", "cited_evidence_ids", "cited_predicates", "provenance", "rollback_to_revision", "incident_id")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     CLIENT_PROPOSAL_ID_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_NUMBER: _ClassVar[int]
@@ -43,6 +47,7 @@ class SubmitProposalRequest(_message.Message):
     CITED_PREDICATES_FIELD_NUMBER: _ClassVar[int]
     PROVENANCE_FIELD_NUMBER: _ClassVar[int]
     ROLLBACK_TO_REVISION_FIELD_NUMBER: _ClassVar[int]
+    INCIDENT_ID_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     client_proposal_id: str
     target: _common_pb2.TargetRef
@@ -52,7 +57,8 @@ class SubmitProposalRequest(_message.Message):
     cited_predicates: _containers.RepeatedScalarFieldContainer[str]
     provenance: _common_pb2.Provenance
     rollback_to_revision: RollbackToRevisionParams
-    def __init__(self, lease_id: _Optional[str] = ..., client_proposal_id: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., expected_effect: _Optional[str] = ..., rationale: _Optional[str] = ..., cited_evidence_ids: _Optional[_Iterable[str]] = ..., cited_predicates: _Optional[_Iterable[str]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ..., rollback_to_revision: _Optional[_Union[RollbackToRevisionParams, _Mapping]] = ...) -> None: ...
+    incident_id: str
+    def __init__(self, lease_id: _Optional[str] = ..., client_proposal_id: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., expected_effect: _Optional[str] = ..., rationale: _Optional[str] = ..., cited_evidence_ids: _Optional[_Iterable[str]] = ..., cited_predicates: _Optional[_Iterable[str]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ..., rollback_to_revision: _Optional[_Union[RollbackToRevisionParams, _Mapping]] = ..., incident_id: _Optional[str] = ...) -> None: ...
 
 class RollbackToRevisionParams(_message.Message):
     __slots__ = ("revision",)
@@ -71,3 +77,41 @@ class SubmitProposalResponse(_message.Message):
     rejection_reason: RejectionReason
     message: str
     def __init__(self, proposal_id: _Optional[str] = ..., status: _Optional[_Union[ProposalStatus, str]] = ..., rejection_reason: _Optional[_Union[RejectionReason, str]] = ..., message: _Optional[str] = ...) -> None: ...
+
+class ListIncidentsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class ListIncidentsResponse(_message.Message):
+    __slots__ = ("incidents",)
+    INCIDENTS_FIELD_NUMBER: _ClassVar[int]
+    incidents: _containers.RepeatedCompositeFieldContainer[OpenIncident]
+    def __init__(self, incidents: _Optional[_Iterable[_Union[OpenIncident, _Mapping]]] = ...) -> None: ...
+
+class OpenIncident(_message.Message):
+    __slots__ = ("id", "target", "state")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    STATE_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    target: _common_pb2.TargetRef
+    state: str
+    def __init__(self, id: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., state: _Optional[str] = ...) -> None: ...
+
+class GetIncidentRequest(_message.Message):
+    __slots__ = ("incident_id",)
+    INCIDENT_ID_FIELD_NUMBER: _ClassVar[int]
+    incident_id: str
+    def __init__(self, incident_id: _Optional[str] = ...) -> None: ...
+
+class GetIncidentResponse(_message.Message):
+    __slots__ = ("incident", "evidence", "predicates", "withheld")
+    INCIDENT_FIELD_NUMBER: _ClassVar[int]
+    EVIDENCE_FIELD_NUMBER: _ClassVar[int]
+    PREDICATES_FIELD_NUMBER: _ClassVar[int]
+    WITHHELD_FIELD_NUMBER: _ClassVar[int]
+    incident: OpenIncident
+    evidence: _containers.RepeatedCompositeFieldContainer[_common_pb2.EvidenceItem]
+    predicates: _containers.RepeatedCompositeFieldContainer[_common_pb2.PredicateResult]
+    withheld: int
+    def __init__(self, incident: _Optional[_Union[OpenIncident, _Mapping]] = ..., evidence: _Optional[_Iterable[_Union[_common_pb2.EvidenceItem, _Mapping]]] = ..., predicates: _Optional[_Iterable[_Union[_common_pb2.PredicateResult, _Mapping]]] = ..., withheld: _Optional[int] = ...) -> None: ...

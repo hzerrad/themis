@@ -65,22 +65,48 @@ func (s *Store) InsertProposal(ctx context.Context, tx pgx.Tx, p Proposal) (Prop
 		return Proposal{}, false, err
 	}
 	t := p.Target
+	conflict := `(lease_id, client_proposal_id)`
+	if p.LeaseID == "" {
+		conflict = `(incident_id, (provenance ->> 'source'), client_proposal_id) WHERE lease_id IS NULL`
+	}
 	tag, err := tx.Exec(ctx, `
 	INSERT INTO proposals (id, incident_id, lease_id, client_proposal_id, capability, capability_version,
 	                       target_group, target_kind, target_namespace, target_name, target_uid,
 	                       params, expected_effect, rationale, cited_evidence_ids, cited_predicates,
 	                       provenance, authenticated, status, rejection_reason, message)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
-	ON CONFLICT (lease_id, client_proposal_id) DO NOTHING
-`, id, p.IncidentID, p.LeaseID, p.ClientProposalID, p.Capability, p.CapabilityVersion,
+	ON CONFLICT `+conflict+` DO NOTHING
+`, id, p.IncidentID, nullIfEmpty(p.LeaseID), p.ClientProposalID, p.Capability, p.CapabilityVersion,
 		t.Group, t.Kind, t.Namespace, t.Name, t.UID,
 		params, p.ExpectedEffect, p.Rationale, nonNil(p.CitedEvidenceIDs), nonNil(p.CitedPredicates),
 		provenance, p.Authenticated, p.Status, p.RejectionReason, p.Message)
 	if err != nil {
 		return Proposal{}, false, fmt.Errorf("insert proposal: %w", err)
 	}
+	if p.LeaseID == "" {
+		stored, err := s.queryProposal(ctx, tx, `WHERE lease_id IS NULL AND incident_id = $1 AND provenance ->> 'source' = $2 AND client_proposal_id = $3`,
+			p.IncidentID, p.Provenance["source"], p.ClientProposalID)
+		return stored, tag.RowsAffected() == 1, err
+	}
 	stored, err := s.queryProposal(ctx, tx, `WHERE lease_id = $1 AND client_proposal_id = $2`, p.LeaseID, p.ClientProposalID)
 	return stored, tag.RowsAffected() == 1, err
+}
+
+func nullIfEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// CountExternalProposals counts what one source suggested for an incident.
+func (s *Store) CountExternalProposals(ctx context.Context, tx pgx.Tx, incidentID, source string) (int, error) {
+	var n int
+	err := tx.QueryRow(ctx, `SELECT count(*) FROM proposals WHERE incident_id = $1 AND lease_id IS NULL AND provenance ->> 'source' = $2`, incidentID, source).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count proposals of incident %s: %w", incidentID, err)
+	}
+	return n, nil
 }
 
 // Proposal returns the proposal with the given ID.
@@ -108,7 +134,7 @@ func (s *Store) SetProposalStatus(ctx context.Context, tx pgx.Tx, id string, sta
 	return nil
 }
 
-const proposalColumns = `id::text, incident_id::text, lease_id::text, client_proposal_id, capability, capability_version,
+const proposalColumns = `id::text, incident_id::text, coalesce(lease_id::text, ''), client_proposal_id, capability, capability_version,
 	target_group, target_kind, target_namespace, target_name, target_uid,
 	params, expected_effect, rationale, cited_evidence_ids, cited_predicates,
 	provenance, authenticated, status, rejection_reason, message, created_at`

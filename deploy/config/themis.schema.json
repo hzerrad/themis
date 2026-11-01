@@ -104,6 +104,70 @@
       "type": "object",
       "description": "Notifications announce escalations to humans."
     },
+    "externalProposals": {
+      "properties": {
+        "sources": {
+          "items": {
+            "properties": {
+              "serviceAccount": {
+                "type": "string",
+                "minLength": 3,
+                "description": "ServiceAccount is its identity, as namespace/name."
+              },
+              "namespaces": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Namespaces are those whose incidents it may read and suggest fixes for."
+              },
+              "capabilities": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Capabilities are the fixes it may suggest."
+              },
+              "perMinute": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "PerMinute bounds its requests to suggest a fix. Defaults to 6."
+              },
+              "ceiling": {
+                "type": "string",
+                "enum": [
+                  "internal",
+                  "sensitive"
+                ],
+                "description": "Ceiling is the most sensitive evidence it may read: internal, or\nsensitive to include container logs. Defaults to internal."
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "serviceAccount",
+              "namespaces",
+              "capabilities"
+            ],
+            "description": "ProposalSource is one agent, known by its Kubernetes ServiceAccount."
+          },
+          "type": "array",
+          "description": "Sources are the agents allowed to suggest fixes."
+        },
+        "window": {
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+          "description": "Window is how long an incident Themis couldn't decide stays open for a\nsuggestion. Defaults to 15m with sources, and to none without."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ExternalProposals lets callers outside Themis suggest fixes."
+    },
     "resources": {
       "properties": {
         "namespace": {

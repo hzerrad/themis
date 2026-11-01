@@ -19,12 +19,36 @@ class ProposalServiceStub:
                 request_serializer=themis_dot_v1_dot_proposal__pb2.SubmitProposalRequest.SerializeToString,
                 response_deserializer=themis_dot_v1_dot_proposal__pb2.SubmitProposalResponse.FromString,
                 _registered_method=True)
+        self.ListIncidents = channel.unary_unary(
+                '/themis.v1.ProposalService/ListIncidents',
+                request_serializer=themis_dot_v1_dot_proposal__pb2.ListIncidentsRequest.SerializeToString,
+                response_deserializer=themis_dot_v1_dot_proposal__pb2.ListIncidentsResponse.FromString,
+                _registered_method=True)
+        self.GetIncident = channel.unary_unary(
+                '/themis.v1.ProposalService/GetIncident',
+                request_serializer=themis_dot_v1_dot_proposal__pb2.GetIncidentRequest.SerializeToString,
+                response_deserializer=themis_dot_v1_dot_proposal__pb2.GetIncidentResponse.FromString,
+                _registered_method=True)
 
 
 class ProposalServiceServicer:
     """Missing associated documentation comment in .proto file."""
 
     def SubmitProposal(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListIncidents(self, request, context):
+        """For callers outside Themis: the incidents they may suggest a fix for, and
+        what Themis knows about one.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetIncident(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -37,6 +61,16 @@ def add_ProposalServiceServicer_to_server(servicer, server):
                     servicer.SubmitProposal,
                     request_deserializer=themis_dot_v1_dot_proposal__pb2.SubmitProposalRequest.FromString,
                     response_serializer=themis_dot_v1_dot_proposal__pb2.SubmitProposalResponse.SerializeToString,
+            ),
+            'ListIncidents': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListIncidents,
+                    request_deserializer=themis_dot_v1_dot_proposal__pb2.ListIncidentsRequest.FromString,
+                    response_serializer=themis_dot_v1_dot_proposal__pb2.ListIncidentsResponse.SerializeToString,
+            ),
+            'GetIncident': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetIncident,
+                    request_deserializer=themis_dot_v1_dot_proposal__pb2.GetIncidentRequest.FromString,
+                    response_serializer=themis_dot_v1_dot_proposal__pb2.GetIncidentResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -66,6 +100,60 @@ class ProposalService:
             '/themis.v1.ProposalService/SubmitProposal',
             themis_dot_v1_dot_proposal__pb2.SubmitProposalRequest.SerializeToString,
             themis_dot_v1_dot_proposal__pb2.SubmitProposalResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListIncidents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/themis.v1.ProposalService/ListIncidents',
+            themis_dot_v1_dot_proposal__pb2.ListIncidentsRequest.SerializeToString,
+            themis_dot_v1_dot_proposal__pb2.ListIncidentsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetIncident(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/themis.v1.ProposalService/GetIncident',
+            themis_dot_v1_dot_proposal__pb2.GetIncidentRequest.SerializeToString,
+            themis_dot_v1_dot_proposal__pb2.GetIncidentResponse.FromString,
             options,
             channel_credentials,
             insecure,

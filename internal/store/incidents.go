@@ -265,3 +265,37 @@ func (s *Store) Supersede(ctx context.Context, tx pgx.Tx, oldID, newID string) e
 	}
 	return nil
 }
+
+// LockIncident returns an incident's state, holding it still until tx ends.
+func (s *Store) LockIncident(ctx context.Context, tx pgx.Tx, id string) (incident.State, error) {
+	var state incident.State
+	err := tx.QueryRow(ctx, `SELECT state FROM incidents WHERE id = $1 FOR UPDATE`, id).Scan(&state)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", fmt.Errorf("incident %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return "", fmt.Errorf("lock incident %s: %w", id, err)
+	}
+	return state, nil
+}
+
+// OpenIncidents returns the incidents in the given namespaces that can still
+// take a suggestion, newest first. No namespaces means none.
+func (s *Store) OpenIncidents(ctx context.Context, namespaces []string, limit int) ([]Incident, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents
+	WHERE state IN ('investigating', 'inconclusive') AND target_namespace = ANY($1)
+	ORDER BY created_at DESC, id DESC LIMIT $2`, namespaces, limit)
+	if err != nil {
+		return nil, fmt.Errorf("open incidents: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
+}
+
+// UndecidedBefore returns the incidents left undecided since before t.
+func (s *Store) UndecidedBefore(ctx context.Context, q Querier, t time.Time, limit int) ([]string, error) {
+	rows, err := q.Query(ctx, `SELECT id::text FROM incidents WHERE state = 'inconclusive' AND updated_at <= $1 ORDER BY updated_at LIMIT $2`, t, limit)
+	if err != nil {
+		return nil, fmt.Errorf("undecided incidents: %w", err)
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
