@@ -136,3 +136,39 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 		t.Errorf("no rule: reason = %q", got)
 	}
 }
+
+func restore() governance.PolicyInput {
+	in := input()
+	in.Restore = true
+	return in
+}
+
+// Putting back what Themis changed needs no approval by default, even in
+// guarded mode: it returns the workload to how a person left it.
+func TestPolicy_RestoreAllowedByDefault(t *testing.T) {
+	d := compile(t, config.ModeGuarded).Evaluate(restore())
+	if d.Outcome != governance.Allow || d.Reason != "No policy rule matched, so Themis may put the workload back as it was." {
+		t.Errorf("decision = %+v, want allowed", d)
+	}
+	if d := compile(t, config.ModeGuarded).Evaluate(input()); d.Outcome != governance.RequireApproval {
+		t.Errorf("a fix with no rule = %s, want require_approval", d.Outcome)
+	}
+}
+
+// A rule can still ask a person, or forbid it.
+func TestPolicy_RulesSeeRestores(t *testing.T) {
+	p := compile(t, config.ModeGuarded, rule("ask-first", `action.restore == "true"`, config.DecisionRequireApproval))
+	if d := p.Evaluate(restore()); d.Outcome != governance.RequireApproval {
+		t.Errorf("restore = %s, want require_approval", d.Outcome)
+	}
+	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval || d.PolicyID == "ask-first" {
+		t.Errorf("a fix matched the restore rule: %+v", d)
+	}
+}
+
+// Observe mode never acts, not even to put things back.
+func TestPolicy_ObserveModeNeverRestores(t *testing.T) {
+	if d := compile(t, config.ModeObserve).Evaluate(restore()); d.Outcome != governance.Deny {
+		t.Errorf("observe mode restore = %s, want deny", d.Outcome)
+	}
+}
