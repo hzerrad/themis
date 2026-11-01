@@ -2,10 +2,12 @@ package execution_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	"google.golang.org/grpc"
@@ -153,5 +155,64 @@ func TestExecute_NoExecutor_Cancels(t *testing.T) {
 	}
 	if got, _ := s.Action(t.Context(), s.DB(), a.ID); got.State != store.ActionCanceled {
 		t.Errorf("action = %s, want canceled", got.State)
+	}
+}
+
+// restoring stores a restore waiting to run, with its incident restoring.
+func restoring(t *testing.T, s *store.Store, pool *pgxpool.Pool) store.Action {
+	t.Helper()
+	a := authorized(t, s)
+	path := []incident.State{incident.Authorized, incident.Executing, incident.Verifying, incident.Restoring}
+	for i := 1; i < len(path); i++ {
+		err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+			return s.Transition(t.Context(), tx, store.TransitionArgs{ID: a.IncidentID, From: path[i-1], To: path[i], Reason: "test", Actor: "test"})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(t.Context(), `UPDATE actions SET params = '{"restores": "the-fix"}' WHERE id = $1`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// A restore that can't be handed over ends with a person told, not stuck.
+func TestExecute_RestoreUnreachableOnTheLastAttempt_Escalates(t *testing.T) {
+	s, pool := pgtest.NewStore(t)
+	a := restoring(t, s, pool)
+	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.Unavailable, "connection refused")}}
+	job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: 25, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
+	if err := w.Work(t.Context(), job); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Escalated {
+		t.Errorf("incident = %s, want escalated", in.State)
+	}
+	got, err := s.Action(t.Context(), s.DB(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != store.ActionCanceled {
+		t.Errorf("action = %s, want canceled", got.State)
+	}
+	trail, err := s.Transitions(t.Context(), a.IncidentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reason := trail[len(trail)-1].Reason; !strings.Contains(reason, "couldn't put the workload back") {
+		t.Errorf("reason = %q", reason)
+	}
+}
+
+func TestExecute_RestoreRefused_Escalates(t *testing.T) {
+	s, pool := pgtest.NewStore(t)
+	a := restoring(t, s, pool)
+	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, "the digest doesn't match")}}
+	if err := w.Execute(t.Context(), a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Escalated {
+		t.Errorf("incident = %s, want escalated", in.State)
 	}
 }
