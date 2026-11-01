@@ -1,0 +1,23 @@
+name: rollout-oom
+version: 1
+description: Revision 2 lowered the memory limit, and its pods are OOMKilled. Revision 1 is healthy.
+tags: [rollout, oom]
+source: synthetic
+difficulty: easy
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+truth:
+  root_causes: [memory_limit_regression]
+  decision: propose
+  acceptable_revisions: [1]
+  required_citations: [pod_states]
+  predicates:
+    rollout_recent: "true"
+    failure_onset_after_rollout: "true"
+    oom_killed_new_revision: "true"
+    gitops_managed: "false"
+    config_changed_before_failure: "false"

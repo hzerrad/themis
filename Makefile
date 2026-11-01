@@ -50,6 +50,10 @@ endif
 	$(UV) run ruff format
 	$(UV) run ruff check --fix
 
+.PHONY: eval-bundles
+eval-bundles: ## Rebuild the evaluation bundles from their scenarios
+	go test ./internal/evaluation -run 'TestScenarios$$' -update
+
 .PHONY: test test-go test-go-next test-python
 test: test-go test-python ## Run all unit tests
 
