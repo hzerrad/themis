@@ -1,0 +1,18 @@
+{{- range .Values.profiles }}
+---
+apiVersion: themis.dev/v1alpha1
+kind: IncidentProfile
+metadata:
+  name: {{ .name }}
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+spec: {{- toYaml (omit . "name") | nindent 2 }}
+{{- end }}
+{{- with .Values.themisConfig }}
+---
+apiVersion: themis.dev/v1alpha1
+kind: ThemisConfig
+metadata:
+  name: themis
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+spec: {{- toYaml . | nindent 2 }}
+{{- end }}

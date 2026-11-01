@@ -45,6 +45,10 @@ helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.e
 
 This installs `themis-executor` with a Role in each enrolled namespace: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. In the default `guarded` mode every action still needs a human to approve its digest in the UI.
 
+## Upgrade
+
+`helm upgrade` doesn't update custom resource definitions. When a release changes them, apply them first: `kubectl apply -f deploy/helm/themis/crds`.
+
 ## Connect Alertmanager
 
 Alertmanager must send alerts to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates. See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
@@ -97,7 +101,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |
 | `notifications.externalURL` | `""` | Where people reach the UI, for links in notices |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
-| `profiles` | one profile | Incident classes, policy and verification; see [Configuration](../../../docs/configuration.md#profiles) |
+| `profiles` | one profile | Incident classes, policy and verification, installed as `IncidentProfile` resources; see [Configuration](../../../docs/configuration.md#configuration-resources) |
+| `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
 | `resources.{core,executor,intelligence}` | small | Container resources |
 
 ## Uninstall

@@ -32,4 +32,5 @@ data:
       {{- end }}
     {{- end }}
     {{- end }}
-    profiles: {{- toYaml .Values.profiles | nindent 6 }}
+    resources:
+      namespace: {{ .Release.Namespace }}

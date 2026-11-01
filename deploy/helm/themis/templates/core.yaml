@@ -76,6 +76,34 @@ spec:
               {{- if .Values.executor.enabled }}
               - {key: executor, path: executor}
               {{- end }}
+---
+# Themis's own configuration resources, wherever teams keep them.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-core-config
+  labels: {{- include "themis.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [themis.dev]
+    resources: [themisconfigs, incidentprofiles]
+    verbs: [get, list, watch]
+  - apiGroups: [themis.dev]
+    resources: [themisconfigs/status, incidentprofiles/status]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-core-config
+  labels: {{- include "themis.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Release.Name }}-core-config
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-core
+    namespace: {{ .Release.Namespace }}
 {{- range .Values.enrolledNamespaces }}
 ---
 # Read-only: workloads, pods, their logs and events, and when the ConfigMaps
