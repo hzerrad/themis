@@ -20,6 +20,7 @@ import (
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
@@ -381,5 +382,46 @@ func TestErrors_ArePlainSentences(t *testing.T) {
 	e.approve(t, a, a.Digest)
 	if got := strings.TrimSpace(e.approve(t, a, a.Digest).Body.String()); got != "This fix was already approved, denied or canceled." {
 		t.Errorf("approved twice: body = %q", got)
+	}
+}
+
+func (e *env) detail(t *testing.T, id string) map[string]any {
+	t.Helper()
+	rec := e.do(t, http.MethodGet, "/v1/incidents/"+id, token, nil)
+	var d map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil {
+		t.Fatalf("detail: %v: %s", err, rec.Body)
+	}
+	return d
+}
+
+// The page tells the operator what Themis couldn't see, and how to let it.
+func TestIncidentDetail_ShowsWhatWasMissingWithRemedies(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		return e.store.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: a.IncidentID, Template: evidence.RolloutHistory, Cause: evidence.GapForbidden, At: now})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing, _ := e.detail(t, a.IncidentID)["Missing"].([]any)
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "add shop to enrolledNamespaces") {
+		t.Errorf("Missing = %v", missing)
+	}
+}
+
+// An investigation that couldn't decide opens with which kind of stop it was.
+func TestIncidentDetail_HeadlineForAStopWithoutConclusion(t *testing.T) {
+	e := newEnv(t)
+	a := e.awaiting(t)
+	if d := e.detail(t, a.IncidentID); d["Headline"] != nil {
+		t.Errorf("an investigation that decided has headline %v", d["Headline"])
+	}
+	if _, err := e.pool.Exec(t.Context(), `UPDATE investigations SET conclusion = 'inconclusive', blind = true WHERE incident_id = $1`, a.IncidentID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.detail(t, a.IncidentID)["Headline"]; got != remedy.HeadlineBlind {
+		t.Errorf("Headline = %v, want %q", got, remedy.HeadlineBlind)
 	}
 }

@@ -247,7 +247,7 @@ const NEXT = {
 };
 
 // summary says, in plain words, what happened and what is expected of you.
-function summary(inc, inv, actions, proposals) {
+function summary(inc, inv, actions, proposals, headline, missed) {
   const facts = [];
   const accepted = proposals.find((p) => p.Status === "accepted");
   const action = actions[actions.length - 1];
@@ -265,9 +265,19 @@ function summary(inc, inv, actions, proposals) {
   const lead = inc.supersededBy
     ? ["The workload was changed outside Themis and still fails, so a new incident investigates it as it is now: ",
       h("a", { href: `#/incidents/${inc.supersededBy}` }, "open the new incident"), "."]
-    : NEXT[inc.state] || inc.state;
+    : headline || NEXT[inc.state] || inc.state;
+  // A headline promises the list of what Themis couldn't see: it follows.
+  const seen = headline && missed && missed.length ? h("ul", {}, missed.map((m) => h("li", {}, m))) : null;
   return h("div", { class: `callout ${inc.state === "awaiting_approval" ? "" : "quiet"}` },
-    h("p", { class: "lead" }, lead), facts.length ? h("ul", {}, facts) : null);
+    h("p", { class: "lead" }, lead), seen, facts.length ? h("ul", {}, facts) : null);
+}
+
+// missing lists what Themis couldn't see, why, and how to let it see next time.
+function missing(messages) {
+  if (!messages || messages.length === 0) return null;
+  return h("div", { class: "panel" },
+    h("h3", {}, "What Themis couldn't see"),
+    h("ul", {}, messages.map((m) => h("li", {}, m))));
 }
 
 function rejectedAttempts(proposals) {
@@ -290,7 +300,8 @@ async function detail(id) {
     h("h1", {}, target(inc.target), " ", state(inc.state)),
     h("p", { class: "muted mono" }, `${inc.id} · profile ${inc.profile} · uid ${inc.target.UID} · opened ${time(inc.createdAt)}`),
 
-    summary(inc, inv, actions, proposals),
+    summary(inc, inv, actions, proposals, d.Headline, d.Missing),
+    d.Headline ? null : missing(d.Missing),
 
     actions.map((a) => {
       const p = proposals.find((x) => x.ID === a.ProposalID);

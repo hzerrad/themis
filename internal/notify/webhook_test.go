@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/notify"
 	"github.com/hzerrad/themis/internal/store"
@@ -149,5 +150,27 @@ func TestWebhook_ErrorsDoNotRevealTheURL(t *testing.T) {
 	err := n.Notify(t.Context(), escalated(t, s))
 	if err == nil || strings.Contains(err.Error(), "s3cretkey") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+// The receiver can show what Themis couldn't see, and how to let it.
+func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
+	s, _ := pgtest.NewStore(t)
+	notice := escalated(t, s)
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: notice.IncidentID, Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, At: notice.At})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, got := receiver(t, http.StatusNoContent)
+	n := &notify.Worker{Store: s, Config: config.Notifications{Webhook: &config.Webhook{URL: srv.URL}}}
+	if err := n.Notify(t.Context(), notice); err != nil {
+		t.Fatal(err)
+	}
+	inc, _ := (<-got).body["incident"].(map[string]any)
+	missing, _ := inc["missing"].([]any)
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "set model.ceiling to sensitive") {
+		t.Errorf("missing = %v", missing)
 	}
 }

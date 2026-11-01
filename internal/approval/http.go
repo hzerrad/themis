@@ -16,6 +16,7 @@ import (
 	"github.com/hzerrad/themis/internal/auth"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
@@ -31,6 +32,8 @@ type API struct {
 	TokenFile string
 	Logger    *slog.Logger
 	Now       func() time.Time
+	// Remedy says what Themis couldn't see and how to let it.
+	Remedy remedy.Writer
 }
 
 func (a *API) Register(mux *http.ServeMux) {
@@ -138,10 +141,19 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 	}
 	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
 		d.Investigation = &inv
+		if inv.Conclusion == "inconclusive" {
+			d.Headline = remedy.Headline(inv.Blind)
+		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		a.fail(w, r, err)
 		return
 	}
+	gaps, err := a.Store.EvidenceGaps(ctx, in.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	d.Missing = a.Remedy.Messages(in, gaps)
 	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
 		a.fail(w, r, err)
 		return

@@ -16,6 +16,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/auth"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -29,6 +30,8 @@ type Worker struct {
 	Store  *store.Store
 	Config config.Notifications
 	Client *http.Client
+	// Remedy says what Themis couldn't see, for the receiver to show.
+	Remedy remedy.Writer
 }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[store.EscalationArgs]) error {
@@ -49,6 +52,8 @@ type incidentView struct {
 	Target  targetView `json:"target"`
 	At      time.Time  `json:"at"`
 	URL     string     `json:"url,omitempty"`
+	// Missing says what Themis couldn't see, why, and how to let it.
+	Missing []string `json:"missing,omitempty"`
 }
 
 type targetView struct {
@@ -83,6 +88,11 @@ func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.Escalat
 			Target: targetView{Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID},
 		},
 	}
+	gaps, err := w.Store.EvidenceGaps(ctx, in.ID)
+	if err != nil {
+		return err
+	}
+	p.Incident.Missing = w.Remedy.Messages(in, gaps)
 	if base := w.Config.ExternalURL; base != "" {
 		p.Incident.URL = strings.TrimRight(base, "/") + "/#/incidents/" + in.ID
 	}
