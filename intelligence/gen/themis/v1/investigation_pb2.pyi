@@ -32,6 +32,13 @@ class InvestigationFailureReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapp
     INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED: _ClassVar[InvestigationFailureReason]
     INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED: _ClassVar[InvestigationFailureReason]
     INVESTIGATION_FAILURE_REASON_INTERNAL: _ClassVar[InvestigationFailureReason]
+
+class EvidenceGapCause(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    EVIDENCE_GAP_CAUSE_UNSPECIFIED: _ClassVar[EvidenceGapCause]
+    EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE: _ClassVar[EvidenceGapCause]
+    EVIDENCE_GAP_CAUSE_DATA_CEILING: _ClassVar[EvidenceGapCause]
+    EVIDENCE_GAP_CAUSE_BUDGET_SPENT: _ClassVar[EvidenceGapCause]
 HYPOTHESIS_STATUS_UNSPECIFIED: HypothesisStatus
 HYPOTHESIS_STATUS_REFUTED: HypothesisStatus
 HYPOTHESIS_STATUS_SUPPORTED: HypothesisStatus
@@ -45,6 +52,10 @@ INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT: InvestigationFailureReason
 INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED: InvestigationFailureReason
 INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED: InvestigationFailureReason
 INVESTIGATION_FAILURE_REASON_INTERNAL: InvestigationFailureReason
+EVIDENCE_GAP_CAUSE_UNSPECIFIED: EvidenceGapCause
+EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE: EvidenceGapCause
+EVIDENCE_GAP_CAUSE_DATA_CEILING: EvidenceGapCause
+EVIDENCE_GAP_CAUSE_BUDGET_SPENT: EvidenceGapCause
 
 class LeaseInvestigationRequest(_message.Message):
     __slots__ = ("worker_id",)
@@ -71,34 +82,48 @@ class RenewLeaseResponse(_message.Message):
     def __init__(self, lease_deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class CompleteInvestigationRequest(_message.Message):
-    __slots__ = ("lease_id", "conclusion", "summary", "hypotheses", "usage", "provenance")
+    __slots__ = ("lease_id", "conclusion", "summary", "hypotheses", "usage", "provenance", "gaps")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     CONCLUSION_FIELD_NUMBER: _ClassVar[int]
     SUMMARY_FIELD_NUMBER: _ClassVar[int]
     HYPOTHESES_FIELD_NUMBER: _ClassVar[int]
     USAGE_FIELD_NUMBER: _ClassVar[int]
     PROVENANCE_FIELD_NUMBER: _ClassVar[int]
+    GAPS_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     conclusion: InvestigationConclusion
     summary: str
     hypotheses: _containers.RepeatedCompositeFieldContainer[Hypothesis]
     usage: Usage
     provenance: _common_pb2.Provenance
-    def __init__(self, lease_id: _Optional[str] = ..., conclusion: _Optional[_Union[InvestigationConclusion, str]] = ..., summary: _Optional[str] = ..., hypotheses: _Optional[_Iterable[_Union[Hypothesis, _Mapping]]] = ..., usage: _Optional[_Union[Usage, _Mapping]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ...) -> None: ...
+    gaps: _containers.RepeatedCompositeFieldContainer[EvidenceGap]
+    def __init__(self, lease_id: _Optional[str] = ..., conclusion: _Optional[_Union[InvestigationConclusion, str]] = ..., summary: _Optional[str] = ..., hypotheses: _Optional[_Iterable[_Union[Hypothesis, _Mapping]]] = ..., usage: _Optional[_Union[Usage, _Mapping]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ..., gaps: _Optional[_Iterable[_Union[EvidenceGap, _Mapping]]] = ...) -> None: ...
 
 class CompleteInvestigationResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
 
 class FailInvestigationRequest(_message.Message):
-    __slots__ = ("lease_id", "reason", "message")
+    __slots__ = ("lease_id", "reason", "message", "gaps")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    GAPS_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     reason: InvestigationFailureReason
     message: str
-    def __init__(self, lease_id: _Optional[str] = ..., reason: _Optional[_Union[InvestigationFailureReason, str]] = ..., message: _Optional[str] = ...) -> None: ...
+    gaps: _containers.RepeatedCompositeFieldContainer[EvidenceGap]
+    def __init__(self, lease_id: _Optional[str] = ..., reason: _Optional[_Union[InvestigationFailureReason, str]] = ..., message: _Optional[str] = ..., gaps: _Optional[_Iterable[_Union[EvidenceGap, _Mapping]]] = ...) -> None: ...
+
+class EvidenceGap(_message.Message):
+    __slots__ = ("template", "cause", "detail")
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    CAUSE_FIELD_NUMBER: _ClassVar[int]
+    DETAIL_FIELD_NUMBER: _ClassVar[int]
+    template: str
+    cause: EvidenceGapCause
+    detail: str
+    def __init__(self, template: _Optional[str] = ..., cause: _Optional[_Union[EvidenceGapCause, str]] = ..., detail: _Optional[str] = ...) -> None: ...
 
 class FailInvestigationResponse(_message.Message):
     __slots__ = ()
