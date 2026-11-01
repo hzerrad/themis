@@ -2,6 +2,7 @@
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import Literal, Protocol
@@ -43,6 +44,11 @@ class InvestigationError(Exception):
 
 
 class Model(Protocol):
+    @property
+    def ceiling(self) -> Classification:
+        """The most sensitive data the model may see."""
+        ...
+
     async def complete[T: BaseModel](
         self, req: ModelRequest, schema: type[T]
     ) -> ModelResult[T]: ...
@@ -134,13 +140,25 @@ def target_json(job: investigation_pb2.Investigation) -> str:
     )
 
 
-def incident_prompt(job: investigation_pb2.Investigation) -> str:
+def withheld(item: common_pb2.EvidenceItem) -> str:
+    """Says that evidence exists without showing it."""
+    return (
+        f'<evidence id="{fence(item.id)}" template="{fence(item.template)}" withheld="true">\n'
+        f"This evidence exists, but this model may not see {classification(item)} data.\n"
+        "</evidence>"
+    )
+
+
+def incident_prompt(
+    job: investigation_pb2.Investigation,
+    render: Callable[[common_pb2.EvidenceItem], str] = render_evidence,
+) -> str:
     predicates = "\n".join(
         f"- {p.name} = {_TRUTHS.get(p.value, 'unknown')}: {p.reason}"
         + (f" (evidence {', '.join(p.evidence_ids)})" if p.evidence_ids else "")
         for p in job.predicates
     )
-    evidence = "\n\n".join(render_evidence(i) for i in job.initial_evidence)
+    evidence = "\n\n".join(render(i) for i in job.initial_evidence)
     return (
         f"Incident {job.incident_id}, profile {job.profile}.\n"
         f"Target (use this exact object as proposal.target): {target_json(job)}\n\n"
@@ -192,16 +210,42 @@ async def investigate(
     model: Model,
     max_steps: int,
     deadline: float | None = None,
+    gaps: list[investigation_pb2.EvidenceGap] | None = None,
 ) -> InvestigationResult:
-    """Runs at most max_steps model steps, none started after deadline (epoch seconds)."""
+    """Runs at most max_steps model steps, none started after deadline (epoch seconds).
+    Evidence it wanted and couldn't have is appended to gaps, for the core."""
+    met: list[investigation_pb2.EvidenceGap] = gaps if gaps is not None else []
+
+    def gap(template: str, cause: investigation_pb2.EvidenceGapCause, detail: str = "") -> None:
+        if not any(g.template == template and g.cause == cause for g in met):
+            met.append(investigation_pb2.EvidenceGap(template=template, cause=cause, detail=detail))
+
+    def visible(item: common_pb2.EvidenceItem) -> bool:
+        return CLASSIFICATION_RANK[classification(item)] <= CLASSIFICATION_RANK[model.ceiling]
+
+    def shown(item: common_pb2.EvidenceItem) -> str:
+        # Evidence the endpoint may not see stays out of the prompt; the
+        # investigation goes on without it, and says so.
+        if visible(item):
+            return render_evidence(item)
+        gap(
+            item.template,
+            investigation_pb2.EVIDENCE_GAP_CAUSE_DATA_CEILING,
+            f"{classification(item)} evidence; the model may see {model.ceiling} data at most",
+        )
+        return withheld(item)
+
     messages = [
         Message(role="system", content=system_prompt(job, max_steps)),
-        Message(role="user", content=incident_prompt(job)),
+        Message(role="user", content=incident_prompt(job, shown)),
     ]
     level: Classification = "internal"
     for i in job.initial_evidence:
-        level = higher(level, classification(i))
+        if visible(i):
+            level = higher(level, classification(i))
     allowed = {t.name for t in job.allowed_templates}
+    seen = {i.template for i in job.initial_evidence}
+    nudged = False
     # A proposal waits for the logs when the profile allows reading them.
     logs_read = LOGS_TEMPLATE not in allowed
     usage = Usage()
@@ -282,6 +326,9 @@ async def investigate(
         match decision.kind:
             case "request_evidence":
                 if decision.template not in allowed:
+                    gap(
+                        decision.template or "", investigation_pb2.EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE
+                    )
                     invalid += 1
                     tell(
                         f"Template {fence(repr(decision.template))} is not allowed. "
@@ -298,6 +345,7 @@ async def investigate(
                     )
                 except grpc.RpcError as e:
                     if e.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                        gap(decision.template, investigation_pb2.EVIDENCE_GAP_CAUSE_BUDGET_SPENT)
                         if not evidence_spent:
                             telemetry.budget_exhausted.labels("evidence").inc()
                         evidence_spent = logs_read = True
@@ -310,8 +358,10 @@ async def investigate(
                 if decision.template == LOGS_TEMPLATE:
                     logs_read = True
                 for i in resp.items:
-                    level = higher(level, classification(i))
-                parts = [render_evidence(i) for i in resp.items]
+                    seen.add(i.template)
+                    if visible(i):
+                        level = higher(level, classification(i))
+                parts = [shown(i) for i in resp.items]
                 parts += [f"Collection failed: {fence(f.message)}" for f in resp.failures]
                 tell("\n\n".join(parts) or "No evidence was returned.")
             case "propose":
@@ -337,6 +387,15 @@ async def investigate(
                     hint = f" The incident's target is {target_json(job)}."
                 tell(f"The proposal was rejected ({reason}): {fence(resp.message)}{hint}")
             case "conclude_inconclusive":
+                # Look before giving up: once, ask for what hasn't been read.
+                untried = sorted(allowed - seen)
+                if untried and not nudged and not evidence_spent:
+                    nudged = True
+                    tell(
+                        "Before concluding that you can't tell, request the evidence you "
+                        f"haven't looked at yet: {', '.join(untried)}."
+                    )
+                    continue
                 return done("inconclusive", step, [])
     telemetry.budget_exhausted.labels("steps").inc()
     return done("inconclusive", max_steps, [])

@@ -73,6 +73,10 @@ class ModelClient:
         self.route = route
         self.price = price
 
+    @property
+    def ceiling(self) -> Classification:
+        return self.endpoint.ceiling
+
     async def complete[T: BaseModel](self, req: ModelRequest, schema: type[T]) -> ModelResult[T]:
         started = time.monotonic()
         route = telemetry.route_label(self.route)

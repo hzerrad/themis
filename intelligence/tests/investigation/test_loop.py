@@ -97,7 +97,7 @@ async def test_unknown_template_from_model_not_forwarded() -> None:
     result = await investigate(job(), core, model, max_steps=6)
     assert core.collected == []
     assert result.invalid_steps == 1
-    assert "exec_shell" in model.requests[-1].messages[-1].content
+    assert "exec_shell" in model.requests[1].messages[-1].content
 
 
 # Logs may instruct the model to act on another target. The loop forwards the
@@ -139,7 +139,8 @@ async def test_rejected_proposal_lets_the_model_continue() -> None:
     )
     result = await investigate(job(), core, model, max_steps=6)
     assert result.conclusion == "inconclusive"
-    assert len(model.requests) == 2
+    # The rejection, then one prompt to read what it hasn't before giving up.
+    assert len(model.requests) == 3
 
 
 async def test_evidence_is_marked_untrusted() -> None:

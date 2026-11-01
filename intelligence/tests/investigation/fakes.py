@@ -8,7 +8,13 @@ from pydantic import BaseModel
 
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
 from themis_intelligence.investigation.schemas import StepDecision
-from themis_intelligence.platform.contract import ModelRequest, ModelResult, TypedError, Usage
+from themis_intelligence.platform.contract import (
+    Classification,
+    ModelRequest,
+    ModelResult,
+    TypedError,
+    Usage,
+)
 
 TARGET = common_pb2.TargetRef(
     group="apps", kind="Deployment", namespace="shop", name="checkout", uid="uid-checkout"
@@ -62,9 +68,12 @@ def job() -> investigation_pb2.Investigation:
 class ScriptedModel:
     """Replies with decisions in order; an error string becomes a typed error."""
 
-    def __init__(self, *replies: dict[str, Any] | str) -> None:
+    def __init__(
+        self, *replies: dict[str, Any] | str, ceiling: Classification = "sensitive"
+    ) -> None:
         self.replies = list(replies)
         self.requests: list[ModelRequest] = []
+        self.ceiling: Classification = ceiling
 
     async def complete[T: BaseModel](self, req: ModelRequest, schema: type[T]) -> ModelResult[T]:
         self.requests.append(req)

@@ -116,3 +116,19 @@ async def test_report_retried_on_a_transient_error() -> None:
     )
     await worker.run_once()
     assert len(core.completed) == 1
+
+
+async def test_reports_the_gaps_it_met() -> None:
+    core = LeasingCore()
+    worker = Worker(
+        core=core,
+        new_model=lambda: ScriptedModel(
+            {"kind": "request_evidence", "template": "target_events", "params": {}},
+            {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
+            {"kind": "conclude_inconclusive"},
+        ),
+    )
+    await worker.run_once()
+    assert [(g.template, g.cause) for g in core.completed[0].gaps] == [
+        ("target_events", investigation_pb2.EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE)
+    ]
