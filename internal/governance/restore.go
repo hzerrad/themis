@@ -46,7 +46,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if in.State != incident.Restoring {
 		return nil
 	}
-	profile, ok := w.Config.Profile(in.Profile)
+	profile, ok := w.Config.Current().Profile(in.Profile)
 	if !ok {
 		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))
 	}
@@ -86,7 +86,11 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if live.ManagedBy != "" {
 		predicates[predicate.NameGitOpsManaged] = predicate.True.String()
 	}
-	decision := w.policies[profile.Name].Evaluate(PolicyInput{
+	policy, err := w.policy(profile)
+	if err != nil {
+		return err
+	}
+	decision := policy.Evaluate(PolicyInput{
 		Capability: rollback.Name, Risk: "medium", Namespace: in.Target.Namespace,
 		ManagedBy: live.ManagedBy, Predicates: predicates, Restore: true,
 	})

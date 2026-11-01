@@ -28,7 +28,7 @@ const actor = "intake"
 type ProcessAlertWorker struct {
 	river.WorkerDefaults[ProcessAlertArgs]
 
-	Config config.Config
+	Config config.Provider
 	Store  *store.Store
 
 	Reader client.Reader
@@ -74,7 +74,7 @@ type rejected struct {
 // judge returns the incident a firing alert belongs to, or why it is rejected,
 // or an error worth retrying.
 func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.IncidentArgs, *rejected, error) {
-	if ns := a.Labels[target.LabelNamespace]; ns != "" && !w.Config.IsEnrolled(ns) {
+	if ns := a.Labels[target.LabelNamespace]; ns != "" && !w.Config.Current().IsEnrolled(ns) {
 		return store.IncidentArgs{}, &rejected{
 			store.RejectionNotEnrolled,
 			fmt.Sprintf("namespace %q is not enrolled", ns),
@@ -89,14 +89,14 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 		return store.IncidentArgs{}, nil, fmt.Errorf("resolve target: %w", err)
 	}
 	// Enforced again on what was resolved, not only on the alert's label.
-	if !w.Config.IsEnrolled(ref.Namespace) {
+	if !w.Config.Current().IsEnrolled(ref.Namespace) {
 		return store.IncidentArgs{}, &rejected{
 			store.RejectionNotEnrolled,
 			fmt.Sprintf("target namespace %q is not enrolled", ref.Namespace),
 		}, nil
 	}
 
-	profile, ok := w.Config.MatchProfile(a.Name, a.Labels, ref)
+	profile, ok := w.Config.Current().MatchProfile(a.Name, a.Labels, ref)
 	if !ok {
 		return store.IncidentArgs{}, &rejected{
 			store.RejectionNoProfile,

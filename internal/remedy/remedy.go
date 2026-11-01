@@ -21,7 +21,14 @@ const (
 
 // Writer writes messages for one configuration.
 type Writer struct {
-	Config config.Config
+	Config config.Provider
+}
+
+func (w Writer) config() config.Config {
+	if w.Config == nil {
+		return config.Config{}
+	}
+	return w.Config.Current()
 }
 
 // noun names a template's evidence, singular or plural, for a sentence.
@@ -61,7 +68,7 @@ func (w Writer) Message(in store.Incident, g store.EvidenceGap) string {
 	ns := in.Target.Namespace
 	switch g.Cause {
 	case evidence.GapForbidden:
-		if slices.Contains(w.Config.EnrolledNamespaces, ns) {
+		if slices.Contains(w.config().EnrolledNamespaces, ns) {
 			return fmt.Sprintf("%s couldn't be read: Themis isn't allowed to read %s in %s, though %s is enrolled. Check the Role Themis has in %s.", name, it, ns, ns, ns)
 		}
 		return fmt.Sprintf("%s couldn't be read: Themis isn't allowed to read %s in %s. To allow it, add %s to enrolledNamespaces.", name, it, ns, ns)
@@ -73,7 +80,7 @@ func (w Writer) Message(in store.Incident, g store.EvidenceGap) string {
 		return fmt.Sprintf("%s couldn't be read: the object %s about no longer exists.", name, n.pick("it's", "they're"))
 	case evidence.GapBudgetSpent:
 		limit := config.DefaultMaxEvidenceRequests
-		if p, ok := w.Config.Profile(in.Profile); ok {
+		if p, ok := w.config().Profile(in.Profile); ok {
 			limit = p.InvestigationBudget().MaxEvidenceRequests
 		}
 		return fmt.Sprintf("%s %s read: the investigation had used all %d of its evidence requests. To allow more, raise investigation.maxEvidenceRequests in the %s profile.", name, n.pick("wasn't", "weren't"), limit, in.Profile)

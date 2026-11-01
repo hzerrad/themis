@@ -41,7 +41,7 @@ type Server struct {
 	themisv1.UnimplementedProposalServiceServer
 
 	Store    *store.Store
-	Config   config.Config
+	Config   config.Provider
 	Registry evidence.Registry
 	Reader   client.Reader
 	Logger   *slog.Logger
@@ -129,7 +129,7 @@ func (s *Server) internal(ctx context.Context, err error) error {
 
 // profile returns the configured profile of an investigation.
 func (s *Server) profile(inv store.Investigation) (config.Profile, error) {
-	p, ok := s.Config.Profile(inv.Profile)
+	p, ok := s.Config.Current().Profile(inv.Profile)
 	if !ok {
 		return config.Profile{}, status.Errorf(codes.FailedPrecondition, "profile %q is no longer configured", inv.Profile)
 	}
