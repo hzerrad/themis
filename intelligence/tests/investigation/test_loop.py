@@ -1,4 +1,6 @@
-from typing import Any
+import re
+from pathlib import Path
+from typing import Any, get_args
 
 import pytest
 from pydantic import ValidationError
@@ -6,7 +8,7 @@ from pydantic import ValidationError
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, job
 from themis.v1 import proposal_pb2
 from themis_intelligence.investigation.loop import InvestigationError, investigate
-from themis_intelligence.investigation.schemas import StepDecision
+from themis_intelligence.investigation.schemas import PredicateName, StepDecision
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -225,3 +227,10 @@ async def test_past_deadline_stops_before_the_next_step() -> None:
         await investigate(job(), FakeCore(), model, max_steps=6, deadline=0.0)
     assert err.value.reason == "deadline_exceeded"
     assert model.requests == []
+
+
+def test_model_may_cite_every_check_the_core_knows() -> None:
+    source = Path(__file__).parents[3] / "internal/predicate/rollout.go"
+    checks = set(re.findall(r'^\s*Name\w+\s*=\s*"(\w+)"', source.read_text(), re.M))
+    assert checks, "found no checks in rollout.go"
+    assert checks == set(get_args(PredicateName))
