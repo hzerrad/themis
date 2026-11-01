@@ -191,6 +191,9 @@ var templates = map[string]*themisv1.EvidenceTemplate{
 	evidence.TargetEvents: {
 		Description: "Recent events of the Deployment, its ReplicaSets and its pods, newest first.",
 	},
+	evidence.ReferencedConfig: {
+		Description: "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values.",
+	},
 	evidence.ContainerLogsTail: {
 		Description: "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
 		Params:      []string{"pod", "container", "previous"},
