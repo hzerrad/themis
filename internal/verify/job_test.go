@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +32,7 @@ var windowStart = time.Date(2026, 10, 27, 9, 40, 0, 0, time.UTC)
 
 type env struct {
 	store  *store.Store
+	pool   *pgxpool.Pool
 	worker *verify.Worker
 	clock  time.Time
 	ns     string
@@ -43,12 +45,12 @@ type env struct {
 func executed(t *testing.T) *env {
 	t.Helper()
 	ctx := t.Context()
-	s, _ := pgtest.NewStore(t)
+	s, pool := pgtest.NewStore(t)
 	ns := k8s.NewNamespace(t)
 	k8s.Load(t, ns, scenario1)
 	d := deploymentIn(t, ns)
 	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)}
-	e := &env{store: s, ns: ns, clock: windowStart}
+	e := &env{store: s, pool: pool, ns: ns, clock: windowStart}
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
 		id, _, err := s.CreateOrJoinIncident(ctx, tx, store.IncidentArgs{Fingerprint: "fp", Profile: "rollout-regression", Target: target, Payload: []byte(`{}`)})
 		if err != nil {
@@ -196,7 +198,9 @@ func (e *env) outcome(t *testing.T) string {
 	return v.Outcome
 }
 
-func TestJob_FailedOutcome_Escalates(t *testing.T) {
+// A fix that didn't help is put back: the incident goes to restoring, and a
+// restore job is queued in the same transaction.
+func TestJob_FailedOutcome_Restores(t *testing.T) {
 	e := executed(t)
 	e.applied(t)
 	e.verify(t)
@@ -204,8 +208,11 @@ func TestJob_FailedOutcome_Escalates(t *testing.T) {
 	if !e.verify(t) {
 		t.Fatal("not final after the window")
 	}
-	if got := e.state(t); got != incident.Escalated || e.outcome(t) != string(verify.Unchanged) {
-		t.Errorf("state = %s after %s, want escalated after unchanged", got, e.outcome(t))
+	if got := e.state(t); got != incident.Restoring || e.outcome(t) != string(verify.Unchanged) {
+		t.Errorf("state = %s after %s, want restoring after unchanged", got, e.outcome(t))
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'restore' AND args->>'actionID' = $1`, e.args.ActionID); n != 1 {
+		t.Errorf("%d restore jobs, want 1", n)
 	}
 }
 
@@ -296,5 +303,75 @@ func TestMetrics_UnobservableCountsAsInconclusive(t *testing.T) {
 	}
 	if got := inconclusive(); got != 1 {
 		t.Errorf("counted %v inconclusive outcomes, want 1", got)
+	}
+}
+
+// restoring has the fix put back: the incident restoring, and a restore of
+// the template now live, which e then checks.
+func (e *env) restoring(t *testing.T) {
+	t.Helper()
+	ctx := t.Context()
+	fix, err := e.store.Action(ctx, e.store.DB(), e.args.ActionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.store.InTx(ctx, func(tx pgx.Tx) error {
+		if err := e.store.Transition(ctx, tx, store.TransitionArgs{ID: e.inc, From: incident.Verifying, To: incident.Restoring, Reason: "test", Actor: "test"}); err != nil {
+			return err
+		}
+		r := fix
+		r.Params = map[string]any{"revision": int64(1), "templateHash": restoredHash(t, e.ns), "restores": fix.ID}
+		r.State = store.ActionSucceeded
+		r.ID, err = e.store.InsertAction(ctx, tx, r)
+		e.args = verify.VerifyArgs{ActionID: r.ID, WindowStart: e.clock}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (e *env) lastReason(t *testing.T) string {
+	t.Helper()
+	trail, err := e.store.Transitions(t.Context(), e.inc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return trail[len(trail)-1].Reason
+}
+
+// Once the workload runs the template from before Themis acted, healthy or
+// not, the incident goes to a person.
+func TestRestore_CheckedThenEscalated(t *testing.T) {
+	e := executed(t)
+	e.rolledBack(t)
+	e.restoring(t)
+	if !e.verify(t) {
+		t.Fatal("not final once the template was rolled out")
+	}
+	if got := e.state(t); got != incident.Escalated {
+		t.Errorf("state = %s, want escalated", got)
+	}
+	if got := e.lastReason(t); got != "Themis put the workload back as it was before it acted: 3 of 3 pods are ready. A person needs to take over." {
+		t.Errorf("reason = %q", got)
+	}
+}
+
+// A restore Kubernetes hasn't rolled out yet is waited for, up to the window.
+func TestRestore_WaitsForTheRollout(t *testing.T) {
+	e := executed(t)
+	e.rolledBack(t)
+	d := deploymentIn(t, e.ns)
+	d.Status.UpdatedReplicas = 1
+	if err := k8s.Status().Update(t.Context(), d); err != nil {
+		t.Fatal(err)
+	}
+	e.restoring(t)
+	if e.verify(t) {
+		t.Fatal("final before the restored template was rolled out")
+	}
+	e.clock = e.clock.Add(6 * time.Minute)
+	if !e.verify(t) || e.state(t) != incident.Escalated || !strings.Contains(e.lastReason(t), "didn't finish rolling it out in time") {
+		t.Errorf("state = %s: %q", e.state(t), e.lastReason(t))
 	}
 }

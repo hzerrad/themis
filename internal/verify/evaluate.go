@@ -23,6 +23,9 @@ type Observation struct {
 	// ReadyBefore is how many replicas were ready when the window started.
 	ReadyBefore     int32
 	RolloutComplete bool
+	// Updated is set once every pod runs the applied template, healthy or
+	// not: a workload put back as it was may still be failing.
+	Updated bool
 
 	// RestartDelta and NewOOMKills count trouble since the window started.
 	RestartDelta int32
