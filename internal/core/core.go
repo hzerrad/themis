@@ -37,6 +37,7 @@ import (
 	"github.com/hzerrad/themis/internal/notify"
 	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/remedy"
+	"github.com/hzerrad/themis/internal/resources"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
@@ -134,22 +135,41 @@ func Run(ctx context.Context, o Options) error {
 		return fmt.Errorf("create manager: %w", err)
 	}
 
+	// Later code reads this, not cfg, for anything a resource can change.
+	var current config.Provider = cfg
+	if cfg.Resources != nil {
+		live := resources.New(cfg, mgr.GetAPIReader(), mgr.GetClient(), func(p config.Profile) error {
+			if err := checkProfileTemplates(p, registry); err != nil {
+				return err
+			}
+			_, err := governance.CompilePolicy(p.EffectivePolicy())
+			return err
+		}, log)
+		if err := live.Refresh(ctx); err != nil {
+			return fmt.Errorf("read configuration resources: %w", err)
+		}
+		if err := live.SetupWatches(mgr); err != nil {
+			return fmt.Errorf("watch configuration resources: %w", err)
+		}
+		current = live
+	}
+
 	workers := river.NewWorkers()
 	telemetry.AddUnscopedWorker(workers, &intake.ProcessAlertWorker{
-		Config: cfg,
+		Config: current,
 		Store:  s,
 		// Uncached: a few gets per alert need no watch permission.
 		Reader: mgr.GetAPIReader(),
 		Mapper: mgr.GetRESTMapper(),
 	})
 	telemetry.AddIncidentWorker(workers, &investigation.PrepareWorker{
-		Config:   cfg,
+		Config:   current,
 		Store:    s,
 		Reader:   mgr.GetAPIReader(),
 		Registry: registry,
 		Logger:   log,
 	})
-	govern, err := governance.NewWorker(cfg, s, mgr.GetAPIReader())
+	govern, err := governance.NewWorker(current, s, mgr.GetAPIReader())
 	if err != nil {
 		return err
 	}
@@ -162,9 +182,9 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer closeExecutor()
 	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
-	telemetry.AddIncidentWorker(workers, &verify.Worker{Config: cfg, Store: s, Reader: mgr.GetAPIReader()})
+	telemetry.AddIncidentWorker(workers, &verify.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader()})
 	telemetry.AddUnscopedWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
-	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications, Remedy: remedy.Writer{Config: cfg}})
+	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications, Remedy: remedy.Writer{Config: current}})
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
@@ -184,12 +204,12 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	investigators := &grpcserver.Server{Store: s, Config: cfg, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}
+	investigators := &grpcserver.Server{Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: cfg}}).Register(mux)
+	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: current}}).Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
@@ -298,10 +318,18 @@ func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
 func checkTemplates(cfg config.Config, r evidence.Registry) error {
 	var errs []error
 	for _, p := range cfg.Profiles {
-		for _, name := range p.Evidence.Allowed {
-			if _, ok := r[name]; !ok {
-				errs = append(errs, fmt.Errorf("profile %s: unknown evidence template %q", p.Name, name))
-			}
+		if err := checkProfileTemplates(p, r); err != nil {
+			errs = append(errs, fmt.Errorf("profile %s: %w", p.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func checkProfileTemplates(p config.Profile, r evidence.Registry) error {
+	var errs []error
+	for _, name := range p.Evidence.Allowed {
+		if _, ok := r[name]; !ok {
+			errs = append(errs, fmt.Errorf("unknown evidence template %q", name))
 		}
 	}
 	return errors.Join(errs...)
