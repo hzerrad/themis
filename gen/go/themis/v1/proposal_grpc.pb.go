@@ -20,6 +20,8 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ProposalService_SubmitProposal_FullMethodName = "/themis.v1.ProposalService/SubmitProposal"
+	ProposalService_ListIncidents_FullMethodName  = "/themis.v1.ProposalService/ListIncidents"
+	ProposalService_GetIncident_FullMethodName    = "/themis.v1.ProposalService/GetIncident"
 )
 
 // ProposalServiceClient is the client API for ProposalService service.
@@ -27,6 +29,10 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProposalServiceClient interface {
 	SubmitProposal(ctx context.Context, in *SubmitProposalRequest, opts ...grpc.CallOption) (*SubmitProposalResponse, error)
+	// For callers outside Themis: the incidents they may suggest a fix for, and
+	// what Themis knows about one.
+	ListIncidents(ctx context.Context, in *ListIncidentsRequest, opts ...grpc.CallOption) (*ListIncidentsResponse, error)
+	GetIncident(ctx context.Context, in *GetIncidentRequest, opts ...grpc.CallOption) (*GetIncidentResponse, error)
 }
 
 type proposalServiceClient struct {
@@ -47,11 +53,35 @@ func (c *proposalServiceClient) SubmitProposal(ctx context.Context, in *SubmitPr
 	return out, nil
 }
 
+func (c *proposalServiceClient) ListIncidents(ctx context.Context, in *ListIncidentsRequest, opts ...grpc.CallOption) (*ListIncidentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIncidentsResponse)
+	err := c.cc.Invoke(ctx, ProposalService_ListIncidents_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *proposalServiceClient) GetIncident(ctx context.Context, in *GetIncidentRequest, opts ...grpc.CallOption) (*GetIncidentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetIncidentResponse)
+	err := c.cc.Invoke(ctx, ProposalService_GetIncident_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProposalServiceServer is the server API for ProposalService service.
 // All implementations must embed UnimplementedProposalServiceServer
 // for forward compatibility.
 type ProposalServiceServer interface {
 	SubmitProposal(context.Context, *SubmitProposalRequest) (*SubmitProposalResponse, error)
+	// For callers outside Themis: the incidents they may suggest a fix for, and
+	// what Themis knows about one.
+	ListIncidents(context.Context, *ListIncidentsRequest) (*ListIncidentsResponse, error)
+	GetIncident(context.Context, *GetIncidentRequest) (*GetIncidentResponse, error)
 	mustEmbedUnimplementedProposalServiceServer()
 }
 
@@ -64,6 +94,12 @@ type UnimplementedProposalServiceServer struct{}
 
 func (UnimplementedProposalServiceServer) SubmitProposal(context.Context, *SubmitProposalRequest) (*SubmitProposalResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SubmitProposal not implemented")
+}
+func (UnimplementedProposalServiceServer) ListIncidents(context.Context, *ListIncidentsRequest) (*ListIncidentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListIncidents not implemented")
+}
+func (UnimplementedProposalServiceServer) GetIncident(context.Context, *GetIncidentRequest) (*GetIncidentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetIncident not implemented")
 }
 func (UnimplementedProposalServiceServer) mustEmbedUnimplementedProposalServiceServer() {}
 func (UnimplementedProposalServiceServer) testEmbeddedByValue()                         {}
@@ -104,6 +140,42 @@ func _ProposalService_SubmitProposal_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProposalService_ListIncidents_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIncidentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProposalServiceServer).ListIncidents(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProposalService_ListIncidents_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProposalServiceServer).ListIncidents(ctx, req.(*ListIncidentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProposalService_GetIncident_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetIncidentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProposalServiceServer).GetIncident(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProposalService_GetIncident_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProposalServiceServer).GetIncident(ctx, req.(*GetIncidentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProposalService_ServiceDesc is the grpc.ServiceDesc for ProposalService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +186,14 @@ var ProposalService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SubmitProposal",
 			Handler:    _ProposalService_SubmitProposal_Handler,
+		},
+		{
+			MethodName: "ListIncidents",
+			Handler:    _ProposalService_ListIncidents_Handler,
+		},
+		{
+			MethodName: "GetIncident",
+			Handler:    _ProposalService_GetIncident_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

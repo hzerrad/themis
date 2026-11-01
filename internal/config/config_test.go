@@ -401,3 +401,49 @@ func TestMatchProfile_ScopeLimitsAProfileToItsNamespace(t *testing.T) {
 		t.Error("a scoped profile didn't match in its namespace")
 	}
 }
+
+func TestExternalProposals_Validate(t *testing.T) {
+	good := config.ProposalSource{ServiceAccount: "agents/triage", Namespaces: []string{"shop"}, Capabilities: config.KnownCapabilities}
+	tests := []struct {
+		name string
+		edit func(*config.ProposalSource)
+		want string
+	}{
+		{"valid", func(*config.ProposalSource) {}, ""},
+		{"no namespace in the account", func(s *config.ProposalSource) { s.ServiceAccount = "triage" }, "namespace/name"},
+		{"no namespaces", func(s *config.ProposalSource) { s.Namespaces = nil }, "at least one namespace"},
+		{"no capabilities", func(s *config.ProposalSource) { s.Capabilities = nil }, "at least one capability"},
+		{"unknown capability", func(s *config.ProposalSource) { s.Capabilities = []string{"delete.everything"} }, "unknown capability"},
+		{"negative rate", func(s *config.ProposalSource) { s.PerMinute = -1 }, "positive"},
+		{"unknown ceiling", func(s *config.ProposalSource) { s.Ceiling = "top-secret" }, "internal or sensitive"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := good
+			tt.edit(&s)
+			err := config.ExternalProposals{Sources: []config.ProposalSource{s}}.Validate()
+			if tt.want == "" && err != nil {
+				t.Errorf("err = %v", err)
+			}
+			if tt.want != "" && (err == nil || !strings.Contains(err.Error(), tt.want)) {
+				t.Errorf("err = %v, want %q", err, tt.want)
+			}
+		})
+	}
+	if err := (config.ExternalProposals{Sources: []config.ProposalSource{good, good}}).Validate(); err == nil {
+		t.Error("a duplicate source passed")
+	}
+}
+
+func TestExternalProposals_EffectiveWindow(t *testing.T) {
+	one := []config.ProposalSource{{ServiceAccount: "a/b"}}
+	if got := (config.ExternalProposals{}).EffectiveWindow(); got != 0 {
+		t.Errorf("no sources: %s, want none, so nothing changes for installs that don't use this", got)
+	}
+	if got := (config.ExternalProposals{Sources: one}).EffectiveWindow(); got != config.DefaultProposalWindow {
+		t.Errorf("sources: %s", got)
+	}
+	if got := (config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}).EffectiveWindow(); got != time.Hour {
+		t.Errorf("explicit: %s", got)
+	}
+}
