@@ -31,8 +31,8 @@ profiles:
       labels: {severity: warning}        # optional; all must match
       targetKinds: [Deployment.apps]
     evidence:
-      initial: [rollout_history, pod_states, target_events]
-      allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+      initial: [rollout_history, pod_states, target_events, referenced_config]
+      allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
     capabilities: [deployment.rollback-to-revision]
     investigation: {maxSteps: 8, maxEvidenceRequests: 6, timeout: 5m}
     policy: {...}
@@ -54,9 +54,10 @@ The investigator cannot query the cluster: it can only ask for a template by nam
 | `rollout_history` | The Deployment's rollout progress and conditions, when its template last changed and by which field manager, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits |
 | `pod_states` | Each pod: its revision, readiness, and each container's current state and last termination, where `OOMKilled` shows |
 | `target_events` | Recent events of the Deployment, its ReplicaSets and its pods |
+| `referenced_config` | The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only. Secrets are listed by name and never read. |
 | `container_logs_tail` | The end of one container's logs, the pod needing attention most by default. Classified `sensitive`. |
 
-No template reads pod specs, where environment variables often hold literal secrets. Every item is redacted before it is stored or sent: bearer and basic credentials, JWTs, private keys, cloud and API keys, `password=`-style pairs, and credentials in URLs.
+No template returns pod specs, where environment variables often hold literal secrets. Every item is redacted before it is stored or sent: bearer and basic credentials, JWTs, private keys, cloud and API keys, `password=`-style pairs, and credentials in URLs.
 
 ### Predicates
 
@@ -68,6 +69,7 @@ Deterministic facts, computed by code from the evidence. Each is `true`, `false`
 | `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`. |
 | `prior_revision_was_healthy` | Pods of the previous revision are ready and never failed |
 | `oom_killed_new_revision` | A container of the current revision was OOMKilled |
+| `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. `unknown` when a required ConfigMap is missing or doesn't say when it changed. Secrets are never read, so a change to one can't be seen. |
 | `gitops_managed` | The target carries Argo CD or Flux markers, or is written by their controllers. Governance also checks this live. |
 
 ### Capabilities
@@ -100,7 +102,8 @@ policy:
       when: >-
         action.restore != "true" &&
         (predicates.oom_killed_new_revision != "true" ||
-         predicates.failure_onset_after_rollout != "true")
+         predicates.failure_onset_after_rollout != "true" ||
+         predicates.config_changed_before_failure != "false")
       decision: deny
     - name: rollback-needs-approval
       when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
