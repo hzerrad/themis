@@ -81,7 +81,7 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 		if err := e.Store.ClaimExecution(ctx, tx, locked, started); err != nil {
 			return err
 		}
-		if _, ok := restores(a); ok {
+		if _, ok := a.Restores(); ok {
 			return nil // the incident stays restoring while it is put back
 		}
 		return e.advance(ctx, tx, a.IncidentID, "execution claimed", incident.Authorized, incident.Executing)
@@ -114,7 +114,7 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error()}
 	}
 	fields := rollback.Fields(a.IncidentID, live, revision, a.PolicyID, a.PolicyDigest)
-	if undone, ok := restores(a); ok {
+	if undone, ok := a.Restores(); ok {
 		fields = rollback.RestoreFields(a.IncidentID, live, revision, undone, a.PolicyID, a.PolicyDigest)
 	}
 	current, err := digest.Compute(fields)
@@ -165,7 +165,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 			return err
 		}
 		store.AfterCommit(tx, actionsTotal.WithLabelValues(capabilities.Value(a.Capability), res.label()).Inc)
-		_, restore := restores(a)
+		_, restore := a.Restores()
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
 			if restore {
@@ -180,12 +180,6 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		}
 		return e.Store.EnqueueTx(ctx, tx, verify.VerifyArgs{ActionID: a.ID, WindowStart: e.now(), IncidentID: a.IncidentID})
 	})
-}
-
-// restores returns the action a restore puts back, and whether a is one.
-func restores(a store.Action) (string, bool) {
-	undone, ok := a.Params["restores"].(string)
-	return undone, ok && undone != ""
 }
 
 func (e *Executor) advance(ctx context.Context, tx pgx.Tx, incidentID, reason string, from, to incident.State) error {

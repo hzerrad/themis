@@ -81,7 +81,8 @@ func (w *Worker) execute(ctx context.Context, actionID string, last bool) error 
 }
 
 // cancel cancels an action still authorized, with its incident; an action
-// the executor claimed is left to its record.
+// the executor claimed is left to its record. A restore that can't run leaves
+// the fix in place, so a person takes over.
 func (w *Worker) cancel(ctx context.Context, actionID, reason string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a, err := w.Store.Action(ctx, tx, actionID)
@@ -91,8 +92,10 @@ func (w *Worker) cancel(ctx context.Context, actionID, reason string) error {
 		if err := w.Store.SetActionState(ctx, tx, a.ID, store.ActionAuthorized, store.ActionCanceled); err != nil {
 			return nil //nolint:nilerr // claimed or already handled
 		}
-		return w.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: a.IncidentID, From: incident.Authorized, To: incident.Canceled, Reason: reason, Actor: "execution",
-		})
+		args := store.TransitionArgs{ID: a.IncidentID, From: incident.Authorized, To: incident.Canceled, Reason: reason, Actor: "execution"}
+		if _, restore := a.Restores(); restore {
+			args.From, args.To, args.Reason = incident.Restoring, incident.Escalated, "Themis couldn't put the workload back, so its change is still in place. "+reason
+		}
+		return w.Store.Transition(ctx, tx, args)
 	})
 }

@@ -63,6 +63,12 @@ type Action struct {
 	CreatedAt         time.Time
 }
 
+// Restores returns the action a restore puts back, and whether a is one.
+func (a Action) Restores() (string, bool) {
+	undone, ok := a.Params["restores"].(string)
+	return undone, ok && undone != ""
+}
+
 // Fields returns the digest fields of a.
 func (a Action) Fields() digest.ActionFields {
 	return digest.ActionFields{
