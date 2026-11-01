@@ -29,7 +29,7 @@ const actor = "investigation"
 type PrepareWorker struct {
 	river.WorkerDefaults[InvestigateArgs]
 
-	Config   config.Config
+	Config   config.Provider
 	Store    *store.Store
 	Reader   client.Reader
 	Registry evidence.Registry
@@ -57,7 +57,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	if in.State != incident.Received {
 		return nil
 	}
-	profile, ok := w.Config.Profile(in.Profile)
+	profile, ok := w.Config.Current().Profile(in.Profile)
 	if !ok {
 		return w.reject(ctx, in, fmt.Sprintf("profile %q is no longer configured", in.Profile))
 	}

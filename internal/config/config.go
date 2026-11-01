@@ -1,5 +1,6 @@
-// Package config loads the Themis configuration file. It is shaped like the
-// custom resources that will replace it.
+// Package config loads the Themis configuration file, which holds how Themis
+// is installed. Profiles come from it, or from custom resources when Resources
+// is set.
 package config
 
 import (
@@ -32,6 +33,15 @@ func IsTargetKind(s string) bool {
 	return targetKindRE.MatchString(s)
 }
 
+// Provider gives the configuration in force now, which may change between
+// calls. Read it once per unit of work.
+type Provider interface {
+	Current() Config
+}
+
+// Current makes a Config a Provider that never changes.
+func (c Config) Current() Config { return c }
+
 // Config is the root of the configuration file.
 type Config struct {
 	// EnrolledNamespaces are the namespaces Themis acts on; alerts about others
@@ -53,9 +63,32 @@ type Config struct {
 	// Notifications announce escalations to humans.
 	Notifications Notifications `json:"notifications,omitzero"`
 
+	// Resources reads profiles and global settings from custom resources,
+	// instead of the profiles below.
+	Resources *Resources `json:"resources,omitempty"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
-	// wins.
-	Profiles []Profile `json:"profiles" jsonschema:"minItems=1"`
+	// wins. Required unless resources is set.
+	Profiles []Profile `json:"profiles,omitempty"`
+}
+
+// Resources configures reading configuration from custom resources.
+type Resources struct {
+	// Namespace is Themis's own. An IncidentProfile here applies to every
+	// enrolled namespace; one elsewhere applies only to its own namespace.
+	Namespace string `json:"namespace" jsonschema:"minLength=1"`
+}
+
+// ThemisConfigSpec is the spec of the ThemisConfig resource: settings a
+// platform team changes without reinstalling.
+type ThemisConfigSpec struct {
+	// EnrolledNamespaces narrows the namespaces given at install, which hold
+	// Themis's permissions. A namespace outside them is reported and ignored.
+	EnrolledNamespaces []string `json:"enrolledNamespaces,omitempty"`
+
+	// AutonomyCeiling is the most any profile may do: guarded, or observe to
+	// stop Themis making changes anywhere. Defaults to guarded.
+	AutonomyCeiling string `json:"autonomyCeiling,omitempty" jsonschema:"enum=guarded,enum=observe"`
 }
 
 // Intake configures the Alertmanager webhook.
@@ -108,6 +141,10 @@ type Webhook struct {
 type Profile struct {
 	// Name is a DNS label, for example rollout-regression.
 	Name string `json:"name" jsonschema:"minLength=1,maxLength=63"`
+
+	// Scope is the only namespace the profile applies to; empty means every
+	// enrolled one. Only a resource in a team's namespace sets it.
+	Scope string `json:"-"`
 
 	// Priority orders profiles matching the same alert; higher wins. Unique,
 	// from 1.
@@ -360,106 +397,124 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if len(c.Profiles) == 0 {
+	switch {
+	case c.Resources != nil && c.Resources.Namespace == "":
+		add("resources.namespace", "is required")
+	case c.Resources != nil && len(c.Profiles) > 0:
+		add("profiles", "set profiles as IncidentProfile resources, or remove resources")
+	case c.Resources == nil && len(c.Profiles) == 0:
 		add("profiles", "at least one profile is required")
 	}
 	seenName := map[string]bool{}
 	seenPriority := map[int]string{}
 	for i, p := range c.Profiles {
 		path := fmt.Sprintf("profiles[%d]", i)
-		for _, msg := range validation.IsDNS1123Label(p.Name) {
-			add(path+".name", "%q: %s", p.Name, msg)
-		}
 		if seenName[p.Name] {
 			add(path+".name", "duplicate profile name %q", p.Name)
 		}
 		seenName[p.Name] = true
-		if p.Priority < 1 {
-			add(path+".priority", "must be at least 1, got %d", p.Priority)
+		if other, ok := seenPriority[p.Priority]; ok && p.Priority >= 1 {
+			add(path+".priority", "priority %d is already used by profile %q", p.Priority, other)
 		} else {
-			if other, ok := seenPriority[p.Priority]; ok {
-				add(path+".priority", "priority %d is already used by profile %q", p.Priority, other)
-			}
 			seenPriority[p.Priority] = p.Name
 		}
-
-		if len(p.Match.AlertNames) == 0 {
-			add(path+".match.alertNames", "at least one alert name is required")
-		}
-		for j, name := range p.Match.AlertNames {
-			if name == "" {
-				add(fmt.Sprintf("%s.match.alertNames[%d]", path, j), "must not be empty")
-			}
-		}
-		for key, value := range p.Match.Labels {
-			for _, msg := range validation.IsQualifiedName(key) {
-				add(path+".match.labels", "key %q: %s", key, msg)
-			}
-			for _, msg := range validation.IsValidLabelValue(value) {
-				add(path+".match.labels", "value %q of %q: %s", value, key, msg)
-			}
-		}
-		if len(p.Match.TargetKinds) == 0 {
-			add(path+".match.targetKinds", "at least one target kind is required")
-		}
-		for j, kind := range p.Match.TargetKinds {
-			if !IsTargetKind(kind) {
-				add(fmt.Sprintf("%s.match.targetKinds[%d]", path, j),
-					"%q is not of the form Kind.group, for example Deployment.apps", kind)
-			}
-		}
-
-		if len(p.Evidence.Allowed) == 0 {
-			add(path+".evidence.allowed", "at least one template is required")
-		}
-		for j, name := range p.Evidence.Allowed {
-			if slices.Contains(p.Evidence.Allowed[:j], name) {
-				add(fmt.Sprintf("%s.evidence.allowed[%d]", path, j), "duplicate template %q", name)
-			}
-		}
-		for j, name := range p.Evidence.Initial {
-			if !p.AllowsTemplate(name) {
-				add(fmt.Sprintf("%s.evidence.initial[%d]", path, j), "template %q is not in evidence.allowed", name)
-			}
-		}
-		for j, name := range p.Capabilities {
-			if !slices.Contains(KnownCapabilities, name) {
-				add(fmt.Sprintf("%s.capabilities[%d]", path, j), "unknown capability %q", name)
-			}
-		}
-		if p.Investigation.MaxSteps < 0 {
-			add(path+".investigation.maxSteps", "must be positive")
-		}
-		if p.Investigation.MaxEvidenceRequests < 0 {
-			add(path+".investigation.maxEvidenceRequests", "must be positive")
-		}
-		if p.Investigation.Timeout.Duration < 0 {
-			add(path+".investigation.timeout", "must be positive")
-		}
-		if m := p.Policy.Mode; m != "" && m != ModeGuarded && m != ModeObserve {
-			add(path+".policy.mode", "must be guarded or observe, got %q", m)
-		}
-		if p.Policy.ApprovalTimeout.Duration < 0 {
-			add(path+".policy.approvalTimeout", "must be positive")
-		}
-		for j, r := range p.Policy.Rules {
-			rpath := fmt.Sprintf("%s.policy.rules[%d]", path, j)
-			if r.Name == "" {
-				add(rpath+".name", "is required")
-			}
-			if r.When == "" {
-				add(rpath+".when", "is required")
-			}
-			if r.Decision != DecisionAllow && r.Decision != DecisionDeny && r.Decision != DecisionRequireApproval {
-				add(rpath+".decision", "must be allow, deny or require_approval, got %q", r.Decision)
-			}
-		}
-		if v := p.EffectiveVerification(); v.Window.Duration < 0 || v.Stability.Duration < 0 || v.Stability.Duration > v.Window.Duration {
-			add(path+".verification", "stability must be positive and within the window")
-		}
+		p.validate(func(sub, format string, args ...any) { add(path+"."+sub, format, args...) })
 	}
 
 	return errors.Join(errs...)
+}
+
+// Validate reports every problem in p, not only the first.
+func (p Profile) Validate() error {
+	var errs []error
+	p.validate(func(path, format string, args ...any) {
+		errs = append(errs, fmt.Errorf("%s: %s", path, fmt.Sprintf(format, args...)))
+	})
+	return errors.Join(errs...)
+}
+
+func (p Profile) validate(add func(path, format string, args ...any)) {
+	for _, msg := range validation.IsDNS1123Label(p.Name) {
+		add("name", "%q: %s", p.Name, msg)
+	}
+	if p.Priority < 1 {
+		add("priority", "must be at least 1, got %d", p.Priority)
+	}
+
+	if len(p.Match.AlertNames) == 0 {
+		add("match.alertNames", "at least one alert name is required")
+	}
+	for j, name := range p.Match.AlertNames {
+		if name == "" {
+			add(fmt.Sprintf("match.alertNames[%d]", j), "must not be empty")
+		}
+	}
+	for key, value := range p.Match.Labels {
+		for _, msg := range validation.IsQualifiedName(key) {
+			add("match.labels", "key %q: %s", key, msg)
+		}
+		for _, msg := range validation.IsValidLabelValue(value) {
+			add("match.labels", "value %q of %q: %s", value, key, msg)
+		}
+	}
+	if len(p.Match.TargetKinds) == 0 {
+		add("match.targetKinds", "at least one target kind is required")
+	}
+	for j, kind := range p.Match.TargetKinds {
+		if !IsTargetKind(kind) {
+			add(fmt.Sprintf("match.targetKinds[%d]", j),
+				"%q is not of the form Kind.group, for example Deployment.apps", kind)
+		}
+	}
+
+	if len(p.Evidence.Allowed) == 0 {
+		add("evidence.allowed", "at least one template is required")
+	}
+	for j, name := range p.Evidence.Allowed {
+		if slices.Contains(p.Evidence.Allowed[:j], name) {
+			add(fmt.Sprintf("evidence.allowed[%d]", j), "duplicate template %q", name)
+		}
+	}
+	for j, name := range p.Evidence.Initial {
+		if !p.AllowsTemplate(name) {
+			add(fmt.Sprintf("evidence.initial[%d]", j), "template %q is not in evidence.allowed", name)
+		}
+	}
+	for j, name := range p.Capabilities {
+		if !slices.Contains(KnownCapabilities, name) {
+			add(fmt.Sprintf("capabilities[%d]", j), "unknown capability %q", name)
+		}
+	}
+	if p.Investigation.MaxSteps < 0 {
+		add("investigation.maxSteps", "must be positive")
+	}
+	if p.Investigation.MaxEvidenceRequests < 0 {
+		add("investigation.maxEvidenceRequests", "must be positive")
+	}
+	if p.Investigation.Timeout.Duration < 0 {
+		add("investigation.timeout", "must be positive")
+	}
+	if m := p.Policy.Mode; m != "" && m != ModeGuarded && m != ModeObserve {
+		add("policy.mode", "must be guarded or observe, got %q", m)
+	}
+	if p.Policy.ApprovalTimeout.Duration < 0 {
+		add("policy.approvalTimeout", "must be positive")
+	}
+	for j, r := range p.Policy.Rules {
+		rpath := fmt.Sprintf("policy.rules[%d]", j)
+		if r.Name == "" {
+			add(rpath+".name", "is required")
+		}
+		if r.When == "" {
+			add(rpath+".when", "is required")
+		}
+		if r.Decision != DecisionAllow && r.Decision != DecisionDeny && r.Decision != DecisionRequireApproval {
+			add(rpath+".decision", "must be allow, deny or require_approval, got %q", r.Decision)
+		}
+	}
+	if v := p.EffectiveVerification(); v.Window.Duration < 0 || v.Stability.Duration < 0 || v.Stability.Duration > v.Window.Duration {
+		add("verification", "stability must be positive and within the window")
+	}
 }
 
 // IsEnrolled reports whether alerts about namespace ns may create work.
@@ -480,7 +535,8 @@ func (c Config) MatchProfile(alertName string, lbls map[string]string, target in
 	candidates := make([]Profile, 0, len(c.Profiles))
 
 	for _, profile := range c.Profiles {
-		if slices.Contains(profile.Match.AlertNames, alertName) &&
+		if (profile.Scope == "" || profile.Scope == target.Namespace) &&
+			slices.Contains(profile.Match.AlertNames, alertName) &&
 			slices.Contains(profile.Match.TargetKinds, TargetKind(target)) &&
 			labels.SelectorFromSet(profile.Match.Labels).Matches(labels.Set(lbls)) {
 			candidates = append(candidates, profile)
@@ -494,7 +550,9 @@ func (c Config) MatchProfile(alertName string, lbls map[string]string, target in
 	// get the candidate with highest priority
 	highestCandidate := candidates[0]
 	for _, candidate := range candidates[1:] {
-		if candidate.Priority > highestCandidate.Priority {
+		// On a tie, the team's own profile is the more specific.
+		if candidate.Priority > highestCandidate.Priority ||
+			(candidate.Priority == highestCandidate.Priority && candidate.Scope != "" && highestCandidate.Scope == "") {
 			highestCandidate = candidate
 		}
 	}
