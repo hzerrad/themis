@@ -178,6 +178,15 @@ func Fields(incidentID string, live Live, revision int64, policyID, policyDigest
 	}
 }
 
+// RestoreFields are the digest fields of putting live back to revision, the
+// one Themis replaced in action restores: a rollback marked with what it
+// undoes.
+func RestoreFields(incidentID string, live Live, revision int64, restores, policyID, policyDigest string) digest.ActionFields {
+	f := Fields(incidentID, live, revision, policyID, policyDigest)
+	f.Params["restores"] = restores
+	return f
+}
+
 // Params binds the revision and the exact template it restores.
 func Params(revision int64, desiredHash string) map[string]any {
 	return map[string]any{"revision": revision, "templateHash": desiredHash}
@@ -198,6 +207,52 @@ func Apply(ctx context.Context, c client.Client, live Live, dryRun bool) (int64,
 		return 0, fmt.Errorf("patch Deployment %s: %w", d.Name, err)
 	}
 	return d.Generation, nil
+}
+
+// RevisionOf returns the revision of the target's ReplicaSet with template,
+// such as the template a rollback replaced: rolling back to it puts the
+// workload back as it was.
+func RevisionOf(ctx context.Context, c client.Reader, t incident.TargetRef, template corev1.PodTemplateSpec) (int64, error) {
+	d, err := getTarget(ctx, c, t)
+	if err != nil {
+		return 0, err
+	}
+	want, err := TemplateHash(withoutHash(template))
+	if err != nil {
+		return 0, err
+	}
+	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	if err != nil {
+		return 0, fmt.Errorf("selector of Deployment %s: %w", d.Name, err)
+	}
+	var list appsv1.ReplicaSetList
+	if err := c.List(ctx, &list, client.InNamespace(d.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		return 0, fmt.Errorf("list ReplicaSets of Deployment %s: %w", d.Name, err)
+	}
+	for i := range list.Items {
+		rs := &list.Items[i]
+		if !metav1.IsControlledBy(rs, d) {
+			continue
+		}
+		h, err := TemplateHash(withoutHash(rs.Spec.Template))
+		if err != nil {
+			return 0, err
+		}
+		if h == want {
+			n, err := strconv.ParseInt(rs.Annotations[revisionAnnotation], 10, 64)
+			if err != nil {
+				return 0, fmt.Errorf("revision of ReplicaSet %s: %w", rs.Name, err)
+			}
+			return n, nil
+		}
+	}
+	return 0, fmt.Errorf("%w: none has the template to put back", ErrNoSuchRevision)
+}
+
+func withoutHash(t corev1.PodTemplateSpec) corev1.PodTemplateSpec {
+	t = *t.DeepCopy()
+	delete(t.Labels, hashLabel)
+	return t
 }
 
 func replicaSetAt(ctx context.Context, c client.Reader, d *appsv1.Deployment, revision int64) (*appsv1.ReplicaSet, error) {
