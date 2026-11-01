@@ -195,8 +195,8 @@ func predicateToProto(r predicate.Result) *themisv1.PredicateResult {
 	}
 }
 
-// templates describe the evidence templates to investigators.
-var templates = map[string]*themisv1.EvidenceTemplate{
+// Templates describe the evidence templates to investigators.
+var Templates = map[string]*themisv1.EvidenceTemplate{
 	evidence.RolloutHistory: {
 		Description: "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits.",
 	},

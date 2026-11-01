@@ -81,7 +81,7 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 	}
 	for _, name := range profile.Evidence.Allowed {
 		t := &themisv1.EvidenceTemplate{Name: name}
-		if d, ok := templates[name]; ok {
+		if d, ok := Templates[name]; ok {
 			t.Description, t.Params = d.GetDescription(), d.GetParams()
 		}
 		out.AllowedTemplates = append(out.AllowedTemplates, t)

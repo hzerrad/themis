@@ -1,6 +1,27 @@
 {
   "scenario": "rollout-oom",
   "version": 1,
+  "difficulty": "easy",
+  "incident_class": "rollout_regression",
+  "truth": {
+    "root_causes": [
+      "memory_limit_regression"
+    ],
+    "decision": "propose",
+    "acceptable_revisions": [
+      1
+    ],
+    "required_citations": [
+      "pod_states"
+    ],
+    "predicates": {
+      "config_changed_before_failure": "false",
+      "failure_onset_after_rollout": "true",
+      "gitops_managed": "false",
+      "oom_killed_new_revision": "true",
+      "rollout_recent": "true"
+    }
+  },
   "target": {
     "Group": "apps",
     "Kind": "Deployment",
@@ -8,6 +29,11 @@
     "Name": "checkout",
     "UID": "uid-deployment-checkout"
   },
+  "capabilities": [
+    "deployment.rollback-to-revision"
+  ],
+  "max_steps": 8,
+  "max_evidence_requests": 6,
   "initial": [
     {
       "id": "ev-rollout_history",
@@ -44,12 +70,32 @@
       "classification": "sensitive"
     }
   },
-  "allowed": [
-    "rollout_history",
-    "pod_states",
-    "target_events",
-    "referenced_config",
-    "container_logs_tail"
+  "templates": [
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
   ],
   "predicates": [
     {
