@@ -130,3 +130,16 @@ func (s *Store) Resolved(ctx context.Context, tx pgx.Tx, source, sourceID string
 	}
 	return resolved, nil
 }
+
+// AlertsStarted returns when the first of an incident's alerts started to
+// fire, and false when it has none.
+func (s *Store) AlertsStarted(ctx context.Context, incidentID string) (time.Time, bool, error) {
+	var at *time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT min(starts_at) FROM incident_alerts WHERE incident_id = $1`, incidentID).Scan(&at); err != nil {
+		return time.Time{}, false, fmt.Errorf("alerts of incident %s: %w", incidentID, err)
+	}
+	if at == nil {
+		return time.Time{}, false, nil
+	}
+	return *at, true, nil
+}

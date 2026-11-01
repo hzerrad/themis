@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,7 +35,14 @@ type PrepareWorker struct {
 	Registry evidence.Registry
 	Logger   *slog.Logger
 	Now      func() time.Time
+
+	// EventRetention is how long the API server keeps events: older ones
+	// are gone. DefaultEventRetention when zero.
+	EventRetention time.Duration
 }
+
+// DefaultEventRetention is the API server's default --event-ttl.
+const DefaultEventRetention = time.Hour
 
 func (w *PrepareWorker) Work(ctx context.Context, job *river.Job[InvestigateArgs]) error {
 	return w.Prepare(ctx, job.Args.IncidentID)
@@ -75,7 +83,12 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		}
 		items = append(items, item)
 	}
-	results := predicate.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now)
+	expired, err := w.expiredEvents(ctx, in.ID, profile.Evidence.Initial, now)
+	if err != nil {
+		return err
+	}
+	gaps = append(gaps, expired...)
+	results := predicate.Attribute(predicate.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
 	// The template investigated, so a change outside Themis can be noticed.
 	snap, err := rollback.Snapshot(ctx, w.Reader, in.Target)
 	if err != nil {
@@ -136,4 +149,36 @@ func evidenceCollected(n int) string {
 		return "Investigation started with 1 piece of evidence."
 	}
 	return fmt.Sprintf("Investigation started with %d pieces of evidence.", n)
+}
+
+// expiredEvents records that the target's first events are gone when its
+// alerts started longer ago than Kubernetes keeps events.
+func (w *PrepareWorker) expiredEvents(ctx context.Context, incidentID string, initial []string, now time.Time) ([]store.EvidenceGap, error) {
+	if !slices.Contains(initial, evidence.TargetEvents) {
+		return nil, nil
+	}
+	started, ok, err := w.Store.AlertsStarted(ctx, incidentID)
+	if err != nil || !ok {
+		return nil, err
+	}
+	retention := w.EventRetention
+	if retention == 0 {
+		retention = DefaultEventRetention
+	}
+	if now.Sub(started) <= retention {
+		return nil, nil
+	}
+	return []store.EvidenceGap{{
+		IncidentID: incidentID, Template: evidence.TargetEvents, Cause: evidence.GapExpired, At: now,
+		Detail: fmt.Sprintf("the alert started %s before, and Kubernetes keeps events for about %s", now.Sub(started).Round(time.Minute), retention),
+	}}, nil
+}
+
+// checkGaps are the gaps the checks read.
+func checkGaps(gaps []store.EvidenceGap) []predicate.Gap {
+	out := make([]predicate.Gap, 0, len(gaps))
+	for _, g := range gaps {
+		out = append(out, predicate.Gap{Template: g.Template, Cause: g.Cause})
+	}
+	return out
 }
