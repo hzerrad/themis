@@ -172,3 +172,27 @@ func TestPolicy_ObserveModeNeverRestores(t *testing.T) {
 		t.Errorf("observe mode restore = %s, want deny", d.Outcome)
 	}
 }
+
+// Rules can tell who suggested a fix, and whether that is proven.
+func TestPolicy_SeesWhoSuggestedTheFix(t *testing.T) {
+	p := compile(t, config.ModeGuarded,
+		rule("no-unproven-outsiders", `proposal.external == "true" && proposal.authenticated != "true"`, config.DecisionDeny),
+		rule("this-agent-only", `proposal.external == "true" && proposal.source != "serviceaccount:agents/triage"`, config.DecisionDeny))
+	tests := []struct {
+		name string
+		in   governance.PolicyInput
+		want governance.Outcome
+	}{
+		{"the investigator", governance.PolicyInput{Source: "themis-intelligence", Authenticated: true}, governance.RequireApproval},
+		{"the named agent", governance.PolicyInput{Source: "serviceaccount:agents/triage", Authenticated: true, External: true}, governance.RequireApproval},
+		{"another agent", governance.PolicyInput{Source: "serviceaccount:agents/other", Authenticated: true, External: true}, governance.Deny},
+		{"not proven", governance.PolicyInput{Source: "serviceaccount:agents/triage", External: true}, governance.Deny},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := p.Evaluate(tt.in).Outcome; got != tt.want {
+				t.Errorf("outcome = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}

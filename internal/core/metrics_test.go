@@ -25,6 +25,7 @@ var themisMetrics = []string{
 	"themis_escalations_total",
 	"themis_evidence_collected_total",
 	"themis_evidence_truncated_total",
+	"themis_external_proposals_total",
 	"themis_gitops_refusals_total",
 	"themis_incident_transitions_total",
 	"themis_incidents",

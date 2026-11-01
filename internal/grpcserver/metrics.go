@@ -13,6 +13,11 @@ var (
 		Help: "Proposals stored, by result: accepted or rejected.",
 	}, []string{"result"})
 
+	externalProposalsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_external_proposals_total",
+		Help: "Proposals stored from outside Themis, by result: accepted or rejected.",
+	}, []string{"result"})
+
 	abstentionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_abstentions_total",
 		Help: "Investigations that couldn't decide, by kind: blind when evidence Themis could have had was missing, ambiguous when it saw everything and found no clear answer.",
@@ -38,7 +43,9 @@ var budgetReasons = map[themisv1.InvestigationFailureReason]bool{
 }
 
 func init() {
-	metrics.Registry.MustRegister(proposalsTotal, abstentionsTotal, safetyEventsTotal)
+	metrics.Registry.MustRegister(proposalsTotal, externalProposalsTotal, abstentionsTotal, safetyEventsTotal)
+	externalProposalsTotal.WithLabelValues("accepted")
+	externalProposalsTotal.WithLabelValues("rejected")
 	abstentionsTotal.WithLabelValues("blind")
 	abstentionsTotal.WithLabelValues("ambiguous")
 	proposalsTotal.WithLabelValues("accepted")

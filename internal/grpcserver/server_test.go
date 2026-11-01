@@ -62,6 +62,7 @@ func (b *syncBuffer) String() string {
 const token = "investigator-s3cret"
 
 type env struct {
+	server *grpcserver.Server
 	lis    *bufconn.Listener
 	logs   *syncBuffer
 	store  *store.Store
@@ -127,6 +128,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		investigations: themisv1.NewInvestigationServiceClient(conn),
 		evidence:       themisv1.NewEvidenceServiceClient(conn),
 		proposals:      themisv1.NewProposalServiceClient(conn),
+		server:         gs,
 	}
 	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Registry: registry, Now: clk.Now}
 	if err := prepare.Prepare(t.Context(), e.newIncident(t)); err != nil {

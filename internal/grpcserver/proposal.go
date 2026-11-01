@@ -35,30 +35,19 @@ type rejection struct {
 }
 
 func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
-	if req.GetTarget() == nil {
-		return nil, status.Error(codes.InvalidArgument, "target is required")
+	if caller, ok := callerFrom(ctx); ok {
+		return s.submitExternal(ctx, caller, req)
 	}
-	if req.GetClientProposalId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "client_proposal_id is required")
+	if req.GetIncidentId() != "" {
+		return nil, status.Error(codes.Unauthenticated, "only a caller outside Themis names an incident")
 	}
-	var (
-		capability string
-		params     map[string]any
-		invalid    string
-	)
-	switch c := req.GetCapability().(type) {
-	case *themisv1.SubmitProposalRequest_RollbackToRevision:
-		capability = CapabilityRollback
-		params = map[string]any{"revision": c.RollbackToRevision.GetRevision()}
-		if c.RollbackToRevision.GetRevision() <= 0 {
-			invalid = "The revision must be a positive number."
-		}
-	default:
-		return nil, status.Error(codes.InvalidArgument, "a capability is required")
+	capability, params, invalid, err := parseProposal(req)
+	if err != nil {
+		return nil, err
 	}
 
 	var stored store.Proposal
-	err := s.Store.InTx(ctx, func(tx pgx.Tx) error {
+	err = s.Store.InTx(ctx, func(tx pgx.Tx) error {
 		inv, err := s.Store.LeasedInvestigation(ctx, tx, req.GetLeaseId(), s.now())
 		if err != nil {
 			return err
@@ -74,7 +63,9 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 			ExpectedEffect: req.GetExpectedEffect(), Rationale: req.GetRationale(),
 			CitedEvidenceIDs: req.GetCitedEvidenceIds(), CitedPredicates: req.GetCitedPredicates(),
 			Provenance: provenance(req.GetProvenance()),
-			Status:     store.ProposalAccepted,
+			// The lease proves it comes from the investigator.
+			Authenticated: true,
+			Status:        store.ProposalAccepted,
 		}
 		r, err := s.judge(ctx, tx, inv, profile, p, invalid)
 		if err != nil {
@@ -101,12 +92,36 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 		return nil, s.internal(ctx, err)
 	}
 
+	return proposalResponse(stored), nil
+}
+
+// parseProposal reads what every proposal must carry. invalid says why its
+// parameters are wrong, for storing the proposal as rejected.
+func parseProposal(req *themisv1.SubmitProposalRequest) (capability string, params map[string]any, invalid string, err error) {
+	if req.GetTarget() == nil {
+		return "", nil, "", status.Error(codes.InvalidArgument, "target is required")
+	}
+	if req.GetClientProposalId() == "" {
+		return "", nil, "", status.Error(codes.InvalidArgument, "client_proposal_id is required")
+	}
+	switch c := req.GetCapability().(type) {
+	case *themisv1.SubmitProposalRequest_RollbackToRevision:
+		if c.RollbackToRevision.GetRevision() <= 0 {
+			invalid = "The revision must be a positive number."
+		}
+		return CapabilityRollback, map[string]any{"revision": c.RollbackToRevision.GetRevision()}, invalid, nil
+	default:
+		return "", nil, "", status.Error(codes.InvalidArgument, "a capability is required")
+	}
+}
+
+func proposalResponse(stored store.Proposal) *themisv1.SubmitProposalResponse {
 	resp := &themisv1.SubmitProposalResponse{ProposalId: stored.ID, Message: stored.Message, Status: themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED}
 	if stored.Status == store.ProposalRejected {
 		resp.Status = themisv1.ProposalStatus_PROPOSAL_STATUS_REJECTED
 		resp.RejectionReason = themisv1.RejectionReason(themisv1.RejectionReason_value[stored.RejectionReason])
 	}
-	return resp, nil
+	return resp
 }
 
 // countProposal counts a stored proposal, and a rejection that is a safety
