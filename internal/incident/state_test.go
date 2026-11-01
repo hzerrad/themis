@@ -17,6 +17,7 @@ var allStates = []incident.State{
 	incident.Authorized,
 	incident.Executing,
 	incident.Verifying,
+	incident.Restoring,
 	incident.Resolved,
 	incident.ContainedEscalated,
 	incident.Escalated,
@@ -214,7 +215,23 @@ func TestStates_ListsEveryState(t *testing.T) {
 			}
 		}
 	}
-	if n := len(incident.States()); n != 17 {
-		t.Errorf("%d states, want 17: update States when adding one", n)
+	if n := len(incident.States()); n != 18 {
+		t.Errorf("%d states, want 18: update States when adding one", n)
+	}
+}
+
+// A fix that didn't help is put back, and the incident then goes to a person.
+// While Themis is putting it back, a write is in flight: nothing cancels it.
+func TestRestoring(t *testing.T) {
+	if !incident.CanTransition(incident.Verifying, incident.Restoring) || !incident.CanTransition(incident.Restoring, incident.Escalated) {
+		t.Error("verifying → restoring → escalated is not allowed")
+	}
+	for _, to := range []incident.State{incident.Canceled, incident.SelfResolved, incident.Resolved, incident.Verifying} {
+		if incident.CanTransition(incident.Restoring, to) {
+			t.Errorf("restoring → %s is allowed", to)
+		}
+	}
+	if incident.Restoring.Terminal() {
+		t.Error("restoring is terminal")
 	}
 }
