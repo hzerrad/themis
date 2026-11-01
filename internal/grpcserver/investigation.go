@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
@@ -119,6 +120,15 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		if err != nil {
 			return err
 		}
+		reported, err := s.recordReportedGaps(ctx, tx, inv, req.GetGaps())
+		if err != nil {
+			return err
+		}
+		if conclusion == "inconclusive" {
+			if result.Blind, err = s.blind(ctx, inv.IncidentID, reported); err != nil {
+				return err
+			}
+		}
 		if err := s.Store.CompleteInvestigation(ctx, tx, inv.LeaseID, result); err != nil {
 			return err
 		}
@@ -178,6 +188,9 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		if err != nil {
 			return err
 		}
+		if _, err := s.recordReportedGaps(ctx, tx, inv, req.GetGaps()); err != nil {
+			return err
+		}
 		retryAt := s.now().Add(retryBackoff << (inv.Attempts - 1))
 		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, failed(req.GetReason()), req.GetMessage(), retryAt)
 		if err != nil {
@@ -197,6 +210,64 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 		return nil, s.internal(ctx, err)
 	}
 	return &themisv1.FailInvestigationResponse{}, nil
+}
+
+// reportedCauses are the gaps only the investigator can see.
+var reportedCauses = map[themisv1.EvidenceGapCause]evidence.GapCause{
+	themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE: evidence.GapNotInProfile,
+	themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_DATA_CEILING:   evidence.GapDataCeiling,
+	themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_BUDGET_SPENT:   evidence.GapBudgetSpent,
+}
+
+// recordReportedGaps keeps the gaps the investigator met, for templates
+// Themis has, and returns their causes.
+func (s *Server) recordReportedGaps(ctx context.Context, tx pgx.Tx, inv store.Investigation, gaps []*themisv1.EvidenceGap) ([]evidence.GapCause, error) {
+	var causes []evidence.GapCause
+	for _, g := range gaps {
+		cause, ok := reportedCauses[g.GetCause()]
+		if _, exists := s.Registry[g.GetTemplate()]; !ok || !exists {
+			continue
+		}
+		err := s.Store.InsertEvidenceGap(ctx, tx, store.EvidenceGap{
+			IncidentID: inv.IncidentID, LeaseID: inv.LeaseID, Template: g.GetTemplate(),
+			Cause: cause, Detail: truncate(g.GetDetail(), maxGapDetail), At: s.now(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		causes = append(causes, cause)
+	}
+	return causes, nil
+}
+
+// maxGapDetail bounds the detail an investigator reports.
+const maxGapDetail = 1024
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return strings.ToValidUTF8(s[:n], "")
+}
+
+// blind reports whether an investigation that couldn't decide was missing
+// evidence Themis could have had: a gap it reported, or one recorded before.
+func (s *Server) blind(ctx context.Context, incidentID string, reported []evidence.GapCause) (bool, error) {
+	for _, c := range reported {
+		if c.Blind() {
+			return true, nil
+		}
+	}
+	recorded, err := s.Store.EvidenceGaps(ctx, incidentID)
+	if err != nil {
+		return false, err
+	}
+	for _, g := range recorded {
+		if g.Cause.Blind() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // failures say why an investigation failed, as the end of a sentence.
