@@ -291,9 +291,13 @@ func (s *Store) OpenIncidents(ctx context.Context, namespaces []string, limit in
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
 }
 
-// UndecidedBefore returns the incidents left undecided since before t.
+// UndecidedBefore returns the incidents left undecided since before t. The
+// last transition says since when; updated_at also moves when an alert joins.
 func (s *Store) UndecidedBefore(ctx context.Context, q Querier, t time.Time, limit int) ([]string, error) {
-	rows, err := q.Query(ctx, `SELECT id::text FROM incidents WHERE state = 'inconclusive' AND updated_at <= $1 ORDER BY updated_at LIMIT $2`, t, limit)
+	rows, err := q.Query(ctx, `SELECT i.id::text FROM incidents i
+	WHERE i.state = 'inconclusive'
+	  AND (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) <= $1
+	ORDER BY i.id LIMIT $2`, t, limit)
 	if err != nil {
 		return nil, fmt.Errorf("undecided incidents: %w", err)
 	}
