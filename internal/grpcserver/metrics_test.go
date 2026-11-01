@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -123,5 +124,22 @@ func TestMetrics_UnknownCapabilityIsASafetyEvent(t *testing.T) {
 	e.submit(t, rollback(e.lease(t), "p-1"))
 	if got := unknown(); got != 1 {
 		t.Errorf("counted %v unknown_capability events, want 1", got)
+	}
+}
+
+func TestMetrics_AbstentionCountedByKind(t *testing.T) {
+	blind := metrictest.Delta(t, "themis_abstentions_total", map[string]string{"kind": "blind"})
+	ambiguous := metrictest.Delta(t, "themis_abstentions_total", map[string]string{"kind": "ambiguous"})
+
+	e := newEnv(t)
+	e.complete(t, e.lease(t), &themisv1.EvidenceGap{Template: evidence.ContainerLogsTail, Cause: themisv1.EvidenceGapCause_EVIDENCE_GAP_CAUSE_DATA_CEILING})
+	other := newEnv(t)
+	other.complete(t, other.lease(t))
+
+	if got := blind(); got != 1 {
+		t.Errorf("counted %v blind abstentions, want 1", got)
+	}
+	if got := ambiguous(); got != 1 {
+		t.Errorf("counted %v ambiguous abstentions, want 1", got)
 	}
 }

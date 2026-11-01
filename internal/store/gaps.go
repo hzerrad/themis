@@ -40,13 +40,16 @@ func (s *Store) InsertEvidenceGap(ctx context.Context, tx pgx.Tx, g EvidenceGap)
 	if g.LeaseID != "" {
 		lease = &g.LeaseID
 	}
-	_, err = tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 	INSERT INTO evidence_gaps (incident_id, lease_id, template, params, cause, detail, at)
 	VALUES ($1, $2, $3, $4, $5, $6, $7)
 	ON CONFLICT (incident_id, lease_id, template, cause) DO NOTHING
 `, g.IncidentID, lease, g.Template, p, g.Cause, g.Detail, g.At)
 	if err != nil {
 		return fmt.Errorf("record evidence gap of incident %s: %w", g.IncidentID, err)
+	}
+	if tag.RowsAffected() == 1 {
+		AfterCommit(tx, missingEvidenceTotal.WithLabelValues(g.Template, string(g.Cause)).Inc)
 	}
 	return nil
 }

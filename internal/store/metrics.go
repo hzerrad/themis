@@ -5,6 +5,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 )
 
@@ -34,6 +35,11 @@ const (
 )
 
 var (
+	missingEvidenceTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_missing_evidence_total",
+		Help: "Evidence an investigation needed and couldn't have, by template and why: forbidden, not_in_profile, expired, not_found, budget_spent, data_ceiling, timeout, unavailable, or absent when there was nothing.",
+	}, []string{"template", "cause"})
+
 	investigationsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_investigations_total",
 		Help: "Investigation leases ended, by outcome: proposed, abstained (inconclusive), failed, budget_exhausted, or lease_lost when the lease expired.",
@@ -58,7 +64,12 @@ var (
 )
 
 func init() {
-	metrics.Registry.MustRegister(investigationsTotal, transitionsTotal, escalationsTotal, stageDuration)
+	metrics.Registry.MustRegister(missingEvidenceTotal, investigationsTotal, transitionsTotal, escalationsTotal, stageDuration)
+	for _, t := range []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents, evidence.ContainerLogsTail} {
+		for _, c := range evidence.GapCauses() {
+			missingEvidenceTotal.WithLabelValues(t, string(c))
+		}
+	}
 	for _, o := range []string{InvestigationProposed, InvestigationAbstained, InvestigationFailed, InvestigationLeaseLost, InvestigationBudgetExhausted} {
 		investigationsTotal.WithLabelValues(o)
 	}

@@ -5,7 +5,7 @@ import "slices"
 // MetricLabels are the label names Themis metrics may use: closed sets only.
 // Never an incident ID, namespace, workload name, alert name or error text.
 var MetricLabels = []string{
-	"capability", "code", "decision", "from", "kind", "outcome", "reason",
+	"capability", "cause", "code", "decision", "from", "kind", "outcome", "reason",
 	"result", "source", "stage", "state", "template", "to",
 }
 

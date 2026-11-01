@@ -13,6 +13,11 @@ var (
 		Help: "Proposals stored, by result: accepted or rejected.",
 	}, []string{"result"})
 
+	abstentionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_abstentions_total",
+		Help: "Investigations that couldn't decide, by kind: blind when evidence Themis could have had was missing, ambiguous when it saw everything and found no clear answer.",
+	}, []string{"kind"})
+
 	safetyEventsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_safety_events_total",
 		Help: "Proposals rejected for naming another target (wrong_target), a capability the profile does not allow (unknown_capability) or evidence that was never collected (unknown_evidence).",
@@ -33,7 +38,9 @@ var budgetReasons = map[themisv1.InvestigationFailureReason]bool{
 }
 
 func init() {
-	metrics.Registry.MustRegister(proposalsTotal, safetyEventsTotal)
+	metrics.Registry.MustRegister(proposalsTotal, abstentionsTotal, safetyEventsTotal)
+	abstentionsTotal.WithLabelValues("blind")
+	abstentionsTotal.WithLabelValues("ambiguous")
 	proposalsTotal.WithLabelValues("accepted")
 	proposalsTotal.WithLabelValues("rejected")
 	for _, k := range safetyKinds {
