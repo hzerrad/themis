@@ -35,3 +35,6 @@ kubeconfig*
 .env
 .env.*
 !.env.example
+
+# Evaluation reports
+/eval/out/

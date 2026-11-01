@@ -54,6 +54,10 @@ endif
 eval-bundles: ## Rebuild the evaluation bundles from their scenarios
 	go test ./internal/evaluation -run 'TestScenarios$$' -update
 
+.PHONY: eval-local
+eval-local: ## Evaluate a local model on every scenario; start Ollama with OLLAMA_CONTEXT_LENGTH=16384
+	$(UV) run python -m themis_intelligence.evaluation --out ../eval/out/local --context-tokens 16384
+
 .PHONY: test test-go test-go-next test-python
 test: test-go test-python ## Run all unit tests
 
