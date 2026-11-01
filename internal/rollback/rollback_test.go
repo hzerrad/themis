@@ -176,3 +176,32 @@ func TestExplain(t *testing.T) {
 		}
 	}
 }
+
+// The template a rollback replaced is still a ReplicaSet's: rolling back to
+// its revision puts the workload back.
+func TestRevisionOf_FindsTheReplicaSetWithTheTemplate(t *testing.T) {
+	target, _ := load(t)
+	prior := read(t, target, 1).Desired
+	if got, err := rollback.RevisionOf(t.Context(), k8s, target, prior); err != nil || got != 1 {
+		t.Errorf("RevisionOf = %d, %v; want 1", got, err)
+	}
+	other := *prior.DeepCopy()
+	other.Spec.Containers[0].Image = "example/checkout:9.9.9"
+	if _, err := rollback.RevisionOf(t.Context(), k8s, target, other); !errors.Is(err, rollback.ErrNoSuchRevision) {
+		t.Errorf("unknown template: err = %v, want ErrNoSuchRevision", err)
+	}
+}
+
+// What a restore undoes is part of its digest: a restore and a rollback to
+// the same revision are different actions.
+func TestRestoreFields_BindWhatIsUndone(t *testing.T) {
+	target, _ := load(t)
+	live := read(t, target, 1)
+	restore, err := digest.Compute(rollback.RestoreFields("inc-1", live, 1, "act-1", "approve", "sha256:p"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restore == digestOf(t, live, 1) {
+		t.Error("a restore has the digest of a plain rollback")
+	}
+}
