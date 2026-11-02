@@ -73,6 +73,32 @@ notifications:
   # Where people reach the UI, for links in notices.
   externalURL: ""
 
+# Sign-in through an OIDC provider, such as Dex, Google, Okta, Keycloak or
+# Entra ID. Off while issuerURL is empty: only the admin token signs in.
+oidc:
+  # The provider's issuer, for example https://accounts.google.com.
+  issuerURL: ""
+  clientID: ""
+  # Themis's /auth/callback as the browser reaches it, for example
+  # https://themis.example.com/auth/callback. Register it with the provider.
+  redirectURL: ""
+  clientSecret:
+    # A Secret in the release namespace holding the client secret.
+    existingSecret: ""
+    key: clientSecret
+  # The ID token claim used as the username. Empty: email.
+  usernameClaim: ""
+  # The ID token claim listing the person's groups. Empty: groups.
+  groupsClaim: ""
+  # How long a sign-in lasts, for example 8h. Empty: 8h.
+  sessionTTL: ""
+
+# Roles for people who sign in, by username or group; the most trusted match
+# wins. Roles: viewer, responder, approver, admin. For example:
+#   - {role: admin, users: [alice@example.com]}
+#   - {role: approver, groups: [sre]}
+access: []
+
 networkPolicy:
   enabled: true
   # Namespaces whose pods may reach the core's gRPC API, for agents that suggest

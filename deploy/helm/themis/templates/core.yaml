@@ -59,10 +59,21 @@ spec:
             {{- if .Values.notifications.webhookSecret }}
             - {name: webhook, mountPath: /var/run/secrets/themis-webhook, readOnly: true}
             {{- end }}
+            {{- if .Values.oidc.issuerURL }}
+            - {name: oidc, mountPath: /var/run/secrets/themis-oidc, readOnly: true}
+            {{- end }}
       volumes:
         {{- if .Values.notifications.webhookSecret }}
         - name: webhook
           secret: {secretName: {{ .Values.notifications.webhookSecret }}}
+        {{- end }}
+        {{- with .Values.oidc }}
+        {{- if .issuerURL }}
+        - name: oidc
+          secret:
+            secretName: {{ required "oidc.clientSecret.existingSecret is required with oidc.issuerURL" .clientSecret.existingSecret }}
+            items: [{key: {{ .clientSecret.key | default "clientSecret" }}, path: client-secret}]
+        {{- end }}
         {{- end }}
         - name: config
           configMap: {name: {{ .Release.Name }}-config}

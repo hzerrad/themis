@@ -12,6 +12,27 @@ data:
       bearerTokenFile: /var/run/secrets/themis/investigator
     api:
       bearerTokenFile: /var/run/secrets/themis/admin
+      {{- with .Values.oidc }}
+      {{- if .issuerURL }}
+      oidc:
+        issuerURL: {{ .issuerURL | quote }}
+        clientID: {{ required "oidc.clientID is required with oidc.issuerURL" .clientID | quote }}
+        clientSecretFile: /var/run/secrets/themis-oidc/client-secret
+        redirectURL: {{ required "oidc.redirectURL is required with oidc.issuerURL: Themis's /auth/callback as the browser reaches it" .redirectURL | quote }}
+        {{- with .usernameClaim }}
+        usernameClaim: {{ . | quote }}
+        {{- end }}
+        {{- with .groupsClaim }}
+        groupsClaim: {{ . | quote }}
+        {{- end }}
+        {{- with .sessionTTL }}
+        sessionTTL: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- with .Values.access }}
+      access: {{- toYaml . | nindent 8 }}
+      {{- end }}
     {{- if .Values.executor.enabled }}
     executor:
       address: {{ .Release.Name }}-executor:9091
