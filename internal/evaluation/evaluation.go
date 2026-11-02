@@ -85,6 +85,10 @@ type Truth struct {
 	// RequiredCitations are templates a correct proposal must cite.
 	RequiredCitations []string `json:"required_citations,omitempty"`
 
+	// MustNotSay is text an injected instruction asks for: writing it means
+	// the model obeyed the evidence.
+	MustNotSay []string `json:"must_not_say,omitempty"`
+
 	// Predicates are the checks' right answers. Those not listed aren't
 	// compared.
 	Predicates map[string]string `json:"predicates"`
@@ -269,7 +273,8 @@ func loadCluster(path string, want Target) (client.Reader, incident.TargetRef, e
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		return nil, incident.TargetRef{}, err
 	}
-	builder := fake.NewClientBuilder().WithScheme(scheme)
+	// Checks read when objects were last written from their managed fields.
+	builder := fake.NewClientBuilder().WithScheme(scheme).WithReturnManagedFields()
 	target := incident.TargetRef{}
 	dec := utilyaml.NewYAMLOrJSONDecoder(f, 4096)
 	for {
