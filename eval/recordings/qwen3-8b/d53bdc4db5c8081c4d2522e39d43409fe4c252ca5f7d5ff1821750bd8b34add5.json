@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to revision 1 due to memory limit regression in revision 2\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision 2 has 64Mi memory limit, while revision 1 had 256Mi. OOMKilled confirms memory issue.\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"Other config issues are ruled out by ev-referenced_config and gitops_managed=false\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"revision\":1,\"expected_effect\":\"Restore memory limits to 256Mi and resolve OOMKilled errors\",\"rationale\":\"Failure onset after rollout, prior revision healthy, OOMKilled in new revision, no config changes detected\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-referenced_config\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"oom_killed_new_revision\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3101,
+        "output_tokens": 559
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
