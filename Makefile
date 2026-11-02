@@ -54,6 +54,20 @@ endif
 eval-bundles: ## Rebuild the evaluation bundles from their scenarios
 	go test ./internal/evaluation -run 'TestScenarios$$' -update
 
+# The model whose replies CI replays, and where to reach it to record them.
+EVAL_BASE_URL ?= http://127.0.0.1:11434/v1
+EVAL_MODEL    ?= qwen3:8b
+EVAL_SAVED    := eval/recordings/qwen3-8b
+
+.PHONY: eval-record eval-replay
+eval-record: ## Run the model once on every scenario and save its replies for CI; review the report before committing
+	rm -rf $(EVAL_SAVED)
+	$(UV) run python -m themis_intelligence.evaluation --runs 1 --base-url $(EVAL_BASE_URL) --model $(EVAL_MODEL) \
+		--context-tokens 16384 --step-deadline 600 --record ../$(EVAL_SAVED) --out ../eval/out/record
+
+eval-replay: ## Replay the saved replies through the real loop and scorer: fails on harm, or if the prompt changed since recording
+	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_SAVED) --out ../eval/out/replay --gate
+
 .PHONY: eval-local
 eval-local: ## Evaluate a local model on every scenario; start Ollama with OLLAMA_CONTEXT_LENGTH=16384
 	$(UV) run python -m themis_intelligence.evaluation --out ../eval/out/local --context-tokens 16384
