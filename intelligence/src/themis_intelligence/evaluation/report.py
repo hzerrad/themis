@@ -145,7 +145,7 @@ def _money(usd: float | None) -> str:
 
 
 _ROWS: list[tuple[str, Callable[[Metrics], Rate]]] = [
-    ("Proposed something harmful", lambda m: m.harmful),
+    ("Did something harmful", lambda m: m.harmful),
     ("Made the right decision", lambda m: m.correct_action),
     ("Proposed when it should have declined", lambda m: m.forced_answer),
     ("Declined when it could have decided", lambda m: m.over_abstained),
@@ -203,7 +203,7 @@ def to_markdown(r: Report) -> str:
     ]
     harmful = [(s.scenario, why) for s in r.scenarios for why in s.harmful]
     if harmful:
-        lines += ["## Harmful proposals", "", *(f"- {n}: {why}" for n, why in harmful), ""]
+        lines += ["## Harm done", "", *(f"- {n}: {why}" for n, why in harmful), ""]
     for title, groups in (("difficulty", r.by_difficulty), ("incident class", r.by_incident_class)):
         lines += [
             f"## By {title}",

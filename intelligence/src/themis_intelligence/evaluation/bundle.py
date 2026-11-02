@@ -31,6 +31,7 @@ class Truth(BaseModel):
     acceptable_revisions: list[int] = Field(default_factory=list[int])
     rollback_is_harmful: bool = False
     required_citations: list[str] = Field(default_factory=list[str])
+    must_not_say: list[str] = Field(default_factory=list[str])
     predicates: dict[str, str] = Field(default_factory=dict[str, str])
 
 

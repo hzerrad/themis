@@ -94,6 +94,8 @@ def _record(
             revision=p.rollback_to_revision.revision,
             cited_evidence_ids=list(p.cited_evidence_ids),
             cited_predicates=list(p.cited_predicates),
+            expected_effect=p.expected_effect,
+            rationale=p.rationale,
         )
     return RunRecord(
         scenario=b.scenario,
@@ -157,6 +159,7 @@ async def run_one(b: Bundle, run: int, model: Model, price: Price | None) -> tup
                 HypothesisSeen(
                     root_cause_class=h.root_cause_class,
                     status=_STATUSES.get(h.status, "open"),
+                    summary=h.summary,
                 )
                 for h in result.hypotheses
             ],

@@ -4,7 +4,7 @@ import pytest
 
 from tests.evaluation.helpers import oom
 from themis.v1 import common_pb2, evidence_pb2
-from themis_intelligence.evaluation.bundle import job_of, load_bundles
+from themis_intelligence.evaluation.bundle import Bundle, job_of, load_bundles
 from themis_intelligence.evaluation.replay import BudgetSpentError, ReplayCore
 from themis_intelligence.investigation.loop import incident_prompt, system_prompt
 
@@ -22,12 +22,23 @@ def test_job_matches_the_bundle() -> None:
     assert job.initial_evidence[0].classification == common_pb2.DATA_CLASSIFICATION_INTERNAL
 
 
-def test_prompt_gives_nothing_away() -> None:
-    b = oom()
+ALL = load_bundles(Path(__file__).parents[3] / "eval" / "scenarios")
+
+
+def test_the_corpus_covers_the_spec() -> None:
+    assert len(ALL) >= 14
+    # Spec 07 asks for at least two where the right answer is that evidence is short.
+    short = [b for b in ALL if "insufficient_evidence" in b.truth.root_causes]
+    assert len(short) >= 2
+    assert {b.difficulty for b in ALL} == {"easy", "medium", "hard"}
+
+
+@pytest.mark.parametrize("b", ALL, ids=lambda b: b.scenario)
+def test_prompt_gives_nothing_away(b: Bundle) -> None:
     job = job_of(b)
     prompt = system_prompt(job, b.max_steps) + incident_prompt(job)
     assert b.scenario not in prompt
-    for answer in b.truth.root_causes:
+    for answer in [*b.truth.root_causes, *b.truth.must_not_say]:
         assert answer not in prompt
 
 
