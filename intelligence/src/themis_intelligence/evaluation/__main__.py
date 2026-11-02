@@ -16,6 +16,11 @@ import httpx
 
 from themis_intelligence.__main__ import read_secret
 from themis_intelligence.evaluation.bundle import Bundle, load_bundles
+from themis_intelligence.evaluation.recordings import (
+    MissingRecordingError,
+    RecordingAdapter,
+    ReplayAdapter,
+)
 from themis_intelligence.evaluation.report import Provenance, build_report, to_markdown
 from themis_intelligence.evaluation.runner import Caps, run_all
 from themis_intelligence.evaluation.score import RunRecord
@@ -23,7 +28,7 @@ from themis_intelligence.investigation import loop
 from themis_intelligence.investigation.schemas import SCHEMA_VERSION
 from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
 from themis_intelligence.platform.budget import Budget
-from themis_intelligence.platform.client import Endpoint, ModelClient, Price
+from themis_intelligence.platform.client import Adapter, Endpoint, ModelClient, Price
 from themis_intelligence.platform.contract import CLASSIFICATION_RANK
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -75,6 +80,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--price-output", type=float, help="US dollars per million output tokens")
     p.add_argument("--max-tokens", type=int, default=5_000_000, help="cap for the whole evaluation")
     p.add_argument("--max-usd", type=float, default=5.0, help="cap for the whole evaluation")
+    saved = p.add_mutually_exclusive_group()
+    saved.add_argument("--record", type=Path, help="save every model reply in this directory")
+    saved.add_argument(
+        "--replay", type=Path, help="answer from replies saved with --record; no model is reached"
+    )
+    p.add_argument(
+        "--gate", action="store_true", help="exit with an error unless the safety gate passes"
+    )
     return p.parse_args(argv)
 
 
@@ -126,15 +139,21 @@ async def main() -> None:
     args = parse_args()
     if args.runs < 1:
         raise SystemExit("--runs must be at least 1.")
-    price = read_price(args)
+    price = None if args.replay else read_price(args)
     bundles = load_bundles(args.scenarios, args.scenario)
     if not bundles:
         raise SystemExit(f"No scenarios under {args.scenarios}.")
 
-    key_file = os.environ.get("MODEL_API_KEY_FILE")
-    adapter = OpenAICompatAdapter(
-        base_url=args.base_url, api_key=read_secret(key_file) if key_file else None
-    )
+    adapter: Adapter
+    if args.replay:
+        adapter = ReplayAdapter(args.replay)
+    else:
+        key_file = os.environ.get("MODEL_API_KEY_FILE")
+        adapter = OpenAICompatAdapter(
+            base_url=args.base_url, api_key=read_secret(key_file) if key_file else None
+        )
+        if args.record:
+            adapter = RecordingAdapter(adapter, args.record)
     endpoint = Endpoint(
         name="evaluation",
         model=args.model,
@@ -145,16 +164,23 @@ async def main() -> None:
     )
     caps = Caps(max_tokens=args.max_tokens, max_usd=args.max_usd, price=price)
     started = datetime.now(UTC).isoformat(timespec="seconds")
-    outcome = await run_all(
-        bundles,
-        lambda tokens: ModelClient(
-            adapter=adapter, endpoint=endpoint, budget=Budget(tokens), route=ROUTE, price=price
-        ),
-        args.runs,
-        caps,
-        progress=show,
-        step_deadline_s=args.step_deadline,
-    )
+    try:
+        outcome = await run_all(
+            bundles,
+            lambda tokens: ModelClient(
+                adapter=adapter, endpoint=endpoint, budget=Budget(tokens), route=ROUTE, price=price
+            ),
+            args.runs,
+            caps,
+            progress=show,
+            step_deadline_s=args.step_deadline,
+        )
+    except MissingRecordingError:
+        raise SystemExit(
+            "No saved reply matches what the model would be sent now: the prompt, the schema or "
+            "the evidence changed. Record new replies with `make eval-record`, and review the new "
+            "numbers before committing them."
+        ) from None
     commit, dirty = git_state()
     provenance = Provenance(
         dataset=dataset_hash(args.scenarios, bundles),
@@ -189,6 +215,8 @@ async def main() -> None:
     print(f"Safety gate: {report.safety_gate}. Reports are in {args.out}.")
     if report.partial:
         print(report.partial_reason)
+    if args.gate and report.safety_gate != "pass":
+        raise SystemExit(f"The safety gate didn't pass ({report.safety_gate}): see {args.out}.")
 
 
 if __name__ == "__main__":

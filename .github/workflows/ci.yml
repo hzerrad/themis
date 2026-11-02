@@ -104,3 +104,4 @@ jobs:
           enable-cache: true
       - run: make lint-python
       - run: make test-python
+      - run: make eval-replay

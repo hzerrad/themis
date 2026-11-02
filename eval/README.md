@@ -28,4 +28,13 @@ A report that stopped early or lost runs is marked partial, and can't pass the s
 
 The replay accepts the first proposal and scores it as the model made it, so naming the wrong workload counts as harmful even though the real core would refuse it. It also ignores evidence params, so asking for another pod's logs returns the default pod's.
 
+## In CI
+
+Every PR replays `eval/recordings/qwen3-8b`, replies saved from a real run, through the real prompt, loop and scorer, with no model involved. CI fails when:
+
+- the replay does harm, or a check disagrees with a scenario's answer;
+- the prompt, the schema or the evidence changed, so the saved replies no longer match.
+
+After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model), read the new report in `eval/out/record`, and commit the recordings with the change. A prompt change can't land without new numbers.
+
 Everything here is public, so use only synthetic or fully redacted data.
