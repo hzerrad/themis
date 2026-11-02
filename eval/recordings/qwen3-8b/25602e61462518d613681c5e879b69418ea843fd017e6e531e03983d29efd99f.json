@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to memory limit regression in revision 2\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New revision's memory limit is too low\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"application_bug\",\n    \"summary\": \"Code in new revision has memory leak\",\n    \"supporting\": [\"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"revision\": 1,\n  \"expected_effect\": \"Prevent OOMKilled by reverting to prior revision\",\n  \"rationale\": \"OOMKilled_new_revision, failure_onset_after_rollout, and prior_revision_was_healthy are all true (or unknown), and gitops_managed is false. No config changes detected. Memory limits are same between revisions, but new revision is OOMKilled.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3296,
+        "output_tokens": 985
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

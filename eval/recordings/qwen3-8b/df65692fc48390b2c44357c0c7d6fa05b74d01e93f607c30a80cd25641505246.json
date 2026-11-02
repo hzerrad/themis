@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Readiness probe failures due to unreachable orders-db service. No rollback needed as the issue is an external dependency.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"dependency_failure\",\n        \"summary\": \"Logs show checkout app cannot connect to orders-db (10.0.4.17:5432) with dial timeout errors\",\n        \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"open\"\n    },\n    {\n        \"root_cause_class\": \"bad_configuration\",\n        \"summary\": \"No ConfigMap/Secret changes detected between rollout and failure\",\n        \"supporting\": [\"ev-referenced_config\"],\n        \"contradicting\": [\"ev-container_logs_tail\"],\n        \"missing\": [],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n    \"revision\": 1,\n    \"expected_effect\": \"Rollback to revision 1 which had no reported failures\",\n    \"rationale\": \"Failure onset after rollout, no config changes, and logs show dependency issue not related to code or resources\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-referenced_config\", \"ev-container_logs_tail\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"config_changed_before_failure\", \"gitops_managed\", \"oom_killed_new_revision\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3192,
+        "output_tokens": 824
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

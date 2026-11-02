@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to configuration change in checkout-config causing failure\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"configuration_change\", \"summary\": \"ConfigMap checkout-config changed after rollout but before failure\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"bad_configuration\", \"summary\": \"New revision's settings are wrong due to ConfigMap change\", \"supporting\": [\"ev-referenced_config\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"revision\": 1,\n  \"expected_effect\": \"Revert to healthy revision 1 before the problematic ConfigMap change\",\n  \"rationale\": \"Failure onset after rollout, prior revision was healthy, and ConfigMap change occurred before failure\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 2659,
+        "output_tokens": 1651
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

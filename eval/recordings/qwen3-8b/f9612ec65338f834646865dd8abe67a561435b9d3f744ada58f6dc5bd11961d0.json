@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 due to memory limit regression in revision 2\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New revision 2 has 64Mi memory limit, while revision 1 had 256Mi. OOMKilled confirms memory exhaustion.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"bad_configuration\",\n    \"summary\": \"Lower memory limit in revision 2 could be a misconfiguration.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"revision\": 1,\n  \"expected_effect\": \"Restore memory limit to 256Mi and resolve OOMKilled errors\",\n  \"rationale\": \"Failure onset after rollout, prior revision healthy, OOMKilled in new revision, no config changes detected\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 2626,
+        "output_tokens": 759
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
