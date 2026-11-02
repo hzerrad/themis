@@ -15,6 +15,15 @@ investigators:
 
 api:
   bearerTokenFile: /var/run/secrets/themis/admin-token
+  # Optional: people sign in through an OIDC provider, each with a role.
+  # oidc:
+  #   issuerURL: https://idp.example.com
+  #   clientID: themis
+  #   clientSecretFile: /var/run/secrets/themis-oidc/client-secret
+  #   redirectURL: https://themis.example.com/auth/callback
+  # access:
+  #   - {role: admin, users: [alice@example.com]}
+  #   - {role: approver, groups: [sre]}
 
 profiles:
   - name: rollout-regression
