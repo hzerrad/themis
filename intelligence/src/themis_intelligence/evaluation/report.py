@@ -34,6 +34,8 @@ class Provenance(BaseModel):
     ceiling: str
     temperature: float
     max_output_tokens: int
+    # Empty means the provider's default.
+    reasoning_effort: str = ""
     step_deadline_s: float = 120.0
     runs_per_scenario: int
     context_tokens: int | None
@@ -228,7 +230,8 @@ def to_markdown(r: Report) -> str:
         f"- Scoring version: {p.scoring_version}",
         f"- Prompt: {p.prompt_version} (`{p.prompt_sha256[:12]}`), schema {p.schema_version}",
         f"- Model: {p.model}, served by {p.served_by or 'unknown'} at {p.endpoint_host}",
-        f"- Temperature {p.temperature}, up to {p.max_output_tokens} output tokens, "
+        f"- Temperature {p.temperature}, reasoning {p.reasoning_effort or 'the default'}, "
+        f"up to {p.max_output_tokens} output tokens, "
         f"context {context}, ceiling {p.ceiling}, {p.step_deadline_s:.0f}s per step",
         f"- {p.runs_per_scenario} runs per scenario",
         f"- Commit: `{p.commit}`{dirty}",
