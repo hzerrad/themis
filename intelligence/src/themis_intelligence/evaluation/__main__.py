@@ -91,7 +91,9 @@ def git_state() -> tuple[str, bool]:
             check=False,
         ).stdout.strip()
 
-    return git("rev-parse", "HEAD") or "unknown", bool(git("status", "--porcelain"))
+    return git("rev-parse", "HEAD") or "unknown", bool(
+        git("status", "--porcelain", "--untracked-files=no")
+    )
 
 
 def show(r: RunRecord) -> None:

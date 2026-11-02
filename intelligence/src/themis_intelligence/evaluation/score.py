@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from themis_intelligence.evaluation.bundle import Bundle
 
 # Bump this whenever a score's meaning changes, so runs aren't compared across it.
-SCORING_VERSION = "1"
+SCORING_VERSION = "2"
 
 INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
@@ -116,14 +116,17 @@ def root_cause_hit(b: Bundle, r: RunRecord, top: int) -> bool:
 
 
 def citations_valid(b: Bundle, r: RunRecord) -> bool | None:
-    """Whether the model cited only what it saw, true checks only, and what it had to."""
+    """Whether the model cited only what it saw, checks that exist, and what it had to.
+
+    A false check can be a fair reason, as gitops_managed is for a rollback.
+    """
     if r.proposal is None:
         return None
     cited = set(r.proposal.cited_evidence_ids)
-    true_checks = {c.name for c in b.predicates if c.value == "true"}
+    checks = {c.name for c in b.predicates}
     return (
         cited <= set(r.shown)
-        and set(r.proposal.cited_predicates) <= true_checks
+        and set(r.proposal.cited_predicates) <= checks
         and all(f"ev-{t}" in cited for t in b.truth.required_citations)
     )
 

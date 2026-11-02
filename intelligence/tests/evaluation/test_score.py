@@ -141,12 +141,16 @@ def test_declining_is_the_root_cause_when_evidence_is_insufficient() -> None:
         # Real, but never shown to the model.
         (["ev-container_logs_tail", "ev-pod_states"], None),
         (["ev-rollout_history"], None),  # leaves out the required evidence
-        (None, ["gitops_managed"]),  # a check that's false
         (None, ["no_such_check"]),
     ],
 )
 def test_bad_citations(cited: list[str] | None, predicates: list[str] | None) -> None:
     assert score(oom(), record(cited=cited, predicates=predicates)).citations_valid is False
+
+
+def test_a_false_check_can_be_cited() -> None:
+    cited = ["oom_killed_new_revision", "gitops_managed"]
+    assert score(oom(), record(predicates=cited)).citations_valid
 
 
 def test_wilson_matches_known_values() -> None:
