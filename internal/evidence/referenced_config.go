@@ -3,6 +3,7 @@ package evidence
 import (
 	"cmp"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/incident"
@@ -40,8 +42,8 @@ type ConfigRefView struct {
 	// Missing is set for a ConfigMap that does not exist.
 	Missing bool `json:"missing,omitzero"`
 
-	// ChangedAt is when a ConfigMap was last written. It is left out when the
-	// object does not say, and for Secrets, which Themis does not read.
+	// ChangedAt is when a ConfigMap's data was last written. It is left out
+	// when the object does not say, and for Secrets, which Themis does not read.
 	ChangedAt time.Time `json:"changedAt,omitzero"`
 }
 
@@ -80,15 +82,31 @@ func (referencedConfig) Collect(ctx context.Context, c client.Reader, t incident
 	return Item{Data: data}, nil
 }
 
-// lastWrite is the newest field manager's time, or zero when none is kept.
+// lastWrite is the newest time a field manager wrote data or binaryData, or
+// zero when none is kept. Managers that own only metadata do not count.
 func lastWrite(cm *corev1.ConfigMap) time.Time {
 	var latest time.Time
 	for _, mf := range cm.ManagedFields {
-		if mf.Time != nil && mf.Time.After(latest) {
+		if mf.Time != nil && mf.Time.After(latest) && writesContent(mf) {
 			latest = mf.Time.UTC()
 		}
 	}
 	return latest
+}
+
+// writesContent reports whether the entry owns data or binaryData. An entry
+// whose fields can't be read counts as a content write, to stay safe.
+func writesContent(mf metav1.ManagedFieldsEntry) bool {
+	if mf.FieldsType != "FieldsV1" || mf.FieldsV1 == nil {
+		return true
+	}
+	var fields map[string]jsontext.Value
+	if err := json.Unmarshal(mf.FieldsV1.GetRawBytes(), &fields); err != nil {
+		return true
+	}
+	_, data := fields["f:data"]
+	_, binary := fields["f:binaryData"]
+	return data || binary
 }
 
 // configRefs lists each reference once. A reference is optional only if every
