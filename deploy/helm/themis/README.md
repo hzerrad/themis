@@ -47,7 +47,7 @@ This installs `themis-executor` with a Role in each enrolled namespace: `get` an
 
 ## Upgrade
 
-`helm upgrade` doesn't update custom resource definitions. When a release changes them, apply them first: `kubectl apply -f deploy/helm/themis/crds`.
+`helm install` creates the `ThemisConfig` and `IncidentProfile` CRDs. Before each `helm upgrade`, a short Job runs `kubectl apply` on them, using the `registry.k8s.io/kubectl` image and a ClusterRole limited to those two CRDs. To manage the CRDs yourself, set `crds.upgrade=false`.
 
 ## Connect Alertmanager
 
@@ -105,6 +105,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
 | `networkPolicy.agentNamespaces` | `[]` | Namespaces whose pods may reach the core's gRPC API, for [agents that suggest fixes](../../../docs/configuration.md#fixes-suggested-from-outside) |
 | `resources.{core,executor,intelligence}` | small | Container resources |
+| `crds.upgrade` | `true` | Update the CRDs before each upgrade, with a Job |
+| `crds.image` | `registry.k8s.io/kubectl:v1.37.2` | The image that Job runs |
 
 ## Uninstall
 
@@ -113,3 +115,5 @@ helm uninstall themis -n themis
 ```
 
 The generated tokens are kept across upgrades. The bundled PostgreSQL's volume survives an uninstall; delete it, or the namespace, to remove the data too.
+
+The CRDs stay too, and so do the `ThemisConfig` and `IncidentProfile` resources you created yourself. The ones the chart made from `profiles` and `themisConfig` are deleted. To remove the CRDs and every resource left: `kubectl delete crd themisconfigs.themis.dev incidentprofiles.themis.dev`.

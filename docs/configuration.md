@@ -72,7 +72,7 @@ What a change does to work already under way:
 - A fix already waiting for approval keeps the decision it got.
 - If a profile is removed, an incident using it that hasn't reached a decision stops and says so.
 
-`helm upgrade` doesn't update custom resource definitions. When a release changes them, apply them first: `kubectl apply -f deploy/helm/themis/crds`.
+`helm upgrade` updates the custom resource definitions before anything else. `helm uninstall` keeps them, and the resources you created.
 
 ## Fixes suggested from outside
 
