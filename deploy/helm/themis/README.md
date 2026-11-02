@@ -35,7 +35,7 @@ Container logs are classified `sensitive`, and with the default `model.ceiling: 
 
 ### Images
 
-Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. Until images are published, build and load them yourself: `make images`, or `make kind-load` for a kind cluster.
+Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. By default they come from `ghcr.io/hzerrad`, published on every merge to main and signed: `main` is the latest, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
 
 ## Let Themis act
 
@@ -104,9 +104,9 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 
 | Value | Default | Meaning |
 |---|---|---|
-| `image.repository` | `""` | Registry and path of the images |
-| `image.tag` | `dev` | Image tag |
-| `image.pullPolicy` | `IfNotPresent` | |
+| `image.repository` | `ghcr.io/hzerrad` | Registry and path of the images |
+| `image.tag` | `main` | Image tag: `main`, or `sha-<commit>` to pin a build |
+| `image.pullPolicy` | `Always` | `main` moves, so it's pulled every time; use `IfNotPresent` with a pinned tag |
 | `logLevel` | `info` | Least severe level every component logs: `debug`, `info`, `warn` or `error` |
 | `telemetry.otlp.endpoint` | `""` | Where every component sends its traces over OTLP; empty, nothing is traced |
 | `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
