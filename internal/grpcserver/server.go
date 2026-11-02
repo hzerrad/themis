@@ -5,6 +5,7 @@ package grpcserver
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"sync"
@@ -54,6 +55,7 @@ type Server struct {
 	Reviewer TokenReviewer
 
 	limiters sync.Map
+	reviews  lru[[sha256.Size]byte, review]
 }
 
 // Register serves every service of s on g.

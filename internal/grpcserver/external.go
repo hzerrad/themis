@@ -2,10 +2,14 @@ package grpcserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/time/rate"
@@ -102,6 +106,65 @@ func (k KubeTokenReviewer) Review(ctx context.Context, token string) (string, er
 	return ns + "/" + sa, nil
 }
 
+const (
+	// reviewFor is how long a token's review is trusted, at most until the
+	// token expires. A ServiceAccount deleted meanwhile keeps access that long.
+	reviewFor = time.Minute
+	// refusalFor is shorter, so a token that becomes valid works soon.
+	refusalFor = 5 * time.Second
+)
+
+// review is what the API server said of a token, until when.
+type review struct {
+	account string
+	until   time.Time
+}
+
+// review asks the Reviewer about a token, or recalls a recent answer. Only
+// the token's hash is kept.
+func (s *Server) review(ctx context.Context, token string) (string, error) {
+	now := s.now()
+	key := sha256.Sum256([]byte(token))
+	if r, ok := s.reviews.get(key); ok && now.Before(r.until) {
+		if r.account == "" {
+			return "", ErrNotAServiceAccount
+		}
+		return r.account, nil
+	}
+	account, err := s.Reviewer.Review(ctx, token)
+	switch {
+	case err == nil:
+		until := now.Add(reviewFor)
+		if exp, ok := expiry(token); ok && exp.Before(until) {
+			until = exp
+		}
+		s.reviews.put(key, review{account, until})
+	case errors.Is(err, ErrNotAServiceAccount):
+		s.reviews.put(key, review{"", now.Add(refusalFor)})
+	}
+	return account, err
+}
+
+// expiry reads a JWT's exp claim without verifying it, so only use it on a
+// token the API server accepted.
+func expiry(token string) (time.Time, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return time.Time{}, false
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(claims.Exp, 0), true
+}
+
 // externalMethods are all a caller outside Themis may call.
 var externalMethods = []string{
 	themisv1.ProposalService_SubmitProposal_FullMethodName,
@@ -122,7 +185,7 @@ func (s *Server) externalCaller(ctx context.Context, tokenFile, method string) (
 	if want, err := auth.ReadToken(tokenFile); err == nil && auth.BearerMatches("Bearer "+token, want) {
 		return Caller{}, false, nil
 	}
-	account, err := s.Reviewer.Review(ctx, token)
+	account, err := s.review(ctx, token)
 	if err != nil {
 		if !errors.Is(err, ErrNotAServiceAccount) {
 			s.logger().WarnContext(ctx, "cannot review a caller's token", "error", err)
