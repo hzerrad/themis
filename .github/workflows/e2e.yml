@@ -3,8 +3,25 @@ name: End-to-end
 on:
   push:
     branches: [main]
+  # Only when something the cluster runs changes. Not a required check, so
+  # skipping it never blocks a merge; it always runs on main.
   pull_request:
-    paths-ignore: ["**.md", "docs/**"]
+    paths:
+      - "api/**"
+      - "cmd/**"
+      - "internal/**"
+      - "intelligence/src/**"
+      - "intelligence/pyproject.toml"
+      - "intelligence/uv.lock"
+      - "deploy/**"
+      - "test/e2e/**"
+      - "test/fixtures/**"
+      - "scripts/**"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - "build/**"
+      - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
 permissions:
