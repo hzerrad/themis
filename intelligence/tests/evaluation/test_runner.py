@@ -63,11 +63,19 @@ async def test_declining_after_the_nudge() -> None:
     assert r.steps == 3
 
 
-async def test_proposing_past_the_hold_until_steps_run_out_is_not_declining() -> None:
-    r = (await run(ScriptedAdapter(propose()))).records[0]
+async def test_running_out_of_steps_is_not_declining() -> None:
+    pods: dict[str, Any] = {"kind": "request_evidence", "template": "pod_states", "params": {}}
+    r = (await run(ScriptedAdapter(pods))).records[0]
     assert r.conclusion == "out_of_steps"
     assert r.proposal is None
-    assert r.decisions == ["propose"] * oom().max_steps
+    assert r.decisions == ["request_evidence"] * oom().max_steps
+
+
+async def test_a_held_proposal_gets_the_logs_and_goes_through() -> None:
+    r = (await run(ScriptedAdapter(propose()))).records[0]
+    assert r.conclusion == "proposed"
+    assert r.steps == 2
+    assert "ev-container_logs_tail" in r.shown
 
 
 async def test_a_repaired_reply_is_counted() -> None:

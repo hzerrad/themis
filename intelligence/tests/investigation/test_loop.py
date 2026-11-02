@@ -137,12 +137,14 @@ async def test_rejected_proposal_lets_the_model_continue() -> None:
     core = FakeCore()
     core.reject_with = proposal_pb2.REJECTION_REASON_UNKNOWN_EVIDENCE
     model = ScriptedModel(
-        propose(cited_evidence_ids=["made-up"]), {"kind": "conclude_inconclusive"}
+        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
+        propose(cited_evidence_ids=["made-up"]),
+        {"kind": "conclude_inconclusive"},
     )
     result = await investigate(job(), core, model, max_steps=6)
     assert result.conclusion == "inconclusive"
-    # The rejection, then one prompt to read what it hasn't before giving up.
-    assert len(model.requests) == 3
+    assert len(core.submitted) == 1
+    assert "rejected" in model.requests[2].messages[-1].content
 
 
 async def test_evidence_is_marked_untrusted() -> None:
@@ -198,17 +200,54 @@ def test_cited_predicates_are_names_not_sentences() -> None:
         StepDecision.model_validate(bad)
 
 
-async def test_proposal_waits_for_the_logs() -> None:
-    core = FakeCore()
-    model = ScriptedModel(
-        propose(),
-        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
-        propose(),
-    )
+# A proposal before the logs is held, and Themis fetches them itself: models
+# told to fetch them tend to propose again until the steps run out.
+async def test_proposal_waits_for_the_logs_themis_fetches() -> None:
+    core = FakeCore(logs="canary-log-line")
+    model = ScriptedModel(propose(), propose())
     result = await investigate(job(), core, model, max_steps=6)
     assert result.conclusion == "proposed"
+    assert [(r.template, dict(r.params)) for r in core.collected] == [("container_logs_tail", {})]
     assert len(core.submitted) == 1
-    assert "container_logs_tail" in model.requests[1].messages[-1].content
+    assert result.usage.steps_used == 2
+    held = model.requests[1].messages[-1].content
+    assert "canary-log-line" in held
+    assert "Decide again" in held
+
+
+async def test_logs_can_change_the_models_mind() -> None:
+    core = FakeCore()
+    model = ScriptedModel(propose(), {"kind": "conclude_inconclusive"})
+    result = await investigate(job(), core, model, max_steps=6)
+    assert result.conclusion == "inconclusive"
+    assert core.submitted == []
+
+
+async def test_logs_already_read_are_not_fetched_again() -> None:
+    core = FakeCore()
+    model = ScriptedModel(
+        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}}, propose()
+    )
+    await investigate(job(), core, model, max_steps=6)
+    assert len(core.collected) == 1
+    assert len(core.submitted) == 1
+
+
+async def test_logs_the_model_may_not_see_do_not_hold_a_proposal_forever() -> None:
+    core = FakeCore(logs="canary-log-line")
+    model = ScriptedModel(propose(), propose(), ceiling="internal")
+    result = await investigate(job(), core, model, max_steps=6)
+    assert result.conclusion == "proposed"
+    assert all("canary-log-line" not in m.content for m in model.requests[1].messages)
+    assert "may not see sensitive data" in model.requests[1].messages[-1].content
+
+
+async def test_spent_budget_on_the_held_proposal_lets_it_through() -> None:
+    core = AbortingCore()
+    model = ScriptedModel(propose(), propose())
+    result = await investigate(job(), core, model, max_steps=6)
+    assert result.conclusion == "proposed"
+    assert "budget is spent" in model.requests[1].messages[-1].content
 
 
 async def test_spent_budget_lets_a_proposal_through_without_logs() -> None:

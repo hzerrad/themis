@@ -259,6 +259,35 @@ async def investigate(
     def tell(content: str) -> None:
         messages.append(Message(role="user", content=content))
 
+    async def collect(template: str, params: dict[str, str]) -> str:
+        """Collects evidence and says what came of it, for the model."""
+        nonlocal evidence_spent, level, logs_read
+        try:
+            resp = await core.collect_evidence(
+                evidence_pb2.CollectEvidenceRequest(
+                    lease_id=job.lease_id, template=template, params=params
+                )
+            )
+        except grpc.RpcError as e:
+            if e.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
+                gap(template, investigation_pb2.EVIDENCE_GAP_CAUSE_BUDGET_SPENT)
+                if not evidence_spent:
+                    telemetry.budget_exhausted.labels("evidence").inc()
+                evidence_spent = logs_read = True
+                return "The evidence budget is spent. Decide with the evidence you have."
+            if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+                return f"The request was refused: {fence(e.details() or '')}"
+            raise
+        if template == LOGS_TEMPLATE:
+            logs_read = True
+        for i in resp.items:
+            seen.add(i.template)
+            if visible(i):
+                level = higher(level, classification(i))
+        parts = [shown(i) for i in resp.items]
+        parts += [f"Collection failed: {fence(f.message)}" for f in resp.failures]
+        return "\n\n".join(parts) or "No evidence was returned."
+
     def done(
         conclusion: Literal["proposed", "inconclusive"], steps: int, ids: list[str]
     ) -> InvestigationResult:
@@ -335,44 +364,22 @@ async def investigate(
                         f"Allowed templates: {', '.join(sorted(allowed))}."
                     )
                     continue
-                try:
-                    resp = await core.collect_evidence(
-                        evidence_pb2.CollectEvidenceRequest(
-                            lease_id=job.lease_id,
-                            template=decision.template,
-                            params=decision.params,
-                        )
-                    )
-                except grpc.RpcError as e:
-                    if e.code() == grpc.StatusCode.RESOURCE_EXHAUSTED:
-                        gap(decision.template, investigation_pb2.EVIDENCE_GAP_CAUSE_BUDGET_SPENT)
-                        if not evidence_spent:
-                            telemetry.budget_exhausted.labels("evidence").inc()
-                        evidence_spent = logs_read = True
-                        tell("The evidence budget is spent. Decide with the evidence you have.")
-                        continue
-                    if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
-                        tell(f"The request was refused: {fence(e.details() or '')}")
-                        continue
-                    raise
-                if decision.template == LOGS_TEMPLATE:
-                    logs_read = True
-                for i in resp.items:
-                    seen.add(i.template)
-                    if visible(i):
-                        level = higher(level, classification(i))
-                parts = [shown(i) for i in resp.items]
-                parts += [f"Collection failed: {fence(f.message)}" for f in resp.failures]
-                tell("\n\n".join(parts) or "No evidence was returned.")
+                tell(await collect(decision.template, decision.params))
             case "propose":
                 if decision.proposal is None:
                     invalid += 1
                     tell("A propose decision needs a proposal.")
                     continue
                 if not logs_read:
+                    # Models asked to read the logs first may just propose again
+                    # until the steps run out, so Themis fetches them itself.
+                    logs = await collect(LOGS_TEMPLATE, {})
+                    logs_read = True
                     tell(
-                        f"Read {LOGS_TEMPLATE} of the failing pod before proposing: "
-                        "the logs may confirm or contradict your hypotheses."
+                        "A proposal needs the failing pod's logs first, so here they are. "
+                        "They may confirm or contradict your hypotheses.\n\n"
+                        f"{logs}\n\n"
+                        "Decide again with these: propose, or conclude inconclusive."
                     )
                     continue
                 resp = await core.submit_proposal(
