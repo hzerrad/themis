@@ -73,6 +73,20 @@ const CHECK_LABEL = {
   gitops_managed: "Managed by GitOps (Argo CD or Flux)",
   config_changed_before_failure: "Its config changed before the failures began",
 };
+const ROOT_CAUSE_LABEL = {
+  memory_limit_regression: "The new version's memory limit is too low",
+  bad_configuration: "The new version's settings are wrong",
+  image_pull_failure: "The image can't be pulled",
+  application_bug: "A bug in the application",
+  configuration_change: "A config change outside the rollout",
+  dependency_failure: "Something it depends on is failing",
+  insufficient_capacity: "The cluster has no room for it",
+  node_problem: "A node is unhealthy",
+  storage_full: "A disk or volume is full",
+  traffic_spike: "More traffic than it can take",
+  insufficient_evidence: "Not enough evidence to tell",
+  other: "Something else",
+};
 const ANSWER_LABEL = { true: "yes", false: "no", unknown: "can't tell" };
 const REJECTION_LABEL = {
   REJECTION_REASON_TARGET_MISMATCH: "It named a different workload than the incident's.",
@@ -230,7 +244,7 @@ function hypotheses(inv) {
   const hs = (inv && inv.Hypotheses) || [];
   if (hs.length === 0) return h("p", { class: "muted" }, "No possible causes recorded.");
   return hs.map((x) => h("div", { class: "cause" },
-    h("strong", {}, label({}, x.rootCauseClass || "unclassified")), " ",
+    h("strong", {}, label(ROOT_CAUSE_LABEL, x.rootCauseClass || "unclassified")), " ",
     h("span", { class: "muted" }, label(CAUSE_LABEL, x.status)),
     h("div", {}, x.summary),
     h("div", { class: "muted" },
