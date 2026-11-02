@@ -1,6 +1,15 @@
 from typing import Any
 
-from tests.evaluation.helpers import DECLINE, DOWN, LOGS, TARGET, ScriptedAdapter, oom, propose
+from tests.evaluation.helpers import (
+    DECLINE,
+    DOWN,
+    LOGS,
+    SLOW,
+    TARGET,
+    ScriptedAdapter,
+    oom,
+    propose,
+)
 from themis_intelligence.evaluation.bundle import Bundle
 from themis_intelligence.evaluation.runner import INVESTIGATION_TOKENS, Caps, Spend, run_all
 from themis_intelligence.investigation.loop import Model
@@ -147,3 +156,10 @@ async def test_logs_stay_out_of_the_prompt_above_the_ceiling() -> None:
     out = await run_all([oom()], client(adapter, ceiling="internal"), 1, CAPS)
     assert out.records[0].conclusion == "abstained"
     assert not any("loading catalog" in m.content for m in adapter.requests[-1].messages)
+
+
+async def test_a_timed_out_call_does_not_stop_the_evaluation() -> None:
+    out = await run_all([oom()], client(ScriptedAdapter(SLOW)), 2, CAPS, step_deadline_s=0.01)
+    assert out.stopped == ""
+    assert [r.conclusion for r in out.records] == ["failed", "failed"]
+    assert out.records[0].failure.startswith("deadline_exceeded")

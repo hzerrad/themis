@@ -15,7 +15,12 @@ from themis_intelligence.evaluation.score import (
     RunRecord,
     TargetSeen,
 )
-from themis_intelligence.investigation.loop import InvestigationError, Model, investigate
+from themis_intelligence.investigation.loop import (
+    STEP_DEADLINE_S,
+    InvestigationError,
+    Model,
+    investigate,
+)
 from themis_intelligence.platform.client import Price
 from themis_intelligence.platform.contract import Usage
 
@@ -130,12 +135,16 @@ def _conclusion(reached: str, use: ModelUse) -> Conclusion:
     return "abstained" if declined else "out_of_steps"
 
 
-async def run_one(b: Bundle, run: int, model: Model, price: Price | None) -> tuple[RunRecord, bool]:
+async def run_one(
+    b: Bundle, run: int, model: Model, price: Price | None, step_deadline_s: float = STEP_DEADLINE_S
+) -> tuple[RunRecord, bool]:
     """One investigation, and whether it ran out of tokens."""
     core = ReplayCore(b)
     recording = RecordingModel(model)
     try:
-        result = await investigate(job_of(b), core, recording, max_steps=b.max_steps)
+        result = await investigate(
+            job_of(b), core, recording, max_steps=b.max_steps, step_deadline_s=step_deadline_s
+        )
     except InvestigationError as e:
         conclusion: Conclusion = "errored" if e.reason == "model_unavailable" else "failed"
         return (
@@ -175,6 +184,7 @@ async def run_all(
     runs: int,
     caps: Caps,
     progress: Callable[[RunRecord], None] = lambda _: None,
+    step_deadline_s: float = STEP_DEADLINE_S,
 ) -> Outcome:
     """new_model gets the tokens an investigation may use."""
     out = Outcome()
@@ -183,7 +193,9 @@ async def run_all(
     for b in bundles:
         for run in range(1, runs + 1):
             allowance = spend.allowance()
-            record, ran_out = await run_one(b, run, new_model(allowance), caps.price)
+            record, ran_out = await run_one(
+                b, run, new_model(allowance), caps.price, step_deadline_s
+            )
             spend.add(Usage(input_tokens=record.input_tokens, output_tokens=record.output_tokens))
             # Out of tokens because of the evaluation's cap says nothing about
             # the model, so this run is dropped. The per-investigation limit is
@@ -196,8 +208,10 @@ async def run_all(
                 return out
             out.records.append(record)
             progress(record)
+            # A reply with no tokens counted means the cap can't work. A call
+            # that timed out has no reply, so says nothing either way.
             silent = not record.input_tokens + record.output_tokens
-            if record.calls and silent and record.conclusion != "errored":
+            if record.decisions and silent:
                 out.stopped = "The endpoint reports no token use, so the cap can't be enforced."
                 return out
             errors = errors + 1 if record.conclusion == "errored" else 0

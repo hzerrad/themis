@@ -1,5 +1,6 @@
 """A real scenario, and a model endpoint that follows a script."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -73,6 +74,8 @@ class ScriptedAdapter:
         self.requests.append(req)
         if isinstance(step, Exception):
             raise step
+        if step is SLOW:
+            await asyncio.sleep(1)
         content = step if isinstance(step, str) else json.dumps(step)
         return ProviderResponse(
             content=content,
@@ -82,3 +85,6 @@ class ScriptedAdapter:
 
 
 DOWN = httpx.ConnectError("connection refused")
+
+# A reply that never comes in time.
+SLOW = object()

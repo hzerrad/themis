@@ -34,6 +34,7 @@ class Provenance(BaseModel):
     ceiling: str
     temperature: float
     max_output_tokens: int
+    step_deadline_s: float = 120.0
     runs_per_scenario: int
     context_tokens: int | None
     price_input_usd_per_mtok: float | None
@@ -228,7 +229,7 @@ def to_markdown(r: Report) -> str:
         f"- Prompt: {p.prompt_version} (`{p.prompt_sha256[:12]}`), schema {p.schema_version}",
         f"- Model: {p.model}, served by {p.served_by or 'unknown'} at {p.endpoint_host}",
         f"- Temperature {p.temperature}, up to {p.max_output_tokens} output tokens, "
-        f"context {context}, ceiling {p.ceiling}",
+        f"context {context}, ceiling {p.ceiling}, {p.step_deadline_s:.0f}s per step",
         f"- {p.runs_per_scenario} runs per scenario",
         f"- Commit: `{p.commit}`{dirty}",
         f"- {p.started_at} to {p.finished_at}",

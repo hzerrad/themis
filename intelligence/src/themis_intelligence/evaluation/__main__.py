@@ -49,6 +49,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="the endpoint's context size, recorded in the report. It isn't sent: set it on the "
         "server, for Ollama with OLLAMA_CONTEXT_LENGTH",
     )
+    p.add_argument(
+        "--step-deadline",
+        type=float,
+        default=loop.STEP_DEADLINE_S,
+        help="seconds a model step may take; raise it for slow local hardware",
+    )
     p.add_argument("--price-input", type=float, help="US dollars per million input tokens")
     p.add_argument("--price-output", type=float, help="US dollars per million output tokens")
     p.add_argument("--max-tokens", type=int, default=5_000_000, help="cap for the whole evaluation")
@@ -124,6 +130,7 @@ async def main() -> None:
         args.runs,
         caps,
         progress=show,
+        step_deadline_s=args.step_deadline,
     )
     commit, dirty = git_state()
     provenance = Provenance(
@@ -138,6 +145,7 @@ async def main() -> None:
         ceiling=args.ceiling,
         temperature=0,
         max_output_tokens=loop.MAX_OUTPUT_TOKENS,
+        step_deadline_s=args.step_deadline,
         runs_per_scenario=args.runs,
         context_tokens=args.context_tokens,
         price_input_usd_per_mtok=args.price_input,

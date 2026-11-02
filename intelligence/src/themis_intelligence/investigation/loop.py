@@ -214,6 +214,7 @@ async def investigate(
     max_steps: int,
     deadline: float | None = None,
     gaps: list[investigation_pb2.EvidenceGap] | None = None,
+    step_deadline_s: float = STEP_DEADLINE_S,
 ) -> InvestigationResult:
     """Runs at most max_steps model steps, none started after deadline (epoch seconds).
     Evidence it wanted and couldn't have is appended to gaps, for the core."""
@@ -322,7 +323,7 @@ async def investigate(
                 data_classification=level,
                 prompt_version=PROMPT_VERSION,
                 messages=messages,
-                deadline_s=STEP_DEADLINE_S,
+                deadline_s=step_deadline_s,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
             ),
             StepDecision,
