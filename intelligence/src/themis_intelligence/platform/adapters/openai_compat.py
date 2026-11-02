@@ -53,7 +53,7 @@ class OpenAICompatAdapter:
             **({"reasoning_effort": req.reasoning_effort} if req.reasoning_effort else {}),
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "reply", "schema": req.json_schema, "strict": True},
+                "json_schema": {"name": "reply", "schema": req.json_schema, "strict": req.strict},
             },
         }
         resp = await self.client.post(

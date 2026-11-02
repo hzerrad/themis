@@ -218,3 +218,23 @@ async def test_a_reply_cut_off_at_the_limit_is_its_own_error() -> None:
     assert "cut off at 100 tokens" in result.error.message
     assert route.call_count == 1
     assert result.usage.output_tokens == 100
+
+
+@respx.mock
+async def test_strict_output_is_on_unless_the_endpoint_turns_it_off() -> None:
+    route = respx.post(f"{BASE}/chat/completions").mock(
+        return_value=reply('{"verdict": "x", "confidence": 1}')
+    )
+    await client().complete(request(), Answer)
+    assert json.loads(route.calls.last.request.content)["response_format"]["json_schema"]["strict"]
+
+    loose = ModelClient(
+        adapter=OpenAICompatAdapter(base_url=BASE),
+        endpoint=Endpoint(name="openai", model="m", ceiling="sensitive", strict_output=False),
+        budget=Budget(max_tokens=10_000),
+    )
+    result = await loose.complete(request(), Answer)
+    assert result.error is None
+    assert not json.loads(route.calls.last.request.content)["response_format"]["json_schema"][
+        "strict"
+    ]

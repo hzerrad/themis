@@ -56,6 +56,10 @@ model:
   # Each reply's output limit. Empty: 2048. A model that reasons needs more,
   # or its replies are cut off.
   maxOutputTokens: ""
+  # Ask the provider to follow the reply schema exactly. OpenAI refuses
+  # Themis's schema in strict mode: set false there. Replies are still
+  # checked either way.
+  strictOutput: true
   # The endpoint's price in US dollars per million tokens, so the investigator
   # reports themis_model_cost_usd_total; for example
   # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is reported.

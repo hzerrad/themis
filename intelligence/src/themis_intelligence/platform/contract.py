@@ -74,6 +74,9 @@ class ProviderRequest(BaseModel):
     # How hard a reasoning model thinks before it answers; None leaves the
     # provider's default.
     reasoning_effort: str | None = None
+    # Strict structured output: the provider must follow the schema exactly.
+    # Some, such as OpenAI's, refuse Themis's schema in strict mode.
+    strict: bool = True
 
 
 class ProviderResponse(BaseModel):

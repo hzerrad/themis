@@ -40,6 +40,10 @@ class Endpoint:
     # max_output_tokens, when set, replaces the caller's output limit: a model
     # that reasons needs room for it.
     max_output_tokens: int | None = None
+    # strict_output asks the provider to follow the schema exactly. Turn it
+    # off for providers that refuse Themis's schema in strict mode, such as
+    # OpenAI: replies are still checked, and repaired once.
+    strict_output: bool = True
 
 
 @dataclass(frozen=True)
@@ -149,6 +153,7 @@ class ModelClient:
                                 max_output_tokens=max_output,
                                 json_schema=schema.model_json_schema(),
                                 reasoning_effort=self.endpoint.reasoning_effort,
+                                strict=self.endpoint.strict_output,
                             )
                         )
                         used = resp.usage
