@@ -1,8 +1,11 @@
 image:
   # Images are named <repository>/themis-{core,executor,intelligence}:<tag>.
-  repository: ""
-  tag: dev
-  pullPolicy: IfNotPresent
+  # They're published on every merge to main: main is the latest, and
+  # sha-<commit> pins an exact build.
+  repository: ghcr.io/hzerrad
+  tag: main
+  # main moves, so it's pulled every time. Pin a sha- tag to pull once.
+  pullPolicy: Always
 
 # Least severe level every component logs: debug, info, warn or error.
 logLevel: info

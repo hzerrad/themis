@@ -173,6 +173,7 @@ themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_UR
 	@# Themis gets its access in each enrolled namespace at install, so it must exist.
 	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
+		--set image.repository= --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=IfNotPresent \
 		--set executor.enabled=true --set model.baseURL=$(MODEL_URL) --set model.name=$(MODEL_NAME) \
 		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) --wait --timeout 5m
 

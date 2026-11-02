@@ -1,7 +1,10 @@
 # Themis for the end-to-end test: the executor on, the fake model, a webhook
 # receiver, and windows short enough to wait for.
+# The images the test builds and loads into kind.
 image:
+  repository: ""
   tag: dev
+  pullPolicy: IfNotPresent
 enrolledNamespaces: [shop]
 executor:
   enabled: true
