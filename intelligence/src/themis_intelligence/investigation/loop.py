@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
 from themis_intelligence import telemetry
 from themis_intelligence.investigation.schemas import (
+    ROOT_CAUSES,
     SCHEMA_VERSION,
     HypothesisOut,
     ProposalOut,
@@ -27,7 +28,7 @@ from themis_intelligence.platform.contract import (
     Usage,
 )
 
-PROMPT_VERSION = "rollout_v1"
+PROMPT_VERSION = "rollout_v2"
 LOGS_TEMPLATE = "container_logs_tail"
 MAX_OUTPUT_TOKENS = 2048
 STEP_DEADLINE_S = 120.0
@@ -126,8 +127,10 @@ def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
         f"  - {t.name}: {t.description}" + (f" Params: {', '.join(t.params)}." if t.params else "")
         for t in job.allowed_templates
     )
+    causes = "\n".join(f"  - {name}: {meaning}" for name, meaning in ROOT_CAUSES.items())
     return (
-        text.replace("{templates}", templates)
+        text.replace("{root_causes}", causes)
+        .replace("{templates}", templates)
         .replace("{capabilities}", ", ".join(job.candidate_capabilities) or "none")
         .replace("{max_steps}", str(max_steps))
     )

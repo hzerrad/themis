@@ -5,6 +5,7 @@ import grpc
 
 from tests.investigation.fakes import FakeCore, FakeRpcError, ScriptedModel, job
 from themis.v1 import investigation_pb2
+from themis_intelligence.investigation.loop import PROMPT_VERSION
 from themis_intelligence.worker import Worker
 
 
@@ -55,7 +56,7 @@ async def test_completes_a_leased_investigation() -> None:
     assert done.lease_id == "lease-1"
     assert done.conclusion == investigation_pb2.INVESTIGATION_CONCLUSION_INCONCLUSIVE
     assert done.summary == "no logs"
-    assert done.provenance.prompt_version == "rollout_v1"
+    assert done.provenance.prompt_version == PROMPT_VERSION
 
 
 async def test_nothing_to_lease() -> None:

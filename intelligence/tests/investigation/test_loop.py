@@ -7,8 +7,14 @@ from pydantic import ValidationError
 
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, job
 from themis.v1 import proposal_pb2
-from themis_intelligence.investigation.loop import InvestigationError, investigate
-from themis_intelligence.investigation.schemas import PredicateName, StepDecision
+from themis_intelligence.investigation.loop import InvestigationError, investigate, system_prompt
+from themis_intelligence.investigation.schemas import (
+    ROOT_CAUSES,
+    HypothesisOut,
+    PredicateName,
+    RootCause,
+    StepDecision,
+)
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -273,3 +279,20 @@ def test_model_may_cite_every_check_the_core_knows() -> None:
     checks = set(re.findall(r'^\s*Name\w+\s*=\s*"(\w+)"', source.read_text(), re.M))
     assert checks, "found no checks in rollout.go"
     assert checks == set(get_args(PredicateName))
+
+
+def test_root_causes_are_a_closed_list_the_prompt_explains() -> None:
+    assert list(get_args(RootCause)) == list(ROOT_CAUSES)
+    with pytest.raises(ValidationError):
+        HypothesisOut.model_validate({**HYPOTHESIS, "root_cause_class": "oom_killed_new_revision"})
+    prompt = system_prompt(job(), 6)
+    for name, meaning in ROOT_CAUSES.items():
+        assert f"{name}: {meaning}" in prompt
+    assert "{root_causes}" not in prompt
+
+
+def test_the_ui_names_every_root_cause_plainly() -> None:
+    app = Path(__file__).parents[3] / "internal" / "web" / "static" / "app.js"
+    labels = re.search(r"const ROOT_CAUSE_LABEL = \{(.*?)\n\};", app.read_text(), re.S)
+    assert labels is not None
+    assert re.findall(r"^  (\w+):", labels.group(1), re.M) == list(ROOT_CAUSES)

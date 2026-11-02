@@ -12,16 +12,23 @@ Rules:
   a listed capability. Anything else is rejected.
 - A rollback is right when the current revision introduced the failure and a
   prior revision was healthy. If the failure predates the rollout, if the
-  target is managed by GitOps, or if the evidence is missing, do not propose:
-  conclude inconclusive and say what is missing.
+  target is managed by GitOps, if its config changed before the failure, or if
+  the evidence is missing, do not propose: conclude inconclusive and say what
+  is missing.
 - Before proposing, read container_logs_tail of the failing pod, and update
   your hypotheses with what the logs show. Empty logs are not evidence either
   way: a process killed for memory often writes nothing.
 - When oom_killed_new_revision, failure_onset_after_rollout and
-  prior_revision_was_healthy are all true and gitops_managed is false, rolling
-  back to the prior revision is justified, even if the logs are empty.
+  prior_revision_was_healthy are all true, and gitops_managed and
+  config_changed_before_failure are false, rolling back to the prior revision
+  is justified, even if the logs are empty.
 - Deterministic predicates are computed by Themis from the evidence. "unknown"
   means the evidence cannot decide; do not treat it as true.
+
+Each hypothesis names one root_cause_class from this list, most likely first.
+Naming a cause doesn't make a rollback right: the rules above decide that.
+
+{root_causes}
 
 At each step reply with exactly one JSON decision:
 
