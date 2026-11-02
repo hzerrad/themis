@@ -13,6 +13,8 @@ Configuration comes from the environment:
                              leaves the provider's default
     MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (2048); raise it for a model that
                              reasons, or its replies are cut off
+    MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
+                             schema exactly; set false for OpenAI, which refuses it
     MODEL_PRICE_INPUT_USD_PER_MTOK, MODEL_PRICE_OUTPUT_USD_PER_MTOK
                              the route's price in US dollars per million tokens, both
                              or neither; without one, no cost is reported
@@ -42,6 +44,15 @@ def read_secret(path: str) -> str:
 
 
 ROUTE = "default"
+
+
+def read_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if value == "":
+        return default
+    if value not in ("true", "false"):
+        raise SystemExit(f"{name} must be true or false.")
+    return value == "true"
 
 
 def read_price() -> Price | None:
@@ -91,6 +102,7 @@ async def main() -> None:
         ceiling=ceiling,
         reasoning_effort=env("MODEL_REASONING_EFFORT") or None,
         max_output_tokens=int(max_output) if max_output else None,
+        strict_output=read_flag("MODEL_STRICT_OUTPUT", default=True),
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()

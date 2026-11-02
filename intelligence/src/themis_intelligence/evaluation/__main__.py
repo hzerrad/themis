@@ -65,6 +65,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=loop.MAX_OUTPUT_TOKENS,
         help="each reply's output limit; a model that reasons needs more",
     )
+    p.add_argument(
+        "--no-strict-output",
+        dest="strict_output",
+        action="store_false",
+        help="don't ask the provider to follow the schema exactly; for OpenAI",
+    )
     p.add_argument("--price-input", type=float, help="US dollars per million input tokens")
     p.add_argument("--price-output", type=float, help="US dollars per million output tokens")
     p.add_argument("--max-tokens", type=int, default=5_000_000, help="cap for the whole evaluation")
@@ -135,6 +141,7 @@ async def main() -> None:
         ceiling=args.ceiling,
         reasoning_effort=args.reasoning_effort,
         max_output_tokens=args.max_output_tokens,
+        strict_output=args.strict_output,
     )
     caps = Caps(max_tokens=args.max_tokens, max_usd=args.max_usd, price=price)
     started = datetime.now(UTC).isoformat(timespec="seconds")
@@ -162,6 +169,7 @@ async def main() -> None:
         temperature=0,
         max_output_tokens=args.max_output_tokens,
         reasoning_effort=args.reasoning_effort or "",
+        strict_output=args.strict_output,
         step_deadline_s=args.step_deadline,
         runs_per_scenario=args.runs,
         context_tokens=args.context_tokens,

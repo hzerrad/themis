@@ -48,6 +48,9 @@ spec:
             {{- with .Values.model.maxOutputTokens }}
             - {name: MODEL_MAX_OUTPUT_TOKENS, value: {{ . | quote }}}
             {{- end }}
+            {{- if not .Values.model.strictOutput }}
+            - {name: MODEL_STRICT_OUTPUT, value: "false"}
+            {{- end }}
             {{- if .Values.model.apiKeySecret }}
             - {name: MODEL_API_KEY_FILE, value: /var/run/secrets/model/apiKey}
             {{- end }}
