@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/evidence"
@@ -91,6 +92,61 @@ func TestReferencedConfig_SaysWhenAConfigMapChangedAndNeverWhatItHolds(t *testin
 	}
 	if strings.Contains(string(item.Data), "s3cret-value") {
 		t.Errorf("the item holds a value: %s", item.Data)
+	}
+}
+
+// writeConfigMap merge-patches the ConfigMap as manager and returns when
+// manager last wrote it. managedFields keep whole seconds, so it waits for the
+// next one first.
+func writeConfigMap(t *testing.T, ns, name, manager, patch string) time.Time {
+	t.Helper()
+	time.Sleep(1100 * time.Millisecond)
+	cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name}}
+	if err := k8s.Patch(t.Context(), cm, client.RawPatch(types.MergePatchType, []byte(patch)), client.FieldOwner(manager)); err != nil {
+		t.Fatal(err)
+	}
+	return writtenAt(t, cm, manager)
+}
+
+func writtenAt(t *testing.T, cm *corev1.ConfigMap, manager string) time.Time {
+	t.Helper()
+	for _, mf := range cm.ManagedFields {
+		if mf.Manager == manager && mf.Time != nil {
+			return mf.Time.UTC()
+		}
+	}
+	t.Fatalf("no write by %s in %+v", manager, cm.ManagedFields)
+	return time.Time{}
+}
+
+func TestReferencedConfig_OnlyADataWriteIsAChange(t *testing.T) {
+	tests := []struct {
+		name, patch string
+		isChange    bool
+	}{
+		{"data", `{"data":{"key":"v2"}}`, true},
+		{"binaryData", `{"binaryData":{"blob":"AAE="}}`, true},
+		{"label", `{"metadata":{"labels":{"team":"payments"}}}`, false},
+		{"annotation", `{"metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"x"}}}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := loadScenario1(t)
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: target.Namespace, Name: "settings"}, Data: map[string]string{"key": "v1"}}
+			if err := k8s.Client.Create(t.Context(), cm, client.FieldOwner("creator")); err != nil {
+				t.Fatal(err)
+			}
+			created := writtenAt(t, cm, "creator")
+			written := writeConfigMap(t, target.Namespace, "settings", "editor", tt.patch)
+			want := created
+			if tt.isChange {
+				want = written
+			}
+			v := withConfig(t, target, envFrom("settings"))
+			if len(v.Refs) != 1 || !v.Refs[0].ChangedAt.Equal(want) {
+				t.Errorf("refs = %+v, want settings changed at %v (created %v, written %v)", v.Refs, want, created, written)
+			}
+		})
 	}
 }
 
