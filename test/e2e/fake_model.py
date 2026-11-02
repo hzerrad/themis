@@ -36,7 +36,7 @@ def decide(messages: list[dict[str, str]]) -> dict[str, object]:
     prior = max(int(r["revision"]) for r in history["revisions"] if r["revision"] and int(r["revision"]) < current)
     cited = [eid for eid, template, _ in evidence if template in ("rollout_history", "pod_states")]
     hypothesis = {
-        "root_cause_class": "bad_rollout",
+        "root_cause_class": "memory_limit_regression",
         "summary": f"revision {current} is OOMKilled; revision {prior} was healthy",
         "supporting": cited,
         "contradicting": [],
