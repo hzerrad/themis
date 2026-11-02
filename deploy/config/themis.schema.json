@@ -46,7 +46,86 @@
         "bearerTokenFile": {
           "type": "string",
           "minLength": 1,
-          "description": "BearerTokenFile holds the admin token the API and UI require."
+          "description": "BearerTokenFile holds the admin token. It stays usable when people sign\nin through OIDC, as a way in if the identity provider is down."
+        },
+        "oidc": {
+          "properties": {
+            "issuerURL": {
+              "type": "string",
+              "minLength": 1
+            },
+            "clientID": {
+              "type": "string",
+              "minLength": 1
+            },
+            "clientSecretFile": {
+              "type": "string",
+              "minLength": 1,
+              "description": "ClientSecretFile holds the client secret."
+            },
+            "redirectURL": {
+              "type": "string",
+              "minLength": 1,
+              "description": "RedirectURL is Themis's /auth/callback as the browser reaches it."
+            },
+            "usernameClaim": {
+              "type": "string",
+              "description": "UsernameClaim names the ID token claim used as the username (email)."
+            },
+            "groupsClaim": {
+              "type": "string",
+              "description": "GroupsClaim names the ID token claim listing the person's groups (groups)."
+            },
+            "sessionTTL": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+              "description": "SessionTTL is how long a sign-in lasts (8h)."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "issuerURL",
+            "clientID",
+            "clientSecretFile",
+            "redirectURL"
+          ],
+          "description": "OIDC lets people sign in to the UI through an identity provider."
+        },
+        "access": {
+          "items": {
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "viewer",
+                  "responder",
+                  "approver",
+                  "admin"
+                ]
+              },
+              "users": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "groups": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "role"
+            ],
+            "description": "AccessBinding gives a role to people by username and by group."
+          },
+          "type": "array",
+          "description": "Access gives people roles, by username or group. Someone signed in who\nmatches no binding can't see anything."
         }
       },
       "additionalProperties": false,

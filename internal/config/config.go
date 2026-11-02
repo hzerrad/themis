@@ -210,8 +210,76 @@ type Investigators struct {
 
 // API configures the HTTP API.
 type API struct {
-	// BearerTokenFile holds the admin token the API and UI require.
+	// BearerTokenFile holds the admin token. It stays usable when people sign
+	// in through OIDC, as a way in if the identity provider is down.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+
+	// OIDC lets people sign in to the UI through an identity provider.
+	OIDC *OIDC `json:"oidc,omitempty"`
+
+	// Access gives people roles, by username or group. Someone signed in who
+	// matches no binding can't see anything.
+	Access []AccessBinding `json:"access,omitempty"`
+}
+
+// OIDC is an identity provider people sign in with.
+type OIDC struct {
+	IssuerURL string `json:"issuerURL" jsonschema:"minLength=1"`
+	ClientID  string `json:"clientID" jsonschema:"minLength=1"`
+	// ClientSecretFile holds the client secret.
+	ClientSecretFile string `json:"clientSecretFile" jsonschema:"minLength=1"`
+	// RedirectURL is Themis's /auth/callback as the browser reaches it.
+	RedirectURL string `json:"redirectURL" jsonschema:"minLength=1"`
+
+	// UsernameClaim names the ID token claim used as the username (email).
+	UsernameClaim string `json:"usernameClaim,omitempty"`
+	// GroupsClaim names the ID token claim listing the person's groups (groups).
+	GroupsClaim string `json:"groupsClaim,omitempty"`
+	// SessionTTL is how long a sign-in lasts (8h).
+	SessionTTL Duration `json:"sessionTTL,omitzero"`
+}
+
+// Roles, from least to most trusted. Each can do what the ones before it can.
+const (
+	// RoleViewer sees incidents, fixes and their outcomes.
+	RoleViewer = "viewer"
+	// RoleResponder also sees raw evidence, such as logs.
+	RoleResponder = "responder"
+	// RoleApprover also suggests, approves and denies fixes.
+	RoleApprover = "approver"
+	// RoleAdmin can do everything.
+	RoleAdmin = "admin"
+)
+
+// Roles lists every role, least trusted first.
+var Roles = []string{RoleViewer, RoleResponder, RoleApprover, RoleAdmin}
+
+// AccessBinding gives a role to people by username and by group.
+type AccessBinding struct {
+	Role   string   `json:"role" jsonschema:"enum=viewer,enum=responder,enum=approver,enum=admin"`
+	Users  []string `json:"users,omitempty"`
+	Groups []string `json:"groups,omitempty"`
+}
+
+// Defaults for OIDC sign-in.
+const (
+	DefaultUsernameClaim = "email"
+	DefaultGroupsClaim   = "groups"
+	DefaultSessionTTL    = 8 * time.Hour
+)
+
+// WithDefaults returns o with its defaults filled in.
+func (o OIDC) WithDefaults() OIDC {
+	if o.UsernameClaim == "" {
+		o.UsernameClaim = DefaultUsernameClaim
+	}
+	if o.GroupsClaim == "" {
+		o.GroupsClaim = DefaultGroupsClaim
+	}
+	if o.SessionTTL.Duration == 0 {
+		o.SessionTTL.Duration = DefaultSessionTTL
+	}
+	return o
 }
 
 // Executor configures the connection to themis-executor.
@@ -482,6 +550,32 @@ func (c Config) Validate() error {
 	}
 	if c.API.BearerTokenFile == "" {
 		add("api.bearerTokenFile", "is required")
+	}
+	if o := c.API.OIDC; o != nil {
+		if !IsHTTPURL(o.IssuerURL) {
+			add("api.oidc.issuerURL", "%q is not an http or https URL", o.IssuerURL)
+		}
+		if !IsHTTPURL(o.RedirectURL) {
+			add("api.oidc.redirectURL", "%q is not an http or https URL", o.RedirectURL)
+		}
+		if o.ClientID == "" {
+			add("api.oidc.clientID", "is required")
+		}
+		if o.ClientSecretFile == "" {
+			add("api.oidc.clientSecretFile", "is required")
+		}
+		if o.SessionTTL.Duration < 0 {
+			add("api.oidc.sessionTTL", "must not be negative")
+		}
+	}
+	for i, b := range c.API.Access {
+		path := fmt.Sprintf("api.access[%d]", i)
+		if !slices.Contains(Roles, b.Role) {
+			add(path+".role", "must be one of %s, got %q", strings.Join(Roles, ", "), b.Role)
+		}
+		if len(b.Users) == 0 && len(b.Groups) == 0 {
+			add(path, "name at least one user or group")
+		}
 	}
 	if w := c.Notifications.Webhook; w != nil {
 		switch {
