@@ -76,6 +76,13 @@
               "type": "string",
               "description": "GroupsClaim names the ID token claim listing the person's groups (groups)."
             },
+            "scopes": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "description": "Scopes are asked of the provider; openid is always added. Some\nproviders need groups to send groups, and some refuse it (openid, email,\nprofile)."
+            },
             "sessionTTL": {
               "type": "string",
               "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",

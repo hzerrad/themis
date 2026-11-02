@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -445,5 +446,19 @@ func TestExternalProposals_EffectiveWindow(t *testing.T) {
 	}
 	if got := (config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}).EffectiveWindow(); got != time.Hour {
 		t.Errorf("explicit: %s", got)
+	}
+}
+
+func TestOIDC_ScopesAlwaysIncludeOpenID(t *testing.T) {
+	for _, tc := range []struct {
+		scopes, want []string
+	}{
+		{nil, []string{"openid", "email", "profile"}},
+		{[]string{"email", "groups"}, []string{"openid", "email", "groups"}},
+		{[]string{"groups", "openid"}, []string{"groups", "openid"}},
+	} {
+		if got := (config.OIDC{Scopes: tc.scopes}).WithDefaults().Scopes; !slices.Equal(got, tc.want) {
+			t.Errorf("scopes %v = %v, want %v", tc.scopes, got, tc.want)
+		}
 	}
 }

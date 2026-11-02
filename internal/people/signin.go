@@ -85,7 +85,7 @@ func (s *SignIn) clientContext(ctx context.Context) context.Context {
 func (s *SignIn) oauth(p *oidc.Provider, secret string) *oauth2.Config {
 	return &oauth2.Config{
 		ClientID: s.Config.ClientID, ClientSecret: secret, RedirectURL: s.Config.RedirectURL,
-		Endpoint: p.Endpoint(), Scopes: []string{oidc.ScopeOpenID, "email", "profile", "groups"},
+		Endpoint: p.Endpoint(), Scopes: s.Config.WithDefaults().Scopes,
 	}
 }
 
@@ -178,6 +178,10 @@ func (s *SignIn) exchange(ctx context.Context, code string, in store.SignIn) (st
 	username, _ := claims[cfg.UsernameClaim].(string)
 	if strings.TrimSpace(username) == "" {
 		return store.Session{}, fmt.Errorf("the ID token has no %s claim", cfg.UsernameClaim)
+	}
+	// Records name the admin token's holder by this, so no one may sign in as it.
+	if username == TokenUser {
+		return store.Session{}, fmt.Errorf("the username %q is kept for the admin token", TokenUser)
 	}
 	// An address the provider hasn't verified could be anyone's.
 	if verified, ok := claims["email_verified"].(bool); cfg.UsernameClaim == "email" && ok && !verified {

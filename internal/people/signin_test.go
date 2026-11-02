@@ -190,7 +190,7 @@ func (r *rig) login(t *testing.T) (string, *http.Cookie) {
 		t.Fatal(err)
 	}
 	q := to.Query()
-	if q.Get("code_challenge_method") != "S256" || q.Get("client_id") != "themis-ui" {
+	if q.Get("code_challenge_method") != "S256" || q.Get("client_id") != "themis-ui" || q.Get("scope") != "openid email profile" {
 		t.Fatalf("authorization request = %s", to)
 	}
 	r.idp.mu.Lock()
@@ -263,6 +263,7 @@ func TestSignIn_Refused(t *testing.T) {
 		"a key the provider didn't publish": {signer: other, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 		"an unverified address":             {claims: map[string]any{"email_verified": false}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 		"no username":                       {claims: map[string]any{"email": ""}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
+		"the admin token's name":            {claims: map[string]any{"email": "admin"}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t)

@@ -235,6 +235,10 @@ type OIDC struct {
 	UsernameClaim string `json:"usernameClaim,omitempty"`
 	// GroupsClaim names the ID token claim listing the person's groups (groups).
 	GroupsClaim string `json:"groupsClaim,omitempty"`
+	// Scopes are asked of the provider; openid is always added. Some
+	// providers need groups to send groups, and some refuse it (openid, email,
+	// profile).
+	Scopes []string `json:"scopes,omitempty"`
 	// SessionTTL is how long a sign-in lasts (8h).
 	SessionTTL Duration `json:"sessionTTL,omitzero"`
 }
@@ -278,6 +282,12 @@ func (o OIDC) WithDefaults() OIDC {
 	}
 	if o.SessionTTL.Duration == 0 {
 		o.SessionTTL.Duration = DefaultSessionTTL
+	}
+	if len(o.Scopes) == 0 {
+		o.Scopes = []string{"email", "profile"}
+	}
+	if !slices.Contains(o.Scopes, "openid") {
+		o.Scopes = append([]string{"openid"}, o.Scopes...)
 	}
 	return o
 }
