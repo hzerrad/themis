@@ -219,7 +219,7 @@ So far everyone shares the admin token, and every approval is recorded as `admin
 | `approver` | Also suggest, approve and deny fixes |
 | `admin` | Everything |
 
-Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The admin token still works, as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. More in [People and roles](configuration.md#people-and-roles).
+Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The admin token still works, as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
 
 ## Clean up
 

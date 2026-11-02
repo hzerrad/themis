@@ -92,6 +92,9 @@ oidc:
   groupsClaim: ""
   # How long a sign-in lasts, for example 8h. Empty: 8h.
   sessionTTL: ""
+  # Scopes to ask for; openid is always added. Empty: email and profile. Dex
+  # and Okta send groups only when asked for the groups scope; Google refuses it.
+  scopes: []
 
 # Roles for people who sign in, by username or group; the most trusted match
 # wins. Roles: viewer, responder, approver, admin. For example:

@@ -28,6 +28,9 @@ data:
         {{- with .sessionTTL }}
         sessionTTL: {{ . | quote }}
         {{- end }}
+        {{- with .scopes }}
+        scopes: {{ toJson . }}
+        {{- end }}
       {{- end }}
       {{- end }}
       {{- with .Values.access }}

@@ -136,6 +136,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.usernameClaim` | `""` (`email`) | The ID token claim used as the username |
 | `oidc.groupsClaim` | `""` (`groups`) | The ID token claim listing the person's groups |
 | `oidc.sessionTTL` | `""` (`8h`) | How long a sign-in lasts |
+| `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
 | `profiles` | one profile | Incident classes, policy and verification, installed as `IncidentProfile` resources; see [Configuration](../../../docs/configuration.md#configuration-resources) |

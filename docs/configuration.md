@@ -53,10 +53,11 @@ With the chart, set the `oidc` and `access` values instead; see the [chart READM
 | `usernameClaim` | no | The ID token claim used as the username. Default `email`. |
 | `groupsClaim` | no | The ID token claim listing the person's groups. Default `groups`. |
 | `sessionTTL` | no | How long a sign-in lasts. Default `8h`. |
+| `scopes` | no | Scopes to ask for. `openid` is always added. Default `email` and `profile`. |
 
 **The redirect URL** is where the provider sends the browser back after sign-in. It must be Themis's `/auth/callback` at the address people type in their browser, not the in-cluster Service: behind an ingress at `https://themis.example.com`, it is `https://themis.example.com/auth/callback`; through `kubectl port-forward` on port 8090, it is `http://127.0.0.1:8090/auth/callback`. Register the same URL with the provider. Over HTTPS, the session cookie is sent only over HTTPS.
 
-**Sign-in** asks the provider for the `openid`, `email`, `profile` and `groups` scopes. When the username is the email, Themis refuses an address the provider says isn't verified. Themis reaches the provider when the first person signs in, so it starts even while the provider is down.
+**Sign-in** asks the provider for `openid` plus `scopes`. Providers differ on groups: Dex and Okta send them only when asked for the `groups` scope, so add it there; Google and Entra ID refuse that scope, so leave it out and grant roles by username, or use groups the provider sends by default. When the username is the email, Themis refuses an address the provider says isn't verified. Themis reaches the provider when the first person signs in, so it starts even while the provider is down.
 
 ### `api.access`
 
