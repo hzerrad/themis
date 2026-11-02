@@ -11,6 +11,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/evaluation"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/governance"
 )
 
 var update = flag.Bool("update", false, "rewrite each scenario's bundle.json")
@@ -24,6 +25,16 @@ func dirs(t *testing.T) []string {
 		t.Fatalf("no scenarios in %s: %v", scenarios, err)
 	}
 	return found
+}
+
+// shipped is the policy people start from.
+func shipped(t *testing.T) *governance.Policy {
+	t.Helper()
+	p, err := evaluation.ShippedPolicy("../../deploy/config/themis.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 func encode(t *testing.T, b evaluation.Bundle) []byte {
@@ -46,7 +57,7 @@ func TestScenarios(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := evaluation.Build(t.Context(), dir, s)
+			b, err := evaluation.Build(t.Context(), dir, s, shipped(t))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -88,11 +99,11 @@ func TestBuild_IsTheSameEveryTime(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		first, err := evaluation.Build(t.Context(), dir, s)
+		first, err := evaluation.Build(t.Context(), dir, s, shipped(t))
 		if err != nil {
 			t.Fatal(err)
 		}
-		second, err := evaluation.Build(t.Context(), dir, s)
+		second, err := evaluation.Build(t.Context(), dir, s, shipped(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +121,7 @@ func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := evaluation.Build(t.Context(), dir, s)
+	b, err := evaluation.Build(t.Context(), dir, s, shipped(t))
 	if err != nil {
 		t.Fatal(err)
 	}

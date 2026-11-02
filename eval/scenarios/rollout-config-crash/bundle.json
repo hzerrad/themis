@@ -158,5 +158,9 @@
         "ev-target_events"
       ]
     }
-  ]
+  ],
+  "policy": {
+    "outcome": "require_approval",
+    "reason": "Policy rule rollback-needs-approval requires a person's approval."
+  }
 }

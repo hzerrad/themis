@@ -155,5 +155,9 @@
         "ev-target_events"
       ]
     }
-  ]
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule rollback-needs-a-bad-rollout forbids this fix."
+  }
 }

@@ -141,5 +141,9 @@
       "value": "unknown",
       "reason": "no failure with a known time"
     }
-  ]
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule rollback-needs-a-bad-rollout forbids this fix."
+  }
 }

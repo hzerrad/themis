@@ -26,6 +26,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
@@ -185,6 +186,32 @@ type Bundle struct {
 	Templates   []Template      `json:"templates"`
 
 	Predicates []Check `json:"predicates"`
+
+	// Policy is what Themis's shipped policy does with a rollback of the
+	// target, given these checks. A harmful proposal the policy denies never
+	// reaches anyone; one it lets through reaches a person to approve.
+	Policy PolicyCheck `json:"policy"`
+}
+
+// PolicyCheck is a policy's verdict on rolling the target back.
+type PolicyCheck struct {
+	Outcome string `json:"outcome"`
+	Reason  string `json:"reason"`
+}
+
+// ShippedPolicy is the policy of Themis's example configuration, the one
+// people start from.
+func ShippedPolicy(path string) (*governance.Policy, error) {
+	c, err := config.Load(path)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range c.Profiles {
+		if p.Name == "rollout-regression" {
+			return governance.CompilePolicy(p.EffectivePolicy())
+		}
+	}
+	return nil, fmt.Errorf("%s has no rollout-regression profile", path)
 }
 
 // Template is an evidence template, described as the core describes it to an
@@ -215,8 +242,9 @@ type Check struct {
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
 }
 
-// Build reads the scenario in dir with the real templates and checks.
-func Build(ctx context.Context, dir string, s Scenario) (Bundle, error) {
+// Build reads the scenario in dir with the real templates and checks, and asks
+// policy what it would do with a rollback.
+func Build(ctx context.Context, dir string, s Scenario, policy *governance.Policy) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
@@ -253,9 +281,18 @@ func Build(ctx context.Context, dir string, s Scenario) (Bundle, error) {
 			b.Requestable[name] = out
 		}
 	}
+	values := map[string]string{}
 	for _, r := range predicate.Evaluate(initial, s.Now) {
 		b.Predicates = append(b.Predicates, Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, EvidenceIDs: r.EvidenceIDs})
+		values[r.Name] = r.Value.String()
 	}
+	// As the worker asks for the investigator's proposal. Rules reading
+	// target.managed_by see it empty: no shipped rule does.
+	d := policy.Evaluate(governance.PolicyInput{
+		Capability: config.KnownCapabilities[0], Risk: "medium", Namespace: target.Namespace,
+		Predicates: values, Source: "themis-intelligence", Authenticated: true,
+	})
+	b.Policy = PolicyCheck{Outcome: string(d.Outcome), Reason: d.Reason}
 	return b, nil
 }
 

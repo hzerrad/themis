@@ -67,6 +67,13 @@ class Check(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list[str])
 
 
+class PolicyCheck(BaseModel):
+    """What Themis's shipped policy does with a rollback of the target."""
+
+    outcome: Literal["allow", "require_approval", "deny"]
+    reason: str
+
+
 class Bundle(BaseModel):
     scenario: str
     version: int
@@ -81,6 +88,7 @@ class Bundle(BaseModel):
     requestable: dict[str, Item]
     templates: list[Template]
     predicates: list[Check]
+    policy: PolicyCheck
 
 
 def load_bundles(root: Path, names: list[str] | None = None) -> list[Bundle]:
