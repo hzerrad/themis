@@ -170,6 +170,8 @@ PROMETHEUS_CHART := 29.39.0
 .PHONY: themis-up themis-down
 themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_URL and MODEL_NAME
 	@test -n "$(MODEL_URL)" || { echo "set MODEL_URL (and MODEL_NAME) to an OpenAI-compatible endpoint"; exit 1; }
+	@# Themis gets its access in each enrolled namespace at install, so it must exist.
+	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
 		--set executor.enabled=true --set model.baseURL=$(MODEL_URL) --set model.name=$(MODEL_NAME) \
 		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) --wait --timeout 5m

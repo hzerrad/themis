@@ -43,9 +43,10 @@ for c in core executor intelligence; do
 done
 ```
 
-Then install the chart:
+Create the namespace you'll enroll, then install the chart. Themis gets its access in each enrolled namespace at install, so the namespace must already exist:
 
 ```bash
+kubectl create namespace shop
 helm install themis deploy/helm/themis -n themis --create-namespace \
   --set image.repository=registry.example.com/themis \
   --set enrolledNamespaces='{shop}' \
@@ -67,7 +68,7 @@ The bundled PostgreSQL is for trying Themis. For anything longer, set `database.
 
 ## 2. Enroll a namespace
 
-Themis only looks at enrolled namespaces. Both paths above enrolled `shop`. To use another, change `enrolledNamespaces` and upgrade:
+Themis only looks at enrolled namespaces. Both paths above enrolled `shop`. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and upgrade:
 
 ```bash
 helm upgrade themis deploy/helm/themis -n themis --reuse-values --set enrolledNamespaces='{payments}'
