@@ -167,3 +167,54 @@ def test_budget_settles_to_actual_usage() -> None:
     budget.settle(r, 20)
     assert budget.spent == 20
     budget.reserve(70)
+
+
+@respx.mock
+async def test_reasoning_effort_and_output_limit_reach_the_model_only_when_set() -> None:
+    route = respx.post(f"{BASE}/chat/completions").mock(
+        return_value=reply('{"verdict": "x", "confidence": 1}')
+    )
+    await client().complete(request(), Answer)
+    body = json.loads(route.calls.last.request.content)
+    assert "reasoning_effort" not in body
+    assert body["max_tokens"] == 100
+
+    tuned = ModelClient(
+        adapter=OpenAICompatAdapter(base_url=BASE),
+        endpoint=Endpoint(
+            name="ollama",
+            model="qwen3",
+            ceiling="sensitive",
+            reasoning_effort="none",
+            max_output_tokens=4096,
+        ),
+        budget=Budget(max_tokens=10_000),
+    )
+    await tuned.complete(request(), Answer)
+    body = json.loads(route.calls.last.request.content)
+    assert body["reasoning_effort"] == "none"
+    assert body["max_tokens"] == 4096
+
+
+# A model that spends its output limit thinking replies with nothing: that is
+# a cut-off reply, not a malformed one, and a repair would be cut off too.
+@respx.mock
+async def test_a_reply_cut_off_at_the_limit_is_its_own_error() -> None:
+    route = respx.post(f"{BASE}/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "model": "qwen3",
+                "choices": [
+                    {"message": {"role": "assistant", "content": ""}, "finish_reason": "length"}
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 100},
+            },
+        )
+    )
+    result = await client().complete(request(), Answer)
+    assert result.error is not None
+    assert result.error.kind == "truncated"
+    assert "cut off at 100 tokens" in result.error.message
+    assert route.call_count == 1
+    assert result.usage.output_tokens == 100

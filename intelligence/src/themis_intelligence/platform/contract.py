@@ -39,7 +39,12 @@ class Usage(BaseModel):
 
 
 ErrorKind = Literal[
-    "validation_failed", "budget_exceeded", "ineligible", "deadline_exceeded", "unavailable"
+    "validation_failed",
+    "truncated",
+    "budget_exceeded",
+    "ineligible",
+    "deadline_exceeded",
+    "unavailable",
 ]
 
 
@@ -66,9 +71,14 @@ class ProviderRequest(BaseModel):
     messages: list[Message]
     max_output_tokens: int
     json_schema: dict[str, Any]
+    # How hard a reasoning model thinks before it answers; None leaves the
+    # provider's default.
+    reasoning_effort: str | None = None
 
 
 class ProviderResponse(BaseModel):
     content: str
     usage: Usage
     model: str
+    # The reply stopped at the output limit, so its content is incomplete.
+    truncated: bool = False

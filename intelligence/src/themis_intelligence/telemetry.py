@@ -100,6 +100,7 @@ def route_label(name: str) -> str:
 MODEL_OUTCOMES = (
     "ok",
     "validation_failed",
+    "truncated",
     "budget_exceeded",
     "ineligible",
     "deadline_exceeded",

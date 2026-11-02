@@ -95,6 +95,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
 | `model.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
 | `model.tokenBudget` | `200000` | Tokens per investigation |
+| `model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`. Empty leaves the provider's default |
+| `model.maxOutputTokens` | `""` (`2048`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
 | `model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |
 | `executor.enabled` | `false` | Install the executor and its write Roles |
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |

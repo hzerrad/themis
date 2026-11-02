@@ -47,6 +47,12 @@ model:
   # CIDR the investigator may reach the model at, for the NetworkPolicy.
   egressCIDR: 0.0.0.0/0
   tokenBudget: 200000
+  # How hard a reasoning model thinks before answering, for example none or
+  # low. Empty leaves the provider's default.
+  reasoningEffort: ""
+  # Each reply's output limit. Empty: 2048. A model that reasons needs more,
+  # or its replies are cut off.
+  maxOutputTokens: ""
   # The endpoint's price in US dollars per million tokens, so the investigator
   # reports themis_model_cost_usd_total; for example
   # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is reported.

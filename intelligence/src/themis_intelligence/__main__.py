@@ -9,6 +9,10 @@ Configuration comes from the environment:
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
+    MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low; unset
+                             leaves the provider's default
+    MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (2048); raise it for a model that
+                             reasons, or its replies are cut off
     MODEL_PRICE_INPUT_USD_PER_MTOK, MODEL_PRICE_OUTPUT_USD_PER_MTOK
                              the route's price in US dollars per million tokens, both
                              or neither; without one, no cost is reported
@@ -80,10 +84,13 @@ async def main() -> None:
         base_url=env("MODEL_BASE_URL", "http://localhost:11434/v1"),
         api_key=read_secret(key_file) if key_file else None,
     )
+    max_output = env("MODEL_MAX_OUTPUT_TOKENS")
     endpoint = Endpoint(
         name=env("MODEL_ENDPOINT", "default"),
         model=env("MODEL_NAME", "qwen3:8b"),
         ceiling=ceiling,
+        reasoning_effort=env("MODEL_REASONING_EFFORT") or None,
+        max_output_tokens=int(max_output) if max_output else None,
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()

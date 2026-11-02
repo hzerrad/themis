@@ -180,6 +180,13 @@ async def test_invalid_model_output_twice_fails_the_investigation() -> None:
     assert err.value.reason == "invalid_model_output"
 
 
+async def test_cut_off_replies_count_as_invalid() -> None:
+    model = ScriptedModel("truncated", "truncated")
+    with pytest.raises(InvestigationError) as err:
+        await investigate(job(), FakeCore(), model, max_steps=6)
+    assert err.value.reason == "invalid_model_output"
+
+
 async def test_model_unavailable_fails_the_investigation() -> None:
     with pytest.raises(InvestigationError) as err:
         await investigate(job(), FakeCore(), ScriptedModel("unavailable"), max_steps=6)

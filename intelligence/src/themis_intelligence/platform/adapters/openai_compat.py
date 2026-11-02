@@ -18,6 +18,7 @@ class _Message(BaseModel):
 
 class _Choice(BaseModel):
     message: _Message
+    finish_reason: str | None = None
 
 
 class _Usage(BaseModel):
@@ -49,6 +50,7 @@ class OpenAICompatAdapter:
             "messages": [m.model_dump() for m in req.messages],
             "max_tokens": req.max_output_tokens,
             "temperature": 0,
+            **({"reasoning_effort": req.reasoning_effort} if req.reasoning_effort else {}),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": "reply", "schema": req.json_schema, "strict": True},
@@ -60,8 +62,10 @@ class OpenAICompatAdapter:
         resp.raise_for_status()
         data = _Completion.model_validate_json(resp.content)
         usage = data.usage or _Usage()
+        choice = data.choices[0]
         return ProviderResponse(
-            content=data.choices[0].message.content or "",
+            content=choice.message.content or "",
+            truncated=choice.finish_reason == "length",
             usage=Usage(input_tokens=usage.prompt_tokens, output_tokens=usage.completion_tokens),
             model=data.model or req.model,
         )

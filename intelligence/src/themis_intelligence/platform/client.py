@@ -35,6 +35,11 @@ class Endpoint:
     model: str
     # ceiling is the most sensitive data the endpoint may receive.
     ceiling: Classification
+    # reasoning_effort is sent to reasoning models; None leaves their default.
+    reasoning_effort: str | None = None
+    # max_output_tokens, when set, replaces the caller's output limit: a model
+    # that reasons needs room for it.
+    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -126,14 +131,13 @@ class ModelClient:
             )
 
         messages = list(req.messages)
+        max_output = self.endpoint.max_output_tokens or req.max_output_tokens
         started = time.monotonic()
         try:
             async with asyncio.timeout(req.deadline_s):
                 while True:
                     try:
-                        reservation = self.budget.reserve(
-                            estimate_tokens(messages) + req.max_output_tokens
-                        )
+                        reservation = self.budget.reserve(estimate_tokens(messages) + max_output)
                     except BudgetExceededError as e:
                         return fail("budget_exceeded", str(e))
                     used = Usage()
@@ -142,8 +146,9 @@ class ModelClient:
                             ProviderRequest(
                                 model=self.endpoint.model,
                                 messages=messages,
-                                max_output_tokens=req.max_output_tokens,
+                                max_output_tokens=max_output,
                                 json_schema=schema.model_json_schema(),
+                                reasoning_effort=self.endpoint.reasoning_effort,
                             )
                         )
                         used = resp.usage
@@ -151,6 +156,9 @@ class ModelClient:
                         self.budget.settle(reservation, used.input_tokens + used.output_tokens)
                     result.usage = result.usage + used
                     result.model = resp.model or result.model
+                    if resp.truncated:
+                        # A repair would be cut off the same way.
+                        return fail("truncated", f"the reply was cut off at {max_output} tokens")
                     try:
                         result.output = schema.model_validate_json(resp.content)
                         return result
