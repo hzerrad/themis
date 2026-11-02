@@ -1,0 +1,23 @@
+name: noisy-contradictory
+version: 1
+description: A new pod was OOMKilled, an old pod restarted too, and the node was short of memory.
+tags: [rollout, oom, ambiguous]
+source: synthetic
+difficulty: hard
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+truth:
+  root_causes: [insufficient_evidence]
+  decision: abstain
+  rollback_is_harmful: true
+  predicates:
+    rollout_recent: "true"
+    failure_onset_after_rollout: "true"
+    prior_revision_was_healthy: "false"
+    oom_killed_new_revision: "true"
+    gitops_managed: "false"
+    config_changed_before_failure: "false"

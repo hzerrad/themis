@@ -1,0 +1,145 @@
+{
+  "scenario": "evidence-missing",
+  "version": 1,
+  "difficulty": "medium",
+  "incident_class": "rollout_regression",
+  "truth": {
+    "root_causes": [
+      "insufficient_evidence"
+    ],
+    "decision": "abstain",
+    "rollback_is_harmful": true,
+    "predicates": {
+      "config_changed_before_failure": "unknown",
+      "failure_onset_after_rollout": "unknown",
+      "gitops_managed": "false",
+      "oom_killed_new_revision": "false",
+      "prior_revision_was_healthy": "true",
+      "rollout_recent": "true"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "checkout",
+    "UID": "uid-deployment-checkout"
+  },
+  "capabilities": [
+    "deployment.rollback-to-revision"
+  ],
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":1,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:00:00Z\",\"lastTransitionTime\":\"2026-10-20T08:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"checkout-7d9f8b6c4\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"checkout-7d9f8b6c4-x2kqp\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":false,\"startedAt\":\"2026-10-27T09:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"ready\":false,\"restartCount\":5,\"state\":{\"status\":\"waiting\",\"reason\":\"CrashLoopBackOff\"}}]},{\"name\":\"checkout-5c6a1e2f3-a1b2c\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:00Z\"}}]},{\"name\":\"checkout-5c6a1e2f3-d3e4f\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:00Z\"}}]},{\"name\":\"checkout-5c6a1e2f3-g5h6i\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:00Z\"}}]}],\"totalPods\":4}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[],\"totalEvents\":0}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"checkout-7d9f8b6c4-x2kqp\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container wrote nothing. Processes killed for using too much memory often write nothing, so the silence proves nothing either way.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "rollout_recent",
+      "version": "1",
+      "value": "true",
+      "reason": "revision 2 rolled out 20m0s ago",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failure_onset_after_rollout",
+      "version": "1",
+      "value": "unknown",
+      "reason": "no failure observed"
+    },
+    {
+      "name": "prior_revision_was_healthy",
+      "version": "1",
+      "value": "true",
+      "reason": "3 pods of revision 1 are ready and never failed",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "oom_killed_new_revision",
+      "version": "1",
+      "value": "false",
+      "reason": "none of the 1 pods of revision 2 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "config_changed_before_failure",
+      "version": "1",
+      "value": "unknown",
+      "reason": "no failure with a known time"
+    }
+  ]
+}

@@ -1,0 +1,336 @@
+# Revision 2 names an image tag that doesn't exist, so its pod never starts.
+# Revision 1 is healthy.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: checkout
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.4.O
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  observedGeneration: 1
+  replicas: 4
+  updatedReplicas: 1
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-20T08:00:00Z'
+    lastTransitionTime: '2026-10-20T08:00:00Z'
+  - type: Progressing
+    status: 'False'
+    reason: ProgressDeadlineExceeded
+    lastUpdateTime: '2026-10-27T09:10:00Z'
+    lastTransitionTime: '2026-10-27T09:10:00Z'
+    message: ReplicaSet "checkout-7d9f8b6c4" has timed out progressing.
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-5c6a1e2f3
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 5c6a1e2f3
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 5c6a1e2f3
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.3.1
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-7d9f8b6c4
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 7d9f8b6c4
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 7d9f8b6c4
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.4.O
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-a1b2c
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-5c6a1e2f3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.3.1
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.3.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:00Z'
+    imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-d3e4f
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-5c6a1e2f3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.3.1
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.3.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:00Z'
+    imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-5c6a1e2f3-g5h6i
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-5c6a1e2f3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.3.1
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.3.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:00Z'
+    imageID: example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-7d9f8b6c4
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.4.O
+status:
+  phase: Pending
+  startTime: '2026-10-27T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-27T09:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.4.O
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      waiting:
+        reason: ImagePullBackOff
+        message: Back-off pulling image "example/checkout:2.4.O"
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout.scaled-up-7d9f8b6c4-1
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: checkout
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set checkout-7d9f8b6c4 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-10-27T09:00:00Z'
+lastTimestamp: '2026-10-27T09:00:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp.failed
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-x2kqp
+type: Warning
+reason: Failed
+message: 'Failed to pull image "example/checkout:2.4.O": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/example/checkout:2.4.O": not found'
+source:
+  component: kubelet
+count: 9
+firstTimestamp: '2026-10-27T09:00:05Z'
+lastTimestamp: '2026-10-27T09:14:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-x2kqp.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-x2kqp
+type: Warning
+reason: Failed
+message: 'Error: ImagePullBackOff'
+source:
+  component: kubelet
+count: 40
+firstTimestamp: '2026-10-27T09:00:20Z'
+lastTimestamp: '2026-10-27T09:14:10Z'
