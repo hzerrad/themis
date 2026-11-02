@@ -9,9 +9,9 @@ Each step has a **kind** path and a **your cluster** path. The kind path uses th
 ## What you need
 
 - Docker, Helm and kubectl. The kind path also needs Go: kind runs through `go tool`.
-- A clone of this repository. Images aren't published yet, so you build them.
+- A clone of this repository, for the chart and the sample workload. The images are published, so there's nothing to build.
 - A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM.
-- For your cluster: Kubernetes 1.35 or later, a registry the cluster can pull from, and an Alertmanager you can configure.
+- For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and an Alertmanager you can configure.
 
 If the model needs a key, put it in a Secret first:
 
@@ -24,31 +24,13 @@ On kind, run `make kind-up` before this, and add `--context kind-themis-dev` to 
 
 ## 1. Install Themis
 
-**kind:**
-
-```bash
-make kind-up        # skip if you created it above
-make themis-up MODEL_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4.1 MODEL_KEY_SECRET=model-key
-```
-
-`themis-up` builds the images, loads them into kind, and installs the chart with the executor on and namespace `shop` enrolled. Leave out `MODEL_KEY_SECRET` if the model needs no key.
-
-**Your cluster:** build the images and push them to your registry:
-
-```bash
-make images
-for c in core executor intelligence; do
-  docker tag themis-$c:dev registry.example.com/themis/themis-$c:dev
-  docker push registry.example.com/themis/themis-$c:dev
-done
-```
+On kind, create the cluster first with `make kind-up` (skip it if you did above), and add `--context kind-themis-dev` to `kubectl` and `--kube-context kind-themis-dev` to `helm` below.
 
 Create the namespace you'll enroll, then install the chart. Themis gets its access in each enrolled namespace at install, so the namespace must already exist:
 
 ```bash
 kubectl create namespace shop
 helm install themis deploy/helm/themis -n themis --create-namespace \
-  --set image.repository=registry.example.com/themis \
   --set enrolledNamespaces='{shop}' \
   --set executor.enabled=true \
   --set model.baseURL=https://api.openai.com/v1 \
@@ -56,6 +38,10 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
   --set model.apiKeySecret=model-key \
   --wait
 ```
+
+Leave out `model.apiKeySecret` if the model needs no key. The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one.
+
+To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODEL_NAME=...` builds the images, loads them into kind, and installs the chart.
 
 | Value | What it does |
 |---|---|
