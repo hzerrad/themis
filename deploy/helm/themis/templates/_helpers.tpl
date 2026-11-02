@@ -37,3 +37,10 @@ seccompProfile:
 - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ $.Values.telemetry.otlp.protocol | quote }}}
 {{- end }}
 {{- end }}
+
+{{/* Annotations of the pre-upgrade hook that updates the CRDs. */}}
+{{- define "themis.crdHook" -}}
+helm.sh/hook: pre-upgrade
+helm.sh/hook-weight: "{{ . }}"
+helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+{{- end }}

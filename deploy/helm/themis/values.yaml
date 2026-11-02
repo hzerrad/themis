@@ -73,6 +73,13 @@ networkPolicy:
   # fixes (themisConfig.externalProposals.sources).
   agentNamespaces: []
 
+crds:
+  # Helm creates the CRDs on install but never updates them. With this on, a
+  # short Job applies them before every helm upgrade. An uninstall keeps them.
+  upgrade: true
+  # Keep in step with kubectl in mise.toml.
+  image: registry.k8s.io/kubectl:v1.37.2
+
 # Global settings, installed as the ThemisConfig resource when set:
 #   enrolledNamespaces: a subset of enrolledNamespaces above
 #   autonomyCeiling: observe stops Themis making changes anywhere
