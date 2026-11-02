@@ -6,6 +6,8 @@ const TOKEN_KEY = "themis-token";
 const POLL_MS = 3000;
 const main = document.getElementById("main");
 let timer = null;
+// me is who's signed in, from /v1/me: a person, or whoever holds the admin token.
+let me = null;
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -25,13 +27,19 @@ function token() {
   try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
 
+// headers go with every request. The request header proves a change comes
+// from this page, which a form on another site can't add.
+function headers() {
+  const out = { "Content-Type": "application/json", "X-Themis-Request": "1" };
+  if (token()) out.Authorization = `Bearer ${token()}`;
+  return out;
+}
+
 async function api(path, options = {}) {
-  const resp = await fetch(path, {
-    ...options,
-    headers: { "Authorization": `Bearer ${token()}`, "Content-Type": "application/json" },
-  });
+  const resp = await fetch(path, { ...options, headers: headers() });
   if (resp.status === 401) {
     try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    me = null;
     route();
     throw new Error("unauthorized");
   }
@@ -121,18 +129,38 @@ function render(...nodes) {
   main.replaceChildren(...nodes.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false));
 }
 
-function login() {
+// Roles, least trusted first: each can do what the ones before it can.
+const ROLES = ["viewer", "responder", "approver", "admin"];
+const can = (role) => me && ROLES.indexOf(me.role) >= ROLES.indexOf(role);
+
+async function login() {
+  let methods = { oidc: false };
+  try { methods = await (await fetch("/v1/sign-in")).json(); } catch {}
   const input = h("input", { type: "password", placeholder: "admin token", autocomplete: "off" });
   const submit = (e) => {
     e.preventDefault();
     try { sessionStorage.setItem(TOKEN_KEY, input.value.trim()); } catch {}
     route();
   };
-  render(h("form", { class: "panel", onsubmit: submit },
-    h("h1", {}, "Sign in"),
+  const tokenForm = h("form", { onsubmit: submit },
     h("p", { class: "muted" }, "Enter the admin token. It is kept for this browser tab only."),
-    h("div", { class: "actions" }, input, h("button", { class: "primary", type: "submit" }, "Continue"))));
-  input.focus();
+    h("div", { class: "actions" }, input, h("button", { class: methods.oidc ? "" : "primary", type: "submit" }, "Continue")));
+  if (!methods.oidc) {
+    render(h("div", { class: "panel" }, h("h1", {}, "Sign in"), tokenForm));
+    input.focus();
+    return;
+  }
+  render(h("div", { class: "panel" },
+    h("h1", {}, "Sign in"),
+    h("p", {}, h("a", { class: "button primary", href: "/auth/login" }, "Sign in with your account")),
+    h("details", {}, h("summary", { class: "muted" }, "Use the admin token instead"), tokenForm)));
+}
+
+function noAccess() {
+  render(h("div", { class: "panel" },
+    h("h1", {}, "No access yet"),
+    h("p", {}, `You're signed in as ${me.username}, but you haven't been given access to Themis yet.`),
+    h("p", { class: "muted" }, "Ask a Themis admin to add you or one of your groups.")));
 }
 
 async function list() {
@@ -172,6 +200,7 @@ function suggestedBy(p) {
   const source = (p.Provenance && p.Provenance.source) || "";
   if (p.LeaseID) return "Themis's investigator";
   if (source === "admin-token") return "A person with the admin token";
+  if (source.startsWith("person:")) return `${source.slice("person:".length)} (signed in)`;
   return p.Authenticated ? `${source} (identity checked)` : `${source || "Unknown"} (identity not checked)`;
 }
 
@@ -230,7 +259,9 @@ function actionPanel(a, reload) {
         h("div", { class: "muted" }, observed(a.Verification.Observation)))] : null),
     h("h2", {}, "What changes"),
     changesTable(a.Changes),
-    a.State === "awaiting_approval" ? h("div", { class: "actions" }, approve, reason, deny) : null,
+    a.State !== "awaiting_approval" ? null
+      : can("approver") ? h("div", { class: "actions" }, approve, reason, deny)
+        : h("p", { class: "muted" }, "Only approvers can approve or deny this change."),
     error);
 }
 
@@ -367,7 +398,9 @@ async function detail(id) {
       h("summary", {}, h("span", { class: "mono" }, short(e.ID)), ` ${label(EVIDENCE_LABEL, e.Template)} · ${time(e.CollectedAt)}`,
         e.Classification === "sensitive" ? " · may contain sensitive data" : "",
         e.Truncated ? " · shortened" : "", e.Redactions ? ` · ${e.Redactions} secrets hidden` : ""),
-      h("pre", {}, JSON.stringify(e.Data, null, 2))))));
+      e.Data === undefined
+        ? h("p", { class: "muted" }, "Only responders can read this evidence.")
+        : h("pre", {}, JSON.stringify(e.Data, null, 2))))));
   // Refreshing would discard what an approver is typing.
   if (!actions.some((a) => a.State === "awaiting_approval")) timer = setTimeout(reload, POLL_MS * 2);
 }
@@ -377,17 +410,40 @@ function showError(e) {
   render(h("div", { class: "panel error" }, e.message));
 }
 
-function route() {
+// whoami asks who's signed in, by the admin token or a session cookie.
+async function whoami() {
+  const resp = await fetch("/v1/me", { headers: headers() });
+  if (resp.status === 401) {
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    return null;
+  }
+  if (!resp.ok) throw new Error((await resp.text()).trim() || resp.statusText);
+  return resp.json();
+}
+
+async function route() {
   clearTimeout(timer);
-  document.getElementById("logout").hidden = !token();
-  if (!token()) return login();
+  try {
+    if (!me) me = await whoami();
+  } catch (e) {
+    return showError(e);
+  }
+  const who = document.getElementById("whoami");
+  who.textContent = me ? (me.token ? "Signed in with the admin token" : `${me.username}${me.role ? ` · ${me.role}` : ""}`) : "";
+  document.getElementById("logout").hidden = !me;
+  if (!me) return login();
+  if (!me.role) return noAccess();
   const m = location.hash.match(/^#\/incidents\/([\w-]+)$/);
   const run = m ? () => detail(m[1]) : async () => { await list(); timer = setTimeout(route, POLL_MS); };
   run().catch(showError);
 }
 
-document.getElementById("logout").addEventListener("click", () => {
+document.getElementById("logout").addEventListener("click", async () => {
+  if (me && !me.token) {
+    try { await fetch("/auth/logout", { method: "POST", headers: headers() }); } catch {}
+  }
   try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  me = null;
   route();
 });
 window.addEventListener("hashchange", route);
