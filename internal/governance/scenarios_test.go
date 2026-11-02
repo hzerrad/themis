@@ -37,6 +37,7 @@ func facts(onset predicate.Truth) []predicate.Result {
 		{Name: predicate.NameFailureOnsetAfterRollout, Version: "1", Value: onset, Reason: "x"},
 		{Name: predicate.NameConfigChangedBeforeFailure, Version: "1", Value: predicate.False, Reason: "x"},
 		{Name: predicate.NameRolloutRecent, Version: "1", Value: predicate.True, Reason: "x"},
+		{Name: predicate.NamePriorRevisionWasHealthy, Version: "1", Value: predicate.True, Reason: "x"},
 	}
 }
 
@@ -79,6 +80,32 @@ func TestScenario_OldRolloutIsNotRolledBack(t *testing.T) {
 	id, p := e.diagnosed(t, "rollout-regression", 1, results)
 	e.govern(t, p)
 	assertNotActed(t, e, id)
+}
+
+// A new version that crashes, or never starts, while the one before it was
+// healthy is a bad rollout too, though nothing ran out of memory.
+func TestScenario_BadRolloutWithoutOOMWaitsForApproval(t *testing.T) {
+	e := shipped(t)
+	results := facts(predicate.True)
+	results[0].Value = predicate.False
+	id, p := e.diagnosed(t, "rollout-regression", 1, results)
+	e.govern(t, p)
+	if got := e.state(t, id); got != incident.AwaitingApproval {
+		t.Errorf("state = %s, want awaiting_approval", got)
+	}
+}
+
+// With no memory kill and no healthy version to go back to, nothing says the
+// rollout is to blame, so it isn't rolled back.
+func TestScenario_NoSignOfABadRevisionIsNotRolledBack(t *testing.T) {
+	for _, prior := range []predicate.Truth{predicate.False, predicate.Unknown} {
+		e := shipped(t)
+		results := facts(predicate.True)
+		results[0].Value, results[5].Value = predicate.False, prior
+		id, p := e.diagnosed(t, "rollout-regression", 1, results)
+		e.govern(t, p)
+		assertNotActed(t, e, id)
+	}
 }
 
 // The control: a bad rollout, with every fact known, waits for approval.

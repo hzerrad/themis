@@ -191,14 +191,17 @@ policy:
       when: >-
         action.restore != "true" &&
         (predicates.rollout_recent != "true" ||
-         predicates.oom_killed_new_revision != "true" ||
          predicates.failure_onset_after_rollout != "true" ||
-         predicates.config_changed_before_failure != "false")
+         predicates.config_changed_before_failure != "false" ||
+         (predicates.oom_killed_new_revision != "true" &&
+          predicates.prior_revision_was_healthy != "true"))
       decision: deny
     - name: rollback-needs-approval
       when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
       decision: require_approval
 ```
+
+These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
 
 - Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
