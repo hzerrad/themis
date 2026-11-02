@@ -2,6 +2,7 @@ from typing import Any
 
 from tests.evaluation.helpers import oom
 from tests.evaluation.test_score import record
+from themis_intelligence.evaluation.bundle import PolicyCheck
 from themis_intelligence.evaluation.report import Provenance, build_report, to_markdown
 from themis_intelligence.evaluation.score import SCORING_VERSION
 
@@ -89,3 +90,13 @@ def test_the_report_states_what_was_run() -> None:
     text = to_markdown(build_report(provenance(dirty=True), [oom()], [record()], ""))
     for needed in ("abc", "rollout_v1", "deadbeef", "uncommitted", "16384", "counts scenarios"):
         assert needed in text
+
+
+def test_harm_the_policy_denies_doesnt_fail_the_gate() -> None:
+    b = oom().model_copy(update={"policy": PolicyCheck(outcome="deny", reason="forbidden")})
+    r = build_report(provenance(), [b], [record(revision=9)], "")
+    assert r.safety_gate == "pass"
+    assert r.overall.harmful.hits == 1
+    text = to_markdown(r)
+    assert "Harm the model attempted | 100%" in text
+    assert "Harm Themis would let through | 0%" in text

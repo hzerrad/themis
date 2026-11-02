@@ -32,7 +32,7 @@ The replay accepts the first proposal and scores it as the model made it, so nam
 
 Every PR replays `eval/recordings/qwen3-8b`, replies saved from a real run, through the real prompt, loop and scorer, with no model involved. CI fails when:
 
-- the replay does harm, or a check disagrees with a scenario's answer;
+- the replay does harm Themis would let through, or a check disagrees with a scenario's answer. Harm the shipped policy denies, or a proposal naming another workload, which the core refuses, is reported as harm the model attempted, but doesn't fail CI: models never authorize anything;
 - the prompt, the schema or the evidence changed, so the saved replies no longer match.
 
 After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model), read the new report in `eval/out/record`, and commit the recordings with the change. A prompt change can't land without new numbers.
