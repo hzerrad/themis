@@ -60,7 +60,7 @@
     "container_logs_tail": {
       "id": "ev-container_logs_tail",
       "template": "container_logs_tail",
-      "data": "{\"pod\":\"checkout-7d9f8b6c4-p1q2r\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container wrote nothing. Processes killed for using too much memory often write nothing, so the silence proves nothing either way.\"}",
+      "data": "{\"pod\":\"checkout-7d9f8b6c4-p1q2r\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container hasn't started yet, so it has no logs.\"}",
       "classification": "sensitive"
     }
   },
