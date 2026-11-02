@@ -11,7 +11,9 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `enrolledNamespaces` | yes | Namespaces Themis may act on. Alerts about any other namespace are recorded as rejected. Each also needs RBAC, which the chart renders per namespace. |
 | `intake.bearerTokenFile` | yes | File holding the token Alertmanager must send. Read on every request, so rotating the Secret needs no restart. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
-| `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. |
+| `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
+| `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |
+| `api.access` | no | Roles for people who sign in, by username or group. |
 | `executor.address`, `executor.bearerTokenFile` | no | Where `themis-executor` listens, and the token it requires. Without `executor`, approved actions are canceled, never executed. |
 | `notifications.webhook.url` or `.urlFile` | no | Where escalations are POSTed. Use `urlFile` when the URL embeds a key. |
 | `notifications.webhook.bearerTokenFile` | no | A token sent with each notice. |
@@ -19,6 +21,59 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `externalProposals` | no | Who outside Themis may suggest fixes; see [below](#fixes-suggested-from-outside). |
 | `resources.namespace` | no | Read profiles and global settings from custom resources, with this as Themis's own namespace. The chart sets it. |
 | `profiles` | without `resources` | Incident classes, below. Set either this or `resources`, not both. |
+
+## People and roles
+
+Without `api.oidc`, the UI and the API take only the admin token, and every approval is recorded as `admin`. With it, people sign in through your identity provider, and each approval and suggestion records who made it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
+
+```yaml
+api:
+  bearerTokenFile: /var/run/secrets/themis/admin
+  oidc:
+    issuerURL: https://idp.example.com
+    clientID: themis
+    clientSecretFile: /var/run/secrets/themis-oidc/client-secret
+    redirectURL: https://themis.example.com/auth/callback
+  access:
+    - {role: admin, users: [alice@example.com]}
+    - {role: approver, groups: [sre]}
+    - {role: viewer, groups: [engineering]}
+```
+
+With the chart, set the `oidc` and `access` values instead; see the [chart README](../deploy/helm/themis/README.md#sign-people-in).
+
+### `api.oidc`
+
+| Key | Required | Meaning |
+|---|---|---|
+| `issuerURL` | yes | The provider's issuer, for example `https://accounts.google.com` |
+| `clientID` | yes | The client ID the provider gave Themis |
+| `clientSecretFile` | yes | File holding the client secret. Read at each sign-in, so rotating the Secret needs no restart. |
+| `redirectURL` | yes | Themis's `/auth/callback` as the browser reaches it, below |
+| `usernameClaim` | no | The ID token claim used as the username. Default `email`. |
+| `groupsClaim` | no | The ID token claim listing the person's groups. Default `groups`. |
+| `sessionTTL` | no | How long a sign-in lasts. Default `8h`. |
+
+**The redirect URL** is where the provider sends the browser back after sign-in. It must be Themis's `/auth/callback` at the address people type in their browser, not the in-cluster Service: behind an ingress at `https://themis.example.com`, it is `https://themis.example.com/auth/callback`; through `kubectl port-forward` on port 8090, it is `http://127.0.0.1:8090/auth/callback`. Register the same URL with the provider. Over HTTPS, the session cookie is sent only over HTTPS.
+
+**Sign-in** asks the provider for the `openid`, `email`, `profile` and `groups` scopes. When the username is the email, Themis refuses an address the provider says isn't verified. Themis reaches the provider when the first person signs in, so it starts even while the provider is down.
+
+### `api.access`
+
+Each entry gives a role to `users` (usernames), `groups`, or both. When someone matches several entries, the most trusted role wins.
+
+| Role | Can |
+|---|---|
+| `viewer` | See incidents, the fixes Themis suggests, and their outcomes. Evidence is listed, but its content, such as logs, is hidden. |
+| `responder` | Everything a viewer can, and also read the evidence itself, such as container logs |
+| `approver` | Everything a responder can, and also suggest, approve and deny fixes |
+| `admin` | Everything. Today this is the same as approver. |
+
+**With no role,** someone who signs in but matches no entry sees nothing. Themis tells them who they're signed in as, and to ask a Themis admin to add them.
+
+**The admin token** still works with OIDC on, and acts as an admin. Keep it as a way in when the provider is down. What it does is still recorded as `admin`, since anyone holding it looks the same.
+
+**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Each person has their own limit on suggestions.
 
 ## Configuration resources
 
@@ -91,7 +146,7 @@ externalProposals:
 
 **Agents** call the `ProposalService` gRPC API on port 9090: `ListIncidents`, `GetIncident`, and `SubmitProposal` with `incident_id` instead of `lease_id`. Each sends a Kubernetes ServiceAccount token issued for the audience `themis`, for example from a [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/#serviceaccounttoken), and Themis checks it with the API server. A token for another audience is refused. Add the agent's namespace to the chart's `networkPolicy.agentNamespaces`.
 
-**People** send the same request as JSON to `POST /v1/incidents/{id}/proposals` with the admin token. That token is shared, so the record proves the token was used, not who used it.
+**People** send the same request as JSON to `POST /v1/incidents/{id}/proposals`, signed in with the [approver role](#people-and-roles) or with the admin token. A signed-in person is recorded as `person:<username>`. The admin token is recorded as `admin-token`, since anyone holding it looks the same.
 
 **When a suggestion is taken:** while Themis investigates, and for `window` after it couldn't decide. `window` defaults to 15 minutes with sources and to none without. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
 
