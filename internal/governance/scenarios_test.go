@@ -36,6 +36,7 @@ func facts(onset predicate.Truth) []predicate.Result {
 		{Name: predicate.NameGitOpsManaged, Version: "1", Value: predicate.False, Reason: "x"},
 		{Name: predicate.NameFailureOnsetAfterRollout, Version: "1", Value: onset, Reason: "x"},
 		{Name: predicate.NameConfigChangedBeforeFailure, Version: "1", Value: predicate.False, Reason: "x"},
+		{Name: predicate.NameRolloutRecent, Version: "1", Value: predicate.True, Reason: "x"},
 	}
 }
 
@@ -68,6 +69,16 @@ func TestScenario_ConfigChangeBeforeTheFailureIsNotRolledBack(t *testing.T) {
 		e.govern(t, p)
 		assertNotActed(t, e, id)
 	}
+}
+
+// A failure long after the rollout isn't blamed on it, however it looks.
+func TestScenario_OldRolloutIsNotRolledBack(t *testing.T) {
+	e := shipped(t)
+	results := facts(predicate.True)
+	results[4].Value = predicate.False
+	id, p := e.diagnosed(t, "rollout-regression", 1, results)
+	e.govern(t, p)
+	assertNotActed(t, e, id)
 }
 
 // The control: a bad rollout, with every fact known, waits for approval.
