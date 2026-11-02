@@ -382,7 +382,7 @@ func TestExternal_RefusesAnOverlongSuggestion(t *testing.T) {
 func TestSubmitFromPerson_RecordsTheTokenAndPassesTheSameChecks(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
-	resp, err := e.server.SubmitFromPerson(t.Context(), suggestion(inv, "c1"))
+	resp, err := e.server.SubmitFromPerson(t.Context(), "", suggestion(inv, "c1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +395,7 @@ func TestSubmitFromPerson_RecordsTheTokenAndPassesTheSameChecks(t *testing.T) {
 	}
 	req := suggestion(inv, "c2")
 	req.Target.Name = "coredns"
-	bad, err := e.server.SubmitFromPerson(t.Context(), req)
+	bad, err := e.server.SubmitFromPerson(t.Context(), "", req)
 	if err != nil {
 		t.Fatal(err)
 	}

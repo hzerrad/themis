@@ -33,7 +33,8 @@ func viewIncident(in store.Incident) incidentView {
 // evidenceView serves Data as JSON rather than base64.
 type evidenceView struct {
 	evidence.Item
-	Data jsontext.Value
+	// Data is left out for people who may not see raw evidence.
+	Data jsontext.Value `json:",omitzero"`
 }
 
 // actionView lists its fields rather than embedding store.Action: the

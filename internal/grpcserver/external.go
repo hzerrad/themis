@@ -42,6 +42,9 @@ const (
 	// credential, so it proves the token, not which person.
 	PersonSource = "admin-token"
 
+	// SignedInSource, followed by a username, names someone signed in.
+	SignedInSource = "person:"
+
 	personPerMinute = 60
 
 	// PeerAttemptsPerMinute bounds, per address, calls with a token not
@@ -251,9 +254,14 @@ func bearer(ctx context.Context) string {
 	return ""
 }
 
-// SubmitFromPerson takes a suggestion from a person using the API.
-func (s *Server) SubmitFromPerson(ctx context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
-	return s.submitExternal(ctx, Caller{Source: PersonSource, PerMinute: personPerMinute, All: true}, req)
+// SubmitFromPerson takes a suggestion from a person using the API: someone
+// signed in, or the holder of the admin token when person is empty.
+func (s *Server) SubmitFromPerson(ctx context.Context, person string, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
+	source := PersonSource
+	if person != "" {
+		source = SignedInSource + person
+	}
+	return s.submitExternal(ctx, Caller{Source: source, PerMinute: personPerMinute, All: true}, req)
 }
 
 func (s *Server) allow(c Caller) bool {

@@ -35,6 +35,7 @@ import (
 	"github.com/hzerrad/themis/internal/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/investigation"
 	"github.com/hzerrad/themis/internal/notify"
+	"github.com/hzerrad/themis/internal/people"
 	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/resources"
@@ -213,7 +214,12 @@ func Run(ctx context.Context, o Options) error {
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	(&approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators}).Register(mux)
+	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators}
+	if o := cfg.API.OIDC; o != nil {
+		api.Sessions = s
+		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
+	}
+	api.Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),

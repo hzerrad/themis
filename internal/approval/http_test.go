@@ -446,7 +446,7 @@ type fakeSuggestions struct {
 	err  error
 }
 
-func (f *fakeSuggestions) SubmitFromPerson(_ context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
+func (f *fakeSuggestions) SubmitFromPerson(_ context.Context, _ string, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error) {
 	f.got = req
 	return f.resp, f.err
 }

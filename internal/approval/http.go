@@ -18,9 +18,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/hzerrad/themis/internal/auth"
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/people"
 	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
@@ -29,16 +30,18 @@ import (
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
-// approver is the identity of the bootstrap admin token.
-const approver = "admin"
-
 const maxBodyBytes = 64 << 10
 
 type API struct {
-	Store     *store.Store
+	Store *store.Store
+	// TokenFile holds the admin token, which acts as an admin.
 	TokenFile string
-	Logger    *slog.Logger
-	Now       func() time.Time
+	// Access gives people signed in through OIDC their roles.
+	Access []config.AccessBinding
+	// Sessions holds people signed in through OIDC; nil without OIDC.
+	Sessions people.Sessions
+	Logger   *slog.Logger
+	Now      func() time.Time
 	// Remedy says what Themis couldn't see and how to let it.
 	Remedy remedy.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
@@ -48,40 +51,85 @@ type API struct {
 // Suggestions takes a fix suggested by a person. The core checks it exactly
 // as it checks the investigator's.
 type Suggestions interface {
-	SubmitFromPerson(ctx context.Context, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error)
+	// SubmitFromPerson takes a suggestion from person, or from the holder of
+	// the admin token when person is empty.
+	SubmitFromPerson(ctx context.Context, person string, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error)
 }
 
 func (a *API) Register(mux *http.ServeMux) {
-	mux.Handle("GET /v1/incidents", a.authed(a.list, nil))
-	mux.Handle("GET /v1/incidents/{id}", a.authed(a.detail, incidentFields))
-	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(a.suggest, incidentFields))
-	mux.Handle("POST /v1/actions/{id}/approve", a.authed(a.approve, a.actionFields))
-	mux.Handle("POST /v1/actions/{id}/deny", a.authed(a.deny, a.actionFields))
+	mux.HandleFunc("GET /v1/sign-in", a.signInMethods)
+	mux.Handle("GET /v1/me", a.authed("", a.me, nil))
+	mux.Handle("GET /v1/incidents", a.authed(config.RoleViewer, a.list, nil))
+	mux.Handle("GET /v1/incidents/{id}", a.authed(config.RoleViewer, a.detail, incidentFields))
+	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
+	mux.Handle("POST /v1/actions/{id}/approve", a.authed(config.RoleApprover, a.approve, a.actionFields))
+	mux.Handle("POST /v1/actions/{id}/deny", a.authed(config.RoleApprover, a.deny, a.actionFields))
 }
 
-// authed serves h to the admin, with the log fields of the request's path,
-// and logs the request at debug level.
-func (a *API) authed(h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
+// authed serves h to whoever has role, or to anyone signed in when role is
+// empty, with the log fields of the request's path, and logs the request at
+// debug level.
+func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
+	directory := &people.Directory{TokenFile: a.TokenFile, Access: a.Access, Sessions: a.Sessions, Now: a.now}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		w := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
 		defer func() {
 			a.logger().DebugContext(r.Context(), "API request served", "route", r.Pattern, "status", w.status)
 		}()
-		want, err := auth.ReadToken(a.TokenFile)
-		if err != nil {
-			a.logger().ErrorContext(r.Context(), "cannot read the admin token", "file", a.TokenFile, telemetry.FieldError, err)
+		who, err := directory.Identify(r)
+		switch {
+		case errors.Is(err, people.ErrUnavailable):
+			a.logger().ErrorContext(r.Context(), "cannot check who sent a request", telemetry.FieldError, err)
 			http.Error(w, "Themis can't check sign-ins right now. Try again shortly.", http.StatusServiceUnavailable)
 			return
-		}
-		if !auth.BearerMatches(r.Header.Get("Authorization"), want) {
-			http.Error(w, "Sign in with the admin token.", http.StatusUnauthorized)
+		case errors.Is(err, people.ErrNoRequestHeader):
+			http.Error(w, "Make changes from the Themis page.", http.StatusForbidden)
+			return
+		case err != nil:
+			http.Error(w, "Sign in to Themis first.", http.StatusUnauthorized)
 			return
 		}
-		if fields != nil {
-			r = r.WithContext(telemetry.WithAttrs(r.Context(), fields(r)...))
+		if role != "" && !who.Can(role) {
+			if who.Role == "" {
+				http.Error(w, "You're signed in as "+who.Username+", but you don't have access to Themis yet. Ask a Themis admin to add you.", http.StatusForbidden)
+			} else {
+				http.Error(w, "This needs the "+role+" role. You have the "+who.Role+" role.", http.StatusForbidden)
+			}
+			return
 		}
+		ctx := people.WithIdentity(r.Context(), who)
+		if fields != nil {
+			ctx = telemetry.WithAttrs(ctx, fields(r)...)
+		}
+		// The deferred log reads r, so it carries the fields too.
+		r = r.WithContext(ctx)
 		h(w, r)
 	})
+}
+
+// actor is who to record as having done something.
+func actor(r *http.Request) string {
+	who, _ := people.From(r.Context())
+	return who.Username
+}
+
+type meView struct {
+	Username string   `json:"username"`
+	Groups   []string `json:"groups,omitempty"`
+	// Role is empty when the person has no access yet.
+	Role string `json:"role"`
+	// Token is set for the shared admin token, which proves the token, not who.
+	Token bool `json:"token,omitempty"`
+}
+
+func (a *API) me(w http.ResponseWriter, r *http.Request) {
+	who, _ := people.From(r.Context())
+	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token})
+}
+
+// signInMethods tells the UI how people sign in, before anyone has.
+func (a *API) signInMethods(w http.ResponseWriter, r *http.Request) {
+	a.reply(w, r, map[string]bool{"oidc": a.Sessions != nil, "token": true})
 }
 
 func incidentFields(r *http.Request) []slog.Attr {
@@ -148,8 +196,14 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	// Raw evidence, such as logs, is for responders.
+	who, _ := people.From(ctx)
 	for _, it := range items {
-		d.Evidence = append(d.Evidence, evidenceView{Item: it, Data: it.Data})
+		v := evidenceView{Item: it}
+		if who.Can(config.RoleResponder) {
+			v.Data = it.Data
+		}
+		d.Evidence = append(d.Evidence, v)
 	}
 	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
 		a.fail(w, r, err)
@@ -204,6 +258,7 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	approver := actor(r)
 	var act store.Action
 	err := a.Store.InTx(ctx, func(tx pgx.Tx) error {
 		var err error
@@ -239,6 +294,7 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	approver := actor(r)
 	err := a.Store.InTx(ctx, func(tx pgx.Tx) error {
 		act, err := a.Store.Action(ctx, tx, r.PathValue("id"))
 		if err != nil {
@@ -284,7 +340,11 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.IncidentId = r.PathValue("id")
-	resp, err := a.Suggestions.SubmitFromPerson(r.Context(), &req)
+	person := ""
+	if who, _ := people.From(r.Context()); !who.Token {
+		person = who.Username
+	}
+	resp, err := a.Suggestions.SubmitFromPerson(r.Context(), person, &req)
 	if err != nil {
 		st := status.Convert(err)
 		http.Error(w, st.Message(), suggestionStatuses[st.Code()])
