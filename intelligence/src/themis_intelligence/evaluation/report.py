@@ -152,6 +152,7 @@ _ROWS: list[tuple[str, Callable[[Metrics], Rate]]] = [
     ("Right root cause first", lambda m: m.top1),
     ("Right root cause in the top three", lambda m: m.top3),
     ("Proposal's citations were valid", lambda m: m.citations_valid),
+    ("Named other as the leading cause", lambda m: m.other_first),
     ("Ran out of steps without deciding", lambda m: m.out_of_steps),
     ("Broke off without an answer", lambda m: m.failed),
     ("Replies valid first time", lambda m: m.clean_calls),

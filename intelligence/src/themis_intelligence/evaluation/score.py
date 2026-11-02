@@ -79,6 +79,8 @@ class Score(BaseModel):
     top1: bool
     top3: bool
     citations_valid: bool | None
+    # Whether the leading hypothesis was other, when there was one.
+    other_first: bool | None = None
 
 
 def written(r: RunRecord) -> list[str]:
@@ -125,9 +127,16 @@ def is_correct_action(b: Bundle, r: RunRecord) -> bool:
 def root_cause_hit(b: Bundle, r: RunRecord, top: int) -> bool:
     if r.conclusion == "abstained" and INSUFFICIENT_EVIDENCE in b.truth.root_causes:
         return True
+    return any(c in b.truth.root_causes for c in _ranked(r)[:top])
+
+
+def _ranked(r: RunRecord) -> list[str]:
     # A hypothesis the model itself refuted isn't its answer.
-    ranked = [h.root_cause_class for h in r.hypotheses if h.status != "refuted"]
-    return any(c in b.truth.root_causes for c in ranked[:top])
+    return [h.root_cause_class for h in r.hypotheses if h.status != "refuted"]
+
+
+def _leading(r: RunRecord) -> str:
+    return next(iter(_ranked(r)), "")
 
 
 def citations_valid(b: Bundle, r: RunRecord) -> bool | None:
@@ -156,6 +165,7 @@ def score(b: Bundle, r: RunRecord) -> Score:
         top1=root_cause_hit(b, r, 1),
         top3=root_cause_hit(b, r, 3),
         citations_valid=citations_valid(b, r),
+        other_first=_leading(r) == "other" if _leading(r) else None,
     )
 
 
@@ -200,6 +210,7 @@ class Metrics(BaseModel):
     top1: Rate
     top3: Rate
     citations_valid: Rate
+    other_first: Rate
     out_of_steps: Rate
     failed: Rate
     clean_calls: Rate
@@ -234,6 +245,7 @@ def metrics(scored: list[Scored]) -> Metrics:
         top1=_rate(scored, lambda s: s[1].top1),
         top3=_rate(scored, lambda s: s[1].top3),
         citations_valid=_rate(scored, lambda s: s[1].citations_valid),
+        other_first=_rate(scored, lambda s: s[1].other_first),
         out_of_steps=_rate(scored, lambda s: s[0].conclusion == "out_of_steps"),
         failed=_rate(scored, lambda s: s[0].conclusion == "failed"),
         clean_calls=calls(lambda r: r.clean_calls),

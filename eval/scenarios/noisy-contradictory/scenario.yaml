@@ -1,5 +1,5 @@
 name: noisy-contradictory
-version: 1
+version: 2
 description: A new pod was OOMKilled, an old pod restarted too, and the node was short of memory.
 tags: [rollout, oom, ambiguous]
 source: synthetic
@@ -11,7 +11,7 @@ evidence:
   initial: [rollout_history, pod_states, target_events, referenced_config]
   allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
 truth:
-  root_causes: [insufficient_evidence]
+  root_causes: [insufficient_evidence, node_problem]
   decision: abstain
   rollback_is_harmful: true
   predicates:

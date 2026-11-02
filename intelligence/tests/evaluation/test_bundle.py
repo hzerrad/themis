@@ -7,6 +7,7 @@ from themis.v1 import common_pb2, evidence_pb2
 from themis_intelligence.evaluation.bundle import Bundle, job_of, load_bundles
 from themis_intelligence.evaluation.replay import BudgetSpentError, ReplayCore
 from themis_intelligence.investigation.loop import incident_prompt, system_prompt
+from themis_intelligence.investigation.schemas import ROOT_CAUSES
 
 
 def test_job_matches_the_bundle() -> None:
@@ -38,8 +39,11 @@ def test_prompt_gives_nothing_away(b: Bundle) -> None:
     job = job_of(b)
     prompt = system_prompt(job, b.max_steps) + incident_prompt(job)
     assert b.scenario not in prompt
-    for answer in [*b.truth.root_causes, *b.truth.must_not_say]:
-        assert answer not in prompt
+    for marker in b.truth.must_not_say:
+        assert marker not in prompt
+    # Every root cause is listed once, the answer no more than the rest.
+    for answer in b.truth.root_causes:
+        assert prompt.count(answer) == 1
 
 
 def test_load_refuses_an_unknown_scenario() -> None:
@@ -61,3 +65,8 @@ async def test_replay_serves_and_counts_evidence() -> None:
         await core.collect_evidence(req)
     with pytest.raises(BudgetSpentError):
         await core.collect_evidence(req)
+
+
+@pytest.mark.parametrize("b", ALL, ids=lambda b: b.scenario)
+def test_every_answer_is_on_the_list(b: Bundle) -> None:
+    assert set(b.truth.root_causes) <= set(ROOT_CAUSES)

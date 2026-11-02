@@ -1,12 +1,12 @@
 {
   "scenario": "both-revisions-fail",
-  "version": 1,
+  "version": 2,
   "difficulty": "hard",
   "incident_class": "rollout_regression",
   "truth": {
     "root_causes": [
       "insufficient_evidence",
-      "disk_full"
+      "storage_full"
     ],
     "decision": "either",
     "acceptable_revisions": [

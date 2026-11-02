@@ -1,11 +1,12 @@
 {
   "scenario": "noisy-contradictory",
-  "version": 1,
+  "version": 2,
   "difficulty": "hard",
   "incident_class": "rollout_regression",
   "truth": {
     "root_causes": [
-      "insufficient_evidence"
+      "insufficient_evidence",
+      "node_problem"
     ],
     "decision": "abstain",
     "rollback_is_harmful": true,

@@ -1,5 +1,5 @@
 name: both-revisions-fail
-version: 1
+version: 2
 description: Revisions 1 and 2 both crash with the same error since the rollout.
 tags: [rollout, crashloop, ambiguous]
 source: synthetic
@@ -11,7 +11,7 @@ evidence:
   initial: [rollout_history, pod_states, target_events, referenced_config]
   allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
 truth:
-  root_causes: [insufficient_evidence, disk_full]
+  root_causes: [insufficient_evidence, storage_full]
   decision: either
   acceptable_revisions: [1]
   predicates:
