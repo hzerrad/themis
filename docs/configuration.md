@@ -104,6 +104,8 @@ externalProposals:
 - `SubmitProposal` must cite evidence Themis collected and name the incident's exact target, UID included. Naming another target is recorded as a safety event.
 - Evidence an agent reads is already redacted. Anything above its `ceiling` is withheld, and the response says how many items.
 - In-cluster gRPC isn't encrypted yet, so these tokens rely on the NetworkPolicy, like the investigator's. Tokens issued for `themis` can't be replayed against other services.
+- Themis remembers a token it accepted for a minute, or until it expires if sooner, and one it refused for 5 seconds. A ServiceAccount deleted meanwhile keeps access for up to that minute.
+- Each address may try 30 tokens a minute that Themis hasn't recently accepted, and each source may make 120 `ListIncidents` and `GetIncident` calls a minute. Past either, the call gets `RESOURCE_EXHAUSTED`.
 
 ## Profiles
 

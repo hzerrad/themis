@@ -46,6 +46,9 @@ A counter counts what was committed: a change the database rolled back is never 
 | `themis_investigations_total` | `outcome` | Investigation leases ended: `proposed`, `abstained`, `failed`, `budget_exhausted`, or `lease_lost` when the investigator stopped renewing |
 | `themis_proposals_total` | `result` | Proposals `accepted` or `rejected` |
 | `themis_external_proposals_total` | `result` | Of those, the ones from outside Themis |
+| `themis_token_reviews_total` | `result` | Agents' tokens checked with the Kubernetes API server: `accepted`, `refused`, or `failed` when it couldn't answer |
+| `themis_token_review_cache_hits_total` | | Agents' tokens answered from a recent check instead |
+| `themis_requests_limited_total` | `kind` | Agents' calls refused for coming too often: `address` for tokens tried from one address, `reads`, `suggestions` |
 | `themis_abstentions_total` | `kind` | Investigations that couldn't decide: `blind` when evidence Themis could have had was missing, `ambiguous` when it saw everything and found no clear answer. Blind ones should be rare on a well-configured install |
 | `themis_missing_evidence_total` | `template`, `cause` | Evidence an investigation needed and couldn't have, counted once per lease: `forbidden`, `not_in_profile`, `expired`, `not_found`, `budget_spent`, `data_ceiling`, `timeout`, `unavailable`, or `absent` when there was nothing |
 | `themis_safety_events_total` | `kind` | Proposals naming another target (`wrong_target`), a capability the profile does not allow (`unknown_capability`), or evidence that was never collected (`unknown_evidence`) |
