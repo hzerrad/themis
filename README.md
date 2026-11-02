@@ -20,7 +20,9 @@ While an incident waits, Themis also watches for changes made outside it. A fix 
 
 ## Try it
 
-The quickest way to see the whole loop is the bad-rollout demo on a local [kind](https://kind.sigs.k8s.io/) cluster, with real Prometheus and Alertmanager: **[docs/demo.md](docs/demo.md)**.
+To try Themis in about 10 minutes, on kind or on your own cluster, follow the **[quickstart](docs/quickstart.md)**: install it, send it alerts, and approve a rollback.
+
+For a closer look at each step, see the bad-rollout demo on a local [kind](https://kind.sigs.k8s.io/) cluster, with real Prometheus and Alertmanager: **[docs/demo.md](docs/demo.md)**.
 
 To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README.md)**. Themis brings no model: point it at any OpenAI-compatible endpoint, hosted or local.
 
