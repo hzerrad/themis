@@ -18,6 +18,21 @@ var (
 		Help: "Proposals stored from outside Themis, by result: accepted or rejected.",
 	}, []string{"result"})
 
+	tokenReviewsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_token_reviews_total",
+		Help: "Callers' tokens sent to the Kubernetes API server, by result: accepted, refused or failed.",
+	}, []string{"result"})
+
+	tokenReviewCacheHitsTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "themis_token_review_cache_hits_total",
+		Help: "Callers' tokens answered from a recent review instead of the API server.",
+	})
+
+	requestsLimitedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_requests_limited_total",
+		Help: "Requests from outside Themis refused for coming too often, by kind: address, reads or suggestions.",
+	}, []string{"kind"})
+
 	abstentionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_abstentions_total",
 		Help: "Investigations that couldn't decide, by kind: blind when evidence Themis could have had was missing, ambiguous when it saw everything and found no clear answer.",
@@ -43,7 +58,14 @@ var budgetReasons = map[themisv1.InvestigationFailureReason]bool{
 }
 
 func init() {
-	metrics.Registry.MustRegister(proposalsTotal, externalProposalsTotal, abstentionsTotal, safetyEventsTotal)
+	metrics.Registry.MustRegister(proposalsTotal, externalProposalsTotal, abstentionsTotal, safetyEventsTotal,
+		tokenReviewsTotal, tokenReviewCacheHitsTotal, requestsLimitedTotal)
+	for _, r := range []string{"accepted", "refused", "failed"} {
+		tokenReviewsTotal.WithLabelValues(r)
+	}
+	for _, l := range []string{"address", "reads", "suggestions"} {
+		requestsLimitedTotal.WithLabelValues(l)
+	}
 	externalProposalsTotal.WithLabelValues("accepted")
 	externalProposalsTotal.WithLabelValues("rejected")
 	abstentionsTotal.WithLabelValues("blind")

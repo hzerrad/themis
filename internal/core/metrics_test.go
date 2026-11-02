@@ -37,8 +37,11 @@ var themisMetrics = []string{
 	"themis_policy_decisions_total",
 	"themis_proposals_total",
 	"themis_redactions_total",
+	"themis_requests_limited_total",
 	"themis_safety_events_total",
 	"themis_stage_duration_seconds",
+	"themis_token_review_cache_hits_total",
+	"themis_token_reviews_total",
 	"themis_verification_outcomes_total",
 }
 

@@ -140,24 +140,31 @@ func (s *Server) review(ctx context.Context, token string) (string, error) {
 	r, cached := s.reviews.get(key)
 	cached = cached && now.Before(r.until)
 	if cached && r.account != "" {
+		tokenReviewCacheHitsTotal.Inc()
 		return r.account, nil
 	}
 	if !s.allowPeer(ctx, now) {
+		requestsLimitedTotal.WithLabelValues("address").Inc()
 		return "", errTooMany
 	}
 	if cached {
+		tokenReviewCacheHitsTotal.Inc()
 		return "", ErrNotAServiceAccount
 	}
 	account, err := s.Reviewer.Review(ctx, token)
 	switch {
 	case err == nil:
+		tokenReviewsTotal.WithLabelValues("accepted").Inc()
 		until := now.Add(reviewFor)
 		if exp, ok := expiry(token); ok && exp.Before(until) {
 			until = exp
 		}
 		s.reviews.put(key, review{account, until})
 	case errors.Is(err, ErrNotAServiceAccount):
+		tokenReviewsTotal.WithLabelValues("refused").Inc()
 		s.reviews.put(key, review{"", now.Add(refusalFor)})
+	default:
+		tokenReviewsTotal.WithLabelValues("failed").Inc()
 	}
 	return account, err
 }
@@ -283,6 +290,7 @@ func (s *Server) reader(ctx context.Context) (Caller, error) {
 		return Caller{}, status.Error(codes.PermissionDenied, "this is for callers outside Themis")
 	}
 	if !s.allowRead(c) {
+		requestsLimitedTotal.WithLabelValues("reads").Inc()
 		return Caller{}, errTooMany
 	}
 	return c, nil
@@ -313,6 +321,7 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 		return nil, err
 	}
 	if !s.allow(caller) {
+		requestsLimitedTotal.WithLabelValues("suggestions").Inc()
 		return nil, status.Error(codes.ResourceExhausted, "too many suggestions: wait a minute and try again")
 	}
 	in, err := s.Store.Incident(ctx, req.GetIncidentId())

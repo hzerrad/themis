@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -13,6 +14,22 @@ import (
 func investigations(t *testing.T, outcome string) func() float64 {
 	t.Helper()
 	return metrictest.Delta(t, "themis_investigations_total", map[string]string{"outcome": outcome})
+}
+
+func TestMetrics_TokenReviews(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t)
+	accepted := metrictest.Delta(t, "themis_token_reviews_total", map[string]string{"result": "accepted"})
+	refused := metrictest.Delta(t, "themis_token_reviews_total", map[string]string{"result": "refused"})
+	hits := metrictest.Delta(t, "themis_token_review_cache_hits_total", nil)
+	limited := metrictest.Delta(t, "themis_requests_limited_total", map[string]string{"kind": "reads"})
+	for range grpcserver.ReadsPerMinute + 1 {
+		_ = list(t, agent)
+	}
+	_ = list(t, e.clientWith(t, "forged"))
+	if a, r, h, l := accepted(), refused(), hits(), limited(); a != 1 || r != 1 || h != grpcserver.ReadsPerMinute || l != 1 {
+		t.Errorf("accepted %v, refused %v, cache hits %v, limited %v", a, r, h, l)
+	}
 }
 
 func TestMetrics_InvestigationProposed(t *testing.T) {
