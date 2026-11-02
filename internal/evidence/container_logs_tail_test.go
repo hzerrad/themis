@@ -15,6 +15,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/testutil/kubetest"
 )
 
 // fakeLogs serves logs by "pod/container", and "pod/container/previous" for
@@ -123,6 +124,41 @@ func TestLogsTail_EmptyLogsAreExplained(t *testing.T) {
 	data := string(collectLogs(t, logs, loadScenario1(t), nil).Data)
 	if !strings.Contains(data, "proves nothing either way") {
 		t.Errorf("empty logs carry no note: %s", data)
+	}
+}
+
+// A container that never ran has no logs, and the API server refuses to read
+// them. That isn't a crash that wrote nothing, so the note says so.
+func TestLogsTail_ContainerThatNeverRanIsExplained(t *testing.T) {
+	ns := k8s.NewNamespace(t)
+	d := k8s.NewDeployment(t, ns, "checkout")
+	rs := k8s.NewReplicaSet(t, ns, "checkout-7d9f", kubetest.RefTo(d, "apps/v1", "Deployment"))
+	unscheduled := k8s.NewPod(t, ns, "checkout-7d9f-a", kubetest.RefTo(rs, "apps/v1", "ReplicaSet"))
+	pulling := k8s.NewPod(t, ns, "checkout-7d9f-b", kubetest.RefTo(rs, "apps/v1", "ReplicaSet"))
+	pulling.Status.ContainerStatuses = []corev1.ContainerStatus{{
+		Name: pulling.Spec.Containers[0].Name, Image: pulling.Spec.Containers[0].Image,
+		State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+	}}
+	if err := k8s.Status().Update(t.Context(), pulling); err != nil {
+		t.Fatal(err)
+	}
+	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: d.Name, UID: string(d.UID)}
+
+	for pod, want := range map[string]string{
+		unscheduled.Name: "The container hasn't started yet, so it has no logs.",
+		pulling.Name:     "The container hasn't started yet (ImagePullBackOff), so it has no logs.",
+	} {
+		// fakeLogs fails every read: a container that never ran isn't read.
+		var view evidence.LogsView
+		if err := json.Unmarshal(collectLogs(t, fakeLogs{}, target, map[string]string{"pod": pod}).Data, &view); err != nil {
+			t.Fatal(err)
+		}
+		if view.Note != want {
+			t.Errorf("%s: Note = %q, want %q", pod, view.Note, want)
+		}
+		if view.Logs != "" || view.Previous {
+			t.Errorf("%s: view = %+v, want no logs", pod, view)
+		}
 	}
 }
 

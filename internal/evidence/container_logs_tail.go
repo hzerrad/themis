@@ -75,6 +75,21 @@ type LogsView struct {
 // emptyLogsNote is the Note of a container that wrote nothing.
 const emptyLogsNote = "The container wrote nothing. Processes killed for using too much memory often write nothing, so the silence proves nothing either way."
 
+// neverRan reports whether a container has never run, so it has no logs to
+// read: the API server refuses to read them, rather than returning none.
+func neverRan(s corev1.ContainerStatus) bool {
+	return s.State.Running == nil && s.State.Terminated == nil && s.LastTerminationState.Terminated == nil && s.RestartCount == 0
+}
+
+// notStartedNote says why a container that never ran has no logs, so silence
+// isn't read as a crash that wrote nothing.
+func notStartedNote(s corev1.ContainerStatus) string {
+	if w := s.State.Waiting; w != nil && w.Reason != "" {
+		return "The container hasn't started yet (" + w.Reason + "), so it has no logs."
+	}
+	return "The container hasn't started yet, so it has no logs."
+}
+
 // The kubelet streams these, as if they were the logs, when it no longer has
 // a run's logs: its container is gone, or its log file is.
 var (
@@ -150,6 +165,14 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 		previous = false
 	default:
 		return Item{}, fmt.Errorf("%w: previous must be true or false", ErrInvalidParams)
+	}
+
+	if neverRan(status) {
+		data, err := json.Marshal(LogsView{Pod: pod.Name, Container: status.Name, Note: notStartedNote(status)})
+		if err != nil {
+			return Item{}, err
+		}
+		return Item{Data: data, Classification: ClassificationSensitive}, nil
 	}
 
 	req := LogRequest{
