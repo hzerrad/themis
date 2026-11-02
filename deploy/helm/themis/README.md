@@ -62,6 +62,32 @@ kubectl -n themis port-forward svc/themis-core 8090:8080
 
 Then open <http://127.0.0.1:8090> and sign in with that token.
 
+## Sign people in
+
+With an OIDC provider, people sign in as themselves, and each approval records who gave it. Any provider works: Dex, Google, Okta, Keycloak, Entra ID and others.
+
+Register Themis with the provider as a web app. Its redirect URL is Themis's `/auth/callback` as the browser reaches it, for example `https://themis.example.com/auth/callback`. Put the client secret in a Secret, then set the values:
+
+```bash
+kubectl -n themis create secret generic themis-oidc --from-literal=clientSecret=...
+helm upgrade themis deploy/helm/themis -n themis --reuse-values -f oidc.yaml
+```
+
+```yaml
+# oidc.yaml
+oidc:
+  issuerURL: https://idp.example.com
+  clientID: themis
+  redirectURL: https://themis.example.com/auth/callback
+  clientSecret: {existingSecret: themis-oidc}
+access:
+  - {role: admin, users: [alice@example.com]}
+  - {role: approver, groups: [sre]}
+  - {role: viewer, groups: [engineering]}
+```
+
+Someone who signs in but matches no entry in `access` sees nothing until an admin adds them. The admin token keeps working, as a way in if the provider is down. Roles are in [Configuration](../../../docs/configuration.md#people-and-roles).
+
 ## Escalation notices
 
 ```bash
@@ -102,6 +128,15 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |
 | `notifications.externalURL` | `""` | Where people reach the UI, for links in notices |
+| `oidc.issuerURL` | `""` | The OIDC provider's issuer. Empty: only the admin token signs in. |
+| `oidc.clientID` | `""` | Required with `oidc.issuerURL` |
+| `oidc.redirectURL` | `""` | Required with `oidc.issuerURL`: Themis's `/auth/callback` as the browser reaches it |
+| `oidc.clientSecret.existingSecret` | `""` | Required with `oidc.issuerURL`: a Secret holding the client secret |
+| `oidc.clientSecret.key` | `clientSecret` | The key in that Secret |
+| `oidc.usernameClaim` | `""` (`email`) | The ID token claim used as the username |
+| `oidc.groupsClaim` | `""` (`groups`) | The ID token claim listing the person's groups |
+| `oidc.sessionTTL` | `""` (`8h`) | How long a sign-in lasts |
+| `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
 | `profiles` | one profile | Incident classes, policy and verification, installed as `IncidentProfile` resources; see [Configuration](../../../docs/configuration.md#configuration-resources) |
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
