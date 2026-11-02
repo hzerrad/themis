@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,6 +57,7 @@ type Server struct {
 
 	limiters sync.Map
 	reviews  lru[[sha256.Size]byte, review]
+	peers    lru[string, *rate.Limiter]
 }
 
 // Register serves every service of s on g.

@@ -79,6 +79,45 @@ func TestExternal_ReviewsATokenAgainOnceItExpires(t *testing.T) {
 	wantReviews(t, reviews, 2)
 }
 
+// Past its limit, an address is refused before its token is reviewed, but a
+// token already accepted still works.
+func TestExternal_LimitsAttemptsPerAddressBeforeReview(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t)
+	reviews := e.countReviews()
+	if err := list(t, agent); err != nil {
+		t.Fatal(err)
+	}
+	for i := range grpcserver.PeerAttemptsPerMinute - 1 {
+		wantCode(t, list(t, e.clientWith(t, fmt.Sprintf("forged-%d", i))), codes.Unauthenticated)
+	}
+	wantReviews(t, reviews, grpcserver.PeerAttemptsPerMinute)
+	wantCode(t, list(t, e.clientWith(t, "forged")), codes.ResourceExhausted)
+	wantReviews(t, reviews, grpcserver.PeerAttemptsPerMinute)
+	if err := list(t, agent); err != nil {
+		t.Errorf("accepted token: %v", err)
+	}
+	e.clock.now = e.clock.now.Add(time.Minute)
+	wantCode(t, list(t, e.clientWith(t, "forged")), codes.Unauthenticated)
+}
+
+func TestExternal_LimitsReads(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t)
+	for range grpcserver.ReadsPerMinute {
+		if err := list(t, agent); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := agent.GetIncident(t.Context(), &themisv1.GetIncidentRequest{IncidentId: "00000000-0000-7000-8000-000000000000"})
+	wantCode(t, err, codes.ResourceExhausted)
+	wantCode(t, list(t, agent), codes.ResourceExhausted)
+	e.clock.now = e.clock.now.Add(time.Minute)
+	if err := list(t, agent); err != nil {
+		t.Errorf("after a minute: %v", err)
+	}
+}
+
 func TestExternal_RemembersARefusalBriefly(t *testing.T) {
 	e := newEnv(t)
 	e.external(t)

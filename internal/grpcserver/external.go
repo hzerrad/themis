@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,6 +43,13 @@ const (
 	PersonSource = "admin-token"
 
 	personPerMinute = 60
+
+	// PeerAttemptsPerMinute bounds, per address, calls with a token not
+	// recently accepted, before Themis asks the API server about it. A caller
+	// with a valid token needs about one a minute.
+	PeerAttemptsPerMinute = 30
+	// ReadsPerMinute bounds each source's ListIncidents and GetIncident calls.
+	ReadsPerMinute = 120
 
 	// maxExternalProposals bounds what one source can pile on an incident.
 	maxExternalProposals = 20
@@ -120,16 +129,24 @@ type review struct {
 	until   time.Time
 }
 
+var errTooMany = status.Error(codes.ResourceExhausted, "too many requests: wait a moment and try again")
+
 // review asks the Reviewer about a token, or recalls a recent answer. Only
-// the token's hash is kept.
+// the token's hash is kept. Unless the token was accepted, the caller's
+// address must be within its limit.
 func (s *Server) review(ctx context.Context, token string) (string, error) {
 	now := s.now()
 	key := sha256.Sum256([]byte(token))
-	if r, ok := s.reviews.get(key); ok && now.Before(r.until) {
-		if r.account == "" {
-			return "", ErrNotAServiceAccount
-		}
+	r, cached := s.reviews.get(key)
+	cached = cached && now.Before(r.until)
+	if cached && r.account != "" {
 		return r.account, nil
+	}
+	if !s.allowPeer(ctx, now) {
+		return "", errTooMany
+	}
+	if cached {
+		return "", ErrNotAServiceAccount
 	}
 	account, err := s.Reviewer.Review(ctx, token)
 	switch {
@@ -187,6 +204,9 @@ func (s *Server) externalCaller(ctx context.Context, tokenFile, method string) (
 	}
 	account, err := s.review(ctx, token)
 	if err != nil {
+		if errors.Is(err, errTooMany) {
+			return Caller{}, false, err
+		}
 		if !errors.Is(err, ErrNotAServiceAccount) {
 			s.logger().WarnContext(ctx, "cannot review a caller's token", "error", err)
 			return Caller{}, false, status.Error(codes.Unavailable, "the caller's identity can't be checked now")
@@ -231,8 +251,41 @@ func (s *Server) SubmitFromPerson(ctx context.Context, req *themisv1.SubmitPropo
 
 func (s *Server) allow(c Caller) bool {
 	key := fmt.Sprintf("%s/%d", c.Source, c.PerMinute)
-	l, _ := s.limiters.LoadOrStore(key, rate.NewLimiter(rate.Limit(float64(c.PerMinute)/60), c.PerMinute))
+	l, _ := s.limiters.LoadOrStore(key, perMinute(c.PerMinute))
 	return l.(*rate.Limiter).Allow() //nolint:forcetypeassert // only limiters are stored
+}
+
+func perMinute(n int) *rate.Limiter {
+	return rate.NewLimiter(rate.Limit(float64(n)/60), n)
+}
+
+// allowPeer counts an attempt from the caller's address, without its port.
+func (s *Server) allowPeer(ctx context.Context, now time.Time) bool {
+	var addr string
+	if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+		addr = p.Addr.String()
+		if host, _, err := net.SplitHostPort(addr); err == nil {
+			addr = host
+		}
+	}
+	return s.peers.getOrPut(addr, func() *rate.Limiter { return perMinute(PeerAttemptsPerMinute) }).AllowN(now, 1)
+}
+
+func (s *Server) allowRead(c Caller) bool {
+	l, _ := s.limiters.LoadOrStore("read/"+c.Source, perMinute(ReadsPerMinute))
+	return l.(*rate.Limiter).AllowN(s.now(), 1) //nolint:forcetypeassert // only limiters are stored
+}
+
+// reader is the caller of a read, within its limit.
+func (s *Server) reader(ctx context.Context) (Caller, error) {
+	c, ok := callerFrom(ctx)
+	if !ok {
+		return Caller{}, status.Error(codes.PermissionDenied, "this is for callers outside Themis")
+	}
+	if !s.allowRead(c) {
+		return Caller{}, errTooMany
+	}
+	return c, nil
 }
 
 func (c Caller) inScope(namespace string) bool {
@@ -369,9 +422,9 @@ func externalResult(r *rejection) string {
 
 // ListIncidents returns the open incidents the caller may suggest fixes for.
 func (s *Server) ListIncidents(ctx context.Context, _ *themisv1.ListIncidentsRequest) (*themisv1.ListIncidentsResponse, error) {
-	caller, ok := callerFrom(ctx)
-	if !ok {
-		return nil, status.Error(codes.PermissionDenied, "this is for callers outside Themis")
+	caller, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
 	}
 	incidents, err := s.Store.OpenIncidents(ctx, caller.Namespaces, maxOpenIncidents)
 	if err != nil {
@@ -391,9 +444,9 @@ func openIncident(in store.Incident) *themisv1.OpenIncident {
 // GetIncident returns what Themis knows about an incident in the caller's
 // scope: redacted evidence up to its ceiling, and the checks.
 func (s *Server) GetIncident(ctx context.Context, req *themisv1.GetIncidentRequest) (*themisv1.GetIncidentResponse, error) {
-	caller, ok := callerFrom(ctx)
-	if !ok {
-		return nil, status.Error(codes.PermissionDenied, "this is for callers outside Themis")
+	caller, err := s.reader(ctx)
+	if err != nil {
+		return nil, err
 	}
 	in, err := s.Store.Incident(ctx, req.GetIncidentId())
 	// One answer for both, so a caller can't learn of an incident out of its scope.
