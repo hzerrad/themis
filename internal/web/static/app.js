@@ -505,7 +505,10 @@ function proposalPanel(p) {
       h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
       h("dt", {}, "Checks cited"), h("dd", {}, (p.CitedPredicates || []).map((c) => label(CHECK_LABEL, c)).join("; ") || "—"),
-      p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null));
+      p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null,
+      // What the suggester says it looked at: for people, nothing decides on it.
+      p.Notes ? [h("dt", {}, "What it looked at"), h("dd", {}, h("details", {},
+        h("summary", { class: "muted" }, "As it reports, unchecked"), h("pre", {}, p.Notes)))] : null));
 }
 
 // observed says what the fix check last saw, in pods.

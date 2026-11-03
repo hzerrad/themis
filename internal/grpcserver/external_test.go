@@ -3,8 +3,10 @@ package grpcserver_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -578,5 +580,25 @@ func TestExternal_FailureWithOnlyTheInvestigatorsFixEscalates(t *testing.T) {
 	}
 	if got := e.state(t, id); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
+	}
+}
+
+// What the suggester looked at is kept for people, and bounded.
+func TestExternal_KeepsNotesBounded(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t, withWindow)
+	inv := e.lease(t)
+	req := suggestion(inv, "c1")
+	req.Notes = "ran: kubectl get pods\n" + strings.Repeat("é", 5000)
+	resp, err := agent.SubmitProposal(t.Context(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := e.store.Proposal(t.Context(), e.store.DB(), resp.GetProposalId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(p.Notes, "ran: kubectl get pods") || len(p.Notes) > 8<<10+16 || !utf8.ValidString(p.Notes) || !strings.HasSuffix(p.Notes, "(cut)") {
+		t.Errorf("notes = %d bytes, valid %v, ending %q", len(p.Notes), utf8.ValidString(p.Notes), p.Notes[len(p.Notes)-10:])
 	}
 }

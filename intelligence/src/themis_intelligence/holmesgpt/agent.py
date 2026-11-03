@@ -10,7 +10,7 @@ import grpc
 from themis.v1 import common_pb2, proposal_pb2, proposal_pb2_grpc
 from themis_intelligence.holmesgpt.decide import SCHEMA, NoSuggestion, decide, revisions
 from themis_intelligence.holmesgpt.holmes import Holmes, HolmesError
-from themis_intelligence.holmesgpt.prompt import INSTRUCTIONS, PROMPT_VERSION, describe
+from themis_intelligence.holmesgpt.prompt import CONCLUDE, INSTRUCTIONS, PROMPT_VERSION, describe
 
 log = logging.getLogger(__name__)
 
@@ -87,14 +87,21 @@ class Agent:
         self.asked: set[str] = set()
 
     async def run(self) -> None:
+        # Themis may start after the adapter: until it first answers, waiting
+        # for it is expected, not a problem.
+        connected, said_waiting = False, False
         while True:
             try:
                 await self.run_once()
+                connected = True
             except grpc.RpcError as e:
                 code = cast(grpc.Call, e).code()
-                log.warning(
-                    "Themis can't be reached", extra={"error": code.name if code else str(e)}
-                )
+                error = code.name if code else str(e)
+                if connected:
+                    log.warning("Themis can't be reached", extra={"error": error})
+                elif not said_waiting:
+                    log.info("waiting for Themis to start", extra={"error": error})
+                    said_waiting = True
             await asyncio.sleep(self.poll_s)
 
     async def run_once(self) -> int:
@@ -117,13 +124,20 @@ class Agent:
             extra={"incident": incident_id, "target": f"{target.namespace}/{target.name}"},
         )
         try:
-            analysis = await self.holmes.ask(describe(incident, history), INSTRUCTIONS, SCHEMA)
+            answer = await self.holmes.ask(
+                describe(incident, history), INSTRUCTIONS, CONCLUDE, SCHEMA
+            )
         except HolmesError as e:
             log.warning(
                 "HolmesGPT couldn't answer", extra={"incident": incident_id, "error": str(e)}
             )
             return
-        outcome = decide(analysis, target, history_id, history, {e.id for e in incident.evidence})
+        log.info(
+            "HolmesGPT answered", extra={"incident": incident_id, "tools_run": answer.tools_run}
+        )
+        outcome = decide(
+            answer.analysis, target, history_id, history, {e.id for e in incident.evidence}
+        )
         if isinstance(outcome, NoSuggestion):
             log.info("no suggestion", extra={"incident": incident_id, "reason": outcome.reason})
             return
@@ -138,6 +152,7 @@ class Agent:
                 rationale=outcome.rationale,
                 expected_effect=f"The Deployment runs revision {outcome.revision} and recovers.",
                 cited_evidence_ids=list(outcome.cited),
+                notes=answer.notes,
                 provenance=common_pb2.Provenance(
                     source=SOURCE,
                     model=self.holmes.model or "",

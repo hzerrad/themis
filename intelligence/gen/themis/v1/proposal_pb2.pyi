@@ -35,7 +35,7 @@ REJECTION_REASON_UNKNOWN_PREDICATE: RejectionReason
 REJECTION_REASON_INCIDENT_CLOSED: RejectionReason
 
 class SubmitProposalRequest(_message.Message):
-    __slots__ = ("lease_id", "client_proposal_id", "target", "expected_effect", "rationale", "cited_evidence_ids", "cited_predicates", "provenance", "rollback_to_revision", "incident_id")
+    __slots__ = ("lease_id", "client_proposal_id", "target", "expected_effect", "rationale", "cited_evidence_ids", "cited_predicates", "provenance", "rollback_to_revision", "incident_id", "notes")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     CLIENT_PROPOSAL_ID_FIELD_NUMBER: _ClassVar[int]
     TARGET_FIELD_NUMBER: _ClassVar[int]
@@ -46,6 +46,7 @@ class SubmitProposalRequest(_message.Message):
     PROVENANCE_FIELD_NUMBER: _ClassVar[int]
     ROLLBACK_TO_REVISION_FIELD_NUMBER: _ClassVar[int]
     INCIDENT_ID_FIELD_NUMBER: _ClassVar[int]
+    NOTES_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     client_proposal_id: str
     target: _common_pb2.TargetRef
@@ -56,7 +57,8 @@ class SubmitProposalRequest(_message.Message):
     provenance: _common_pb2.Provenance
     rollback_to_revision: RollbackToRevisionParams
     incident_id: str
-    def __init__(self, lease_id: _Optional[str] = ..., client_proposal_id: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., expected_effect: _Optional[str] = ..., rationale: _Optional[str] = ..., cited_evidence_ids: _Optional[_Iterable[str]] = ..., cited_predicates: _Optional[_Iterable[str]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ..., rollback_to_revision: _Optional[_Union[RollbackToRevisionParams, _Mapping]] = ..., incident_id: _Optional[str] = ...) -> None: ...
+    notes: str
+    def __init__(self, lease_id: _Optional[str] = ..., client_proposal_id: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., expected_effect: _Optional[str] = ..., rationale: _Optional[str] = ..., cited_evidence_ids: _Optional[_Iterable[str]] = ..., cited_predicates: _Optional[_Iterable[str]] = ..., provenance: _Optional[_Union[_common_pb2.Provenance, _Mapping]] = ..., rollback_to_revision: _Optional[_Union[RollbackToRevisionParams, _Mapping]] = ..., incident_id: _Optional[str] = ..., notes: _Optional[str] = ...) -> None: ...
 
 class RollbackToRevisionParams(_message.Message):
     __slots__ = ("revision",)

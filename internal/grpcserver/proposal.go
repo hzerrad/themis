@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
@@ -63,6 +64,7 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 			ExpectedEffect: req.GetExpectedEffect(), Rationale: req.GetRationale(),
 			CitedEvidenceIDs: req.GetCitedEvidenceIds(), CitedPredicates: req.GetCitedPredicates(),
 			Provenance: provenance(req.GetProvenance()),
+			Notes:      notes(req.GetNotes()),
 			// The lease proves it comes from the investigator.
 			Authenticated: true,
 			Status:        store.ProposalAccepted,
@@ -180,4 +182,20 @@ func (s *Server) judge(ctx context.Context, tx pgx.Tx, inv store.Investigation, 
 
 func provenance(p *themisv1.Provenance) map[string]string {
 	return map[string]string{"source": p.GetSource(), "model": p.GetModel(), "promptVersion": p.GetPromptVersion(), "route": p.GetRoute()}
+}
+
+// maxNotes bounds what a suggester may say it looked at.
+const maxNotes = 8 << 10
+
+// notes keeps at most maxNotes of valid text, cut at a character.
+func notes(s string) string {
+	s = strings.ToValidUTF8(s, "")
+	if len(s) <= maxNotes {
+		return s
+	}
+	cut := maxNotes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + " …(cut)"
 }

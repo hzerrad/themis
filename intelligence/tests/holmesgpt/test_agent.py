@@ -1,10 +1,14 @@
 """The adapter asks HolmesGPT once per waiting incident, and suggests only
 what passes Themis's checks."""
 
+import asyncio
+import contextlib
 import json
 from typing import Any
 
+import grpc
 import httpx
+import pytest
 
 from themis.v1 import common_pb2, proposal_pb2
 from themis_intelligence.holmesgpt.agent import Agent
@@ -53,12 +57,43 @@ class FakeThemis:
         return proposal_pb2.SubmitProposalResponse(status=proposal_pb2.PROPOSAL_STATUS_ACCEPTED)
 
 
+# What HolmesGPT's /api/chat sends back for the tools it ran.
+TOOL_CALLS: list[dict[str, Any]] = [
+    {
+        "tool_call_id": "1",
+        "tool_name": "kubectl_describe",
+        "description": "kubectl describe pod checkout-x -n shop",
+        "result": {"status": "success", "data": "SECRET_FROM_A_LOG", "params": {}},
+    },
+    {
+        "tool_call_id": "2",
+        "tool_name": "fetch_logs",
+        "description": "NA",
+        "result": {"status": "error", "data": "x"},
+    },
+]
+
+
+HISTORY_SO_FAR = [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+
+
 def holmes_answering(analysis: Any, seen: list[dict[str, Any]], status: int = 200) -> Holmes:
+    """A HolmesGPT that investigates with tools in the first turn and gives
+    analysis as its verdict in the second."""
+
     def handler(req: httpx.Request) -> httpx.Response:
-        seen.append(
-            {"path": req.url.path, "headers": dict(req.headers), "body": json.loads(req.content)}
-        )
-        return httpx.Response(status, json={"analysis": analysis})
+        body = json.loads(req.content)
+        seen.append({"path": req.url.path, "headers": dict(req.headers), "body": body})
+        reply: dict[str, Any]
+        if "response_format" not in body:
+            reply = {
+                "analysis": "Revision 2 is OOMKilled at 64Mi.",
+                "tool_calls": TOOL_CALLS,
+                "conversation_history": HISTORY_SO_FAR,
+            }
+        else:
+            reply = {"analysis": analysis, "tool_calls": []}
+        return httpx.Response(status, json=reply)
 
     return Holmes(
         "http://holmes",
@@ -90,11 +125,42 @@ async def test_asks_each_waiting_incident_once() -> None:
     req = themis.submitted[0]
     assert req.rollback_to_revision.revision == 1 and req.client_proposal_id == "holmesgpt-a"
     assert req.provenance.source == "holmesgpt" and req.target == TARGET
-    asked = seen[0]
-    assert asked["path"] == "/api/chat" and asked["headers"]["x-api-key"] == "key"
-    assert asked["body"]["response_format"]["json_schema"]["schema"] == SCHEMA
-    assert asked["body"]["model"] == "gpt" and "revision 2 (current)" in asked["body"]["ask"]
-    assert "oom_killed_new_revision: true" in asked["body"]["ask"]
+    # Two turns: free to run tools, then the verdict in the same conversation.
+    investigate, conclude = seen[0], seen[1]
+    assert investigate["path"] == "/api/chat" and investigate["headers"]["x-api-key"] == "key"
+    assert "response_format" not in investigate["body"]
+    assert investigate["body"]["model"] == "gpt"
+    assert "revision 2 (current)" in investigate["body"]["ask"]
+    assert "oom_killed_new_revision: true" in investigate["body"]["ask"]
+    assert conclude["body"]["conversation_history"] == HISTORY_SO_FAR
+    assert conclude["body"]["response_format"]["json_schema"]["schema"] == SCHEMA
+    # What it ran and found go with the suggestion, for people; never what it read.
+    assert req.notes == (
+        "HolmesGPT ran 2 tools:\n"
+        "- kubectl describe pod checkout-x -n shop (success)\n"
+        "- fetch_logs (error)\n\n"
+        "What HolmesGPT found:\nRevision 2 is OOMKilled at 64Mi."
+    )
+    assert "SECRET_FROM_A_LOG" not in req.notes
+
+
+class Unreachable(FakeThemis):
+    async def list_incidents(self) -> list[proposal_pb2.OpenIncident]:
+        raise grpc.aio.AioRpcError(
+            grpc.StatusCode.UNAVAILABLE, grpc.aio.Metadata(), grpc.aio.Metadata()
+        )
+
+
+async def test_waiting_for_themis_at_start_is_quiet(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO")
+    agent = Agent(Unreachable({}), holmes_answering(GOOD, []), poll_s=0)
+    task = asyncio.create_task(agent.run())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    said = [(r.levelname, r.getMessage()) for r in caplog.records if "Themis" in r.getMessage()]
+    assert said == [("INFO", "waiting for Themis to start")]
 
 
 async def test_free_text_suggests_nothing() -> None:
@@ -112,7 +178,7 @@ async def test_holmes_failing_suggests_nothing() -> None:
 async def test_holmes_errors_say_what_to_do() -> None:
     for status, says in [(401, "API key"), (404, "older than"), (500, "500")]:
         try:
-            await holmes_answering(GOOD, [], status=status).ask("q", "i", SCHEMA)
+            await holmes_answering(GOOD, [], status=status).ask("q", "i", "c", SCHEMA)
         except HolmesError as e:
             assert says in str(e)
         else:
