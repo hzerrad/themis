@@ -2,18 +2,16 @@ package governance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/hzerrad/themis/internal/digest"
+	"github.com/hzerrad/themis/internal/fix"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
-	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -40,11 +38,11 @@ func (w *RestoreWorker) Work(ctx context.Context, job *river.Job[RestoreArgs]) e
 // escalates. It acts only on an incident in restoring, so a repeated job does
 // nothing.
 func (w *Worker) Restore(ctx context.Context, actionID string) error {
-	fix, err := w.Store.Action(ctx, w.Store.DB(), actionID)
+	applied, err := w.Store.Action(ctx, w.Store.DB(), actionID)
 	if err != nil {
 		return err
 	}
-	in, err := w.Store.Incident(ctx, fix.IncidentID)
+	in, err := w.Store.Incident(ctx, applied.IncidentID)
 	if err != nil {
 		return err
 	}
@@ -55,26 +53,27 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if !ok {
 		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))
 	}
-	var before corev1.PodTemplateSpec
-	if err := json.Unmarshal(fix.PreState, &before); err != nil {
-		return fmt.Errorf("template before action %s: %w", fix.ID, err)
+	done, ok := w.fixes()[applied.Capability]
+	if !ok {
+		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
-	revision, err := rollback.RevisionOf(ctx, w.Reader, in.Target, before)
-	if errors.Is(err, rollback.ErrNoSuchRevision) {
-		return w.escalate(ctx, in.ID, "Themis couldn't put the workload back: Kubernetes no longer keeps the version from before it acted.")
-	}
-	if errors.Is(err, rollback.ErrStale) {
-		return w.escalate(ctx, in.ID, "The workload was deleted or replaced, so there is nothing to put back.")
+	name, params, err := done.Undo(ctx, w.Reader, in.Target, applied.PreState)
+	if refusal, ok := errors.AsType[*fix.Refusal](err); ok {
+		return w.escalate(ctx, in.ID, refusal.Reason)
 	}
 	if err != nil {
 		return err
 	}
-	live, err := rollback.Read(ctx, w.Reader, in.Target, revision)
-	if errors.Is(err, rollback.ErrAlreadyCurrent) {
-		return w.escalate(ctx, in.ID, "The workload is already back as it was before Themis acted.")
+	undo, ok := w.fixes()[name]
+	if !ok {
+		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
-	if errors.Is(err, rollback.ErrStale) || errors.Is(err, rollback.ErrNoSuchRevision) {
-		return w.escalate(ctx, in.ID, "Themis couldn't put the workload back. "+rollback.Explain(err, revision))
+	plan, err := undo.Plan(ctx, w.Reader, in.Target, params)
+	if refusal, ok := errors.AsType[*fix.Refusal](err); ok {
+		if refusal.NoOp {
+			return w.escalate(ctx, in.ID, "The workload is already back as it was before Themis acted.")
+		}
+		return w.escalate(ctx, in.ID, "Themis couldn't put the workload back. "+refusal.Reason)
 	}
 	if err != nil {
 		return err
@@ -82,7 +81,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 
 	// Anything else is someone's later change, not Themis's to undo. From here
 	// the digest binds this template, so the executor refuses any later one.
-	if hash, ok := fix.Params["templateHash"].(string); !ok || hash != live.Target.SpecHash {
+	if hash, ok := applied.Params["templateHash"].(string); !ok || hash != plan.Target.SpecHash {
 		return w.escalate(ctx, in.ID, "The workload changed after Themis's fix, so Themis left it as it is. A person needs to take over.")
 	}
 
@@ -94,7 +93,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	for _, r := range results {
 		predicates[r.Name] = r.Value.String()
 	}
-	if live.ManagedBy != "" {
+	if plan.ManagedBy != "" {
 		predicates[predicate.NameGitOpsManaged] = predicate.True.String()
 	}
 	policy, err := w.policy(profile)
@@ -102,8 +101,8 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		return err
 	}
 	decision := policy.Evaluate(PolicyInput{
-		Capability: rollback.Name, Risk: "medium", Namespace: in.Target.Namespace,
-		ManagedBy: live.ManagedBy, Predicates: predicates, Restore: true,
+		Capability: undo.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
+		ManagedBy: plan.ManagedBy, Predicates: predicates, Restore: true,
 	})
 	switch decision.Outcome {
 	case Deny:
@@ -113,7 +112,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	case Allow:
 	}
 
-	a, err := w.restoreAction(in, fix, live, revision, decision)
+	a, err := w.restoreAction(in, applied, undo, plan, decision)
 	if err != nil {
 		return err
 	}
@@ -131,38 +130,30 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 }
 
 // restoreAction is authorized by policy alone: it needs no approval.
-func (w *Worker) restoreAction(in store.Incident, fix store.Action, live rollback.Live, revision int64, d Decision) (store.Action, error) {
-	fields := rollback.RestoreFields(in.ID, live, revision, fix.ID, d.PolicyID, d.PolicyDigest)
+func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo fix.Fix, plan fix.Plan, d Decision) (store.Action, error) {
+	fields := fix.Fields(in.ID, undo, plan, applied.ID, d.PolicyID, d.PolicyDigest)
 	dg, err := digest.Compute(fields)
 	if err != nil {
 		return store.Action{}, err
 	}
-	pre, err := json.Marshal(live.PreState)
-	if err != nil {
-		return store.Action{}, err
-	}
-	desired, err := json.Marshal(live.Desired)
-	if err != nil {
-		return store.Action{}, err
-	}
 	return store.Action{
-		IncidentID: in.ID, ProposalID: fix.ProposalID,
+		IncidentID: in.ID, ProposalID: applied.ProposalID,
 		Capability: fields.Capability, CapabilityVersion: fields.CapabilityVersion,
 		Target: fields.Target, Params: fields.Params, Constraints: fields.Constraints,
-		PreState: pre, Desired: desired,
-		BlastRadius: map[string]any{"replicas": int64(live.Replicas)},
-		Risk:        "medium",
+		PreState: plan.Before, Desired: plan.After,
+		BlastRadius: plan.BlastRadius,
+		Risk:        plan.Risk,
 		Decision:    string(Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
 		Digest: dg, State: store.ActionAuthorized,
 	}, nil
 }
 
 func (w *Worker) escalateAction(ctx context.Context, actionID, reason string) error {
-	fix, err := w.Store.Action(ctx, w.Store.DB(), actionID)
+	applied, err := w.Store.Action(ctx, w.Store.DB(), actionID)
 	if err != nil {
 		return err
 	}
-	return w.escalate(ctx, fix.IncidentID, reason)
+	return w.escalate(ctx, applied.IncidentID, reason)
 }
 
 func (w *Worker) escalateDecided(ctx context.Context, incidentID string, d Decision, reason string) error {

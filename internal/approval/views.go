@@ -6,8 +6,8 @@ import (
 
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/fix"
 	"github.com/hzerrad/themis/internal/predicate"
-	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -57,7 +57,7 @@ type actionView struct {
 	State             store.ActionState
 	ExpiresAt         *time.Time
 	CreatedAt         time.Time
-	Changes           []rollback.Change `json:",omitempty"`
+	Changes           []fix.Change      `json:",omitempty"`
 	Execution         *store.Execution  `json:",omitempty"`
 	Verification      *verificationView `json:",omitempty"`
 }

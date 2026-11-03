@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hzerrad/themis/internal/fix"
+
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/hzerrad/themis/internal/evidence"
@@ -18,12 +20,7 @@ import (
 // Change is one difference between the current and the restored template.
 // Env values that look secret, by name or content, are hidden; commands and
 // args are never shown, since secrets hide in them in too many shapes.
-type Change struct {
-	Container string `json:"container"`
-	Field     string `json:"field"`
-	Before    string `json:"before"`
-	After     string `json:"after"`
-}
+type Change = fix.Change
 
 // handled are the container fields Changes describes one by one.
 var handled = []string{"image", "resources", "command", "args", "env"}
@@ -45,25 +42,25 @@ func containerChanges(pre, desired corev1.PodTemplateSpec) []Change {
 		a, inAfter := after[name]
 		switch {
 		case !inBefore:
-			out = append(out, Change{name, "container", "not present", "added"})
+			out = append(out, Change{Container: name, Field: "container", Before: "not present", After: "added"})
 			continue
 		case !inAfter:
-			out = append(out, Change{name, "container", "present", "removed"})
+			out = append(out, Change{Container: name, Field: "container", Before: "present", After: "removed"})
 			continue
 		}
 		add := func(field, bv, av string) {
 			if bv != av {
-				out = append(out, Change{name, field, bv, av})
+				out = append(out, Change{Container: name, Field: field, Before: bv, After: av})
 			}
 		}
 		add("image", b.Image, a.Image)
 		add("limits", quantitiesJSON(b.Resources.Limits), quantitiesJSON(a.Resources.Limits))
 		add("requests", quantitiesJSON(b.Resources.Requests), quantitiesJSON(a.Resources.Requests))
 		if !slices.Equal(b.Command, a.Command) {
-			out = append(out, Change{name, "command", "changed", "changed"})
+			out = append(out, Change{Container: name, Field: "command", Before: "changed", After: "changed"})
 		}
 		if !slices.Equal(b.Args, a.Args) {
-			out = append(out, Change{name, "args", "changed", "changed"})
+			out = append(out, Change{Container: name, Field: "args", Before: "changed", After: "changed"})
 		}
 		out = append(out, envChanges(name, b.Env, a.Env)...)
 	}
@@ -75,14 +72,14 @@ func envChanges(container string, before, after []corev1.EnvVar) []Change {
 	var out []Change
 	for _, e := range before {
 		if v, ok := a[e.Name]; !ok {
-			out = append(out, Change{container, "env " + e.Name, envValue(e), "not set"})
+			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: envValue(e), After: "not set"})
 		} else if !sameEnv(e, v) {
-			out = append(out, Change{container, "env " + e.Name, envValue(e), envValue(v)})
+			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: envValue(e), After: envValue(v)})
 		}
 	}
 	for _, e := range after {
 		if _, ok := b[e.Name]; !ok {
-			out = append(out, Change{container, "env " + e.Name, "not set", envValue(e)})
+			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: "not set", After: envValue(e)})
 		}
 	}
 	return out

@@ -4,7 +4,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/hzerrad/themis/internal/rollback"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/telemetry"
 )
 
@@ -12,7 +12,7 @@ import (
 const resultDryRunFailed = "dry_run_failed"
 
 // capabilities the executor can run.
-var capabilities = telemetry.Bounded{rollback.Name}
+var capabilities = telemetry.Bounded(fixes.Default().Names())
 
 var actionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "themis_actions_total",

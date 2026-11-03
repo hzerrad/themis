@@ -17,15 +17,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
-	corev1 "k8s.io/api/core/v1"
 
 	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/fix"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/people"
 	"github.com/hzerrad/themis/internal/remedy"
-	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 
@@ -493,11 +493,17 @@ func (a *API) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// changes diffs an action's templates, and says so when it cannot.
-func changes(a store.Action) []rollback.Change {
-	var pre, desired corev1.PodTemplateSpec
-	if json.Unmarshal(a.PreState, &pre) != nil || json.Unmarshal(a.Desired, &desired) != nil {
-		return []rollback.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
+// changes lists what an action changes, as its fix describes it, and says so
+// when it cannot.
+func changes(a store.Action) []fix.Change {
+	unknown := []fix.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
+	f, ok := fixes.Default()[a.Capability]
+	if !ok {
+		return unknown
 	}
-	return rollback.Changes(pre, desired)
+	list, err := f.Changes(a.PreState, a.Desired)
+	if err != nil {
+		return unknown
+	}
+	return list
 }

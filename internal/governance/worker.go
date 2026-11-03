@@ -14,9 +14,10 @@ import (
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
+	"github.com/hzerrad/themis/internal/fix"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
-	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -31,6 +32,8 @@ type Worker struct {
 	Store  *store.Store
 	Reader client.Reader
 	Now    func() time.Time
+	// Fixes are the fixes Themis can carry out; nil means those it ships with.
+	Fixes fix.Registry
 
 	// policies holds compiled policies by digest of their source: profiles
 	// can change while Themis runs.
@@ -89,14 +92,16 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if !ok {
 		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
 	}
-	revision, ok := revisionOf(p.Params)
-	if !ok || p.Capability != rollback.Name {
+	f, ok := w.fixes()[p.Capability]
+	if !ok {
 		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
-
-	live, err := rollback.Read(ctx, w.Reader, in.Target, revision)
-	if errors.Is(err, rollback.ErrStale) || errors.Is(err, rollback.ErrNoSuchRevision) || errors.Is(err, rollback.ErrAlreadyCurrent) {
-		return w.close(ctx, in.ID, rollback.Explain(err, revision))
+	plan, err := f.Plan(ctx, w.Reader, in.Target, p.Params)
+	if errors.Is(err, fix.ErrInvalidParams) {
+		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
+	}
+	if refusal, ok := errors.AsType[*fix.Refusal](err); ok {
+		return w.close(ctx, in.ID, refusal.Reason)
 	}
 	if err != nil {
 		return err
@@ -111,7 +116,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		predicates[r.Name] = r.Value.String()
 	}
 	// Live ownership wins over what the evidence said.
-	if live.ManagedBy != "" {
+	if plan.ManagedBy != "" {
 		predicates[predicate.NameGitOpsManaged] = predicate.True.String()
 	}
 	policy, err := w.policy(profile)
@@ -119,12 +124,12 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		return err
 	}
 	decision := policy.Evaluate(PolicyInput{
-		Capability: rollback.Name, Risk: "medium", Namespace: in.Target.Namespace,
-		ManagedBy: live.ManagedBy, Predicates: predicates,
+		Capability: f.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
+		ManagedBy: plan.ManagedBy, Predicates: predicates,
 		Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == "",
 	})
 
-	a, err := w.action(in, p, live, revision, decision, profile.EffectivePolicy())
+	a, err := w.action(in, p, f, plan, decision, profile.EffectivePolicy())
 	if err != nil {
 		return err
 	}
@@ -140,7 +145,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 			return err
 		}
 		store.AfterCommit(tx, policyDecisions.WithLabelValues(decision.label()).Inc)
-		if decision.Outcome == Deny && live.ManagedBy != "" {
+		if decision.Outcome == Deny && plan.ManagedBy != "" {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
 		if decision.Outcome == Deny {
@@ -150,17 +155,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	})
 }
 
-func (w *Worker) action(in store.Incident, p store.Proposal, live rollback.Live, revision int64, d Decision, pol config.Policy) (store.Action, error) {
-	fields := rollback.Fields(in.ID, live, revision, d.PolicyID, d.PolicyDigest)
+func (w *Worker) action(in store.Incident, p store.Proposal, f fix.Fix, plan fix.Plan, d Decision, pol config.Policy) (store.Action, error) {
+	fields := fix.Fields(in.ID, f, plan, "", d.PolicyID, d.PolicyDigest)
 	dg, err := digest.Compute(fields)
-	if err != nil {
-		return store.Action{}, err
-	}
-	pre, err := json.Marshal(live.PreState)
-	if err != nil {
-		return store.Action{}, err
-	}
-	desired, err := json.Marshal(live.Desired)
 	if err != nil {
 		return store.Action{}, err
 	}
@@ -168,9 +165,9 @@ func (w *Worker) action(in store.Incident, p store.Proposal, live rollback.Live,
 		IncidentID: in.ID, ProposalID: p.ID,
 		Capability: fields.Capability, CapabilityVersion: fields.CapabilityVersion,
 		Target: fields.Target, Params: fields.Params, Constraints: fields.Constraints,
-		PreState: pre, Desired: desired,
-		BlastRadius: map[string]any{"replicas": int64(live.Replicas)},
-		Risk:        "medium",
+		PreState: plan.Before, Desired: plan.After,
+		BlastRadius: plan.BlastRadius,
+		Risk:        plan.Risk,
 		Decision:    string(d.Outcome), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
 		Digest: dg, State: store.ActionDenied,
 	}
@@ -204,12 +201,10 @@ func (w *Worker) now() time.Time {
 	return time.Now()
 }
 
-func revisionOf(params map[string]any) (int64, bool) {
-	switch n := params["revision"].(type) {
-	case int64:
-		return n, n > 0
-	case float64:
-		return int64(n), n > 0 && n == float64(int64(n))
+// fixes are the fixes this worker can carry out.
+func (w *Worker) fixes() fix.Registry {
+	if w.Fixes != nil {
+		return w.Fixes
 	}
-	return 0, false
+	return fixes.Default()
 }

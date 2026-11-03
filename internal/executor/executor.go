@@ -6,7 +6,6 @@ package executor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -15,8 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/digest"
+	"github.com/hzerrad/themis/internal/fix"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/rollback"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
@@ -50,6 +50,8 @@ type Executor struct {
 	Client client.Client
 	Logger *slog.Logger
 	Now    func() time.Time
+	// Fixes are the fixes it can carry out; nil means those Themis ships with.
+	Fixes fix.Registry
 }
 
 // Execute runs an action once. The execution record is committed before it
@@ -100,35 +102,35 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	if err != nil || recomputed != a.Digest {
 		return Result{Status: Stale, Message: "Not applied: the stored fix was altered after it was approved."}
 	}
-	revision, ok := revisionOf(a.Params)
-	if a.Capability != rollback.Name || !ok {
+	f, ok := e.fixes()[a.Capability]
+	if !ok {
 		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
 	}
 
 	target := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
-	live, err := rollback.Read(ctx, e.Client, target, revision)
+	plan, err := f.Plan(ctx, e.Client, target, a.Params)
+	if errors.Is(err, fix.ErrInvalidParams) {
+		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
+	}
+	if refusal, ok := errors.AsType[*fix.Refusal](err); ok {
+		return Result{Status: Stale, Message: "Not applied. " + refusal.Reason}
+	}
 	if err != nil {
-		if errors.Is(err, rollback.ErrStale) || errors.Is(err, rollback.ErrNoSuchRevision) || errors.Is(err, rollback.ErrAlreadyCurrent) {
-			return Result{Status: Stale, Message: "Not applied. " + rollback.Explain(err, revision)}
-		}
 		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error()}
 	}
-	fields := rollback.Fields(a.IncidentID, live, revision, a.PolicyID, a.PolicyDigest)
-	if undone, ok := a.Restores(); ok {
-		fields = rollback.RestoreFields(a.IncidentID, live, revision, undone, a.PolicyID, a.PolicyDigest)
-	}
-	current, err := digest.Compute(fields)
+	undone, _ := a.Restores()
+	current, err := digest.Compute(fix.Fields(a.IncidentID, f, plan, undone, a.PolicyID, a.PolicyDigest))
 	if err != nil || current != a.Digest {
 		return Result{Status: Stale, Message: "Not applied: the workload changed after the fix was approved."}
 	}
 
-	if _, err := rollback.Apply(ctx, e.Client, live, true); err != nil {
+	if _, err := f.Apply(ctx, e.Client, plan, true); err != nil {
 		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change in a trial run: " + err.Error(), dryRunFailed: true}
 	}
-	gen, err := rollback.Apply(ctx, e.Client, live, false)
+	gen, err := f.Apply(ctx, e.Client, plan, false)
 	switch {
 	case err == nil:
-		return Result{Status: Succeeded, Message: fmt.Sprintf("Rolled back to revision %d.", revision), PostGeneration: gen}
+		return Result{Status: Succeeded, Message: plan.Done, PostGeneration: gen}
 	case apierrors.IsConflict(err):
 		return Result{Status: Stale, Message: "Not applied: the workload changed while the fix was being applied: " + err.Error()}
 	case isRejected(err):
@@ -200,7 +202,10 @@ func (e *Executor) logger() *slog.Logger {
 	return slog.Default()
 }
 
-func revisionOf(params map[string]any) (int64, bool) {
-	n, ok := params["revision"].(int64)
-	return n, ok && n > 0
+// fixes are the fixes this executor can carry out.
+func (e *Executor) fixes() fix.Registry {
+	if e.Fixes != nil {
+		return e.Fixes
+	}
+	return fixes.Default()
 }
