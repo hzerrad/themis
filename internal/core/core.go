@@ -240,7 +240,7 @@ func Run(ctx context.Context, o Options) error {
 	mux := http.NewServeMux()
 	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators, Setup: s}
 	api.Sessions, api.Accounts = s, s
-	checker := &checks.Checker{Config: current, Store: s, Access: checks.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil}
+	checker := &checks.Checker{Config: current, Store: s, Access: checks.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
 	}

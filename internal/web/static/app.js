@@ -52,13 +52,13 @@ async function api(path, options = {}) {
 
 const STATE_TONE = {
   resolved: "good", self_resolved: "good", closed_no_action: "neutral", canceled: "neutral", rejected: "neutral",
-  awaiting_approval: "warn", escalated: "bad", contained_escalated: "warn",
+  awaiting_approval: "warn", awaiting_suggestion: "warn", escalated: "bad", contained_escalated: "warn",
   succeeded: "good", failed: "bad", stale: "bad", ambiguous: "bad", denied: "neutral", expired: "neutral", authorized: "warn",
 };
 
 // Words for the values the API returns. Anything unlisted is shown as it is.
 const STATE_LABEL = {
-  received: "alert received", investigating: "investigating", diagnosed: "diagnosed",
+  received: "alert received", investigating: "investigating", awaiting_suggestion: "waiting for a suggestion", diagnosed: "diagnosed",
   inconclusive: "no clear cause", recommended: "fix suggested, not applied", proposed: "fix proposed",
   awaiting_approval: "needs your approval", authorized: "approved", executing: "applying the fix",
   verifying: "checking the fix", restoring: "putting things back", resolved: "fixed", contained_escalated: "partly fixed, needs a person",
@@ -503,6 +503,7 @@ function hypotheses(inv) {
 const NEXT = {
   received: "Themis received the alert and is collecting evidence.",
   investigating: "Themis is investigating with the model.",
+  awaiting_suggestion: "No investigator is installed, so Themis is waiting for a person or a tool such as HolmesGPT to suggest a fix. It checks any suggestion against the cluster and your policy, like its own.",
   diagnosed: "The investigation suggested a fix. Themis is checking it against the cluster and your policy.",
   proposed: "Themis is checking the suggested fix against your policy.",
   awaiting_approval: "A fix needs your approval. Check what it changes, then approve or deny it.",

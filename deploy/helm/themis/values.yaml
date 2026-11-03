@@ -37,9 +37,14 @@ postgres:
 
 # Bring your own model: any OpenAI-compatible endpoint, hosted or local.
 model:
-  # Required, for example https://api.openai.com/v1 or http://ollama:11434/v1.
+  # Off installs no investigator: Themis collects evidence and runs its
+  # checks, then each incident waits for a fix suggested by a person or a
+  # tool outside Themis, such as HolmesGPT.
+  enabled: true
+  # Required when enabled, for example https://api.openai.com/v1 or
+  # http://ollama:11434/v1.
   baseURL: ""
-  # Required: the model name the endpoint serves.
+  # Required when enabled: the model name the endpoint serves.
   name: ""
   # The most sensitive evidence the endpoint may receive. sensitive includes
   # (redacted) container logs; set internal to keep logs from the endpoint.

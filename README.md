@@ -24,7 +24,7 @@ To try Themis in about 10 minutes, on kind or on your own cluster, follow the **
 
 For a closer look at each step, see the bad-rollout demo on a local [kind](https://kind.sigs.k8s.io/) cluster, with real Prometheus and Alertmanager: **[docs/demo.md](docs/demo.md)**.
 
-To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README.md)**. Themis brings no model: point it at any OpenAI-compatible endpoint, hosted or local.
+To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README.md)**. Themis brings no model: point it at any OpenAI-compatible endpoint, hosted or local. Or run it without one (`model.enabled=false`): it still collects evidence and runs its checks, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT, governed exactly like its own.
 
 ## Principles
 

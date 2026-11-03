@@ -12,6 +12,9 @@ data:
       tokenSecret: {{ .Release.Name }}-tokens
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
+      {{- if not (include "themis.modelEnabled" .) }}
+      disabled: true
+      {{- end }}
     api:
       bearerTokenFile: /var/run/secrets/themis/admin
       {{- with .Values.oidc }}

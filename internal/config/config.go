@@ -142,6 +142,17 @@ func (e ExternalProposals) EffectiveWindow() time.Duration {
 	return e.Window.Duration
 }
 
+// SuggestionWindow returns how long an incident waits for a suggestion: after
+// Themis couldn't decide, or, without an investigator, from when it opens.
+// Without an investigator only suggestions can fix anything, so it's never
+// none: people need time to answer.
+func (c Config) SuggestionWindow() time.Duration {
+	if w := c.ExternalProposals.EffectiveWindow(); w > 0 || !c.Investigators.Disabled {
+		return w
+	}
+	return DefaultProposalWindow
+}
+
 // Source returns the source with the given ServiceAccount.
 func (e ExternalProposals) Source(serviceAccount string) (ProposalSource, bool) {
 	for _, s := range e.Sources {
@@ -214,6 +225,11 @@ type Intake struct {
 type Investigators struct {
 	// BearerTokenFile holds the token investigators must send as a bearer token.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+
+	// Disabled means no investigator is installed: Themis collects evidence
+	// and runs its checks, then each incident waits for a fix suggested by a
+	// person or a tool outside Themis.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // API configures the HTTP API.

@@ -40,6 +40,10 @@
           "type": "string",
           "minLength": 1,
           "description": "BearerTokenFile holds the token investigators must send as a bearer token."
+        },
+        "disabled": {
+          "type": "boolean",
+          "description": "Disabled means no investigator is installed: Themis collects evidence\nand runs its checks, then each incident waits for a fix suggested by a\nperson or a tool outside Themis."
         }
       },
       "additionalProperties": false,

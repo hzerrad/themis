@@ -22,5 +22,10 @@ Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or 
 {{- end }}
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}
-Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis diagnoses and suggests only{{ end }}
+Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis never applies a fix{{ end }}
+{{- if (include "themis.modelEnabled" .) }}
 Model:    {{ .Values.model.name }} at {{ .Values.model.baseURL }}
+{{- else }}
+Model:    none; each incident waits for a fix suggested by a person or a
+          tool outside Themis
+{{- end }}

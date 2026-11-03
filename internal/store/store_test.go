@@ -224,6 +224,7 @@ func TestStateColumnsUseEnum(t *testing.T) {
 var allStates = []incident.State{
 	incident.Received,
 	incident.Investigating,
+	incident.AwaitingSuggestion,
 	incident.Diagnosed,
 	incident.Inconclusive,
 	incident.Recommended,

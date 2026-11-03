@@ -46,8 +46,17 @@ helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 {{- end }}
 
 {{/*
-Whether the setup port is on. Values from before it existed, kept with
---reuse-values, have no setup key, so a missing key means on.
+Whether the investigator and its model are installed. Values from before
+model.enabled existed, kept with --reuse-values, have no such key, so a
+missing key means on.
+*/}}
+{{- define "themis.modelEnabled" -}}
+{{- $model := .Values.model | default dict -}}
+{{- if not (and (hasKey $model "enabled") (eq (toString $model.enabled) "false")) }}true{{ end -}}
+{{- end }}
+
+{{/*
+Whether the setup port is on. A missing key means on, as above.
 */}}
 {{- define "themis.setupEnabled" -}}
 {{- $setup := .Values.setup | default dict -}}

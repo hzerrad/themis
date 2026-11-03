@@ -1,4 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
+{{- if (include "themis.modelEnabled" .) }}
 # The investigator may reach only the core's gRPC API, the model and DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -23,6 +24,7 @@ spec:
       ports: [{port: 4317, protocol: TCP}, {port: 4318, protocol: TCP}]
     {{- end }}
     - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+{{- end }}
 ---
 # The core's gRPC API serves the investigator and agents in the namespaces
 # allowed to reach it; its HTTP API anyone with a token. Its setup port, 8083,

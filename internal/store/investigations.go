@@ -50,9 +50,21 @@ func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID s
 	if err != nil {
 		return "", fmt.Errorf("failed to create investigation ID: %w", err)
 	}
+	if err := s.RecordInitialEvidence(ctx, tx, incidentID, items, results); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO investigations (id, incident_id) VALUES ($1, $2)`, id, incidentID); err != nil {
+		return "", fmt.Errorf("create investigation of incident %s: %w", incidentID, err)
+	}
+	return id.String(), nil
+}
+
+// RecordInitialEvidence records the evidence collected when an incident
+// opens, and what the checks made of it.
+func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []predicate.Result) error {
 	for _, item := range items {
 		if err := s.InsertEvidence(ctx, tx, incidentID, "", nil, item); err != nil {
-			return "", err
+			return err
 		}
 	}
 	for _, r := range results {
@@ -66,20 +78,17 @@ func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID s
 		}
 		g, err := json.Marshal(gaps)
 		if err != nil {
-			return "", err
+			return err
 		}
 		_, err = tx.Exec(ctx, `
 	INSERT INTO predicate_results (incident_id, name, version, value, reason, evidence_ids, gaps, blind)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 `, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids, g, r.Blind)
 		if err != nil {
-			return "", fmt.Errorf("record predicate %s: %w", r.Name, err)
+			return fmt.Errorf("record predicate %s: %w", r.Name, err)
 		}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO investigations (id, incident_id) VALUES ($1, $2)`, id, incidentID); err != nil {
-		return "", fmt.Errorf("create investigation of incident %s: %w", incidentID, err)
-	}
-	return id.String(), nil
+	return nil
 }
 
 const investigationColumns = `
