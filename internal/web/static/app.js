@@ -6,7 +6,8 @@ const TOKEN_KEY = "themis-token";
 const POLL_MS = 3000;
 const main = document.getElementById("main");
 let timer = null;
-// me is who's signed in, from /v1/me: a person, or whoever holds the admin token.
+// me is who's signed in, from /v1/me: a person, whoever holds the admin token,
+// or, until setup finishes, whoever opened Themis through kubectl port-forward.
 let me = null;
 
 function h(tag, attrs = {}, ...children) {
@@ -143,17 +144,22 @@ async function login() {
     route();
   };
   const tokenForm = h("form", { onsubmit: submit },
-    h("p", { class: "muted" }, "Enter the admin token. It is kept for this browser tab only."),
-    h("div", { class: "actions" }, input, h("button", { class: methods.oidc ? "" : "primary", type: "submit" }, "Continue")));
+    h("p", { class: "muted" }, "The emergency token is for scripts and for when sign-in is broken. It is kept for this browser tab only."),
+    h("div", { class: "actions" }, input, h("button", { type: "submit" }, "Continue")));
+  const emergency = h("details", {}, h("summary", { class: "muted" }, "Use the emergency token"), tokenForm);
   if (!methods.oidc) {
-    render(h("div", { class: "panel" }, h("h1", {}, "Sign in"), tokenForm));
-    input.focus();
+    render(h("div", { class: "panel" },
+      h("h1", {}, "Sign-in isn't set up yet"),
+      h("p", {}, "Open Themis through kubectl port-forward to set it up. You'll be an admin until someone signs in for real:"),
+      h("pre", {}, "kubectl -n themis port-forward deploy/themis-core 8090:8083"),
+      h("p", { class: "muted" }, "Then go to http://localhost:8090. If you installed Themis under another name or namespace, use those."),
+      emergency));
     return;
   }
   render(h("div", { class: "panel" },
     h("h1", {}, "Sign in"),
     h("p", {}, h("a", { class: "button primary", href: "/auth/login" }, "Sign in with your account")),
-    h("details", {}, h("summary", { class: "muted" }, "Use the admin token instead"), tokenForm)));
+    emergency));
 }
 
 function noAccess() {
@@ -206,6 +212,9 @@ function sourceRows(p) {
   if (p.LeaseID) {
     row("From", "Themis's own investigator");
     row("Identity", "Checked: it held this incident's investigation");
+  } else if (src === "person:setup") {
+    row("From", "A person");
+    row("Identity", "Someone with kubectl access, through port-forward before sign-in was set up. Kubernetes checked them; Themis doesn't know who");
   } else if (src === "admin-token") {
     row("From", "A person");
     row("Identity", "The shared admin token, which proves the token, not which person");
@@ -454,8 +463,13 @@ async function route() {
     return showError(e);
   }
   const who = document.getElementById("whoami");
-  who.textContent = me ? (me.token ? "Signed in with the admin token" : `${me.username}${me.role ? ` · ${me.role}` : ""}`) : "";
-  document.getElementById("logout").hidden = !me;
+  who.textContent = !me ? ""
+    : me.setup ? "Admin, through kubectl port-forward"
+    : me.token ? "Signed in with the emergency token"
+    : `${me.username}${me.role ? ` · ${me.role}` : ""}`;
+  document.getElementById("setup").hidden = !(me && me.setup);
+  // Coming in through port-forward isn't a sign-in, so there's nothing to sign out of.
+  document.getElementById("logout").hidden = !me || me.setup;
   if (!me) return login();
   if (!me.role) return noAccess();
   const m = location.hash.match(/^#\/incidents\/([\w-]+)$/);

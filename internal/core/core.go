@@ -54,8 +54,12 @@ type Options struct {
 	Kubernetes  *rest.Config
 
 	// MetricsAddr "0" disables metrics. GRPCAddr serves investigators.
-	HTTPAddr    string
-	GRPCAddr    string
+	HTTPAddr string
+	GRPCAddr string
+	// SetupAddr serves Themis to kubectl port-forward, letting whoever comes
+	// that way in as admin until an admin signs in for real. It must be a
+	// loopback address; empty disables it.
+	SetupAddr   string
 	ProbeAddr   string
 	MetricsAddr string
 
@@ -81,6 +85,9 @@ func Run(ctx context.Context, o Options) error {
 		log = slog.Default()
 	}
 	ctrl.SetLogger(logr.FromSlogHandler(log.Handler()))
+	if err := checkSetupAddr(o.SetupAddr); err != nil {
+		return err
+	}
 
 	shutdownTracing, err := telemetry.SetupTracing(ctx, "core")
 	if err != nil {
@@ -214,7 +221,7 @@ func Run(ctx context.Context, o Options) error {
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators}
+	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators, Setup: s}
 	if o := cfg.API.OIDC; o != nil {
 		api.Sessions = s
 		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
@@ -239,12 +246,34 @@ func Run(ctx context.Context, o Options) error {
 	if err := mgr.Add(&server{addr: o.HTTPAddr, handler: otelhttp.NewHandler(mux, "http"), log: log}); err != nil {
 		return err
 	}
+	if o.SetupAddr != "" {
+		door := &people.Door{Store: s, Next: mux, Logger: log}
+		if err := mgr.Add(&server{addr: o.SetupAddr, handler: otelhttp.NewHandler(door, "setup"), log: log}); err != nil {
+			return err
+		}
+	}
 	if err := mgr.Add(&grpcRunnable{addr: o.GRPCAddr, server: rpc}); err != nil {
 		return err
 	}
 
-	log.InfoContext(ctx, "starting themis-core", "http", o.HTTPAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
+	log.InfoContext(ctx, "starting themis-core", "http", o.HTTPAddr, "setup", o.SetupAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
 	return mgr.Start(ctx)
+}
+
+// checkSetupAddr refuses a setup address others could reach: whoever comes
+// in that way is an admin until setup finishes.
+func checkSetupAddr(addr string) error {
+	if addr == "" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("setup address %q: %w", addr, err)
+	}
+	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return fmt.Errorf("setup address %q must be a loopback address such as 127.0.0.1:8083, since whoever reaches it is an admin until setup finishes", addr)
+	}
+	return nil
 }
 
 func connect(ctx context.Context, url string) (*pgxpool.Pool, error) {

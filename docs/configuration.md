@@ -24,7 +24,9 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 
 ## People and roles
 
-Without `api.oidc`, the UI and the API take only the admin token, and every approval is recorded as `admin`. With it, people sign in through your identity provider, and each approval and suggestion records who made it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
+**Before anyone signs in,** whoever opens Themis through `kubectl port-forward` to the core's setup port (8083) is an admin, recorded as `setup`. Kubernetes has already checked that they may port-forward to Themis, and the port listens only on the pod's own loopback address, so nothing else reaches it; the chart's NetworkPolicy blocks it too. The first time someone with the `admin` role signs in through OIDC, setup finishes for good: the port then serves Themis like any other address, with sign-in. The core refuses to start if `--setup-addr` isn't a loopback address. Turn the port off with the chart's `setup.enabled: false`.
+
+Without `api.oidc`, the UI and the API otherwise take only the emergency (admin) token, and every approval made with it is recorded as `admin`. With it, people sign in through your identity provider, and each approval and suggestion records who made it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
 
 ```yaml
 api:
@@ -55,7 +57,7 @@ With the chart, set the `oidc` and `access` values instead; see the [chart READM
 | `sessionTTL` | no | How long a sign-in lasts. Default `8h`. |
 | `scopes` | no | Scopes to ask for. `openid` is always added. Default `email` and `profile`. |
 
-**The redirect URL** is where the provider sends the browser back after sign-in. It must be Themis's `/auth/callback` at the address people type in their browser, not the in-cluster Service: behind an ingress at `https://themis.example.com`, it is `https://themis.example.com/auth/callback`; through `kubectl port-forward` on port 8090, it is `http://127.0.0.1:8090/auth/callback`. Register the same URL with the provider. Over HTTPS, the session cookie is sent only over HTTPS.
+**The redirect URL** is where the provider sends the browser back after sign-in. It must be Themis's `/auth/callback` at the address people type in their browser, not the in-cluster Service: behind an ingress at `https://themis.example.com`, it is `https://themis.example.com/auth/callback`; through `kubectl port-forward` on port 8090, it is `http://localhost:8090/auth/callback`. Register the same URL with the provider. Over HTTPS, the session cookie is sent only over HTTPS.
 
 **Sign-in** asks the provider for `openid` plus `scopes`. Providers differ on groups: Dex and Okta send them only when asked for the `groups` scope, so add it there; Google and Entra ID refuse that scope, so leave it out and grant roles by username, or use groups the provider sends by default. When the username is the email, Themis refuses an address the provider says isn't verified. Themis reaches the provider when the first person signs in, so it starts even while the provider is down.
 
@@ -74,7 +76,7 @@ Each entry gives a role to `users` (usernames), `groups`, or both. When someone 
 
 **The admin token** still works with OIDC on, and acts as an admin. Keep it as a way in when the provider is down. What it does is still recorded as `admin`, since anyone holding it looks the same.
 
-**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Each person has their own limit on suggestions.
+**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, `person:setup` for someone who came in through port-forward before setup finished, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Each person has their own limit on suggestions.
 
 ## Configuration resources
 

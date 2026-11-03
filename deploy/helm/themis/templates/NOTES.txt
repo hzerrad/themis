@@ -1,0 +1,26 @@
+Themis is running in namespace {{ .Release.Namespace }}.
+
+Open it:
+
+  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-core 8090:{{ if .Values.setup.enabled }}8083{{ else }}8080{{ end }}
+
+then go to http://localhost:8090.
+{{- if .Values.setup.enabled }}
+
+Opening Themis this way makes you an admin until an admin signs in for
+real: Kubernetes has already checked that you may port-forward to it.
+{{- if not .Values.oidc.issuerURL }}
+
+No sign-in is set up yet. Set the oidc values so people can sign in as
+themselves.
+{{- end }}
+{{- else }}
+
+Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or {{ end }}with the admin token:
+
+  kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-tokens -o jsonpath='{.data.admin}' | base64 -d
+{{- end }}
+
+Watching: {{ join ", " .Values.enrolledNamespaces }}
+Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis diagnoses and suggests only{{ end }}
+Model:    {{ .Values.model.name }} at {{ .Values.model.baseURL }}

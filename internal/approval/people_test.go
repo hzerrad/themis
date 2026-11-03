@@ -23,7 +23,7 @@ import (
 )
 
 // signedIn is an API where people sign in, with a session for each of
-// viewer, responder, approver and nobody (no role).
+// viewer, responder, approver, admin and nobody (no role).
 func signedIn(t *testing.T) *env {
 	t.Helper()
 	s, pool := pgtest.NewStore(t)
@@ -32,7 +32,7 @@ func signedIn(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	e := &env{store: s, pool: pool, clock: now}
-	for _, name := range []string{"viewer", "responder", "approver", "nobody"} {
+	for _, name := range []string{"viewer", "responder", "approver", "admin", "nobody"} {
 		se := store.Session{Subject: name, Username: name + "@example.com", Groups: []string{name + "s"}, CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
 		if err := s.CreateSession(t.Context(), "session-"+name, se); err != nil {
 			t.Fatal(err)
@@ -40,11 +40,12 @@ func signedIn(t *testing.T) *env {
 	}
 	mux := http.NewServeMux()
 	(&approval.API{
-		Store: s, TokenFile: file, Sessions: s, Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, Setup: s, Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},
 			{Role: config.RoleApprover, Groups: []string{"approvers"}},
+			{Role: config.RoleAdmin, Users: []string{"admin@example.com"}},
 		},
 		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
 	}).Register(mux)
@@ -179,6 +180,34 @@ func TestPeople_Me(t *testing.T) {
 	rec = e.do(t, http.MethodGet, "/v1/me", token, nil)
 	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil || me.Role != config.RoleAdmin || !me.Token {
 		t.Errorf("me with the token = %+v, %v", me, err)
+	}
+}
+
+// Setup finishes when an admin signs in for real: not with the token, and
+// not as anyone less trusted.
+func TestPeople_AnAdminSigningInFinishesSetup(t *testing.T) {
+	e := signedIn(t)
+	finished := func() bool {
+		t.Helper()
+		done, err := e.store.SetupFinished(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return done
+	}
+	e.as(t, "approver", http.MethodGet, "/v1/me", nil)
+	e.do(t, http.MethodGet, "/v1/me", token, nil)
+	if finished() {
+		t.Fatal("setup finished without an admin signing in")
+	}
+	if rec := e.as(t, "admin", http.MethodGet, "/v1/me", nil); rec.Code != http.StatusOK {
+		t.Fatalf("me for admin = %d %q", rec.Code, rec.Body)
+	}
+	if !finished() {
+		t.Error("setup still open after an admin signed in")
+	}
+	if !strings.Contains(e.logs.String(), "setup finished") {
+		t.Errorf("no log says setup finished: %s", e.logs.String())
 	}
 }
 

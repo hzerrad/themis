@@ -53,10 +53,10 @@ make demo-up                                  # the healthy checkout workload in
 ## 4. Open the UI
 
 ```bash
-make ui   # prints the admin token and serves the UI on http://127.0.0.1:8090
+make ui   # serves the UI on http://localhost:8090
 ```
 
-Sign in with the token. The list is empty for now.
+Open it. You're an admin because you came in through `kubectl port-forward`; there's no password to find. The list is empty for now.
 
 ## 5. Break the rollout
 
