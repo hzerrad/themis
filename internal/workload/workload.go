@@ -76,8 +76,9 @@ type Replicas struct {
 	Observed                                  bool
 }
 
-// Workload is a target as read once. Its revisions and pods are read on
-// first use, then kept, so they agree with each other.
+// Workload is a target as read once. Its revisions and its pods are each
+// read on first use, then kept. Each costs a list call and needs its own
+// permission: the executor may list ReplicaSets but not pods.
 type Workload struct {
 	Target     incident.TargetRef
 	Generation int64
@@ -102,7 +103,8 @@ type Workload struct {
 	deployment *appsv1.Deployment
 	revisions  []Revision
 	pods       []Pod
-	listed     bool
+	listedRS   bool
+	listedPods bool
 }
 
 // Revision is one revision Kubernetes keeps of a workload.
@@ -167,10 +169,25 @@ func (w *Workload) Object() *appsv1.Deployment { return w.deployment }
 
 // Revisions are the revisions Kubernetes keeps, in no particular order.
 func (w *Workload) Revisions(ctx context.Context) ([]Revision, error) {
-	if err := w.list(ctx); err != nil {
+	if w.listedRS {
+		return w.revisions, nil
+	}
+	sets, err := list[*appsv1.ReplicaSetList](ctx, w, &appsv1.ReplicaSetList{}, "ReplicaSets")
+	if err != nil {
 		return nil, err
 	}
-	return w.revisions, nil
+	var revisions []Revision
+	for i := range sets.Items {
+		rs := &sets.Items[i]
+		if !metav1.IsControlledBy(rs, w.deployment) {
+			continue
+		}
+		template := *rs.Spec.Template.DeepCopy()
+		delete(template.Labels, hashLabel)
+		revisions = append(revisions, Revision{Number: revisionOf(rs), Template: template, Object: rs})
+	}
+	w.revisions, w.listedRS = revisions, true
+	return revisions, nil
 }
 
 // RevisionAt returns revision n.
@@ -189,44 +206,20 @@ func (w *Workload) RevisionAt(ctx context.Context, n int64) (Revision, error) {
 
 // Pods are the workload's pods, of every revision it keeps.
 func (w *Workload) Pods(ctx context.Context) ([]Pod, error) {
-	if err := w.list(ctx); err != nil {
+	if w.listedPods {
+		return w.pods, nil
+	}
+	revisions, err := w.Revisions(ctx)
+	if err != nil {
 		return nil, err
 	}
-	return w.pods, nil
-}
-
-// list reads the ReplicaSets and pods the Deployment controls. Ownership
-// decides, not labels: selectors of workloads can overlap.
-func (w *Workload) list(ctx context.Context) error {
-	if w.listed {
-		return nil
-	}
-	d := w.deployment
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
-	if err != nil {
-		return fmt.Errorf("selector of Deployment %s: %w", d.Name, err)
-	}
-	in := []client.ListOption{client.InNamespace(d.Namespace), client.MatchingLabelsSelector{Selector: selector}}
-	var sets appsv1.ReplicaSetList
-	if err := w.reader.List(ctx, &sets, in...); err != nil {
-		return fmt.Errorf("list ReplicaSets of Deployment %s: %w", d.Name, err)
-	}
 	numbers := map[types.UID]int64{}
-	var revisions []Revision
-	for i := range sets.Items {
-		rs := &sets.Items[i]
-		if !metav1.IsControlledBy(rs, d) {
-			continue
-		}
-		n := revisionOf(rs)
-		numbers[rs.UID] = n
-		template := *rs.Spec.Template.DeepCopy()
-		delete(template.Labels, hashLabel)
-		revisions = append(revisions, Revision{Number: n, Template: template, Object: rs})
+	for _, r := range revisions {
+		numbers[r.Object.UID] = r.Number
 	}
-	var podList corev1.PodList
-	if err := w.reader.List(ctx, &podList, in...); err != nil {
-		return fmt.Errorf("list pods of Deployment %s: %w", d.Name, err)
+	podList, err := list[*corev1.PodList](ctx, w, &corev1.PodList{}, "pods")
+	if err != nil {
+		return nil, err
 	}
 	var pods []Pod
 	for i := range podList.Items {
@@ -237,8 +230,23 @@ func (w *Workload) list(ctx context.Context) error {
 			}
 		}
 	}
-	w.revisions, w.pods, w.listed = revisions, pods, true
-	return nil
+	w.pods, w.listedPods = pods, true
+	return pods, nil
+}
+
+// list lists objects of the kind of into that the Deployment's selector
+// matches. Callers keep only what the Deployment controls: selectors of
+// workloads can overlap.
+func list[L client.ObjectList](ctx context.Context, w *Workload, into L, what string) (L, error) {
+	d := w.deployment
+	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
+	if err != nil {
+		return into, fmt.Errorf("selector of Deployment %s: %w", d.Name, err)
+	}
+	if err := w.reader.List(ctx, into, client.InNamespace(d.Namespace), client.MatchingLabelsSelector{Selector: selector}); err != nil {
+		return into, fmt.Errorf("list %s of Deployment %s: %w", what, d.Name, err)
+	}
+	return into, nil
 }
 
 func revisionOf(obj metav1.Object) int64 {

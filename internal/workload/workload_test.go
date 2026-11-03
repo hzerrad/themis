@@ -1,6 +1,7 @@
 package workload_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/workload"
@@ -184,5 +186,27 @@ func TestRevisionsAndPods(t *testing.T) {
 	}
 	if len(got) != 2 || got["a"] != 3 || got["b"] != 2 {
 		t.Errorf("pods = %v, want a at revision 3 and b at revision 2", got)
+	}
+}
+
+// The executor may list ReplicaSets but not pods, so finding a revision must
+// never list pods.
+func TestRevisionAt_NeedsNoPods(t *testing.T) {
+	d := deployment()
+	previous := replicaSet("checkout-p", "rs-2", "2", "shop/checkout:1.4.1", d)
+	c := fake.NewClientBuilder().WithObjects(d, previous).WithInterceptorFuncs(interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if _, ok := list.(*corev1.PodList); ok {
+				return errors.New("pods are forbidden")
+			}
+			return c.List(ctx, list, opts...)
+		},
+	}).Build()
+	w, err := workload.Read(t.Context(), c, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.RevisionAt(t.Context(), 2); err != nil {
+		t.Errorf("RevisionAt without pod access: %v", err)
 	}
 }
