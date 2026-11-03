@@ -43,7 +43,7 @@ func (d *Door) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	open, err := d.open(r.Context())
 	if err != nil {
-		d.Logger.ErrorContext(r.Context(), "cannot check whether setup has finished", telemetry.FieldError, err)
+		d.logger().ErrorContext(r.Context(), "cannot check whether setup has finished", telemetry.FieldError, err)
 		http.Error(w, "Themis can't check sign-ins right now. Try again shortly.", http.StatusServiceUnavailable)
 		return
 	}
@@ -64,6 +64,13 @@ func (d *Door) open(ctx context.Context) (bool, error) {
 	// Setup never reopens, so once finished, the door stops asking.
 	d.finished.Store(finished)
 	return !finished, nil
+}
+
+func (d *Door) logger() *slog.Logger {
+	if d.Logger != nil {
+		return d.Logger
+	}
+	return slog.Default()
 }
 
 func loopbackHost(hostport string) bool {

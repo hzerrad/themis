@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -330,5 +331,42 @@ func TestSignOut(t *testing.T) {
 	}
 	if _, err := r.store.Session(t.Context(), session.Value, now); err == nil {
 		t.Error("the session outlived sign-out")
+	}
+}
+
+type sessionEnder struct{ err error }
+
+func (s sessionEnder) EndSession(context.Context, string) error { return s.err }
+
+// Sign-out clears the cookie however it was set. A browser ignores a secure
+// Set-Cookie over plain HTTP, where OIDC sets a plain cookie, and over HTTPS
+// lets a non-secure deletion replace a secure one.
+func TestSignOut_ClearsTheCookieHoweverItWasSet(t *testing.T) {
+	for _, addr := range []string{"http://themis.internal", "https://themis.example.com", "http://localhost:8090"} {
+		mux := http.NewServeMux()
+		(&identity.SignOut{Store: sessionEnder{}}).Register(mux)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, addr+"/auth/logout", nil)
+		req.Header.Set(identity.RequestHeader, "1")
+		req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: "s"}) //nolint:gosec // a cookie the browser sends back
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		c := cookieNamed(t, rec, identity.SessionCookie)
+		if c.Secure || c.MaxAge >= 0 {
+			t.Errorf("%s: sign-out cookie secure=%v max-age=%d, want a non-secure deletion", addr, c.Secure, c.MaxAge)
+		}
+	}
+}
+
+// With no logger set, a failed sign-out logs to the default logger.
+func TestSignOut_WithoutALogger(t *testing.T) {
+	mux := http.NewServeMux()
+	(&identity.SignOut{Store: sessionEnder{err: errors.New("database down")}}).Register(mux)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/auth/logout", nil)
+	req.Header.Set(identity.RequestHeader, "1")
+	req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: "s"}) //nolint:gosec // a cookie the browser sends back
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("sign-out with the database down = %d, want 503", rec.Code)
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
@@ -30,5 +32,35 @@ func TestMetrics_EvidenceCollectedTruncatedRedacted(t *testing.T) {
 	}
 	if got := redactions(); got != 2 {
 		t.Errorf("redactions %v, want 2", got)
+	}
+}
+
+// Every registered template has its missing-evidence series from the start,
+// so a dashboard shows zero for it rather than nothing.
+func TestMetrics_MissingEvidenceStartsAtZero(t *testing.T) {
+	evidence.NewRegistry(fakeTemplate{})
+	families, err := metrics.Registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, f := range families {
+		if f.GetName() != "themis_missing_evidence_total" {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+			if labels["template"] == "fake" {
+				seen[labels["cause"]] = true
+			}
+		}
+	}
+	for _, c := range evidence.GapCauses() {
+		if !seen[string(c)] {
+			t.Errorf("no themis_missing_evidence_total series for template fake, cause %s", c)
+		}
 	}
 }

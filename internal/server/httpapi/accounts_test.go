@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -155,4 +156,24 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 	if code, _ := f.me(b); code != http.StatusUnauthorized {
 		t.Errorf("bob's session after his account was deleted = %d, want 401", code)
 	}
+}
+
+// Changing your own password is under the same lock as signing in, so a
+// stolen session can't be used to guess the password.
+func TestAccounts_ChangingYourPasswordLocksAfterWrongTries(t *testing.T) {
+	f := newFresh(t)
+	expect(t, "creating root", f.send(http.MethodPost, "/v1/accounts", nil, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	root := f.signIn("root", rootPassword)
+	change := func(current string) *httptest.ResponseRecorder {
+		return f.send(http.MethodPost, "/v1/me/password", root, map[string]string{"current": current, "new": "root's new long password"})
+	}
+	for i := range 10 {
+		expect(t, fmt.Sprintf("wrong current password %d", i+1), change("a guess"), http.StatusForbidden)
+	}
+	rec := change(rootPassword)
+	expect(t, "the right password once locked", rec, http.StatusForbidden)
+	if !strings.Contains(rec.Body.String(), "locked") {
+		t.Errorf("a locked change says %q, want it to say the account is locked", rec.Body)
+	}
+	expect(t, "signing in once locked", f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": "root", "password": rootPassword}), http.StatusUnauthorized)
 }

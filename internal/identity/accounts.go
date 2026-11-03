@@ -19,12 +19,54 @@ const (
 	accountSessionTTL = 8 * time.Hour
 )
 
-// AccountStore keeps accounts and the sessions they start.
-type AccountStore interface {
+// PasswordStore keeps accounts and counts their wrong passwords.
+type PasswordStore interface {
 	Account(ctx context.Context, username string) (store.Account, error)
 	PasswordFailed(ctx context.Context, username string, now time.Time, maxFailures int, lockFor time.Duration) error
 	PasswordSucceeded(ctx context.Context, username string) error
+}
+
+// AccountStore keeps accounts and the sessions they start.
+type AccountStore interface {
+	PasswordStore
 	CreateSession(ctx context.Context, id string, se store.Session) error
+}
+
+// Verify's errors, besides store.ErrNotFound for an unknown username.
+var (
+	ErrWrongPassword = errors.New("wrong password")
+	ErrAccountLocked = errors.New("account locked")
+)
+
+// Verify checks username's password. A wrong one counts towards locking the
+// account and a right one clears the count, so every place that checks a
+// password is covered by the same lock.
+func Verify(ctx context.Context, s PasswordStore, username, password string, now time.Time) (store.Account, error) {
+	a, err := s.Account(ctx, username)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		// Take as long as a real check, so timing doesn't reveal the username.
+		_, _ = CheckPassword(ctx, dummyHash(), password)
+		return store.Account{}, err
+	case err != nil:
+		return store.Account{}, err
+	case a.LockedUntil.After(now):
+		return store.Account{}, ErrAccountLocked
+	}
+	ok, err := CheckPassword(ctx, a.PasswordHash, password)
+	if err != nil {
+		return store.Account{}, err
+	}
+	if !ok {
+		if err := s.PasswordFailed(ctx, a.Username, now, maxWrongPasswords, lockFor); err != nil {
+			return store.Account{}, err
+		}
+		return store.Account{}, ErrWrongPassword
+	}
+	if err := s.PasswordSucceeded(ctx, a.Username); err != nil {
+		return store.Account{}, err
+	}
+	return a, nil
 }
 
 // Passwords signs people in with a Themis account's username and password.
@@ -58,34 +100,15 @@ func (p *Passwords) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := p.now()
-	a, err := p.Store.Account(ctx, in.Username)
+	a, err := Verify(ctx, p.Store, in.Username, in.Password, now)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		// Take as long as a real check, so timing doesn't reveal the username.
-		_, _ = CheckPassword(ctx, dummyHash(), in.Password)
 		p.refuse(w, r, in.Username, "unknown username")
 		return
+	case errors.Is(err, ErrAccountLocked), errors.Is(err, ErrWrongPassword):
+		p.refuse(w, r, in.Username, err.Error())
+		return
 	case err != nil:
-		p.fail(w, r, err)
-		return
-	case a.LockedUntil.After(now):
-		p.refuse(w, r, in.Username, "account locked")
-		return
-	}
-	ok, err := CheckPassword(ctx, a.PasswordHash, in.Password)
-	if err != nil {
-		p.fail(w, r, err)
-		return
-	}
-	if !ok {
-		if err := p.Store.PasswordFailed(ctx, a.Username, now, maxWrongPasswords, lockFor); err != nil {
-			p.fail(w, r, err)
-			return
-		}
-		p.refuse(w, r, in.Username, "wrong password")
-		return
-	}
-	if err := p.Store.PasswordSucceeded(ctx, a.Username); err != nil {
 		p.fail(w, r, err)
 		return
 	}
@@ -155,11 +178,22 @@ func (s *SignOut) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
 		if err := s.Store.EndSession(r.Context(), c.Value); err != nil {
-			s.Logger.ErrorContext(r.Context(), "cannot end a session", telemetry.FieldError, err)
+			s.logger().ErrorContext(r.Context(), "cannot end a session", telemetry.FieldError, err)
 			http.Error(w, "Themis can't sign you out right now. Try again shortly.", http.StatusServiceUnavailable)
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: !loopbackHost(r.Host)}) //nolint:gosec // secure everywhere but localhost
+	// The session cookie may have been set secure (a password, or OIDC over
+	// HTTPS) or not (OIDC over plain HTTP). A browser ignores a secure
+	// Set-Cookie sent over plain HTTP, but over HTTPS lets a non-secure one
+	// replace a secure cookie, so a non-secure deletion clears either.
+	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // deletes the cookie however it was set
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *SignOut) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }

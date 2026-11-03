@@ -49,7 +49,7 @@ func (s *Store) InsertEvidenceGap(ctx context.Context, tx pgx.Tx, g EvidenceGap)
 		return fmt.Errorf("record evidence gap of incident %s: %w", g.IncidentID, err)
 	}
 	if tag.RowsAffected() == 1 {
-		AfterCommit(tx, missingEvidenceTotal.WithLabelValues(g.Template, string(g.Cause)).Inc)
+		AfterCommit(tx, func() { evidence.CountGap(g.Template, g.Cause) })
 	}
 	return nil
 }
