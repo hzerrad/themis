@@ -150,6 +150,8 @@ function passwordForm(primary) {
       password.value = "";
       return;
     }
+    // Signing in during setup finishes it: Setup shows what's left.
+    if (me && me.setup) location.hash = "#/setup";
     me = null;
     route();
   };
@@ -300,7 +302,12 @@ function alertmanagerSetup() {
 
 // modelStep sets the model the install left unset. What the install set is
 // shown locked: a change here would be undone by the next upgrade.
+// modelSaved says the model was just saved, so Setup can say so once.
+let modelSaved = false;
+
 function modelStep(v, done) {
+  const saved = modelSaved;
+  modelSaved = false;
   const byInstall = (name) => v.byInstall.includes(name);
   const locked = h("span", { class: "muted" }, " Set by Helm: change it in the chart's values.");
   const field = (name, input) => byInstall(name) ? [input, locked] : input;
@@ -319,6 +326,7 @@ function modelStep(v, done) {
     if (!byInstall("model.apiKey") && key.value) change.apiKey = key.value;
     try {
       await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change) });
+      modelSaved = true;
       route();
     } catch (err) {
       error.textContent = err.message;
@@ -326,7 +334,8 @@ function modelStep(v, done) {
   };
   const all = ["model.baseURL", "model.name"].every(byInstall);
   return h("div", { class: "panel step" },
-    h("h3", {}, `2. The model ${done ? "· done" : ""}`),
+    h("h3", {}, `2. The model ${done ? "· done" : v.complete ? "· set" : ""}`),
+    saved ? h("p", { class: "fix" }, "Saved. The investigator uses it from its next investigation; this step shows done once the model has answered one.") : null,
     all ? h("p", {}, `Set by Helm: ${v.name} at ${v.baseURL}. Change it in the chart's values.`)
       : h("form", { onsubmit: save },
         h("p", { class: "muted" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. The investigator uses it from its next investigation."),
@@ -364,6 +373,7 @@ async function setup() {
     h("div", { class: "panel step" },
       h("h3", {}, `3. Alerts ${done("Alerts") ? "· done" : ""}`),
       h("p", {}, alerts.summary),
+      done("Alerts") ? null : h("p", { class: "muted" }, "Already connected Alertmanager? This step shows done when the first alert arrives."),
       done("Alerts") ? null : alertmanagerSetup()),
     h("div", { class: "panel step" },
       h("h3", {}, "4. Check"),
@@ -435,7 +445,8 @@ async function list() {
   render(
     h("h1", {}, "Incidents"),
     h("div", { class: "panel" }, incidents.length === 0
-      ? h("p", { class: "muted" }, "No incidents yet.")
+      ? h("p", { class: "muted" }, "No incidents yet. One opens when Alertmanager sends Themis an alert about a workload it watches. ",
+        h("a", { href: "#/status" }, "Status"), " shows whether alerts arrive.")
       : h("table", {},
         h("thead", {}, h("tr", {}, ["State", "Workload", "Profile", "Alerts", "Opened", "ID"].map((c) => h("th", {}, c)))),
         h("tbody", {}, rows))));
@@ -493,7 +504,16 @@ function sourceRows(p) {
   return rows;
 }
 
-function proposalPanel(p) {
+// citedChecks names the checks a suggestion cites, each with what Themis
+// found: a check's name alone reads as a claim, true or not.
+function citedChecks(names, predicates) {
+  return (names || []).map((c) => {
+    const found = (predicates || []).find((x) => x.Name === c);
+    return `${label(CHECK_LABEL, c)}: ${found ? label(ANSWER_LABEL, found.Value) : "not checked"}`;
+  }).join("; ");
+}
+
+function proposalPanel(p, predicates) {
   return h("div", { class: "panel" },
     h("h3", {}, "What was suggested"),
     h("dl", { class: "source" }, sourceRows(p)),
@@ -504,7 +524,7 @@ function proposalPanel(p) {
       h("dt", {}, "Expected effect"), h("dd", {}, p.ExpectedEffect || "—"),
       h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
-      h("dt", {}, "Checks cited"), h("dd", {}, (p.CitedPredicates || []).map((c) => label(CHECK_LABEL, c)).join("; ") || "—"),
+      h("dt", {}, "Checks cited"), h("dd", {}, citedChecks(p.CitedPredicates, predicates) || "—"),
       p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null,
       // What the suggester says it looked at: for people, nothing decides on it.
       p.Notes ? [h("dt", {}, "What it looked at"), h("dd", {}, h("details", {},
@@ -631,11 +651,11 @@ function missing(messages) {
     h("ul", {}, messages.map((m) => h("li", {}, m))));
 }
 
-function rejectedAttempts(proposals) {
+function rejectedAttempts(proposals, predicates) {
   if (proposals.length === 0) return null;
   return h("details", { class: "panel rejected" },
     h("summary", {}, `Suggestions Themis refused (${proposals.length})`),
-    proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p))));
+    proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p, predicates))));
 }
 
 // SUGGESTABLE are the states in which a person may suggest a fix.
@@ -713,9 +733,9 @@ async function detail(id) {
 
     actions.map((a) => {
       const p = proposals.find((x) => x.ID === a.ProposalID);
-      return h("div", { class: "grid" }, p ? proposalPanel(p) : h("div"), actionPanel(a, reload));
+      return h("div", { class: "grid" }, p ? proposalPanel(p, d.Predicates) : h("div"), actionPanel(a, reload));
     }),
-    rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID))),
+    rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID)), d.Predicates),
     SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(inc, d.Evidence || [], reload) : null,
 
     h("h2", {}, "Investigation"),
