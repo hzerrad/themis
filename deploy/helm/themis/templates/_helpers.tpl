@@ -44,3 +44,12 @@ helm.sh/hook: pre-upgrade
 helm.sh/hook-weight: "{{ . }}"
 helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 {{- end }}
+
+{{/*
+Whether the setup port is on. Values from before it existed, kept with
+--reuse-values, have no setup key, so a missing key means on.
+*/}}
+{{- define "themis.setupEnabled" -}}
+{{- $setup := .Values.setup | default dict -}}
+{{- if not (and (hasKey $setup "enabled") (eq (toString $setup.enabled) "false")) }}true{{ end -}}
+{{- end }}

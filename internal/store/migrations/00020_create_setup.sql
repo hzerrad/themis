@@ -7,5 +7,11 @@ CREATE TABLE setup (
   finished_by text NOT NULL
 );
 
+-- An install that already has incidents or sign-ins was set up before setup
+-- existed, so its door never opens.
+INSERT INTO setup (finished_at, finished_by)
+SELECT now(), 'an install from before setup'
+WHERE EXISTS (SELECT 1 FROM incidents) OR EXISTS (SELECT 1 FROM sessions);
+
 -- +goose Down
 DROP TABLE setup;

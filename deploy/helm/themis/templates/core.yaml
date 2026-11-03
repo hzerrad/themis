@@ -43,7 +43,7 @@ spec:
             - --config=/etc/themis/themis.yaml
             - --log-level={{ .Values.logLevel }}
             # Bound to the pod's loopback address, so only kubectl port-forward reaches it.
-            - --setup-addr={{ if .Values.setup.enabled }}127.0.0.1:8083{{ end }}
+            - --setup-addr={{ if (include "themis.setupEnabled" .) }}127.0.0.1:8083{{ end }}
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
