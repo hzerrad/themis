@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -276,6 +277,61 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 }
 
 // themis-core refuses to start rather than run half-configured.
+// TestRun_WaitsForTheDatabase starts the core before its database, as a fresh
+// install does, and expects it to wait instead of exiting.
+func TestRun_WaitsForTheDatabase(t *testing.T) {
+	ns := k8s.NewNamespace(t)
+	dbURL, err := url.Parse(pgtest.NewDatabase(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	late := freeAddr(t)
+	target := dbURL.Host
+	dbURL.Host = late
+	go func() {
+		time.Sleep(3 * time.Second)
+		relay(t, late, target)
+	}()
+	start(t, func() core.Options {
+		return core.Options{
+			ConfigPath:   writeConfig(t, ns),
+			DatabaseURL:  dbURL.String(),
+			Kubernetes:   k8s.Config,
+			HTTPAddr:     freeAddr(t),
+			ProbeAddr:    freeAddr(t),
+			MetricsAddr:  "0",
+			GRPCAddr:     freeAddr(t),
+			Workers:      1,
+			DatabaseWait: 20 * time.Second,
+			Logger:       slog.New(slog.DiscardHandler),
+		}
+	})
+}
+
+// relay forwards connections on addr to target, standing in for a database
+// that only starts listening now.
+func relay(t *testing.T, addr, target string) {
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", addr)
+	if err != nil {
+		t.Errorf("listen on %s: %v", addr, err)
+		return
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	for {
+		in, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		out, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", target)
+		if err != nil {
+			_ = in.Close()
+			continue
+		}
+		go func() { _, _ = io.Copy(out, in); _ = out.Close() }()
+		go func() { _, _ = io.Copy(in, out); _ = in.Close() }()
+	}
+}
+
 func TestRun_RefusesToStart(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	tests := map[string]func(o *core.Options){
@@ -291,15 +347,16 @@ func TestRun_RefusesToStart(t *testing.T) {
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
 			o := core.Options{
-				ConfigPath:  writeConfig(t, ns),
-				DatabaseURL: "postgres://unused",
-				Kubernetes:  k8s.Config,
-				HTTPAddr:    freeAddr(t),
-				ProbeAddr:   freeAddr(t),
-				MetricsAddr: "0",
-				GRPCAddr:    freeAddr(t),
-				Workers:     1,
-				Logger:      slog.New(slog.DiscardHandler),
+				ConfigPath:   writeConfig(t, ns),
+				DatabaseURL:  "postgres://unused",
+				Kubernetes:   k8s.Config,
+				HTTPAddr:     freeAddr(t),
+				ProbeAddr:    freeAddr(t),
+				MetricsAddr:  "0",
+				GRPCAddr:     freeAddr(t),
+				Workers:      1,
+				DatabaseWait: 3 * time.Second,
+				Logger:       slog.New(slog.DiscardHandler),
 			}
 			mutate(&o)
 

@@ -49,6 +49,8 @@ spec:
             - {name: grpc, containerPort: 9090}
             - {name: probes, containerPort: 8081}
             - {name: metrics, containerPort: 8082}
+          # The core waits up to two minutes for its database before serving probes.
+          startupProbe: {httpGet: {path: /healthz, port: probes}, periodSeconds: 5, failureThreshold: 30}
           readinessProbe: {httpGet: {path: /readyz, port: probes}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /healthz, port: probes}, periodSeconds: 10}
           resources: {{- toYaml .Values.resources.core | nindent 12 }}

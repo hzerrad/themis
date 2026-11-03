@@ -62,6 +62,10 @@ type Options struct {
 	// Workers is how many jobs run at once in this process.
 	Workers int
 
+	// DatabaseWait is how long to wait for the database at start, so that
+	// Themis and its database can start together. Zero means two minutes.
+	DatabaseWait time.Duration
+
 	Logger *slog.Logger
 }
 
@@ -72,6 +76,8 @@ const (
 	idleTimeout       = 120 * time.Second
 	shutdownTimeout   = 15 * time.Second
 	connectTimeout    = 10 * time.Second
+	databaseWait      = 2 * time.Minute
+	maxConnectBackoff = 5 * time.Second
 )
 
 // Run runs themis-core until ctx is done.
@@ -107,7 +113,11 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	pool, err := connect(ctx, o.DatabaseURL)
+	wait := o.DatabaseWait
+	if wait == 0 {
+		wait = databaseWait
+	}
+	pool, err := connect(ctx, o.DatabaseURL, wait, log)
 	if err != nil {
 		return err
 	}
@@ -247,7 +257,9 @@ func Run(ctx context.Context, o Options) error {
 	return mgr.Start(ctx)
 }
 
-func connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
+// connect waits up to wait for the database to answer, retrying with backoff,
+// since on a fresh install it usually starts after Themis.
+func connect(ctx context.Context, url string, wait time.Duration, log *slog.Logger) (*pgxpool.Pool, error) {
 	if url == "" {
 		return nil, errors.New("no database URL: set DATABASE_URL")
 	}
@@ -255,13 +267,28 @@ func connect(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
-	pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
-	if err := pool.Ping(pingCtx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("database unreachable: %w", err)
+	deadline := time.Now().Add(wait)
+	backoff := time.Second
+	for {
+		pingCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+		err = pool.Ping(pingCtx)
+		cancel()
+		if err == nil {
+			return pool, nil
+		}
+		if ctx.Err() != nil || time.Now().Add(backoff).After(deadline) {
+			pool.Close()
+			return nil, fmt.Errorf("database unreachable after %s: %w", wait, err)
+		}
+		log.InfoContext(ctx, "waiting for the database", "error", err.Error(), "retry_in", backoff.String())
+		select {
+		case <-ctx.Done():
+			pool.Close()
+			return nil, ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, maxConnectBackoff)
 	}
-	return pool, nil
 }
 
 type server struct {
