@@ -101,6 +101,10 @@ pre {
 .state.bad { color: var(--bad); }
 .state.neutral { color: var(--muted); }
 .fix { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--line); }
+.step { margin-top: 14px; }
+.copyable { position: relative; }
+.copyable pre { overflow-x: auto; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.copyable button { position: absolute; top: 6px; right: 6px; }
 
 .truth-true { color: var(--good); }
 .truth-false { color: var(--muted); }

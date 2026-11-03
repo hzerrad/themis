@@ -245,6 +245,10 @@ func Run(ctx context.Context, o Options) error {
 		checker.Executor = cfg.Executor.Address
 	}
 	api.Checks = checker
+	api.Config, api.Intake = current, cfg.Intake
+	if cfg.Resources != nil {
+		api.Namespace = cfg.Resources.Namespace
+	}
 	if o := cfg.API.OIDC; o != nil {
 		api.OIDC = true
 		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)

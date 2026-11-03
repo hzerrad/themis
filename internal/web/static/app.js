@@ -263,6 +263,41 @@ function ago(t) {
   return time(t);
 }
 
+// copyable is code to copy and run, with a button that copies it.
+function copyable(code) {
+  const button = h("button", { onclick: async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      button.textContent = "Copied";
+    } catch {
+      button.textContent = "Select it and copy";
+    }
+  } }, "Copy");
+  return h("div", { class: "copyable" }, h("pre", {}, code), button);
+}
+
+// alertmanagerSetup shows how to send Alertmanager's alerts to Themis.
+function alertmanagerSetup() {
+  const ns = h("input", { type: "text", value: "monitoring", autocapitalize: "none", "aria-label": "Alertmanager's namespace" });
+  const out = h("div", {});
+  const show = async () => {
+    try {
+      const { steps } = await api(`/v1/setup/alertmanager?namespace=${encodeURIComponent(ns.value.trim())}`);
+      out.replaceChildren(...steps.map((s, i) => h("div", { class: "step" },
+        h("h3", {}, `${i === 0 ? "1" : "2"}. ${s.title}`), h("p", { class: "muted" }, s.text), copyable(s.code))));
+    } catch (e) {
+      out.replaceChildren(h("div", { class: "error" }, e.message));
+    }
+  };
+  ns.addEventListener("change", show);
+  show();
+  return h("div", { class: "panel" },
+    h("h3", {}, "Connect Alertmanager"),
+    h("div", { class: "actions" }, h("label", {}, "Alertmanager's namespace ", ns)),
+    out,
+    h("p", { class: "muted" }, "Once a crash-loop or out-of-memory alert fires, this page shows alerts arriving."));
+}
+
 // status says whether each part of the install works, and how to fix what doesn't.
 async function status() {
   const { checks } = await api("/v1/status");
@@ -277,7 +312,10 @@ async function status() {
         h("td", {}, h("span", { class: `state ${tone}` }, word)),
         h("td", {}, c.summary,
           c.at ? h("div", { class: "muted" }, `Last heard from ${ago(c.at)}.`) : null,
-          c.fix && c.state !== "ok" ? h("div", { class: "fix" }, c.fix) : null));
+          c.fix && c.state !== "ok" ? h("div", { class: "fix" }, c.fix) : null,
+          c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("button", { onclick: (e) => {
+            e.target.replaceWith(alertmanagerSetup());
+          } }, "Show how to connect Alertmanager") : null));
     }))),
     h("div", { class: "actions" }, h("button", { onclick: route }, "Check again")));
 }

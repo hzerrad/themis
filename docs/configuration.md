@@ -10,6 +10,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 |---|---|---|
 | `enrolledNamespaces` | yes | Namespaces Themis may act on. Alerts about any other namespace are recorded as rejected. Each also needs RBAC, which the chart renders per namespace. |
 | `intake.bearerTokenFile` | yes | File holding the token Alertmanager must send. Read on every request, so rotating the Secret needs no restart. |
+| `intake.url` | no | Where Alertmanager reaches the intake, for the setup steps the Status page shows. The chart sets it. |
+| `intake.tokenSecret` | no | The Secret, in Themis's namespace, whose `intake` key holds the token, for the same steps. The chart sets it. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
 | `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
 | `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |
@@ -282,7 +284,7 @@ The outcome is `resolved` (healthy and stable), `contained` (a complete rollout,
 
 ## Connecting your Alertmanager
 
-Add a receiver that posts to the core with the intake token. With the chart, the token is the `intake` key of the `themis-tokens` Secret: copy it into a Secret Alertmanager can mount.
+The **Status** page shows these steps with your install's address and alerts filled in, for kube-prometheus-stack or any other Alertmanager: admins click **Show how to connect Alertmanager** while no alerts arrive. By hand: add a receiver that posts to the core with the intake token. With the chart, the token is the `intake` key of the `themis-tokens` Secret: copy it into a Secret Alertmanager can mount.
 
 ```yaml
 receivers:

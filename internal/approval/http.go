@@ -53,6 +53,13 @@ type API struct {
 	Remedy remedy.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Config is Themis's live configuration, for the alerts its profiles
+	// handle.
+	Config config.Provider
+	// Intake is where Alertmanager reaches Themis, and Namespace Themis's own,
+	// for the setup steps Themis shows.
+	Intake    config.Intake
+	Namespace string
 	// Checks say whether each part of the install works. Nil means the
 	// status page isn't served.
 	Checks interface {
@@ -86,6 +93,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	}
 	if a.Checks != nil {
 		mux.Handle("GET /v1/status", a.authed(config.RoleViewer, a.status, nil))
+	}
+	if a.Config != nil {
+		mux.Handle("GET /v1/setup/alertmanager", a.authed(config.RoleAdmin, a.alertmanagerSetup, nil))
 	}
 }
 
