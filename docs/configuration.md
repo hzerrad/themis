@@ -156,6 +156,16 @@ externalProposals:
 
 **Agents** call the `ProposalService` gRPC API on port 9090: `ListIncidents`, `GetIncident`, and `SubmitProposal` with `incident_id` instead of `lease_id`. Each sends a Kubernetes ServiceAccount token issued for the audience `themis`, for example from a [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/#serviceaccounttoken), and Themis checks it with the API server. A token for another audience is refused. Add the agent's namespace to the chart's `networkPolicy.agentNamespaces`.
 
+**HolmesGPT** suggests fixes through an adapter the chart installs. Point it at an existing HolmesGPT (0.25 or later) with its API key:
+
+```bash
+kubectl -n themis create secret generic holmes-key --from-literal=apiKey=...   # HolmesGPT's HOLMES_API_KEY
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set holmesgpt.enabled=true --set holmesgpt.url=http://holmes-holmes.holmes --set holmesgpt.apiKeySecret=holmes-key
+```
+
+The chart adds the adapter as a source with its own service account, limited to rollbacks in the enrolled namespaces, and lets it reach the core. Each incident waiting for a suggestion, or that Themis couldn't decide, is put to HolmesGPT once, with the checks and evidence Themis collected, but never container logs: HolmesGPT reads the cluster itself. Its answer must be JSON naming the incident's own Deployment and an earlier revision Themis collected; anything else, including a free-text answer, suggests nothing, and the adapter's log says why. What it does suggest is checked like any other suggestion, shows as from `holmesgpt` with the identity Themis verified, and needs approval like any fix.
+
 **People** send the same request as JSON to `POST /v1/incidents/{id}/proposals`, signed in with the [approver role](#people-and-roles) or with the admin token. A signed-in person is recorded as `person:<username>`. The admin token is recorded as `admin-token`, since anyone holding it looks the same.
 
 **When a suggestion is taken:** while Themis investigates, for `window` after it couldn't decide, and, without an investigator, for `window` from when the incident opens. `window` defaults to 15 minutes with sources or without an investigator, and to none otherwise. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.

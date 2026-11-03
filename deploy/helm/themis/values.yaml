@@ -121,6 +121,24 @@ oidc:
 #   - {role: approver, groups: [sre]}
 access: []
 
+# HolmesGPT as a source of fixes: each incident waiting for a suggestion, or
+# that Themis couldn't decide, is put to an existing HolmesGPT install. A
+# rollback it finds is suggested to Themis, which checks it like any other:
+# against the cluster, then policy and approval. HolmesGPT never sees
+# Themis's container logs; it reads the cluster itself.
+holmesgpt:
+  enabled: false
+  # HolmesGPT's HTTP API, such as http://holmes-holmes.holmes (its chart's
+  # Service in namespace holmes). Version 0.25 or later.
+  url: ""
+  # A Secret in the release namespace with an apiKey key: HolmesGPT's
+  # HOLMES_API_KEY. Without one, anyone who can reach HolmesGPT can use it.
+  apiKeySecret: ""
+  # A key of HolmesGPT's modelList; empty uses its default.
+  model: ""
+  # How many suggestions a minute it may make.
+  perMinute: 6
+
 networkPolicy:
   enabled: true
   # Namespaces whose pods may reach the core's gRPC API, for agents that suggest
@@ -180,3 +198,4 @@ resources:
   core: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
   executor: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 256Mi}}
   intelligence: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
+  holmesgpt: {requests: {cpu: 10m, memory: 64Mi}, limits: {memory: 256Mi}}

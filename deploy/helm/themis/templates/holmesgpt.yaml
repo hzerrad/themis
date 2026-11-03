@@ -1,0 +1,65 @@
+{{- if .Values.holmesgpt.enabled }}
+# Puts incidents waiting for a suggestion to HolmesGPT, and suggests the
+# rollbacks it finds, which Themis checks like any other suggestion.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-holmesgpt
+  labels: {{- include "themis.labels" . | nindent 4 }}
+# It proves who it is to Themis with a token for the audience themis, and has
+# no access to the cluster.
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-holmesgpt
+  labels: {{- include "themis.labels" . | nindent 4 }}
+    app.kubernetes.io/component: holmesgpt
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "themis.selector" (dict "root" . "component" "holmesgpt") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "themis.labels" . | nindent 8 }}
+        app.kubernetes.io/component: holmesgpt
+    spec:
+      serviceAccountName: {{ .Release.Name }}-holmesgpt
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true}
+      containers:
+        - name: holmesgpt
+          image: {{ include "themis.image" (dict "root" . "component" "intelligence") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: [python, -m, themis_intelligence.holmesgpt]
+          env:
+            - {name: THEMIS_CORE_ADDR, value: "{{ .Release.Name }}-core:9090"}
+            - {name: THEMIS_TOKEN_FILE, value: /var/run/secrets/themis/token}
+            - {name: HOLMES_URL, value: {{ required "holmesgpt.url is required with holmesgpt.enabled: HolmesGPT's HTTP API, such as http://holmes-holmes.holmes" .Values.holmesgpt.url | quote }}}
+            {{- with .Values.holmesgpt.model }}
+            - {name: HOLMES_MODEL, value: {{ . | quote }}}
+            {{- end }}
+            {{- if .Values.holmesgpt.apiKeySecret }}
+            - {name: HOLMES_API_KEY_FILE, value: /var/run/secrets/holmes/apiKey}
+            {{- end }}
+            - {name: LOG_LEVEL, value: {{ .Values.logLevel | quote }}}
+          resources: {{- toYaml .Values.resources.holmesgpt | nindent 12 }}
+          securityContext: {{- include "themis.securityContext" . | nindent 12 }}
+          volumeMounts:
+            - {name: token, mountPath: /var/run/secrets/themis, readOnly: true}
+            {{- if .Values.holmesgpt.apiKeySecret }}
+            - {name: holmes, mountPath: /var/run/secrets/holmes, readOnly: true}
+            {{- end }}
+      volumes:
+        - name: token
+          projected:
+            sources:
+              - serviceAccountToken: {path: token, audience: themis, expirationSeconds: 3600}
+        {{- if .Values.holmesgpt.apiKeySecret }}
+        - name: holmes
+          secret:
+            secretName: {{ .Values.holmesgpt.apiKeySecret }}
+            items: [{key: apiKey, path: apiKey}]
+        {{- end }}
+{{- end }}

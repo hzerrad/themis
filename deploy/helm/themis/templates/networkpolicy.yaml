@@ -42,6 +42,10 @@ spec:
     - from:
         - podSelector:
             matchLabels: {{- include "themis.selector" (dict "root" . "component" "intelligence") | nindent 14 }}
+        {{- if .Values.holmesgpt.enabled }}
+        - podSelector:
+            matchLabels: {{- include "themis.selector" (dict "root" . "component" "holmesgpt") | nindent 14 }}
+        {{- end }}
         {{- range .Values.networkPolicy.agentNamespaces }}
         - namespaceSelector:
             matchLabels: {kubernetes.io/metadata.name: {{ . }}}
