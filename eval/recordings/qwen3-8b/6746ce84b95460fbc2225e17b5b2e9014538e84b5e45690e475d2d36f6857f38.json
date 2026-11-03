@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose",
+      "usage": {
+        "input_tokens": 2734,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b",
+      "truncated": true
+    }
+  ]
+}

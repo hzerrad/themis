@@ -74,6 +74,12 @@ class PolicyCheck(BaseModel):
     reason: str
 
 
+class Fix(BaseModel):
+    name: str
+    description: str
+    params_schema: str
+
+
 class Bundle(BaseModel):
     scenario: str
     version: int
@@ -82,6 +88,8 @@ class Bundle(BaseModel):
     truth: Truth
     target: Target
     capabilities: list[str]
+    # The fixes as the core describes them to the investigator.
+    fixes: list[Fix] = []
     max_steps: int
     max_evidence_requests: int
     initial: list[Item]
@@ -135,6 +143,12 @@ def job_of(b: Bundle) -> investigation_pb2.Investigation:
         profile=PROFILE,
         target=target_proto(b),
         candidate_capabilities=b.capabilities,
+        capabilities=[
+            common_pb2.Capability(
+                name=f.name, description=f.description, params_schema=f.params_schema
+            )
+            for f in b.fixes
+        ],
         initial_evidence=[item_proto(b, i) for i in b.initial],
         predicates=[
             common_pb2.PredicateResult(

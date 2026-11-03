@@ -685,7 +685,8 @@ function suggestForm(inc, evidence, reload) {
     const body = {
       clientProposalId: `ui-${Date.now()}`,
       target: { group: t.Group || t.group || "apps", kind: t.Kind || t.kind, namespace: t.Namespace || t.namespace, name: t.Name || t.name, uid: t.UID || t.uid },
-      rollbackToRevision: { revision: Number(revision.value) },
+      capabilityName: "deployment.rollback-to-revision",
+      params: { revision: Number(revision.value) },
       rationale: why.value.trim(),
       expectedEffect: effect.value.trim(),
       citedEvidenceIds: evidence.map((x) => x.ID),

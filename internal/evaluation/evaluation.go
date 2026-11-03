@@ -26,6 +26,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/incident"
@@ -175,9 +176,12 @@ type Bundle struct {
 
 	Target incident.TargetRef `json:"target"`
 
-	Capabilities        []string `json:"capabilities"`
-	MaxSteps            int      `json:"max_steps"`
-	MaxEvidenceRequests int      `json:"max_evidence_requests"`
+	Capabilities []string `json:"capabilities"`
+	// Fixes describe the capabilities as the core sends them to the
+	// investigator, so the replay sees the same prompt.
+	Fixes               []BundleFix `json:"fixes"`
+	MaxSteps            int         `json:"max_steps"`
+	MaxEvidenceRequests int         `json:"max_evidence_requests"`
 
 	// Initial is what the investigation starts with; Requestable is what it
 	// may ask for, by template.
@@ -256,7 +260,7 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
-		Truth: s.Truth, Target: target, Capabilities: config.KnownCapabilities,
+		Truth: s.Truth, Target: target, Capabilities: config.KnownCapabilities, Fixes: bundleFixes(config.KnownCapabilities),
 		MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
@@ -378,4 +382,22 @@ func (l fileLogs) Logs(_ context.Context, req evidence.LogRequest) (io.ReadClose
 		return nil, err
 	}
 	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+// BundleFix is a fix as the core describes it to the investigator.
+type BundleFix struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	ParamsSchema string `json:"params_schema"`
+}
+
+func bundleFixes(names []string) []BundleFix {
+	registry := fixes.Default()
+	var out []BundleFix
+	for _, name := range names {
+		if f, ok := registry[name]; ok {
+			out = append(out, BundleFix{Name: f.Name(), Description: f.Description(), ParamsSchema: string(f.Schema())})
+		}
+	}
+	return out
 }

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Pods in both revisions 1 and 2 show CrashLoopBackOff, but no logs or detailed error messages provided to confirm application-specific issues.\",\"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 2884,
+        "output_tokens": 871
+      },
+      "model": "qwen3:8b",
+      "truncated": false
+    }
+  ]
+}

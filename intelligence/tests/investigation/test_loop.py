@@ -42,7 +42,7 @@ def propose(target: dict[str, str] | None = None, **overrides: Any) -> dict[str,
             "name": "checkout",
             "uid": "uid-checkout",
         },
-        "revision": 1,
+        "params": {"revision": 1},
         "expected_effect": "pods stop being OOMKilled",
         "rationale": "revision 2 is OOMKilled; revision 1 was healthy",
         "cited_evidence_ids": ["ev-pods", "ev-history"],
@@ -70,7 +70,8 @@ async def test_requests_evidence_then_proposes_rollback() -> None:
     assert len(core.submitted) == 1
     sub = core.submitted[0]
     assert sub.lease_id == "lease-1"
-    assert sub.rollback_to_revision.revision == 1
+    assert sub.capability_name == "deployment.rollback-to-revision"
+    assert sub.params.fields["revision"].number_value == 1
     assert list(sub.cited_evidence_ids) == ["ev-pods", "ev-history"]
     assert sub.client_proposal_id
     assert result.hypotheses[0].root_cause_class == "memory_limit_regression"

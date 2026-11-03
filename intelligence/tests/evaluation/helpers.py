@@ -49,7 +49,7 @@ def propose(**overrides: Any) -> dict[str, Any]:
         "proposal": {
             "capability": "deployment.rollback-to-revision",
             "target": TARGET,
-            "revision": 1,
+            "params": {"revision": 1},
             "expected_effect": "pods stop being killed",
             "rationale": "revision 2 is killed",
             "cited_evidence_ids": ["ev-pod_states"],
