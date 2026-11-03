@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -63,24 +62,6 @@ type Live struct {
 
 	ManagedBy string
 	Replicas  int32
-}
-
-// TemplateSnapshot identifies the target's current template.
-type TemplateSnapshot struct {
-	SpecHash string
-
-	// Manager last wrote the template, at ChangedAt.
-	Manager   string
-	ChangedAt time.Time
-}
-
-// Snapshot reads the target's current template identity.
-func Snapshot(ctx context.Context, c client.Reader, t incident.TargetRef) (TemplateSnapshot, error) {
-	w, err := read(ctx, c, t)
-	if err != nil {
-		return TemplateSnapshot{}, err
-	}
-	return TemplateSnapshot{SpecHash: w.TemplateHash, Manager: w.Writer, ChangedAt: w.WrittenAt}, nil
 }
 
 // read reads the target, marking a lost one stale.

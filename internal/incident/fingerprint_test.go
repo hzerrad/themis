@@ -1,10 +1,9 @@
-package intake_test
+package incident_test
 
 import (
 	"testing"
 
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/intake"
 )
 
 var checkout = incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "5f1c2a7e"}
@@ -21,7 +20,7 @@ func TestFingerprint_Format(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := intake.Fingerprint("rollout-regression", tt.target); got != tt.want {
+			if got := incident.Fingerprint("rollout-regression", tt.target); got != tt.want {
 				t.Errorf("Fingerprint = %q, want %q", got, tt.want)
 			}
 		})
@@ -30,7 +29,7 @@ func TestFingerprint_Format(t *testing.T) {
 
 // Changing any part of the incident's identity gives a different fingerprint.
 func TestFingerprint_EveryPartCounts(t *testing.T) {
-	base := intake.Fingerprint("rollout-regression", checkout)
+	base := incident.Fingerprint("rollout-regression", checkout)
 
 	tests := []struct {
 		name    string
@@ -49,7 +48,7 @@ func TestFingerprint_EveryPartCounts(t *testing.T) {
 			target := checkout
 			tt.mutate(&target)
 
-			if got := intake.Fingerprint(tt.profile, target); got == base {
+			if got := incident.Fingerprint(tt.profile, target); got == base {
 				t.Errorf("Fingerprint unchanged (%q) after changing the %s", got, tt.name)
 			}
 		})

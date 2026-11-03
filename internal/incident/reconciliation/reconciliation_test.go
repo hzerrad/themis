@@ -9,13 +9,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability/rollback"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/incident/reconciliation"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
@@ -58,7 +58,7 @@ func deployment(t *testing.T, ns string) *appsv1.Deployment {
 func (e *env) open(t *testing.T, to incident.State) string {
 	t.Helper()
 	ctx := t.Context()
-	snap, err := rollback.Snapshot(ctx, k8s, e.target)
+	snap, err := workload.Read(ctx, k8s, e.target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func (e *env) open(t *testing.T, to incident.State) string {
 		if err != nil {
 			return err
 		}
-		if err := e.store.SetObservedSpec(ctx, tx, id, snap.SpecHash); err != nil {
+		if err := e.store.SetObservedSpec(ctx, tx, id, snap.TemplateHash); err != nil {
 			return err
 		}
 		if err := e.store.RecordFiringAlert(ctx, tx, store.FiringAlertArgs{IncidentID: id, Source: "alertmanager", SourceID: "a1", StartsAt: time.Now()}); err != nil {

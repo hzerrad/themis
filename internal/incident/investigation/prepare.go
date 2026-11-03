@@ -64,7 +64,11 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 
 	target, err := workload.Read(ctx, w.Reader, in.Target)
 	if workload.Lost(err) {
-		return w.reject(ctx, in, err.Error())
+		lost := w.Store.InTx(ctx, func(tx pgx.Tx) error { return TargetLost(ctx, w.Store, tx, in, err, actor) })
+		if errors.Is(lost, store.ErrStateConflict) {
+			return nil
+		}
+		return lost
 	}
 	if err != nil {
 		return err
