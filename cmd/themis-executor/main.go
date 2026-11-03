@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
 	"github.com/hzerrad/themis/internal/executor"
-	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/kubewarn"
+	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 )
@@ -79,7 +79,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 		return fmt.Errorf("kubernetes client: %w", err)
 	}
 
-	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(grpcserver.RequireToken(tokenFile), telemetry.UnaryServerFields()))
+	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(grpcapi.RequireToken(tokenFile), telemetry.UnaryServerFields()))
 	(&executor.Server{Executor: &executor.Executor{Store: s, Client: c, Logger: log}}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {

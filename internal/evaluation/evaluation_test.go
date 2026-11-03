@@ -11,7 +11,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/evaluation"
 	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/governance"
+	"github.com/hzerrad/themis/internal/incident/governance"
 )
 
 var update = flag.Bool("update", false, "rewrite each scenario's bundle.json")

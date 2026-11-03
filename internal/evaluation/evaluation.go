@@ -24,13 +24,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
+	"github.com/hzerrad/themis/internal/capability/builtin"
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/fixes"
-	"github.com/hzerrad/themis/internal/governance"
-	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/predicate"
+	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/server/grpcapi"
 )
 
 // Decisions a scenario can expect of an investigation.
@@ -272,7 +272,7 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 			return Bundle{}, fmt.Errorf("%s: %w", name, err)
 		}
 		item.ID = "ev-" + name
-		about := grpcserver.Templates[name]
+		about := grpcapi.Templates[name]
 		b.Templates = append(b.Templates, Template{Name: name, Description: about.GetDescription(), Params: about.GetParams()})
 		out := Item{
 			ID: item.ID, Template: name, Data: string(item.Data), Truncated: item.Truncated,
@@ -286,7 +286,7 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 		}
 	}
 	values := map[string]string{}
-	for _, r := range predicate.Evaluate(initial, s.Now) {
+	for _, r := range check.Evaluate(initial, s.Now) {
 		b.Predicates = append(b.Predicates, Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, EvidenceIDs: r.EvidenceIDs})
 		values[r.Name] = r.Value.String()
 	}
@@ -392,7 +392,7 @@ type BundleFix struct {
 }
 
 func bundleFixes(names []string) []BundleFix {
-	registry := fixes.Default()
+	registry := builtin.Default()
 	var out []BundleFix
 	for _, name := range names {
 		if f, ok := registry[name]; ok {

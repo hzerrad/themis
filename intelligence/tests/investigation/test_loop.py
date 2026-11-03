@@ -288,7 +288,7 @@ async def test_past_deadline_stops_before_the_next_step() -> None:
 
 
 def test_model_may_cite_every_check_the_core_knows() -> None:
-    source = Path(__file__).parents[3] / "internal/predicate/rollout.go"
+    source = Path(__file__).parents[3] / "internal/check/rollout.go"
     checks = set(re.findall(r'^\s*Name\w+\s*=\s*"(\w+)"', source.read_text(), re.M))
     assert checks, "found no checks in rollout.go"
     assert checks == set(get_args(PredicateName))
@@ -305,7 +305,7 @@ def test_root_causes_are_a_closed_list_the_prompt_explains() -> None:
 
 
 def test_the_ui_names_every_root_cause_plainly() -> None:
-    app = Path(__file__).parents[3] / "internal" / "web" / "static" / "app.js"
+    app = Path(__file__).parents[3] / "internal" / "server" / "web" / "static" / "app.js"
     labels = re.search(r"const ROOT_CAUSE_LABEL = \{(.*?)\n\};", app.read_text(), re.S)
     assert labels is not None
     assert re.findall(r"^  (\w+):", labels.group(1), re.M) == list(ROOT_CAUSES)
