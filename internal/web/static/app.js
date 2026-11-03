@@ -563,6 +563,63 @@ function rejectedAttempts(proposals) {
     proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p))));
 }
 
+// SUGGESTABLE are the states in which a person may suggest a fix.
+const SUGGESTABLE = ["investigating", "awaiting_suggestion", "inconclusive"];
+
+// suggestForm lets a person suggest a rollback. The core checks it exactly as
+// it checks the investigator's: against the cluster, then your policy.
+function suggestForm(inc, evidence, reload) {
+  const t = inc.target;
+  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const earlier = history ? (history.Data.revisions || []).filter((r) => !r.current)
+    .sort((a, b) => Number(b.revision) - Number(a.revision)) : [];
+  const revision = earlier.length
+    ? h("select", { "aria-label": "Revision to roll back to" }, earlier.map((r) => h("option", { value: r.revision },
+      `Revision ${r.revision} · ${(r.containers || []).map((c) => c.image).join(", ")}${r.createdAt ? ` · from ${time(r.createdAt)}` : ""}`)))
+    : h("input", { type: "number", min: "1", placeholder: "revision", "aria-label": "Revision to roll back to" });
+  const why = h("textarea", { rows: "3", placeholder: "Why this fixes it. The approver reads this." });
+  const effect = h("input", { type: "text", placeholder: "What should happen, for example: pods stop crash-looping" });
+  const error = h("div", { class: "error" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    if (!why.value.trim()) {
+      error.textContent = "Say why this fixes it: whoever approves it reads that.";
+      return;
+    }
+    const body = {
+      clientProposalId: `ui-${Date.now()}`,
+      target: { group: t.Group || t.group || "apps", kind: t.Kind || t.kind, namespace: t.Namespace || t.namespace, name: t.Name || t.name, uid: t.UID || t.uid },
+      rollbackToRevision: { revision: Number(revision.value) },
+      rationale: why.value.trim(),
+      expectedEffect: effect.value.trim(),
+      citedEvidenceIds: evidence.map((x) => x.ID),
+    };
+    try {
+      const r = await api(`/v1/incidents/${encodeURIComponent(inc.id)}/proposals`, { method: "POST", body: JSON.stringify(body) });
+      // The API says REJECTED at the end of a longer status name.
+      if (r && String(r.status).endsWith("_REJECTED")) {
+        error.textContent = r.message || "Themis didn't accept this fix.";
+        return;
+      }
+      reload();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  const form = h("form", { onsubmit: submit },
+    h("dl", {},
+      h("dt", {}, "Fix"), h("dd", {}, "Roll back to ", revision),
+      h("dt", {}, "Why"), h("dd", {}, why),
+      h("dt", {}, "Expected effect"), h("dd", {}, effect)),
+    h("div", { class: "actions" }, h("button", { class: "primary", type: "submit" }, "Suggest this fix")),
+    h("p", { class: "muted" }, "Themis checks it against the cluster and your policy, as it does its own. It cites the evidence above."),
+    error);
+  const waiting = inc.state !== "investigating";
+  return h("details", { class: "panel suggest", open: waiting },
+    h("summary", {}, h("strong", {}, waiting ? "Suggest a fix" : "Suggest a fix while Themis investigates")), form);
+}
+
 async function detail(id) {
   const reload = () => detail(id).catch(showError);
   const d = await api(`/v1/incidents/${encodeURIComponent(id)}`);
@@ -584,6 +641,7 @@ async function detail(id) {
       return h("div", { class: "grid" }, p ? proposalPanel(p) : h("div"), actionPanel(a, reload));
     }),
     rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID))),
+    SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(inc, d.Evidence || [], reload) : null,
 
     h("h2", {}, "Investigation"),
     h("div", { class: "panel" }, inv
@@ -618,8 +676,9 @@ async function detail(id) {
       e.Data === undefined
         ? h("p", { class: "muted" }, "Only responders can read this evidence.")
         : h("pre", {}, JSON.stringify(e.Data, null, 2))))));
-  // Refreshing would discard what an approver is typing.
-  if (!actions.some((a) => a.State === "awaiting_approval")) timer = setTimeout(reload, POLL_MS * 2);
+  // Refreshing would discard what an approver or suggester is typing.
+  const typing = actions.some((a) => a.State === "awaiting_approval") || (SUGGESTABLE.includes(inc.state) && can("approver"));
+  if (!typing) timer = setTimeout(reload, POLL_MS * 2);
 }
 
 function showError(e) {

@@ -167,3 +167,6 @@ details summary { cursor: pointer; }
 details.rejected { margin-top: 16px; }
 details.rejected .grid { margin-top: 12px; }
 caption { caption-side: bottom; text-align: left; padding-top: 8px; font-size: 12px; }
+
+.suggest { margin-top: 16px; }
+.suggest textarea { width: 100%; font: inherit; }
