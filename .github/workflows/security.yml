@@ -54,8 +54,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
-        with:
+      # The release itself, checked against its published checksum: the
+      # setup-trivy action fetched an unpinned install script.
+      - name: Install Trivy
+        env:
           # Keep in step with mise.toml.
-          version: v0.76.0
+          TRIVY_VERSION: 0.76.0
+          TRIVY_SHA256: e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7
+        run: |
+          curl -fsSLo trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
+          tar -xzf trivy.tar.gz trivy
+          sudo install trivy /usr/local/bin/trivy
+          rm trivy trivy.tar.gz
+          trivy --version
       - run: make vuln-images
