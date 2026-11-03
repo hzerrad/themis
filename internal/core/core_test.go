@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/hzerrad/themis/internal/core"
-	"github.com/hzerrad/themis/internal/grpcserver"
+	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
@@ -239,7 +239,7 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	})
 	// The investigation is prepared and offered to investigators over gRPC.
 	conn, err := grpc.NewClient(o.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(grpcserver.BearerToken(investigatorSecret)))
+		grpc.WithPerRPCCredentials(grpcapi.BearerToken(investigatorSecret)))
 	if err != nil {
 		t.Fatal(err)
 	}

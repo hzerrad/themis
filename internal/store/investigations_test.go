@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -30,7 +30,7 @@ func investigating(t *testing.T, s *store.Store) string {
 	t.Helper()
 	id, _ := createOrJoin(t, s, newIncident("fp-"+t.Name()))
 	items := []evidence.Item{evidenceItem("0192f0c1-0000-7000-8000-00000000000a", evidence.PodStates)}
-	results := []predicate.Result{{Name: "oom_killed_new_revision", Version: "1", Value: predicate.True, Reason: "x", EvidenceIDs: []string{items[0].ID}}}
+	results := []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x", EvidenceIDs: []string{items[0].ID}}}
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		if err := s.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.Investigating, Reason: "test", Actor: "test"}); err != nil {
 			return err
@@ -311,7 +311,7 @@ func TestPredicates_Stored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Predicates: %v", err)
 	}
-	if len(results) != 1 || results[0].Value != predicate.True || len(results[0].EvidenceIDs) != 1 {
+	if len(results) != 1 || results[0].Value != check.True || len(results[0].EvidenceIDs) != 1 {
 		t.Errorf("Predicates = %+v", results)
 	}
 }

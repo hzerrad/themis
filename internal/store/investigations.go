@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/predicate"
 )
 
 // MaxInvestigationAttempts bounds the leases of one investigation.
@@ -45,7 +45,7 @@ type InvestigationResult struct {
 
 // CreateInvestigation records an incident's initial evidence and predicates
 // and queues its investigation for leasing.
-func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []predicate.Result) (string, error) {
+func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []check.Result) (string, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return "", fmt.Errorf("failed to create investigation ID: %w", err)
@@ -61,7 +61,7 @@ func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID s
 
 // RecordInitialEvidence records the evidence collected when an incident
 // opens, and what the checks made of it.
-func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []predicate.Result) error {
+func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []check.Result) error {
 	for _, item := range items {
 		if err := s.InsertEvidence(ctx, tx, incidentID, "", nil, item); err != nil {
 			return err
@@ -74,7 +74,7 @@ func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID
 		}
 		gaps := r.Gaps
 		if gaps == nil {
-			gaps = []predicate.Gap{}
+			gaps = []check.Gap{}
 		}
 		g, err := json.Marshal(gaps)
 		if err != nil {
@@ -341,7 +341,7 @@ func (s *Store) MissingEvidence(ctx context.Context, tx pgx.Tx, incidentID strin
 }
 
 // Predicates returns an incident's predicate results.
-func (s *Store) Predicates(ctx context.Context, incidentID string) ([]predicate.Result, error) {
+func (s *Store) Predicates(ctx context.Context, incidentID string) ([]check.Result, error) {
 	rows, err := s.pool.Query(ctx, `
 	SELECT name, version, value::text, reason, evidence_ids::text[], gaps, blind
 	FROM predicate_results WHERE incident_id = $1 ORDER BY id
@@ -349,18 +349,18 @@ func (s *Store) Predicates(ctx context.Context, incidentID string) ([]predicate.
 	if err != nil {
 		return nil, fmt.Errorf("predicates of incident %s: %w", incidentID, err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (predicate.Result, error) {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (check.Result, error) {
 		var (
-			r     predicate.Result
+			r     check.Result
 			value string
 			gaps  []byte
 		)
 		if err := row.Scan(&r.Name, &r.Version, &value, &r.Reason, &r.EvidenceIDs, &gaps, &r.Blind); err != nil {
-			return predicate.Result{}, err
+			return check.Result{}, err
 		}
-		r.Value = predicate.ParseTruth(value)
+		r.Value = check.ParseTruth(value)
 		if err := json.Unmarshal(gaps, &r.Gaps); err != nil {
-			return predicate.Result{}, err
+			return check.Result{}, err
 		}
 		if len(r.Gaps) == 0 {
 			r.Gaps = nil

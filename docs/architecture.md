@@ -57,3 +57,39 @@ PostgreSQL holds incidents and their transitions, alert states, rejected alerts,
 ## Contracts
 
 The core and the investigator speak gRPC, defined in [`api/proto/themis/v1`](../api/proto/themis/v1). The core never connects to the investigator: the investigator leases work, renews its lease while it works, and reports back. A result reported on a lost lease is refused.
+
+## Where the code lives
+
+The repository follows the usual Go layout: binaries in `cmd/`, everything else in `internal/`, contracts in `api/`. Inside `internal/`, folders follow the picture above.
+
+| Folder | What it holds |
+|---|---|
+| `cmd/themis-core`, `cmd/themis-executor` | The two Go binaries: flags, logging, then `internal/core` or `internal/executor` |
+| `api/proto`, `gen/` | The gRPC contracts, and the code generated from them |
+| `intelligence/` | The investigator, in Python |
+| `internal/core` | Assembles themis-core from the packages below |
+| `internal/executor` | themis-executor: the only code that writes to workloads |
+| `internal/incident` | An incident and its states |
+| `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |
+| `internal/incident/investigation` | Hands incidents to an investigator, and waits for a suggested fix when there is none |
+| `internal/incident/governance` | Policy, approvals, and putting a failed fix back |
+| `internal/incident/execution` | Passes approved actions to the executor |
+| `internal/incident/verification` | Decides whether the fix worked |
+| `internal/incident/reconciliation` | Notices targets changed outside Themis |
+| `internal/incident/notification` | Tells people when an incident is handed to them |
+| `internal/capability` | **What Themis can change.** The interface every fix implements, and the registry |
+| `internal/capability/rollback` | `deployment.rollback-to-revision` |
+| `internal/capability/builtin` | The fixes Themis ships with |
+| `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout" |
+| `internal/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
+| `internal/server/httpapi`, `internal/server/grpcapi`, `internal/server/web` | The HTTP API, the investigators' gRPC API, and the UI |
+| `internal/identity` | Who is calling: accounts, sessions, sign-in, the setup door |
+| `internal/selfcheck` | The status page: whether each part of an install works |
+| `internal/hint` | Plain advice when Themis couldn't see something it needed |
+| `internal/store` | PostgreSQL, and its migrations |
+| `internal/config`, `internal/config/resources`, `internal/settings` | Configuration from the file, from custom resources, and from the Setup page |
+| `internal/auth`, `internal/digest`, `internal/telemetry`, `internal/health`, `internal/kubewarn` | Shared plumbing: tokens, the action digest, metrics and traces, probes, API warnings |
+| `internal/evaluation`, `eval/` | Replaying recorded model replies against the scenarios |
+| `internal/testutil` | Test helpers: a real API server, PostgreSQL, metrics |
+
+`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in `internal/capability/builtin`; nothing else in the core changes.

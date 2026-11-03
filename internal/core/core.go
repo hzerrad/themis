@@ -23,28 +23,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/hzerrad/themis/internal/approval"
 	"github.com/hzerrad/themis/internal/auth"
-	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/execution"
-	"github.com/hzerrad/themis/internal/governance"
-	"github.com/hzerrad/themis/internal/grpcserver"
 	"github.com/hzerrad/themis/internal/health"
-	"github.com/hzerrad/themis/internal/intake"
-	"github.com/hzerrad/themis/internal/intake/alertmanager"
-	"github.com/hzerrad/themis/internal/investigation"
-	"github.com/hzerrad/themis/internal/notify"
-	"github.com/hzerrad/themis/internal/people"
-	"github.com/hzerrad/themis/internal/reconcile"
-	"github.com/hzerrad/themis/internal/remedy"
-	"github.com/hzerrad/themis/internal/resources"
+	"github.com/hzerrad/themis/internal/hint"
+	"github.com/hzerrad/themis/internal/identity"
+	"github.com/hzerrad/themis/internal/incident/execution"
+	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/incident/intake"
+	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/incident/investigation"
+	"github.com/hzerrad/themis/internal/incident/notification"
+	"github.com/hzerrad/themis/internal/incident/reconciliation"
+	"github.com/hzerrad/themis/internal/incident/verification"
+	"github.com/hzerrad/themis/internal/selfcheck"
+	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/server/httpapi"
+	"github.com/hzerrad/themis/internal/server/web"
 	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
-	"github.com/hzerrad/themis/internal/verify"
-	"github.com/hzerrad/themis/internal/web"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -195,7 +195,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
-	telemetry.AddUnscopedWorker(workers, &approval.ExpireWorker{Store: s})
+	telemetry.AddUnscopedWorker(workers, &httpapi.ExpireWorker{Store: s})
 	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
@@ -203,9 +203,9 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer closeExecutor()
 	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
-	telemetry.AddIncidentWorker(workers, &verify.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader()})
-	telemetry.AddUnscopedWorker(workers, &reconcile.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
-	telemetry.AddIncidentWorker(workers, &notify.Worker{Store: s, Config: cfg.Notifications, Remedy: remedy.Writer{Config: current}})
+	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader()})
+	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
+	telemetry.AddIncidentWorker(workers, &notification.Worker{Store: s, Config: cfg.Notifications, Remedy: hint.Writer{Config: current}})
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
@@ -215,10 +215,10 @@ func Run(ctx context.Context, o Options) error {
 		investigation.Queue: o.Workers,
 	}, []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
-			return approval.ExpireArgs{}, nil
+			return httpapi.ExpireArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}),
 		river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) {
-			return reconcile.Args{}, nil
+			return reconciliation.Args{}, nil
 		}, nil),
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
 			return investigation.CloseUndecidedArgs{}, nil
@@ -228,20 +228,20 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	beat := func(component string) *checks.Heartbeat {
-		return &checks.Heartbeat{Store: s, Component: component, Logger: log}
+	beat := func(component string) *selfcheck.Heartbeat {
+		return &selfcheck.Heartbeat{Store: s, Component: component, Logger: log}
 	}
-	investigators := &grpcserver.Server{
-		Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcserver.KubeTokenReviewer{Clientset: clientset},
+	investigators := &grpcapi.Server{
+		Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
 		Heartbeat: beat(store.HeartbeatInvestigator),
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators, Setup: s}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Setup: s}
 	api.Sessions, api.Accounts = s, s
-	checker := &checks.Checker{Config: current, Store: s, Access: checks.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
+	checker := &selfcheck.Checker{Config: current, Store: s, Access: selfcheck.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
 	}
@@ -259,10 +259,10 @@ func Run(ctx context.Context, o Options) error {
 	}
 	if o := cfg.API.OIDC; o != nil {
 		api.OIDC = true
-		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
+		(&identity.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
 	}
-	(&people.Passwords{Store: s, Logger: log}).Register(mux)
-	(&people.SignOut{Store: s, Logger: log}).Register(mux)
+	(&identity.Passwords{Store: s, Logger: log}).Register(mux)
+	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
 	api.Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
@@ -286,7 +286,7 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	if o.SetupAddr != "" {
-		door := &people.Door{Store: s, Next: mux, Logger: log}
+		door := &identity.Door{Store: s, Next: mux, Logger: log}
 		if err := mgr.Add(&server{addr: o.SetupAddr, handler: otelhttp.NewHandler(door, "setup"), log: log}); err != nil {
 			return err
 		}
@@ -400,7 +400,7 @@ func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
 	}
 	conn, err := grpc.NewClient(cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(grpcserver.BearerToken(token)),
+		grpc.WithPerRPCCredentials(grpcapi.BearerToken(token)),
 		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()),
 		telemetry.GRPCClientTracing())
 	if err != nil {

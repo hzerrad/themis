@@ -59,6 +59,11 @@ jobs:
       matrix:
         # Every supported minor: keep in step with the README's "Supported versions".
         kubernetes: ["1.35", "1.36", "1.37"]
+    env:
+      # Each test binary would start its own reaper container, and when many
+      # start at once they time out. The runner is discarded after the job, so
+      # nothing needs reaping.
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

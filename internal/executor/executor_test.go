@@ -16,17 +16,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/executor"
-	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/predicate"
+	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
-	"github.com/hzerrad/themis/internal/verify"
 )
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
@@ -70,7 +70,7 @@ func approved(t *testing.T) (*env, store.Action) {
 				return err
 			}
 		}
-		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []predicate.Result{{Name: predicate.NameGitOpsManaged, Version: "1", Value: predicate.False}}); err != nil {
+		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: check.NameGitOpsManaged, Version: "1", Value: check.False}}); err != nil {
 			return err
 		}
 		p, _, err := s.InsertProposal(ctx, tx, store.Proposal{
@@ -163,7 +163,7 @@ func TestExecute_RestoresPriorTemplate(t *testing.T) {
 	if got := e.incidentState(t, a.IncidentID); got != incident.Verifying {
 		t.Errorf("incident = %s, want verifying", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, verify.VerifyArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, verification.VerifyArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
 		t.Errorf("%d verify jobs for the action and its incident, want 1", n)
 	}
 }
@@ -425,7 +425,7 @@ func TestExecute_RestorePutsTheTemplateBack(t *testing.T) {
 	if got := e.incidentState(t, a.IncidentID); got != incident.Restoring {
 		t.Errorf("incident = %s, want restoring until the restore is checked", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2`, verify.VerifyArgs{}.Kind(), r.ID); n != 1 {
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2`, verification.VerifyArgs{}.Kind(), r.ID); n != 1 {
 		t.Errorf("%d checks of the restore, want 1", n)
 	}
 }

@@ -13,13 +13,13 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/digest"
-	"github.com/hzerrad/themis/internal/fix"
-	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
-	"github.com/hzerrad/themis/internal/verify"
 )
 
 const actor = "executor"
@@ -51,7 +51,7 @@ type Executor struct {
 	Logger *slog.Logger
 	Now    func() time.Time
 	// Fixes are the fixes it can carry out; nil means those Themis ships with.
-	Fixes fix.Registry
+	Fixes capability.Registry
 }
 
 // Execute runs an action once. The execution record is committed before it
@@ -102,24 +102,24 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	if err != nil || recomputed != a.Digest {
 		return Result{Status: Stale, Message: "Not applied: the stored fix was altered after it was approved."}
 	}
-	f, ok := e.fixes()[a.Capability]
+	f, ok := e.registry()[a.Capability]
 	if !ok {
 		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
 	}
 
 	target := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
 	plan, err := f.Plan(ctx, e.Client, target, a.Params)
-	if errors.Is(err, fix.ErrInvalidParams) {
+	if errors.Is(err, capability.ErrInvalidParams) {
 		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
 	}
-	if refusal, ok := errors.AsType[*fix.Refusal](err); ok {
+	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		return Result{Status: Stale, Message: "Not applied. " + refusal.Reason}
 	}
 	if err != nil {
 		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error()}
 	}
 	undone, _ := a.Restores()
-	current, err := digest.Compute(fix.Fields(a.IncidentID, f, plan, undone, a.PolicyID, a.PolicyDigest))
+	current, err := digest.Compute(capability.Fields(a.IncidentID, f, plan, undone, a.PolicyID, a.PolicyDigest))
 	if err != nil || current != a.Digest {
 		return Result{Status: Stale, Message: "Not applied: the workload changed after the fix was approved."}
 	}
@@ -180,7 +180,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 				return err
 			}
 		}
-		return e.Store.EnqueueTx(ctx, tx, verify.VerifyArgs{ActionID: a.ID, WindowStart: e.now(), IncidentID: a.IncidentID})
+		return e.Store.EnqueueTx(ctx, tx, verification.VerifyArgs{ActionID: a.ID, WindowStart: e.now(), IncidentID: a.IncidentID})
 	})
 }
 
@@ -203,9 +203,9 @@ func (e *Executor) logger() *slog.Logger {
 }
 
 // fixes are the fixes this executor can carry out.
-func (e *Executor) fixes() fix.Registry {
+func (e *Executor) registry() capability.Registry {
 	if e.Fixes != nil {
 		return e.Fixes
 	}
-	return fixes.Default()
+	return builtin.Default()
 }
