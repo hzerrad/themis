@@ -40,6 +40,7 @@ import (
 	"github.com/hzerrad/themis/internal/reconcile"
 	"github.com/hzerrad/themis/internal/remedy"
 	"github.com/hzerrad/themis/internal/resources"
+	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/verify"
@@ -245,6 +246,13 @@ func Run(ctx context.Context, o Options) error {
 		checker.Executor = cfg.Executor.Address
 	}
 	api.Checks = checker
+	if cfg.Settings != nil {
+		modelSettings := &settings.Settings{Store: s, KeyFile: cfg.Settings.KeyFile, Install: cfg.Model}
+		api.Settings, investigators.Settings = modelSettings, modelSettings
+		if !cfg.Investigators.Disabled {
+			checker.Model = modelSettings
+		}
+	}
 	api.Config, api.Intake = current, cfg.Intake
 	if cfg.Resources != nil {
 		api.Namespace = cfg.Resources.Namespace

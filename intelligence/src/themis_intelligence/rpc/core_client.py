@@ -52,6 +52,14 @@ class _Investigations(Protocol):
         timeout: float,
     ) -> Awaitable[investigation_pb2.FailInvestigationResponse]: ...
 
+    def GetModelSettings(
+        self,
+        request: investigation_pb2.GetModelSettingsRequest,
+        *,
+        metadata: Metadata,
+        timeout: float,
+    ) -> Awaitable[investigation_pb2.GetModelSettingsResponse]: ...
+
 
 class _Evidence(Protocol):
     def CollectEvidence(
@@ -147,6 +155,13 @@ class CoreClient:
             timeout=CALL_TIMEOUT_S,
         )
         return resp.investigation if resp.HasField("investigation") else None
+
+    async def model_settings(self) -> investigation_pb2.GetModelSettingsResponse:
+        return await self.investigations.GetModelSettings(
+            investigation_pb2.GetModelSettingsRequest(),
+            metadata=self.metadata,
+            timeout=CALL_TIMEOUT_S,
+        )
 
     async def renew_lease(self, lease_id: str) -> None:
         await self.investigations.RenewLease(

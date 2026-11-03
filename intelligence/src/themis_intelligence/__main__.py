@@ -4,9 +4,12 @@ Configuration comes from the environment:
 
     THEMIS_CORE_ADDR         themis-core's gRPC address (localhost:9090)
     THEMIS_TOKEN_FILE        file holding the investigator bearer token
-    MODEL_BASE_URL           an OpenAI-compatible API (http://localhost:11434/v1)
-    MODEL_NAME               the model (qwen3:8b)
+    MODEL_BASE_URL           an OpenAI-compatible API, such as http://localhost:11434/v1
+    MODEL_NAME               the model, such as qwen3:8b
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
+                             The three above, and MODEL_STRICT_OUTPUT with the address,
+                             come from Themis's setup when unset here; without an
+                             address and a name, no incident is investigated
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
     MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low; unset
@@ -28,7 +31,7 @@ import os
 from pathlib import Path
 
 from themis_intelligence import telemetry, tracing
-from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
+from themis_intelligence.model_source import Installed, ModelSource
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price
 from themis_intelligence.platform.contract import CLASSIFICATION_RANK
@@ -91,18 +94,20 @@ async def main() -> None:
     if ceiling not in CLASSIFICATION_RANK:
         raise SystemExit(f"MODEL_CEILING must be one of {', '.join(CLASSIFICATION_RANK)}.")
     key_file = env("MODEL_API_KEY_FILE")
-    adapter = OpenAICompatAdapter(
-        base_url=env("MODEL_BASE_URL", "http://localhost:11434/v1"),
+    # What the install left unset comes from Themis's setup, read before each lease.
+    installed = Installed(
+        base_url=env("MODEL_BASE_URL") or None,
+        model=env("MODEL_NAME") or None,
         api_key=read_secret(key_file) if key_file else None,
+        strict_output=read_flag("MODEL_STRICT_OUTPUT", default=True),
     )
     max_output = env("MODEL_MAX_OUTPUT_TOKENS")
     endpoint = Endpoint(
         name=env("MODEL_ENDPOINT", "default"),
-        model=env("MODEL_NAME", "qwen3:8b"),
+        model="",
         ceiling=ceiling,
         reasoning_effort=env("MODEL_REASONING_EFFORT") or None,
         max_output_tokens=int(max_output) if max_output else None,
-        strict_output=read_flag("MODEL_STRICT_OUTPUT", default=True),
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()
@@ -114,12 +119,15 @@ async def main() -> None:
         env("THEMIS_CORE_ADDR", "localhost:9090"),
         read_secret(env("THEMIS_TOKEN_FILE", "/var/run/secrets/themis/investigator-token")),
     )
-    worker = Worker(
-        core=core,
-        new_model=lambda: ModelClient(
+    source = ModelSource(
+        installed,
+        core,
+        endpoint,
+        lambda adapter, endpoint: ModelClient(
             adapter=adapter, endpoint=endpoint, budget=Budget(budget), route=ROUTE, price=price
         ),
     )
+    worker = Worker(core=core, new_model=source.new_model, ready=source.ready)
     stop_tracing = tracing.setup_tracing()
     try:
         await worker.run()

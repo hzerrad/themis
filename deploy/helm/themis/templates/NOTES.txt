@@ -24,7 +24,11 @@ Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or 
 Watching: {{ join ", " .Values.enrolledNamespaces }}
 Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis never applies a fix{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
+{{- if and .Values.model.baseURL .Values.model.name }}
 Model:    {{ .Values.model.name }} at {{ .Values.model.baseURL }}
+{{- else }}
+Model:    not set yet; set it on the Setup page
+{{- end }}
 {{- else }}
 Model:    none; each incident waits for a fix suggested by a person or a
           tool outside Themis

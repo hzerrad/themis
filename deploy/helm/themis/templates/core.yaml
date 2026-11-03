@@ -90,6 +90,7 @@ spec:
               - {key: intake, path: intake}
               - {key: investigator, path: investigator}
               - {key: admin, path: admin}
+              - {key: settings, path: settings}
               {{- if .Values.executor.enabled }}
               - {key: executor, path: executor}
               {{- end }}

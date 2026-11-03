@@ -202,6 +202,38 @@
       "type": "object",
       "description": "Notifications announce escalations to humans."
     },
+    "settings": {
+      "properties": {
+        "keyFile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "KeyFile holds the secret that encrypts secret settings, such as the\nmodel's key. Losing it loses them; changing it makes them unreadable."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "keyFile"
+      ],
+      "description": "Settings are those made in Themis's setup, kept in its database."
+    },
+    "model": {
+      "properties": {
+        "baseURL": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": "boolean",
+          "description": "APIKey says the install gives the investigator a key."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Model is what the install itself set for the investigator's model, so\nsetup leaves those alone. The chart sets it."
+    },
     "externalProposals": {
       "properties": {
         "sources": {

@@ -10,6 +10,7 @@ metadata:
   labels: {{- include "themis.labels" . | nindent 4 }}
 type: Opaque
 data:
-  {{- range $key := list "intake" "investigator" "admin" "executor" }}
+  {{- /* settings encrypts secret settings made in setup: losing it loses them. */}}
+  {{- range $key := list "intake" "investigator" "admin" "executor" "settings" }}
   {{ $key }}: {{ get $data $key | default (randAlphaNum 48 | b64enc) }}
   {{- end }}

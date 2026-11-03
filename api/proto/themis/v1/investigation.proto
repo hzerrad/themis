@@ -10,6 +10,19 @@ service InvestigationService {
   rpc RenewLease(RenewLeaseRequest) returns (RenewLeaseResponse);
   rpc CompleteInvestigation(CompleteInvestigationRequest) returns (CompleteInvestigationResponse);
   rpc FailInvestigation(FailInvestigationRequest) returns (FailInvestigationResponse);
+  // GetModelSettings returns the model settings made in Themis's setup, for
+  // whatever the investigator's own environment leaves unset.
+  rpc GetModelSettings(GetModelSettingsRequest) returns (GetModelSettingsResponse);
+}
+
+message GetModelSettingsRequest {}
+
+// Empty fields were not set in Themis's setup.
+message GetModelSettingsResponse {
+  string base_url = 1;
+  string model = 2;
+  string api_key = 3;
+  optional bool strict_output = 4;
 }
 
 enum HypothesisStatus {

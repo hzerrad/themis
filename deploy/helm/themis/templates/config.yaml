@@ -15,6 +15,22 @@ data:
       {{- if not (include "themis.modelEnabled" .) }}
       disabled: true
       {{- end }}
+    settings:
+      keyFile: /var/run/secrets/themis/settings
+    {{- with .Values.model }}
+    {{- if or .baseURL .name .apiKeySecret }}
+    model:
+      {{- with .baseURL }}
+      baseURL: {{ . | quote }}
+      {{- end }}
+      {{- with .name }}
+      name: {{ . | quote }}
+      {{- end }}
+      {{- if .apiKeySecret }}
+      apiKey: true
+      {{- end }}
+    {{- end }}
+    {{- end }}
     api:
       bearerTokenFile: /var/run/secrets/themis/admin
       {{- with .Values.oidc }}

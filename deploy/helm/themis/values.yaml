@@ -41,10 +41,10 @@ model:
   # checks, then each incident waits for a fix suggested by a person or a
   # tool outside Themis, such as HolmesGPT.
   enabled: true
-  # Required when enabled, for example https://api.openai.com/v1 or
-  # http://ollama:11434/v1.
+  # For example https://api.openai.com/v1 or http://ollama:11434/v1. Left
+  # empty, it's set on Themis's Setup page instead.
   baseURL: ""
-  # Required when enabled: the model name the endpoint serves.
+  # The model name the endpoint serves. Left empty, it's set on the Setup page.
   name: ""
   # The most sensitive evidence the endpoint may receive. sensitive includes
   # (redacted) container logs; set internal to keep logs from the endpoint.
