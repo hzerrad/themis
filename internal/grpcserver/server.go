@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -54,6 +55,10 @@ type Server struct {
 	// Reviewer proves who a caller outside Themis is. Without one, there are
 	// no such callers.
 	Reviewer TokenReviewer
+
+	// Heartbeat records that the investigator asked for work. Nil records
+	// nothing.
+	Heartbeat *checks.Heartbeat
 
 	limiters sync.Map
 	reviews  lru[[sha256.Size]byte, review]

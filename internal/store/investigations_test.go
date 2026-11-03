@@ -197,7 +197,7 @@ func TestFailInvestigation_RetriesThenGivesUp(t *testing.T) {
 		var exhausted bool
 		err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 			var err error
-			exhausted, err = s.FailInvestigation(t.Context(), tx, inv.LeaseID, "model_unavailable", "connection refused", now.Add(time.Minute))
+			exhausted, err = s.FailInvestigation(t.Context(), tx, inv.LeaseID, "model_unavailable", "The model couldn't be reached", "connection refused", now.Add(time.Minute))
 			return err
 		})
 		if err != nil {

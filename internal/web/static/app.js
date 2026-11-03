@@ -248,6 +248,40 @@ async function accounts() {
     error);
 }
 
+// CHECK_STATE says how each part of the install is doing, and in what tone.
+const CHECK_STATE = {
+  ok: ["Working", "good"], warn: ["Needs attention", "warn"], problem: ["Not working", "bad"],
+  waiting: ["Waiting", "neutral"], off: ["Off", "neutral"],
+};
+
+// ago says how long ago t was, roughly.
+function ago(t) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
+  if (90 > s) return `${s} seconds ago`;
+  if (90 * 60 > s) return `${Math.round(s / 60)} minutes ago`;
+  if (36 * 3600 > s) return `${Math.round(s / 3600)} hours ago`;
+  return time(t);
+}
+
+// status says whether each part of the install works, and how to fix what doesn't.
+async function status() {
+  const { checks } = await api("/v1/status");
+  const broken = checks.filter((c) => c.state === "problem").length;
+  render(
+    h("h1", {}, "Status"),
+    h("p", { class: "muted" }, broken ? `${broken === 1 ? "One part isn't" : `${broken} parts aren't`} working. Each says how to fix it.` : "Each part of Themis, checked just now."),
+    h("table", {}, h("tbody", {}, checks.map((c) => {
+      const [word, tone] = CHECK_STATE[c.state] || [c.state, "neutral"];
+      return h("tr", {},
+        h("td", {}, h("strong", {}, c.name)),
+        h("td", {}, h("span", { class: `state ${tone}` }, word)),
+        h("td", {}, c.summary,
+          c.at ? h("div", { class: "muted" }, `Last heard from ${ago(c.at)}.`) : null,
+          c.fix && c.state !== "ok" ? h("div", { class: "fix" }, c.fix) : null));
+    }))),
+    h("div", { class: "actions" }, h("button", { onclick: route }, "Check again")));
+}
+
 // password lets someone signed in with an account change its password.
 function changePassword() {
   const current = h("input", { type: "password", placeholder: "current password", autocomplete: "current-password" });
@@ -587,6 +621,7 @@ async function route() {
   const m = location.hash.match(/^#\/incidents\/([\w-]+)$/);
   const run = m ? () => detail(m[1])
     : location.hash === "#/accounts" && can("admin") ? accounts
+    : location.hash === "#/status" || (location.hash === "" && me.setup) ? status
     : location.hash === "#/password" && me.account ? async () => changePassword()
     : async () => { await list(); timer = setTimeout(route, POLL_MS); };
   run().catch(showError);

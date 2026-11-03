@@ -210,18 +210,18 @@ func (s *Store) CompleteInvestigation(ctx context.Context, tx pgx.Tx, leaseID st
 	return nil
 }
 
-// FailInvestigation releases a lease after a failure. The investigation is
-// leased again from retryAt unless that was its last attempt, which it
-// reports.
-func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, reason, message string, retryAt time.Time) (bool, error) {
+// FailInvestigation releases a lease after a failure of kind. The
+// investigation is leased again from retryAt unless that was its last
+// attempt, which it reports.
+func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, kind, reason, message string, retryAt time.Time) (bool, error) {
 	var exhausted bool
 	err := tx.QueryRow(ctx, `
 	UPDATE investigations
 	SET state = CASE WHEN attempts >= $2 THEN 'failed'::investigation_state ELSE 'pending' END,
-	    lease_id = NULL, lease_deadline = NULL, failure = $3, lease_after = $4, updated_at = now()
+	    lease_id = NULL, lease_deadline = NULL, failure = $3, failure_kind = $5, lease_after = $4, updated_at = now()
 	WHERE lease_id = $1 AND state = 'leased'
 	RETURNING state = 'failed'
-`, leaseID, MaxInvestigationAttempts, reason+": "+message, retryAt).Scan(&exhausted)
+`, leaseID, MaxInvestigationAttempts, reason+": "+message, retryAt, kind).Scan(&exhausted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, ErrLeaseLost
 	}
@@ -236,7 +236,7 @@ func (s *Store) FailInvestigation(ctx context.Context, tx pgx.Tx, leaseID, reaso
 func (s *Store) ExpireInvestigations(ctx context.Context, tx pgx.Tx, now time.Time) ([]string, error) {
 	rows, err := tx.Query(ctx, `
 	UPDATE investigations
-	SET state = 'failed', failure = 'The investigator stopped responding during its last attempt', lease_id = NULL, updated_at = now()
+	SET state = 'failed', failure = 'The investigator stopped responding during its last attempt', failure_kind = 'stopped_responding', lease_id = NULL, updated_at = now()
 	WHERE state = 'leased' AND lease_deadline < $1 AND attempts >= $2
 	RETURNING incident_id::text
 `, now, MaxInvestigationAttempts)

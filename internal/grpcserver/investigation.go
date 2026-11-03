@@ -23,6 +23,7 @@ import (
 
 func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInvestigationRequest) (*themisv1.LeaseInvestigationResponse, error) {
 	now := s.now()
+	s.Heartbeat.Beat(ctx, req.GetWorkerId())
 	var (
 		inv store.Investigation
 		ok  bool
@@ -229,7 +230,7 @@ func (s *Server) FailInvestigation(ctx context.Context, req *themisv1.FailInvest
 			return err
 		}
 		retryAt := s.now().Add(retryBackoff << (inv.Attempts - 1))
-		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, failed(req.GetReason()), req.GetMessage(), retryAt)
+		exhausted, err := s.Store.FailInvestigation(ctx, tx, inv.LeaseID, failureKind(req.GetReason()), failed(req.GetReason()), req.GetMessage(), retryAt)
 		if err != nil {
 			return err
 		}
@@ -315,6 +316,12 @@ var failures = map[themisv1.InvestigationFailureReason]string{
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED:     "it used up its token budget.",
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED:    "it ran out of time.",
 	themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_INTERNAL:             "the investigator hit an internal error.",
+}
+
+// failureKind is the reason as stored: the enum's name, lowercase, without
+// its prefix, such as model_unavailable.
+func failureKind(r themisv1.InvestigationFailureReason) string {
+	return strings.ToLower(strings.TrimPrefix(r.String(), "INVESTIGATION_FAILURE_REASON_"))
 }
 
 // failed says why an investigation failed, as a sentence of its own.

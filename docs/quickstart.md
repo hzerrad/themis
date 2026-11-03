@@ -134,7 +134,7 @@ make ui   # serves the UI on http://localhost:8090
 kubectl -n themis port-forward deploy/themis-core 8090:8083
 ```
 
-Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The banner at the top leads you to create your admin account; sign in with it and setup is done (or use your identity provider, in step 6). Then break the rollout, in another terminal:
+Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The first page is **Status**: each part of Themis, whether it works, and how to fix it if not. The banner at the top leads you to create your admin account; sign in with it and setup is done (or use your identity provider, in step 6). Then break the rollout, in another terminal:
 
 **kind:**
 

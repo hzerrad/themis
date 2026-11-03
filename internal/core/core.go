@@ -25,6 +25,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/approval"
 	"github.com/hzerrad/themis/internal/auth"
+	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/execution"
@@ -226,13 +227,24 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	investigators := &grpcserver.Server{Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcserver.KubeTokenReviewer{Clientset: clientset}}
+	beat := func(component string) *checks.Heartbeat {
+		return &checks.Heartbeat{Store: s, Component: component, Logger: log}
+	}
+	investigators := &grpcserver.Server{
+		Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcserver.KubeTokenReviewer{Clientset: clientset},
+		Heartbeat: beat(store.HeartbeatInvestigator),
+	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
 	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators, Setup: s}
 	api.Sessions, api.Accounts = s, s
+	checker := &checks.Checker{Config: current, Store: s, Access: checks.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil}
+	if cfg.Executor != nil {
+		checker.Executor = cfg.Executor.Address
+	}
+	api.Checks = checker
 	if o := cfg.API.OIDC; o != nil {
 		api.OIDC = true
 		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
@@ -245,6 +257,8 @@ func Run(ctx context.Context, o Options) error {
 		Receiver:  intake.NewReceiver(s),
 		TokenFile: cfg.Intake.BearerTokenFile,
 		Logger:    log,
+		Heartbeat: beat(store.HeartbeatAlertmanager),
+		Refused:   beat(store.HeartbeatAlertmanagerRefused),
 	})
 
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {

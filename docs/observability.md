@@ -4,6 +4,22 @@ Themis's three components, the core, the executor and the investigator (`intelli
 
 None of it carries workload data. Logs, metric labels and spans never contain evidence, container logs, prompts, model output, alert annotation values, policy inputs beyond their names, tokens or secrets. The end-to-end test plants canaries in a secret, a container's logs, a prompt injection in those logs and an alert annotation, and fails if one reaches any component's logs or metrics.
 
+## Status
+
+The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, check each part of an install when asked, and say how to fix what doesn't work:
+
+| Part | Working when | Otherwise |
+|---|---|---|
+| Database | It answers | Nothing else can be checked |
+| Investigator | It asked for work in the last 2 minutes | It never has, or stopped |
+| Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident |
+| Alerts | Alertmanager sent alerts, and through which receiver | None yet, or something sends them with the wrong token |
+| Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
+| Fixes | The executor is installed and reachable | Off, or unreachable |
+| Sign-in | People sign in with accounts or an identity provider | Setup isn't finished, or only the emergency token works |
+
+The investigator and Alertmanager are recorded as heard from at most every 30 seconds, in the database, so every core replica sees the same.
+
 ## Logs
 
 Each component logs to stdout, one JSON object per line. Set the least severe level with `logLevel` in the Helm chart, or `--log-level`: `debug`, `info` (the default), `warn` or `error`.
