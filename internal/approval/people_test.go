@@ -40,7 +40,7 @@ func signedIn(t *testing.T) *env {
 	}
 	mux := http.NewServeMux()
 	(&approval.API{
-		Store: s, TokenFile: file, Sessions: s, Setup: s, Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: s, Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},

@@ -232,10 +232,13 @@ func Run(ctx context.Context, o Options) error {
 
 	mux := http.NewServeMux()
 	api := &approval.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: remedy.Writer{Config: current}, Suggestions: investigators, Setup: s}
+	api.Sessions, api.Accounts = s, s
 	if o := cfg.API.OIDC; o != nil {
-		api.Sessions = s
+		api.OIDC = true
 		(&people.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
 	}
+	(&people.Passwords{Store: s, Logger: log}).Register(mux)
+	(&people.SignOut{Store: s, Logger: log}).Register(mux)
 	api.Register(mux)
 	web.Register(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{

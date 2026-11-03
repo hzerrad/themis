@@ -56,7 +56,6 @@ type SignIn struct {
 func (s *SignIn) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /auth/login", s.login)
 	mux.HandleFunc("GET /auth/callback", s.callback)
-	mux.HandleFunc("POST /auth/logout", s.logout)
 }
 
 // discover finds the provider's endpoints and keys, and keeps them once found,
@@ -198,21 +197,6 @@ func (s *SignIn) exchange(ctx context.Context, code string, in store.SignIn) (st
 	}
 	now := s.now()
 	return store.Session{Subject: idt.Subject, Username: username, Groups: groups, CreatedAt: now, ExpiresAt: now.Add(cfg.SessionTTL.Duration)}, nil
-}
-
-func (s *SignIn) logout(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get(RequestHeader) == "" {
-		http.Error(w, "Sign out from the Themis page.", http.StatusForbidden)
-		return
-	}
-	if c, err := r.Cookie(SessionCookie); err == nil && c.Value != "" {
-		if err := s.Store.EndSession(r.Context(), c.Value); err != nil {
-			s.fail(w, r, http.StatusServiceUnavailable, "Themis can't sign you out right now. Try again shortly.", err)
-			return
-		}
-	}
-	http.SetCookie(w, s.cookie(SessionCookie, "", "/", -1))
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // cookie is HTTP-only, and secure whenever Themis is reached over HTTPS.

@@ -134,7 +134,7 @@ make ui   # serves the UI on http://localhost:8090
 kubectl -n themis port-forward deploy/themis-core 8090:8083
 ```
 
-Open <http://localhost:8090>. There's no password: until an admin signs in for real (step 6), whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. Then break the rollout, in another terminal:
+Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The banner at the top leads you to create your admin account; sign in with it and setup is done (or use your identity provider, in step 6). Then break the rollout, in another terminal:
 
 **kind:**
 
@@ -166,9 +166,9 @@ Click **Approve this change**. You approve exactly what you were shown: if the w
 
 The timeline holds the whole record, from the alert to the result. To try again, roll checkout back (`make demo-fix`, or `kubectl -n shop rollout undo deployment/checkout`) and break it again. [The demo](demo.md#things-to-try) has more to try, such as denying a fix or fixing it yourself first.
 
-## 6. Optional: sign people in
+## 6. Optional: sign people in through your identity provider
 
-So far, whoever opens Themis through port-forward is an admin, and every approval is recorded as `setup`. With an OIDC provider, people sign in as themselves, each with a role, and an approval records who gave it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
+Themis accounts, on the **Accounts** page, are enough for a small team. With an OIDC provider, people sign in as themselves, each with a role, and an approval records who gave it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
 
 1. Register Themis with your provider as a web app. Set its redirect URL to Themis's `/auth/callback` as your browser reaches it. Through the port-forward above, that is `http://localhost:8090/auth/callback`; behind an ingress, something like `https://themis.example.com/auth/callback`.
 2. Put the client secret in a Secret:

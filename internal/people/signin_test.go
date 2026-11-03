@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -168,6 +169,7 @@ func newRig(t *testing.T) *rig {
 		Config: config.OIDC{IssuerURL: r.idp.URL, ClientID: "themis-ui", ClientSecretFile: secret, RedirectURL: "https://themis.example.com/auth/callback"},
 		Store:  r.store, Now: func() time.Time { return now },
 	}).Register(r.mux)
+	(&people.SignOut{Store: r.store, Logger: slog.New(slog.DiscardHandler)}).Register(r.mux)
 	return r
 }
 

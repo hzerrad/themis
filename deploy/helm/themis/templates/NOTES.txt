@@ -11,8 +11,8 @@ Opening Themis this way makes you an admin until an admin signs in for
 real: Kubernetes has already checked that you may port-forward to it.
 {{- if not .Values.oidc.issuerURL }}
 
-No sign-in is set up yet. Set the oidc values so people can sign in as
-themselves.
+Create your admin account there and sign in with it, or set the oidc
+values to sign in through your identity provider.
 {{- end }}
 {{- else }}
 
