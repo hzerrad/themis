@@ -24,6 +24,15 @@ type Fix interface {
 	Name() string
 	Version() string
 
+	// Description says what the fix does, for whoever suggests it. Schema
+	// is the JSON Schema of its parameters.
+	Description() string
+	Schema() json.RawMessage
+
+	// Validate checks params without reading the cluster, and returns them
+	// as the fix stores them: JSON numbers decode as float64, for one.
+	Validate(params map[string]any) (map[string]any, error)
+
 	// Plan reads the target and works out the change params ask for. A
 	// *Refusal says why it can't go ahead; ErrInvalidParams that the
 	// parameters make no sense.

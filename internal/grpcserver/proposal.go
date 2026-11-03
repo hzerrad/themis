@@ -12,6 +12,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/fix"
+	"github.com/hzerrad/themis/internal/fixes"
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/store"
 
@@ -42,7 +44,7 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 	if req.GetIncidentId() != "" {
 		return nil, status.Error(codes.Unauthenticated, "only a caller outside Themis names an incident")
 	}
-	capability, params, invalid, err := parseProposal(req)
+	capability, params, invalid, err := s.parseProposal(req)
 	if err != nil {
 		return nil, err
 	}
@@ -97,14 +99,32 @@ func (s *Server) SubmitProposal(ctx context.Context, req *themisv1.SubmitProposa
 	return proposalResponse(stored), nil
 }
 
-// parseProposal reads what every proposal must carry. invalid says why its
-// parameters are wrong, for storing the proposal as rejected.
-func parseProposal(req *themisv1.SubmitProposalRequest) (capability string, params map[string]any, invalid string, err error) {
+// parseProposal reads what every proposal must carry: the fix as
+// capability_name and params, or in the older rollback_to_revision form.
+// invalid says why its parameters are wrong, for storing the proposal as
+// rejected.
+func (s *Server) parseProposal(req *themisv1.SubmitProposalRequest) (capability string, params map[string]any, invalid string, err error) {
 	if req.GetTarget() == nil {
 		return "", nil, "", status.Error(codes.InvalidArgument, "target is required")
 	}
 	if req.GetClientProposalId() == "" {
 		return "", nil, "", status.Error(codes.InvalidArgument, "client_proposal_id is required")
+	}
+	if name := req.GetCapabilityName(); name != "" {
+		if req.GetCapability() != nil {
+			return "", nil, "", status.Error(codes.InvalidArgument, "set capability_name or rollback_to_revision, not both")
+		}
+		params = req.GetParams().AsMap()
+		f, ok := s.fixes()[name]
+		if !ok {
+			// Not a fix Themis knows: judging rejects it as not allowed.
+			return name, params, "", nil
+		}
+		normal, err := f.Validate(params)
+		if err != nil {
+			return name, params, sentence(err), nil
+		}
+		return name, normal, "", nil
 	}
 	switch c := req.GetCapability().(type) {
 	case *themisv1.SubmitProposalRequest_RollbackToRevision:
@@ -115,6 +135,37 @@ func parseProposal(req *themisv1.SubmitProposalRequest) (capability string, para
 	default:
 		return "", nil, "", status.Error(codes.InvalidArgument, "a capability is required")
 	}
+}
+
+// sentence makes a Go error a sentence for the incident's timeline.
+func sentence(err error) string {
+	msg := strings.TrimPrefix(err.Error(), fix.ErrInvalidParams.Error()+": ")
+	if msg == "" {
+		return "The fix's parameters aren't valid."
+	}
+	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+}
+
+// fixes are the fixes Themis can carry out.
+func (s *Server) fixes() fix.Registry {
+	if s.Fixes != nil {
+		return s.Fixes
+	}
+	return fixes.Default()
+}
+
+// capabilities describes the fixes named that Themis can carry out, for a
+// suggester.
+func (s *Server) capabilities(names []string) []*themisv1.Capability {
+	var out []*themisv1.Capability
+	for _, name := range names {
+		f, ok := s.fixes()[name]
+		if !ok {
+			continue
+		}
+		out = append(out, &themisv1.Capability{Name: f.Name(), Description: f.Description(), ParamsSchema: string(f.Schema())})
+	}
+	return out
 }
 
 func proposalResponse(stored store.Proposal) *themisv1.SubmitProposalResponse {

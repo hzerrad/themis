@@ -67,6 +67,16 @@ message Budget {
   google.protobuf.Timestamp deadline = 4;
 }
 
+// Capability is a fix Themis can carry out, as a suggester sees it.
+message Capability {
+  // The name a suggestion uses, such as deployment.rollback-to-revision.
+  string name = 1;
+  // What the fix does, in words.
+  string description = 2;
+  // The JSON Schema of its parameters, as JSON text.
+  string params_schema = 3;
+}
+
 message Provenance {
   string source = 1;
   string model = 2;

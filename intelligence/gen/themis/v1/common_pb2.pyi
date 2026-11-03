@@ -126,6 +126,16 @@ class Budget(_message.Message):
     deadline: _timestamp_pb2.Timestamp
     def __init__(self, max_steps: _Optional[int] = ..., max_input_tokens: _Optional[int] = ..., max_output_tokens: _Optional[int] = ..., deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
+class Capability(_message.Message):
+    __slots__ = ("name", "description", "params_schema")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    PARAMS_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    params_schema: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., params_schema: _Optional[str] = ...) -> None: ...
+
 class Provenance(_message.Message):
     __slots__ = ("source", "model", "prompt_version", "route")
     SOURCE_FIELD_NUMBER: _ClassVar[int]

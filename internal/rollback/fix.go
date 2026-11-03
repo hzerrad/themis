@@ -21,6 +21,24 @@ var _ fix.Fix = Fix{}
 func (Fix) Name() string    { return Name }
 func (Fix) Version() string { return Version }
 
+func (Fix) Description() string {
+	return "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history."
+}
+
+var schema = json.RawMessage(`{"type":"object","additionalProperties":false,"required":["revision"],` +
+	`"properties":{"revision":{"type":"integer","minimum":1,"description":"The earlier revision to roll back to."}}}`)
+
+func (Fix) Schema() json.RawMessage { return schema }
+
+// Validate needs a revision: a positive whole number, and nothing else.
+func (Fix) Validate(params map[string]any) (map[string]any, error) {
+	revision, ok := RevisionParam(params)
+	if !ok || len(params) != 1 {
+		return nil, fmt.Errorf("%w: a rollback needs only revision, a positive whole number", fix.ErrInvalidParams)
+	}
+	return map[string]any{"revision": revision}, nil
+}
+
 // Plan reads the target and the template of the revision params name.
 func (Fix) Plan(ctx context.Context, r client.Reader, t incident.TargetRef, params map[string]any) (fix.Plan, error) {
 	revision, ok := RevisionParam(params)

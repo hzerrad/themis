@@ -324,7 +324,7 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 		len(req.GetCitedEvidenceIds()) > maxExternalCitations || len(req.GetCitedPredicates()) > maxExternalCitations {
 		return nil, status.Error(codes.InvalidArgument, "the suggestion is too long")
 	}
-	capability, params, invalid, err := parseProposal(req)
+	capability, params, invalid, err := s.parseProposal(req)
 	if err != nil {
 		return nil, err
 	}
@@ -492,6 +492,15 @@ func (s *Server) GetIncident(ctx context.Context, req *themisv1.GetIncidentReque
 	}
 	for _, r := range results {
 		resp.Predicates = append(resp.Predicates, predicateToProto(r))
+	}
+	if profile, ok := s.Config.Current().Profile(in.Profile); ok {
+		var allowed []string
+		for _, c := range profile.Capabilities {
+			if caller.All || slices.Contains(caller.Capabilities, c) {
+				allowed = append(allowed, c)
+			}
+		}
+		resp.Capabilities = s.capabilities(allowed)
 	}
 	return resp, nil
 }

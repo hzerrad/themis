@@ -69,6 +69,7 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 		Profile:               inv.Profile,
 		Target:                targetToProto(inv.Target),
 		CandidateCapabilities: profile.Capabilities,
+		Capabilities:          s.capabilities(profile.Capabilities),
 		Budget: &themisv1.Budget{
 			MaxSteps: int32(budget.MaxSteps), //nolint:gosec // validated config
 			Deadline: timestamppb.New(now.Add(budget.Timeout.Duration)),
