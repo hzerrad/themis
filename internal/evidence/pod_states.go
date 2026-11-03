@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json/v2"
 	"slices"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // PodStates describes the target's pods: revision, readiness and container
@@ -69,27 +68,14 @@ func NewPodStates() Template { return podStates{} }
 
 func (podStates) Name() string { return PodStates }
 
-func (podStates) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, _ map[string]string) (Item, error) {
-	d, err := getDeployment(ctx, c, t)
-	if err != nil {
-		return Item{}, err
-	}
-	replicaSets, err := ownedReplicaSets(ctx, c, d)
-	if err != nil {
-		return Item{}, err
-	}
-	revisions := map[types.UID]string{}
-	for _, rs := range replicaSets {
-		revisions[rs.UID] = rs.Annotations[revisionAnnotation]
-	}
-
-	pods, err := ownedPods(ctx, c, d, replicaSets)
+func (podStates) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
+	pods, err := w.Pods(ctx)
 	if err != nil {
 		return Item{}, err
 	}
 	var view PodStatesView
 	for _, pod := range pods {
-		view.Pods = append(view.Pods, viewPod(pod, revisions[metav1.GetControllerOf(pod).UID]))
+		view.Pods = append(view.Pods, viewPod(pod.Pod, revisionString(pod.Revision)))
 	}
 
 	view.TotalPods = len(view.Pods)
@@ -171,4 +157,13 @@ func healthRank(p PodView) int {
 		}
 	}
 	return 2
+}
+
+// revisionString shows a revision as Kubernetes writes it, or nothing when
+// it isn't numbered.
+func revisionString(n int64) string {
+	if n == 0 {
+		return ""
+	}
+	return strconv.FormatInt(n, 10)
 }

@@ -12,13 +12,13 @@ import (
 	"github.com/riverqueue/river"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability/rollback"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 const actor = "investigation"
@@ -62,16 +62,24 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		return w.reject(ctx, in, fmt.Sprintf("profile %q is no longer configured", in.Profile))
 	}
 
+	target, err := workload.Read(ctx, w.Reader, in.Target)
+	if workload.Lost(err) {
+		lost := w.Store.InTx(ctx, func(tx pgx.Tx) error { return TargetLost(ctx, w.Store, tx, in, err, actor) })
+		if errors.Is(lost, store.ErrStateConflict) {
+			return nil
+		}
+		return lost
+	}
+	if err != nil {
+		return err
+	}
 	now := w.now()
 	var (
 		items []evidence.Item
 		gaps  []store.EvidenceGap
 	)
 	for _, name := range profile.Evidence.Initial {
-		item, err := w.Registry.Collect(ctx, w.Reader, name, in.Target, nil, now)
-		if errors.Is(err, evidence.ErrTargetGone) {
-			return w.reject(ctx, in, err.Error())
-		}
+		item, err := w.Registry.Collect(ctx, w.Reader, name, target, nil, now)
 		if err != nil {
 			// Missing evidence makes predicates unknown; it does not stop the
 			// investigation, and the incident says why it is missing.
@@ -89,12 +97,6 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	}
 	gaps = append(gaps, expired...)
 	results := check.Attribute(check.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
-	// The template investigated, so a change outside Themis can be noticed.
-	snap, err := rollback.Snapshot(ctx, w.Reader, in.Target)
-	if err != nil {
-		w.logger().WarnContext(ctx, "cannot snapshot the target's template", telemetry.FieldError, err)
-	}
-
 	// Without an investigator, the incident waits for a person or a tool
 	// outside Themis to suggest a fix; the checks still run for the policy.
 	noInvestigator := w.Config.Current().Investigators.Disabled
@@ -125,7 +127,8 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 				return err
 			}
 		}
-		return w.Store.SetObservedSpec(ctx, tx, in.ID, snap.SpecHash)
+		// The template investigated, so a change outside Themis can be noticed.
+		return w.Store.SetObservedSpec(ctx, tx, in.ID, target.TemplateHash)
 	})
 }
 

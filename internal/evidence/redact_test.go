@@ -77,7 +77,7 @@ func TestRedact_LeavesOrdinaryTextAlone(t *testing.T) {
 
 func TestRegistry_CollectRedacts(t *testing.T) {
 	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Data: []byte(`{"logs":"Authorization: Bearer abcdef123456"}`)}})
-	item, err := r.Collect(t.Context(), nil, "fake", target, nil, time.Now())
+	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}

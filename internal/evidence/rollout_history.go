@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // RolloutHistory describes the target's rollout: its progress, ownership, and
@@ -99,19 +99,15 @@ func NewRolloutHistory() Template { return rolloutHistory{} }
 
 func (rolloutHistory) Name() string { return RolloutHistory }
 
-func (rolloutHistory) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, _ map[string]string) (Item, error) {
-	d, err := getDeployment(ctx, c, t)
-	if err != nil {
-		return Item{}, err
-	}
-	replicaSets, err := ownedReplicaSets(ctx, c, d)
+func (rolloutHistory) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
+	revisions, err := w.Revisions(ctx)
 	if err != nil {
 		return Item{}, err
 	}
 
-	view := RolloutHistoryView{Deployment: viewDeployment(d)}
-	for _, rs := range replicaSets {
-		view.Revisions = append(view.Revisions, viewRevision(rs, view.Deployment.Revision))
+	view := RolloutHistoryView{Deployment: viewDeployment(w.Object())}
+	for _, r := range revisions {
+		view.Revisions = append(view.Revisions, viewRevision(r.Object, view.Deployment.Revision))
 	}
 	view.TotalRevisions = len(view.Revisions)
 	slices.SortFunc(view.Revisions, func(a, b RevisionView) int {

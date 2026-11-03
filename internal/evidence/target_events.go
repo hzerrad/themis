@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // TargetEvents lists the recent events of the target, its ReplicaSets and its
@@ -46,30 +46,27 @@ func NewTargetEvents() Template { return targetEvents{} }
 
 func (targetEvents) Name() string { return TargetEvents }
 
-func (targetEvents) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, _ map[string]string) (Item, error) {
-	d, err := getDeployment(ctx, c, t)
+func (targetEvents) Collect(ctx context.Context, c client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
+	revisions, err := w.Revisions(ctx)
 	if err != nil {
 		return Item{}, err
 	}
-	replicaSets, err := ownedReplicaSets(ctx, c, d)
+	pods, err := w.Pods(ctx)
 	if err != nil {
 		return Item{}, err
 	}
-	pods, err := ownedPods(ctx, c, d, replicaSets)
-	if err != nil {
-		return Item{}, err
-	}
-	about := map[types.UID]bool{d.UID: true}
-	for _, rs := range replicaSets {
-		about[rs.UID] = true
+	about := map[types.UID]bool{types.UID(w.Target.UID): true}
+	for _, r := range revisions {
+		about[r.Object.UID] = true
 	}
 	for _, p := range pods {
 		about[p.UID] = true
 	}
 
+	ns := w.Target.Namespace
 	var list corev1.EventList
-	if err := c.List(ctx, &list, client.InNamespace(t.Namespace)); err != nil {
-		return Item{}, fmt.Errorf("list events in %s: %w", t.Namespace, err)
+	if err := c.List(ctx, &list, client.InNamespace(ns)); err != nil {
+		return Item{}, fmt.Errorf("list events in %s: %w", ns, err)
 	}
 	var view TargetEventsView
 	for i := range list.Items {

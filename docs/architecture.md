@@ -82,6 +82,7 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/capability/builtin` | The fixes Themis ships with |
 | `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout" |
 | `internal/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
+| `internal/workload` | The target as Themis reads it: whether it is still the same object, its template, revisions, pods and replica counts. Everything else asks here |
 | `internal/server/httpapi`, `internal/server/grpcapi`, `internal/server/web` | The HTTP API, the investigators' gRPC API, and the UI |
 | `internal/identity` | Who is calling: accounts, sessions, sign-in, the setup door |
 | `internal/selfcheck` | The status page: whether each part of an install works |

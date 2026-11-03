@@ -105,7 +105,7 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 	}
 
 	return store.IncidentArgs{
-		Fingerprint: Fingerprint(profile.Name, ref),
+		Fingerprint: incident.Fingerprint(profile.Name, ref),
 		Profile:     profile.Name,
 		Target:      ref,
 		Payload:     a.Payload,

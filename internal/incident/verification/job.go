@@ -9,23 +9,17 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability/rollback"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // DefaultPoll is how often a verification looks at the target.
 const DefaultPoll = 15 * time.Second
-
-const revisionAnnotation = "deployment.kubernetes.io/revision"
 
 // outcomes maps a final outcome to the incident's end. Restoring the
 // pre-incident state after a failure comes in a later milestone.
@@ -50,7 +44,8 @@ type Worker struct {
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	final, err := w.Verify(ctx, job.Args)
-	if err != nil && job.Attempt >= job.MaxAttempts {
+	// Retrying can't make an unsupported target supported.
+	if err != nil && (job.Attempt >= job.MaxAttempts || errors.Is(err, workload.ErrUnsupported)) {
 		// A write happened: never leave the incident in verifying.
 		return w.escalate(ctx, job.Args.ActionID, "Couldn't check whether the fix worked: "+err.Error())
 	}
@@ -141,42 +136,40 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	return final, err
 }
 
-// Observe reads the target's state, and the restarts of its current
-// revision's containers. A template other than the applied one is a foreign
-// change; generation is not, since annotation updates bump it.
+// Observe reads the target and observes it. A target deleted or replaced is
+// a foreign change; generation is not, since annotation updates bump it.
 func Observe(ctx context.Context, c client.Reader, t incident.TargetRef, since time.Time, applied string) (Observation, int32, error) {
-	var d appsv1.Deployment
-	err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: t.Name}, &d)
-	if apierrors.IsNotFound(err) || (err == nil && string(d.UID) != t.UID) {
+	w, err := workload.Read(ctx, c, t)
+	if errors.Is(err, workload.ErrGone) || errors.Is(err, workload.ErrReplaced) {
 		return Observation{ForeignSpecChange: true}, 0, nil
 	}
 	if err != nil {
-		return Observation{}, 0, fmt.Errorf("get Deployment %s: %w", t.Name, err)
-	}
-	live, err := rollback.TemplateHash(d.Spec.Template)
-	if err != nil {
 		return Observation{}, 0, err
 	}
-	desired := int32(1)
-	if d.Spec.Replicas != nil {
-		desired = *d.Spec.Replicas
-	}
-	s := d.Status
-	o := Observation{
-		DesiredReplicas: desired,
-		ReadyReplicas:   s.ReadyReplicas,
-		RolloutComplete: s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == desired &&
-			s.AvailableReplicas == desired && s.Replicas == desired,
-		Updated:           s.ObservedGeneration >= d.Generation && s.UpdatedReplicas == desired,
-		ForeignSpecChange: live != applied,
-	}
+	return ObserveWorkload(ctx, w, since, applied)
+}
 
-	pods, err := currentPods(ctx, c, &d)
+// ObserveWorkload reports the workload's state, and the restarts of its
+// current revision's containers. A template other than the applied one is a
+// foreign change.
+func ObserveWorkload(ctx context.Context, w *workload.Workload, since time.Time, applied string) (Observation, int32, error) {
+	r := w.Replicas
+	o := Observation{
+		DesiredReplicas:   r.Desired,
+		ReadyReplicas:     r.Ready,
+		RolloutComplete:   r.Observed && r.Updated == r.Desired && r.Available == r.Desired && r.Total == r.Desired,
+		Updated:           r.Observed && r.Updated == r.Desired,
+		ForeignSpecChange: w.TemplateHash != applied,
+	}
+	pods, err := w.Pods(ctx)
 	if err != nil {
 		return Observation{}, 0, err
 	}
 	var restarts int32
 	for _, p := range pods {
+		if p.Revision != w.Revision {
+			continue
+		}
 		for _, cs := range p.Status.ContainerStatuses {
 			restarts += cs.RestartCount
 			if term := cs.LastTerminationState.Terminated; term != nil && term.Reason == "OOMKilled" && !term.FinishedAt.Time.Before(since) {
@@ -185,40 +178,6 @@ func Observe(ctx context.Context, c client.Reader, t incident.TargetRef, since t
 		}
 	}
 	return o, restarts, nil
-}
-
-// currentPods are the pods of the ReplicaSet at the Deployment's revision.
-func currentPods(ctx context.Context, c client.Reader, d *appsv1.Deployment) ([]corev1.Pod, error) {
-	selector, err := metav1.LabelSelectorAsSelector(d.Spec.Selector)
-	if err != nil {
-		return nil, err
-	}
-	in := []client.ListOption{client.InNamespace(d.Namespace), client.MatchingLabelsSelector{Selector: selector}}
-	var sets appsv1.ReplicaSetList
-	if err := c.List(ctx, &sets, in...); err != nil {
-		return nil, fmt.Errorf("list ReplicaSets: %w", err)
-	}
-	var current *appsv1.ReplicaSet
-	for i := range sets.Items {
-		rs := &sets.Items[i]
-		if metav1.IsControlledBy(rs, d) && rs.Annotations[revisionAnnotation] == d.Annotations[revisionAnnotation] {
-			current = rs
-		}
-	}
-	if current == nil {
-		return nil, nil
-	}
-	var pods corev1.PodList
-	if err := c.List(ctx, &pods, in...); err != nil {
-		return nil, fmt.Errorf("list pods: %w", err)
-	}
-	var out []corev1.Pod
-	for _, p := range pods.Items {
-		if metav1.IsControlledBy(&p, current) {
-			out = append(out, p)
-		}
-	}
-	return out, nil
 }
 
 func (w *Worker) escalate(ctx context.Context, actionID, reason string) error {

@@ -12,6 +12,7 @@ import (
 	"github.com/hzerrad/themis/internal/capability/rollback"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
@@ -167,9 +168,11 @@ func TestApply_ConcurrentChangeConflicts(t *testing.T) {
 // A refused rollback is explained to the operator in words, never as an error.
 func TestExplain(t *testing.T) {
 	for err, want := range map[error]string{
-		fmt.Errorf("%w: Deployment checkout is gone", rollback.ErrStale): "The workload was deleted or replaced, so the fix no longer applies.",
-		fmt.Errorf("%w: 1", rollback.ErrNoSuchRevision):                  "Revision 1 no longer exists, so Themis can't roll back to it.",
-		fmt.Errorf("%w: 1", rollback.ErrAlreadyCurrent):                  "The workload already runs revision 1, so there's nothing to roll back.",
+		fmt.Errorf("%w: %w", rollback.ErrStale, &workload.Error{Case: workload.ErrGone}):        "The workload was deleted, so the fix no longer applies.",
+		fmt.Errorf("%w: %w", rollback.ErrStale, &workload.Error{Case: workload.ErrReplaced}):    "The workload was replaced by a new one with the same name, so the fix no longer applies.",
+		fmt.Errorf("%w: %w", rollback.ErrStale, &workload.Error{Case: workload.ErrUnsupported}): "Themis can only roll back Deployments.",
+		fmt.Errorf("%w: 1", rollback.ErrNoSuchRevision):                                         "Revision 1 no longer exists, so Themis can't roll back to it.",
+		fmt.Errorf("%w: 1", rollback.ErrAlreadyCurrent):                                         "The workload already runs revision 1, so there's nothing to roll back.",
 	} {
 		if got := rollback.Explain(err, 1); got != want {
 			t.Errorf("Explain(%v) = %q, want %q", err, got, want)

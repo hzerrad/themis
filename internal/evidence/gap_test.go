@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // A collection error says why the evidence is missing, so the operator is
@@ -22,7 +23,9 @@ func TestGap_CauseFromError(t *testing.T) {
 	}{
 		"forbidden":            {apierrors.NewForbidden(rs, "", errors.New("RBAC")), evidence.GapForbidden},
 		"forbidden, wrapped":   {fmt.Errorf("collect rollout_history: %w", apierrors.NewForbidden(rs, "", errors.New("RBAC"))), evidence.GapForbidden},
-		"target gone":          {fmt.Errorf("collect: %w", evidence.ErrTargetGone), evidence.GapNotFound},
+		"target replaced":      {&workload.Error{Case: workload.ErrReplaced}, evidence.GapNotFound},
+		"pod replaced":         {fmt.Errorf("collect: %w", evidence.ErrPodReplaced), evidence.GapNotFound},
+		"no pods":              {evidence.ErrNoPods, evidence.GapAbsent},
 		"object not found":     {apierrors.NewNotFound(rs, "checkout-7d9f8b6c4"), evidence.GapNotFound},
 		"deadline":             {fmt.Errorf("list pods: %w", context.DeadlineExceeded), evidence.GapTimeout},
 		"API server timeout":   {apierrors.NewTimeoutError("slow", 1), evidence.GapTimeout},

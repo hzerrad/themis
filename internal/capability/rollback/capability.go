@@ -11,6 +11,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/capability"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // Capability is deployment.rollback-to-revision as a capability.Capability.
@@ -90,8 +91,11 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	if errors.Is(err, ErrNoSuchRevision) {
 		return "", nil, &capability.Refusal{Reason: "Themis couldn't put the workload back: Kubernetes no longer keeps the version from before it acted."}
 	}
+	if errors.Is(err, workload.ErrGone) {
+		return "", nil, &capability.Refusal{Reason: "The workload was deleted, so there is nothing to put back."}
+	}
 	if errors.Is(err, ErrStale) {
-		return "", nil, &capability.Refusal{Reason: "The workload was deleted or replaced, so there is nothing to put back."}
+		return "", nil, &capability.Refusal{Reason: "The workload was replaced by a new one with the same name, so there is nothing to put back."}
 	}
 	if err != nil {
 		return "", nil, err

@@ -27,7 +27,7 @@ func withConfig(t *testing.T, target incident.TargetRef, edit func(*corev1.PodSp
 	if err := k8s.Update(t.Context(), &d); err != nil {
 		t.Fatal(err)
 	}
-	item, err := evidence.NewReferencedConfig().Collect(t.Context(), k8s, target, nil)
+	item, err := evidence.NewReferencedConfig().Collect(t.Context(), k8s, read(t, target), nil)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestReferencedConfig_SaysWhenAConfigMapChangedAndNeverWhatItHolds(t *testin
 	if len(v.Refs) != 1 || v.Refs[0].ChangedAt.IsZero() || time.Since(v.Refs[0].ChangedAt) > time.Minute {
 		t.Errorf("refs = %+v, want settings changed just now", v.Refs)
 	}
-	item, err := evidence.NewReferencedConfig().Collect(t.Context(), k8s, target, nil)
+	item, err := evidence.NewReferencedConfig().Collect(t.Context(), k8s, read(t, target), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

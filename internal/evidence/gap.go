@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // GapCause is why evidence an investigation needed is missing. The set is
@@ -47,7 +49,9 @@ func (c GapCause) Blind() bool { return c != GapAbsent }
 // CauseOf says why a collection failed.
 func CauseOf(err error) GapCause {
 	switch {
-	case errors.Is(err, ErrTargetGone), apierrors.IsNotFound(err):
+	case errors.Is(err, ErrNoPods):
+		return GapAbsent
+	case workload.Lost(err), errors.Is(err, ErrPodReplaced), apierrors.IsNotFound(err):
 		return GapNotFound
 	case apierrors.IsForbidden(err):
 		return GapForbidden

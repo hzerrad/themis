@@ -781,12 +781,7 @@ func (c Config) IsEnrolled(ns string) bool {
 }
 
 // TargetKind returns t as Kind.group.
-func TargetKind(t incident.TargetRef) string {
-	if t.Group == "" {
-		return t.Kind
-	}
-	return t.Kind + "." + t.Group
-}
+func TargetKind(t incident.TargetRef) string { return t.KindGroup() }
 
 // MatchProfile returns the highest-priority profile matching the alert.
 func (c Config) MatchProfile(alertName string, lbls map[string]string, target incident.TargetRef) (Profile, bool) {

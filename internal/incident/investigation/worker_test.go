@@ -158,17 +158,48 @@ func TestPrepare_Idempotent(t *testing.T) {
 	}
 }
 
-func TestPrepare_TargetGone_Rejects(t *testing.T) {
+// A target lost before Themis acts ends the incident in a way that says what
+// happened. A replaced one isn't left unresolved: a new incident follows the
+// new object.
+func TestPrepare_TargetLost(t *testing.T) {
 	e := newEnv(t)
-	gone := e.target
-	gone.UID = "uid-of-a-deleted-deployment"
-	id := e.newIncident(t, "rollout-regression", gone)
+	replaced, deleted, statefulSet := e.target, e.target, e.target
+	replaced.UID = "uid-of-the-deployment-before"
+	deleted.Name = "deleted"
+	statefulSet.Kind = "StatefulSet"
 
-	if err := e.worker.Prepare(t.Context(), id); err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
-	if got := e.state(t, id); got != incident.Rejected {
-		t.Errorf("state = %s, want rejected", got)
+	for name, c := range map[string]struct {
+		target incident.TargetRef
+		want   incident.State
+	}{
+		"replaced":         {replaced, incident.Canceled},
+		"deleted":          {deleted, incident.Canceled},
+		"unsupported kind": {statefulSet, incident.Rejected},
+	} {
+		id := e.newIncident(t, "rollout-regression", c.target)
+		if err := e.worker.Prepare(t.Context(), id); err != nil {
+			t.Fatalf("%s: Prepare: %v", name, err)
+		}
+		in, err := e.store.Incident(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if in.State != c.want {
+			t.Errorf("%s: state = %s, want %s", name, in.State, c.want)
+		}
+		if name != "replaced" {
+			if in.SupersededBy != "" {
+				t.Errorf("%s: superseded by %s, want no successor", name, in.SupersededBy)
+			}
+			continue
+		}
+		next, err := e.store.Incident(t.Context(), in.SupersededBy)
+		if err != nil {
+			t.Fatalf("replaced: no successor: %v", err)
+		}
+		if next.Target != e.target || next.State != incident.Received {
+			t.Errorf("replaced: successor targets %+v in %s, want the new object, received", next.Target, next.State)
+		}
 	}
 }
 

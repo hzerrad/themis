@@ -31,6 +31,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // Decisions a scenario can expect of an investigation.
@@ -266,8 +267,12 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 	}
 	var initial evidence.Bundle
 	initial.Target = target
+	w, err := workload.Read(ctx, c, target)
+	if err != nil {
+		return Bundle{}, err
+	}
 	for _, name := range s.Evidence.Allowed {
-		item, err := registry.Collect(ctx, c, name, target, nil, s.Now)
+		item, err := registry.Collect(ctx, c, name, w, nil, s.Now)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("%s: %w", name, err)
 		}

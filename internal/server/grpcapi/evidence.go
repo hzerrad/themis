@@ -9,8 +9,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/workload"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -50,7 +52,7 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 		return nil, s.internal(ctx, err)
 	}
 
-	item, err := s.Registry.Collect(ctx, s.Reader, req.GetTemplate(), inv.Target, req.GetParams(), s.now())
+	item, err := s.collect(ctx, req.GetTemplate(), inv.Target, req.GetParams())
 	if err != nil {
 		if errors.Is(err, evidence.ErrInvalidParams) {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -127,4 +129,13 @@ func failureReason(err error) themisv1.CollectionFailureReason {
 func int32Ptr(n int) *int32 {
 	v := int32(max(n, 0)) //nolint:gosec // bounded by the budget
 	return &v
+}
+
+// collect reads the target, then runs the template for it.
+func (s *Server) collect(ctx context.Context, template string, t incident.TargetRef, params map[string]string) (evidence.Item, error) {
+	w, err := workload.Read(ctx, s.Reader, t)
+	if err != nil {
+		return evidence.Item{}, err
+	}
+	return s.Registry.Collect(ctx, s.Reader, template, w, params, s.now())
 }
