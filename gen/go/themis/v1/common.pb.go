@@ -557,6 +557,70 @@ func (x *Budget) GetDeadline() *timestamppb.Timestamp {
 	return nil
 }
 
+// Capability is a fix Themis can carry out, as a suggester sees it.
+type Capability struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name a suggestion uses, such as deployment.rollback-to-revision.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// What the fix does, in words.
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// The JSON Schema of its parameters, as JSON text.
+	ParamsSchema  string `protobuf:"bytes,3,opt,name=params_schema,json=paramsSchema,proto3" json:"params_schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Capability) Reset() {
+	*x = Capability{}
+	mi := &file_themis_v1_common_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Capability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Capability) ProtoMessage() {}
+
+func (x *Capability) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_common_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Capability.ProtoReflect.Descriptor instead.
+func (*Capability) Descriptor() ([]byte, []int) {
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Capability) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Capability) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *Capability) GetParamsSchema() string {
+	if x != nil {
+		return x.ParamsSchema
+	}
+	return ""
+}
+
 type Provenance struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Source        string                 `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
@@ -569,7 +633,7 @@ type Provenance struct {
 
 func (x *Provenance) Reset() {
 	*x = Provenance{}
-	mi := &file_themis_v1_common_proto_msgTypes[4]
+	mi := &file_themis_v1_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +645,7 @@ func (x *Provenance) String() string {
 func (*Provenance) ProtoMessage() {}
 
 func (x *Provenance) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[4]
+	mi := &file_themis_v1_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +658,7 @@ func (x *Provenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provenance.ProtoReflect.Descriptor instead.
 func (*Provenance) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Provenance) GetSource() string {
@@ -636,7 +700,7 @@ type CollectionFailure struct {
 
 func (x *CollectionFailure) Reset() {
 	*x = CollectionFailure{}
-	mi := &file_themis_v1_common_proto_msgTypes[5]
+	mi := &file_themis_v1_common_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +712,7 @@ func (x *CollectionFailure) String() string {
 func (*CollectionFailure) ProtoMessage() {}
 
 func (x *CollectionFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[5]
+	mi := &file_themis_v1_common_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,7 +725,7 @@ func (x *CollectionFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollectionFailure.ProtoReflect.Descriptor instead.
 func (*CollectionFailure) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CollectionFailure) GetTarget() *TargetRef {
@@ -731,7 +795,12 @@ const file_themis_v1_common_proto_rawDesc = "" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x12(\n" +
 	"\x10max_input_tokens\x18\x02 \x01(\x03R\x0emaxInputTokens\x12*\n" +
 	"\x11max_output_tokens\x18\x03 \x01(\x03R\x0fmaxOutputTokens\x126\n" +
-	"\bdeadline\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\"w\n" +
+	"\bdeadline\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\"g\n" +
+	"\n" +
+	"Capability\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
+	"\rparams_schema\x18\x03 \x01(\tR\fparamsSchema\"w\n" +
 	"\n" +
 	"Provenance\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
@@ -775,7 +844,7 @@ func file_themis_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_themis_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_themis_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_themis_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_themis_v1_common_proto_goTypes = []any{
 	(Truth)(0),                    // 0: themis.v1.Truth
 	(DataClassification)(0),       // 1: themis.v1.DataClassification
@@ -784,20 +853,21 @@ var file_themis_v1_common_proto_goTypes = []any{
 	(*PredicateResult)(nil),       // 4: themis.v1.PredicateResult
 	(*EvidenceItem)(nil),          // 5: themis.v1.EvidenceItem
 	(*Budget)(nil),                // 6: themis.v1.Budget
-	(*Provenance)(nil),            // 7: themis.v1.Provenance
-	(*CollectionFailure)(nil),     // 8: themis.v1.CollectionFailure
-	nil,                           // 9: themis.v1.EvidenceItem.AttributesEntry
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*Capability)(nil),            // 7: themis.v1.Capability
+	(*Provenance)(nil),            // 8: themis.v1.Provenance
+	(*CollectionFailure)(nil),     // 9: themis.v1.CollectionFailure
+	nil,                           // 10: themis.v1.EvidenceItem.AttributesEntry
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_themis_v1_common_proto_depIdxs = []int32{
 	0,  // 0: themis.v1.PredicateResult.value:type_name -> themis.v1.Truth
 	3,  // 1: themis.v1.EvidenceItem.target:type_name -> themis.v1.TargetRef
-	10, // 2: themis.v1.EvidenceItem.collected_at:type_name -> google.protobuf.Timestamp
+	11, // 2: themis.v1.EvidenceItem.collected_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: themis.v1.EvidenceItem.classification:type_name -> themis.v1.DataClassification
-	9,  // 4: themis.v1.EvidenceItem.attributes:type_name -> themis.v1.EvidenceItem.AttributesEntry
-	10, // 5: themis.v1.EvidenceItem.window_start:type_name -> google.protobuf.Timestamp
-	10, // 6: themis.v1.EvidenceItem.window_end:type_name -> google.protobuf.Timestamp
-	10, // 7: themis.v1.Budget.deadline:type_name -> google.protobuf.Timestamp
+	10, // 4: themis.v1.EvidenceItem.attributes:type_name -> themis.v1.EvidenceItem.AttributesEntry
+	11, // 5: themis.v1.EvidenceItem.window_start:type_name -> google.protobuf.Timestamp
+	11, // 6: themis.v1.EvidenceItem.window_end:type_name -> google.protobuf.Timestamp
+	11, // 7: themis.v1.Budget.deadline:type_name -> google.protobuf.Timestamp
 	3,  // 8: themis.v1.CollectionFailure.target:type_name -> themis.v1.TargetRef
 	2,  // 9: themis.v1.CollectionFailure.reason:type_name -> themis.v1.CollectionFailureReason
 	10, // [10:10] is the sub-list for method output_type
@@ -818,7 +888,7 @@ func file_themis_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_themis_v1_common_proto_rawDesc), len(file_themis_v1_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

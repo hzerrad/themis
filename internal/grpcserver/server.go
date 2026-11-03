@@ -22,6 +22,7 @@ import (
 	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/fix"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
 	"github.com/hzerrad/themis/internal/settings"
@@ -62,6 +63,9 @@ type Server struct {
 	Settings interface {
 		Model(ctx context.Context) (settings.Model, error)
 	}
+
+	// Fixes are the fixes Themis can carry out; nil means those it ships with.
+	Fixes fix.Registry
 
 	// Heartbeat records that the investigator asked for work. Nil records
 	// nothing.

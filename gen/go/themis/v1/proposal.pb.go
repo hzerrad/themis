@@ -9,6 +9,7 @@ package themisv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -147,6 +148,11 @@ type SubmitProposalRequest struct {
 	Capability isSubmitProposalRequest_Capability `protobuf_oneof:"capability"`
 	// Set instead of lease_id by a caller outside Themis.
 	IncidentId string `protobuf:"bytes,12,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
+	// The fix to make and its parameters, as the fix's params_schema
+	// describes them. rollback_to_revision is the older form of capability
+	// deployment.rollback-to-revision with params {"revision": n}.
+	CapabilityName string           `protobuf:"bytes,14,opt,name=capability_name,json=capabilityName,proto3" json:"capability_name,omitempty"`
+	Params         *structpb.Struct `protobuf:"bytes,15,opt,name=params,proto3" json:"params,omitempty"`
 	// For people only: what the suggester looked at, such as the commands an
 	// agent ran. Themis shows it with the suggestion and never decides on it.
 	// Longer than 8 KiB is cut.
@@ -262,6 +268,20 @@ func (x *SubmitProposalRequest) GetIncidentId() string {
 		return x.IncidentId
 	}
 	return ""
+}
+
+func (x *SubmitProposalRequest) GetCapabilityName() string {
+	if x != nil {
+		return x.CapabilityName
+	}
+	return ""
+}
+
+func (x *SubmitProposalRequest) GetParams() *structpb.Struct {
+	if x != nil {
+		return x.Params
+	}
+	return nil
 }
 
 func (x *SubmitProposalRequest) GetNotes() string {
@@ -583,7 +603,9 @@ type GetIncidentResponse struct {
 	Evidence   []*EvidenceItem        `protobuf:"bytes,2,rep,name=evidence,proto3" json:"evidence,omitempty"`
 	Predicates []*PredicateResult     `protobuf:"bytes,3,rep,name=predicates,proto3" json:"predicates,omitempty"`
 	// How many items this caller may not see.
-	Withheld      int32 `protobuf:"varint,4,opt,name=withheld,proto3" json:"withheld,omitempty"`
+	Withheld int32 `protobuf:"varint,4,opt,name=withheld,proto3" json:"withheld,omitempty"`
+	// The fixes this caller may suggest for the incident.
+	Capabilities  []*Capability `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -646,11 +668,18 @@ func (x *GetIncidentResponse) GetWithheld() int32 {
 	return 0
 }
 
+func (x *GetIncidentResponse) GetCapabilities() []*Capability {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
 var File_themis_v1_proposal_proto protoreflect.FileDescriptor
 
 const file_themis_v1_proposal_proto_rawDesc = "" +
 	"\n" +
-	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x16themis/v1/common.proto\"\x8f\x04\n" +
+	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x16themis/v1/common.proto\"\xe9\x04\n" +
 	"\x15SubmitProposalRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12,\n" +
 	"\x12client_proposal_id\x18\x02 \x01(\tR\x10clientProposalId\x12,\n" +
@@ -665,7 +694,9 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"provenance\x12W\n" +
 	"\x14rollback_to_revision\x18\v \x01(\v2#.themis.v1.RollbackToRevisionParamsH\x00R\x12rollbackToRevision\x12\x1f\n" +
 	"\vincident_id\x18\f \x01(\tR\n" +
-	"incidentId\x12\x14\n" +
+	"incidentId\x12'\n" +
+	"\x0fcapability_name\x18\x0e \x01(\tR\x0ecapabilityName\x12/\n" +
+	"\x06params\x18\x0f \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
 	"\x05notes\x18\r \x01(\tR\x05notesB\f\n" +
 	"\n" +
 	"capabilityJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"6\n" +
@@ -686,14 +717,15 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"\x05state\x18\x03 \x01(\tR\x05state\"5\n" +
 	"\x12GetIncidentRequest\x12\x1f\n" +
 	"\vincident_id\x18\x01 \x01(\tR\n" +
-	"incidentId\"\xd7\x01\n" +
+	"incidentId\"\x92\x02\n" +
 	"\x13GetIncidentResponse\x123\n" +
 	"\bincident\x18\x01 \x01(\v2\x17.themis.v1.OpenIncidentR\bincident\x123\n" +
 	"\bevidence\x18\x02 \x03(\v2\x17.themis.v1.EvidenceItemR\bevidence\x12:\n" +
 	"\n" +
 	"predicates\x18\x03 \x03(\v2\x1a.themis.v1.PredicateResultR\n" +
 	"predicates\x12\x1a\n" +
-	"\bwithheld\x18\x04 \x01(\x05R\bwithheld*m\n" +
+	"\bwithheld\x18\x04 \x01(\x05R\bwithheld\x129\n" +
+	"\fcapabilities\x18\x05 \x03(\v2\x15.themis.v1.CapabilityR\fcapabilities*m\n" +
 	"\x0eProposalStatus\x12\x1f\n" +
 	"\x1bPROPOSAL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18PROPOSAL_STATUS_ACCEPTED\x10\x01\x12\x1c\n" +
@@ -740,31 +772,35 @@ var file_themis_v1_proposal_proto_goTypes = []any{
 	(*GetIncidentResponse)(nil),      // 9: themis.v1.GetIncidentResponse
 	(*TargetRef)(nil),                // 10: themis.v1.TargetRef
 	(*Provenance)(nil),               // 11: themis.v1.Provenance
-	(*EvidenceItem)(nil),             // 12: themis.v1.EvidenceItem
-	(*PredicateResult)(nil),          // 13: themis.v1.PredicateResult
+	(*structpb.Struct)(nil),          // 12: google.protobuf.Struct
+	(*EvidenceItem)(nil),             // 13: themis.v1.EvidenceItem
+	(*PredicateResult)(nil),          // 14: themis.v1.PredicateResult
+	(*Capability)(nil),               // 15: themis.v1.Capability
 }
 var file_themis_v1_proposal_proto_depIdxs = []int32{
 	10, // 0: themis.v1.SubmitProposalRequest.target:type_name -> themis.v1.TargetRef
 	11, // 1: themis.v1.SubmitProposalRequest.provenance:type_name -> themis.v1.Provenance
 	3,  // 2: themis.v1.SubmitProposalRequest.rollback_to_revision:type_name -> themis.v1.RollbackToRevisionParams
-	0,  // 3: themis.v1.SubmitProposalResponse.status:type_name -> themis.v1.ProposalStatus
-	1,  // 4: themis.v1.SubmitProposalResponse.rejection_reason:type_name -> themis.v1.RejectionReason
-	7,  // 5: themis.v1.ListIncidentsResponse.incidents:type_name -> themis.v1.OpenIncident
-	10, // 6: themis.v1.OpenIncident.target:type_name -> themis.v1.TargetRef
-	7,  // 7: themis.v1.GetIncidentResponse.incident:type_name -> themis.v1.OpenIncident
-	12, // 8: themis.v1.GetIncidentResponse.evidence:type_name -> themis.v1.EvidenceItem
-	13, // 9: themis.v1.GetIncidentResponse.predicates:type_name -> themis.v1.PredicateResult
-	2,  // 10: themis.v1.ProposalService.SubmitProposal:input_type -> themis.v1.SubmitProposalRequest
-	5,  // 11: themis.v1.ProposalService.ListIncidents:input_type -> themis.v1.ListIncidentsRequest
-	8,  // 12: themis.v1.ProposalService.GetIncident:input_type -> themis.v1.GetIncidentRequest
-	4,  // 13: themis.v1.ProposalService.SubmitProposal:output_type -> themis.v1.SubmitProposalResponse
-	6,  // 14: themis.v1.ProposalService.ListIncidents:output_type -> themis.v1.ListIncidentsResponse
-	9,  // 15: themis.v1.ProposalService.GetIncident:output_type -> themis.v1.GetIncidentResponse
-	13, // [13:16] is the sub-list for method output_type
-	10, // [10:13] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	12, // 3: themis.v1.SubmitProposalRequest.params:type_name -> google.protobuf.Struct
+	0,  // 4: themis.v1.SubmitProposalResponse.status:type_name -> themis.v1.ProposalStatus
+	1,  // 5: themis.v1.SubmitProposalResponse.rejection_reason:type_name -> themis.v1.RejectionReason
+	7,  // 6: themis.v1.ListIncidentsResponse.incidents:type_name -> themis.v1.OpenIncident
+	10, // 7: themis.v1.OpenIncident.target:type_name -> themis.v1.TargetRef
+	7,  // 8: themis.v1.GetIncidentResponse.incident:type_name -> themis.v1.OpenIncident
+	13, // 9: themis.v1.GetIncidentResponse.evidence:type_name -> themis.v1.EvidenceItem
+	14, // 10: themis.v1.GetIncidentResponse.predicates:type_name -> themis.v1.PredicateResult
+	15, // 11: themis.v1.GetIncidentResponse.capabilities:type_name -> themis.v1.Capability
+	2,  // 12: themis.v1.ProposalService.SubmitProposal:input_type -> themis.v1.SubmitProposalRequest
+	5,  // 13: themis.v1.ProposalService.ListIncidents:input_type -> themis.v1.ListIncidentsRequest
+	8,  // 14: themis.v1.ProposalService.GetIncident:input_type -> themis.v1.GetIncidentRequest
+	4,  // 15: themis.v1.ProposalService.SubmitProposal:output_type -> themis.v1.SubmitProposalResponse
+	6,  // 16: themis.v1.ProposalService.ListIncidents:output_type -> themis.v1.ListIncidentsResponse
+	9,  // 17: themis.v1.ProposalService.GetIncident:output_type -> themis.v1.GetIncidentResponse
+	15, // [15:18] is the sub-list for method output_type
+	12, // [12:15] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_themis_v1_proposal_proto_init() }

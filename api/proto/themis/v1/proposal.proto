@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package themis.v1;
 
+import "google/protobuf/struct.proto";
 import "themis/v1/common.proto";
 
 service ProposalService {
@@ -31,6 +32,12 @@ message SubmitProposalRequest {
 
   // Set instead of lease_id by a caller outside Themis.
   string incident_id = 12;
+
+  // The fix to make and its parameters, as the fix's params_schema
+  // describes them. rollback_to_revision is the older form of capability
+  // deployment.rollback-to-revision with params {"revision": n}.
+  string capability_name = 14;
+  google.protobuf.Struct params = 15;
 
   // For people only: what the suggester looked at, such as the commands an
   // agent ran. Themis shows it with the suggestion and never decides on it.
@@ -71,6 +78,8 @@ message GetIncidentResponse {
   repeated PredicateResult predicates = 3;
   // How many items this caller may not see.
   int32 withheld = 4;
+  // The fixes this caller may suggest for the incident.
+  repeated Capability capabilities = 5;
 }
 
 enum ProposalStatus {

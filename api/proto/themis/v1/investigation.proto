@@ -113,8 +113,10 @@ message Investigation {
   repeated CollectionFailure initial_failures = 7;
   repeated PredicateResult predicates = 8;
   repeated EvidenceTemplate allowed_templates = 9;
+  // The names of the fixes the profile allows; capabilities describes them.
   repeated string candidate_capabilities = 10;
   Budget budget = 11;
+  repeated Capability capabilities = 12;
 }
 
 message Hypothesis {
