@@ -120,6 +120,9 @@ pre {
 
 .actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
 
+/* Styles that set display would otherwise show what the page hides. */
+[hidden] { display: none !important; }
+
 button, a.button {
   display: inline-block;
   text-decoration: none;
