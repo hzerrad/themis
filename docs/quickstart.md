@@ -10,7 +10,7 @@ Each step has a **kind** path and a **your cluster** path. The kind path uses th
 
 - Docker, Helm and kubectl. The kind path also needs Go: kind runs through `go tool`.
 - A clone of this repository, for the chart and the sample workload. The images are published, so there's nothing to build.
-- A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM.
+- A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM. You can also set it after install, on the Setup page, or run Themis without one and suggest fixes yourself or through HolmesGPT.
 - For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and an Alertmanager you can configure.
 
 If the model needs a key, put it in a Secret first:
@@ -89,7 +89,7 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 make monitoring-up
 ```
 
-**Your cluster:** copy the intake token into a Secret Alertmanager can mount. This assumes Alertmanager runs in `monitoring`:
+**Your cluster:** the **Setup** page (step 4) shows these steps filled in for your install, for kube-prometheus-stack or any other Alertmanager, ready to copy. By hand: copy the intake token into a Secret Alertmanager can mount. This assumes Alertmanager runs in `monitoring`:
 
 ```bash
 kubectl -n themis get secret themis-tokens -o jsonpath='{.data.intake}' | base64 -d | \
@@ -134,7 +134,7 @@ make ui   # serves the UI on http://localhost:8090
 kubectl -n themis port-forward deploy/themis-core 8090:8083
 ```
 
-Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The first page is **Status**: each part of Themis, whether it works, and how to fix it if not. The banner at the top leads you to create your admin account; sign in with it and setup is done (or use your identity provider, in step 6). Then break the rollout, in another terminal:
+Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The first page is **Setup**, in order: create your admin account and sign in with it, which finishes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 
