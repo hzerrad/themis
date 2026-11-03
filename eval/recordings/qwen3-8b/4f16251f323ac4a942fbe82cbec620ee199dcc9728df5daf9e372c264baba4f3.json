@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause. Storage full is indicated by logs, but no remediation capability exists for storage issues. Rollback is not justified as the failure onset is after rollout but logs from prior revision show storage full.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"storage_full\",\n    \"summary\": \"Logs from prior revision show 'no",
+      "usage": {
+        "input_tokens": 3087,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b",
+      "truncated": true
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "",
+      "usage": {
+        "input_tokens": 2848,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b",
+      "truncated": true
+    }
+  ]
+}

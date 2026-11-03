@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 due to image pull failure in new revision\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"image_pull_failure\",\n    \"summary\": \"New revision's image 'example/checkout:2.4.O' not found in registry\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Restore working image 'example/checkout:2.3.1' from prior revision\",\n  \"rationale\": \"Failure onset after rollout, prior revision healthy, and image pull failure confirmed in new revision. Logs confirm container hasn't started due to image pull issue.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3083,
+        "output_tokens": 566
+      },
+      "model": "qwen3:8b",
+      "truncated": false
+    }
+  ]
+}

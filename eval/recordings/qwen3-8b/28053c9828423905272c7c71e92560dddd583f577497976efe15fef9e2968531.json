@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to prior revision due to configuration error in new revision\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"bad_configuration\",\n        \"summary\": \"New revision's app failed due to missing PAYMENTS_ENDPOINT environment variable\",\n        \"supporting\": [\"ev-container_logs_tail\", \"ev-pod_states\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Restores functionality by reverting to the healthy prior revision\",\n    \"rationale\": \"The new revision (2) failed due to a configuration error (missing PAYMENTS_ENDPOINT), while the prior revision (1) was healthy. Rolling back is justified as the failure was introduced by the new revision and no config changes occurred after rollout.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3001,
+        "output_tokens": 1090
+      },
+      "model": "qwen3:8b",
+      "truncated": false
+    }
+  ]
+}

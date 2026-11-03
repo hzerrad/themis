@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient cluster CPU capacity to schedule new pods, but prior revision health is unknown. No rollback justified.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Pods cannot schedule due to CPU insufficiency\",\"supporting\":[\"ev-target_events\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[\"prior_revision_was_healthy\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Unable to confirm prior revision health\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"prior_revision_was_healthy\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3268,
+        "output_tokens": 539
+      },
+      "model": "qwen3:8b",
+      "truncated": false
+    }
+  ]
+}
