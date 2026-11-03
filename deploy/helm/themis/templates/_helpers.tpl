@@ -62,3 +62,11 @@ Whether the setup port is on. A missing key means on, as above.
 {{- $setup := .Values.setup | default dict -}}
 {{- if not (and (hasKey $setup "enabled") (eq (toString $setup.enabled) "false")) }}true{{ end -}}
 {{- end }}
+
+{{/*
+The Secret holding Themis's tokens and settings key: the one the chart
+generates, or one the install provides, as GitOps tools need.
+*/}}
+{{- define "themis.tokensSecret" -}}
+{{- (.Values.tokens | default dict).existingSecret | default (printf "%s-tokens" .Release.Name) -}}
+{{- end }}

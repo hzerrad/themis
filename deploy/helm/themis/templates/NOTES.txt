@@ -18,7 +18,7 @@ values to sign in through your identity provider.
 
 Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or {{ end }}with the admin token:
 
-  kubectl -n {{ .Release.Namespace }} get secret {{ .Release.Name }}-tokens -o jsonpath='{.data.admin}' | base64 -d
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.tokensSecret" . }} -o jsonpath='{.data.admin}' | base64 -d
 {{- end }}
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}

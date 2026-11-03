@@ -16,7 +16,7 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
   --set model.apiKeySecret=model-key
 ```
 
-`model.baseURL` and `model.name` are required; the install fails without them.
+`model.baseURL` and `model.name` can also be left out and set on the **Setup** page after install. With `model.enabled=false`, no investigator is installed, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT.
 
 ### Model examples
 
@@ -49,18 +49,31 @@ This installs `themis-executor` with a Role in each enrolled namespace: `get` an
 
 `helm install` creates the `ThemisConfig` and `IncidentProfile` CRDs. Before each `helm upgrade`, a short Job runs `kubectl apply` on them, using the `registry.k8s.io/kubectl` image and a ClusterRole limited to those two CRDs. To manage the CRDs yourself, set `crds.upgrade=false`.
 
+## Use with Argo CD or Flux
+
+The chart generates Themis's tokens and the key that encrypts secret settings once, and keeps them across upgrades with Helm's `lookup`. GitOps tools don't run `lookup`, so every sync would make new ones, and a new settings key makes saved secrets, such as a model key set on the Setup page, unreadable. Create the Secret yourself instead, outside the synced manifests or with your secrets tool, and name it:
+
+```bash
+kubectl -n themis create secret generic themis-tokens-gitops \
+  $(for k in intake investigator admin settings executor; do printf -- "--from-literal=%s=%s " $k "$(openssl rand -hex 32)"; done)
+```
+
+```yaml
+tokens:
+  existingSecret: themis-tokens-gitops
+```
+
 ## Connect Alertmanager
 
-Alertmanager must send alerts to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates. See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
+The **Status** page shows the exact steps for your install while no alerts arrive. Alertmanager must send alerts to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
 
 ## Open the UI
 
 ```bash
-kubectl -n themis get secret themis-tokens -o jsonpath='{.data.admin}' | base64 -d; echo
-kubectl -n themis port-forward svc/themis-core 8090:8080
+kubectl -n themis port-forward deploy/themis-core 8090:8083
 ```
 
-Then open <http://127.0.0.1:8090> and sign in with that token.
+Then open <http://localhost:8090>. Until an admin signs in for real, whoever comes in through port-forward is an admin: the Setup page leads you to create your admin account. After that, the same command opens the sign-in page.
 
 ## Sign people in
 
@@ -107,6 +120,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `image.repository` | `ghcr.io/hzerrad` | Registry and path of the images |
 | `image.tag` | `main` | Image tag: `main`, or `sha-<commit>` to pin a build |
 | `image.pullPolicy` | `Always` | `main` moves, so it's pulled every time; use `IfNotPresent` with a pinned tag |
+| `setup.enabled` | `true` | Open Themis through `kubectl port-forward` to port 8083 as an admin until an admin signs in |
+| `tokens.existingSecret` | `""` | A Secret with Themis's tokens and settings key, for GitOps; see above. Empty, the chart generates one |
 | `logLevel` | `info` | Least severe level every component logs: `debug`, `info`, `warn` or `error` |
 | `telemetry.otlp.endpoint` | `""` | Where every component sends its traces over OTLP; empty, nothing is traced |
 | `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
@@ -115,8 +130,9 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |
-| `model.baseURL` | **required** | An OpenAI-compatible endpoint |
-| `model.name` | **required** | The model the endpoint serves |
+| `model.enabled` | `true` | Install the investigator. Off, incidents wait for a suggested fix |
+| `model.baseURL` | `""` | An OpenAI-compatible endpoint. Empty, it's set on the Setup page |
+| `model.name` | `""` | The model the endpoint serves. Empty, it's set on the Setup page |
 | `model.apiKeySecret` | `""` | A Secret with an `apiKey` key, if the endpoint needs one |
 | `model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
 | `model.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |

@@ -9,7 +9,7 @@ data:
     intake:
       bearerTokenFile: /var/run/secrets/themis/intake
       url: http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager
-      tokenSecret: {{ .Release.Name }}-tokens
+      tokenSecret: {{ include "themis.tokensSecret" . }}
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
       {{- if not (include "themis.modelEnabled" .) }}

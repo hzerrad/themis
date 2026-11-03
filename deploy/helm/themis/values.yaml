@@ -85,6 +85,16 @@ notifications:
   # Where people reach the UI, for links in notices.
   externalURL: ""
 
+# Themis's tokens and the key that encrypts secret settings. The chart
+# generates them once and keeps them across upgrades with Helm's lookup, which
+# GitOps tools such as Argo CD don't run: there, every sync would make new
+# ones, and a new settings key makes saved secrets unreadable. Under GitOps,
+# create the Secret yourself, with keys intake, investigator, admin, settings
+# and, with the executor, executor, each a random string of at least 32
+# characters, and name it here.
+tokens:
+  existingSecret: ""
+
 # Opening Themis with kubectl port-forward to the core's setup port. Until an
 # admin signs in through a real sign-in, whoever comes in this way is an admin:
 # Kubernetes has already checked they may port-forward to Themis. Nothing else
