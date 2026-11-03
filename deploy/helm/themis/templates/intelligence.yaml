@@ -75,7 +75,7 @@ spec:
       volumes:
         - name: token
           secret:
-            secretName: {{ .Release.Name }}-tokens
+            secretName: {{ include "themis.tokensSecret" . }}
             items: [{key: investigator, path: investigator}]
         {{- if .Values.model.apiKeySecret }}
         - name: model
