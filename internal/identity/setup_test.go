@@ -120,3 +120,13 @@ func TestDoor_SessionWins(t *testing.T) {
 		t.Errorf("identity = %+v, %v; want bob", who, err)
 	}
 }
+
+// With no logger set, the door logs a failure to the default logger.
+func TestDoor_WithoutALogger(t *testing.T) {
+	door := &identity.Door{Store: &setupStore{err: errors.New("database down")}, Next: http.NotFoundHandler()}
+	rec := httptest.NewRecorder()
+	door.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8083/", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("door with the database down = %d, want 503", rec.Code)
+	}
+}

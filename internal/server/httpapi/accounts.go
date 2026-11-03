@@ -15,7 +15,7 @@ import (
 
 // Accounts keeps the accounts people sign in to with a password.
 type Accounts interface {
-	identity.Accounts
+	identity.PasswordStore
 	Accounts(ctx context.Context) ([]store.Account, error)
 	HasAccounts(ctx context.Context) (bool, error)
 	CreateAccount(ctx context.Context, a store.Account) error
@@ -161,18 +161,18 @@ func (a *API) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	if !a.decode(w, r, &in) {
 		return
 	}
-	acc, err := a.Accounts.Account(r.Context(), who.Username)
-	if err != nil {
+	// The same lock as signing in, so a stolen session can't be used to
+	// guess the password.
+	_, err := identity.Verify(r.Context(), a.Accounts, who.Username, in.Current, a.now())
+	switch {
+	case errors.Is(err, identity.ErrWrongPassword):
+		http.Error(w, "Your current password isn't right. After 10 wrong tries your account is locked for 15 minutes.", http.StatusForbidden)
+		return
+	case errors.Is(err, identity.ErrAccountLocked):
+		http.Error(w, "Your account is locked after too many wrong passwords. Try again in 15 minutes.", http.StatusForbidden)
+		return
+	case err != nil:
 		a.failAccount(w, r, err)
-		return
-	}
-	ok, err := identity.CheckPassword(r.Context(), acc.PasswordHash, in.Current)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if !ok {
-		http.Error(w, "Your current password isn't right.", http.StatusForbidden)
 		return
 	}
 	if err := identity.CheckNewPassword(who.Username, in.New); err != nil {
