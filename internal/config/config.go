@@ -200,6 +200,14 @@ func (e ExternalProposals) validate(add func(path, format string, args ...any)) 
 type Intake struct {
 	// BearerTokenFile holds the token Alertmanager must send as a bearer token.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+
+	// URL is where Alertmanager reaches the intake, for the setup steps
+	// Themis shows. The chart sets it to the core's Service.
+	URL string `json:"url,omitempty"`
+
+	// TokenSecret names the Secret, in Themis's namespace, whose intake key
+	// holds the token, for the setup steps Themis shows. The chart sets it.
+	TokenSecret string `json:"tokenSecret,omitempty"`
 }
 
 // Investigators configures the investigators' gRPC API.

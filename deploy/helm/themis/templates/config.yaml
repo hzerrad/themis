@@ -8,6 +8,8 @@ data:
     enrolledNamespaces: {{- toYaml .Values.enrolledNamespaces | nindent 6 }}
     intake:
       bearerTokenFile: /var/run/secrets/themis/intake
+      url: http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager
+      tokenSecret: {{ .Release.Name }}-tokens
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
     api:
