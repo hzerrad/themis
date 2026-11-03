@@ -125,17 +125,16 @@ Open the UI:
 **kind:**
 
 ```bash
-make ui   # prints the admin token and serves the UI on http://127.0.0.1:8090
+make ui   # serves the UI on http://localhost:8090
 ```
 
 **Your cluster:**
 
 ```bash
-kubectl -n themis get secret themis-tokens -o jsonpath='{.data.admin}' | base64 -d; echo
-kubectl -n themis port-forward svc/themis-core 8090:8080
+kubectl -n themis port-forward deploy/themis-core 8090:8083
 ```
 
-Open <http://127.0.0.1:8090> and sign in with the token. Then break the rollout, in another terminal:
+Open <http://localhost:8090>. There's no password: until an admin signs in for real (step 6), whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. Then break the rollout, in another terminal:
 
 **kind:**
 
@@ -169,9 +168,9 @@ The timeline holds the whole record, from the alert to the result. To try again,
 
 ## 6. Optional: sign people in
 
-So far everyone shares the admin token, and every approval is recorded as `admin`. With an OIDC provider, people sign in as themselves, each with a role, and an approval records who gave it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
+So far, whoever opens Themis through port-forward is an admin, and every approval is recorded as `setup`. With an OIDC provider, people sign in as themselves, each with a role, and an approval records who gave it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
 
-1. Register Themis with your provider as a web app. Set its redirect URL to Themis's `/auth/callback` as your browser reaches it. Through the port-forward above, that is `http://127.0.0.1:8090/auth/callback`; behind an ingress, something like `https://themis.example.com/auth/callback`.
+1. Register Themis with your provider as a web app. Set its redirect URL to Themis's `/auth/callback` as your browser reaches it. Through the port-forward above, that is `http://localhost:8090/auth/callback`; behind an ingress, something like `https://themis.example.com/auth/callback`.
 2. Put the client secret in a Secret:
 
    ```bash
@@ -184,7 +183,7 @@ So far everyone shares the admin token, and every approval is recorded as `admin
    oidc:
      issuerURL: https://idp.example.com
      clientID: themis
-     redirectURL: http://127.0.0.1:8090/auth/callback
+     redirectURL: http://localhost:8090/auth/callback
      clientSecret: {existingSecret: themis-oidc}
    access:
      - {role: admin, users: [you@example.com]}
@@ -207,7 +206,7 @@ So far everyone shares the admin token, and every approval is recorded as `admin
 | `approver` | Also suggest, approve and deny fixes |
 | `admin` | Everything |
 
-Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The admin token still works, as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
+Once someone with the `admin` role signs in, port-forward no longer makes anyone an admin; it opens the sign-in page like any other address. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The emergency token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
 
 ## Clean up
 

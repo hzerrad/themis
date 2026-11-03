@@ -183,6 +183,7 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 			DatabaseURL: dbURL,
 			Kubernetes:  k8s.Config,
 			HTTPAddr:    freeAddr(t),
+			SetupAddr:   freeAddr(t),
 			ProbeAddr:   freeAddr(t),
 			MetricsAddr: freeAddr(t),
 			GRPCAddr:    freeAddr(t),
@@ -192,6 +193,14 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	})
 	if code, _ := get("http://" + o.ProbeAddr + "/healthz"); code != http.StatusOK {
 		t.Errorf("/healthz = %d, want 200", code)
+	}
+	// Before anyone has signed in, kubectl port-forward to the setup port is
+	// the way in; the API port asks who you are.
+	if code, body := get("http://" + o.SetupAddr + "/v1/me"); code != http.StatusOK || !strings.Contains(body, `"setup":true`) {
+		t.Errorf("/v1/me through the setup port = %d %q, want the setup admin", code, body)
+	}
+	if code, _ := get("http://" + o.HTTPAddr + "/v1/me"); code != http.StatusUnauthorized {
+		t.Errorf("/v1/me through the API port = %d, want 401", code)
 	}
 
 	payload := fmt.Sprintf(`{"version":"4","status":"firing","receiver":"themis","alerts":[{
@@ -340,6 +349,7 @@ func TestRun_RefusesToStart(t *testing.T) {
 		"unknown template": func(o *core.Options) {
 			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
 		},
+		"setup address others can reach": func(o *core.Options) { o.SetupAddr = "0.0.0.0:8083" },
 		"unreachable database": func(o *core.Options) {
 			o.DatabaseURL = "postgres://themis:themis@" + freeAddr(t) + "/themis?sslmode=disable&connect_timeout=2"
 		},

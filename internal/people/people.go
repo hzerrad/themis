@@ -1,6 +1,7 @@
 // Package people says who is calling the HTTP API and what they may do:
-// someone signed in through OIDC, with the roles their bindings give them, or
-// the holder of the shared admin token.
+// someone signed in through OIDC, with the roles their bindings give them, the
+// holder of the shared admin token, or, until setup finishes, whoever reached
+// Themis through kubectl port-forward.
 package people
 
 import (
@@ -34,6 +35,9 @@ type Identity struct {
 	Role string
 	// Token is set for the shared admin token: it proves the token, not who.
 	Token bool
+	// Setup is set for whoever came in through kubectl port-forward before
+	// setup finished: Kubernetes allowed them, but Themis doesn't know who.
+	Setup bool
 }
 
 // Can reports whether i has role, or one more trusted.
@@ -82,7 +86,7 @@ type Directory struct {
 }
 
 // Identify says who sent r. A bearer token must be the admin token; without
-// one, the session cookie decides.
+// one, the session cookie decides, and without a session, the setup door.
 func (d *Directory) Identify(r *http.Request) (Identity, error) {
 	if header := r.Header.Get("Authorization"); header != "" {
 		want, err := auth.ReadToken(d.TokenFile)
@@ -94,21 +98,45 @@ func (d *Directory) Identify(r *http.Request) (Identity, error) {
 		}
 		return Identity{Username: TokenUser, Role: config.RoleAdmin, Token: true}, nil
 	}
+	se, err := d.session(r)
+	switch {
+	case err == nil:
+		if !headerSent(r) {
+			return Identity{}, ErrNoRequestHeader
+		}
+		return Identity{Username: se.Username, Groups: se.Groups, Role: RoleOf(d.Access, se.Username, se.Groups)}, nil
+	case !errors.Is(err, ErrSignedOut):
+		return Identity{}, err
+	case throughSetup(r):
+		// The browser sends nothing that proves who, so a page on another
+		// site could post to localhost; it can't add the header.
+		if !headerSent(r) {
+			return Identity{}, ErrNoRequestHeader
+		}
+		return Identity{Username: SetupUser, Role: config.RoleAdmin, Setup: true}, nil
+	}
+	return Identity{}, ErrSignedOut
+}
+
+// session is the live session r's cookie names.
+func (d *Directory) session(r *http.Request) (store.Session, error) {
 	c, err := r.Cookie(SessionCookie)
 	if err != nil || d.Sessions == nil {
-		return Identity{}, ErrSignedOut
+		return store.Session{}, ErrSignedOut
 	}
 	se, err := d.Sessions.Session(r.Context(), c.Value, d.now())
 	if errors.Is(err, store.ErrNotFound) {
-		return Identity{}, ErrSignedOut
+		return store.Session{}, ErrSignedOut
 	}
 	if err != nil {
-		return Identity{}, errors.Join(ErrUnavailable, err)
+		return store.Session{}, errors.Join(ErrUnavailable, err)
 	}
-	if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Header.Get(RequestHeader) == "" {
-		return Identity{}, ErrNoRequestHeader
-	}
-	return Identity{Username: se.Username, Groups: se.Groups, Role: RoleOf(d.Access, se.Username, se.Groups)}, nil
+	return se, nil
+}
+
+// headerSent reports whether r reads, or carries RequestHeader.
+func headerSent(r *http.Request) bool {
+	return r.Method == http.MethodGet || r.Method == http.MethodHead || r.Header.Get(RequestHeader) != ""
 }
 
 func (d *Directory) now() time.Time {

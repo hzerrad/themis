@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,6 +47,11 @@ type API struct {
 	Remedy remedy.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Setup records when the first admin signs in for real, which closes the
+	// setup door. Nil means there is no door.
+	Setup people.SetupStore
+
+	setupFinished atomic.Bool
 }
 
 // Suggestions takes a fix suggested by a person. The core checks it exactly
@@ -89,6 +95,7 @@ func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request)
 			http.Error(w, "Sign in to Themis first.", http.StatusUnauthorized)
 			return
 		}
+		a.finishSetup(r.Context(), who)
 		if role != "" && !who.Can(role) {
 			if who.Role == "" {
 				http.Error(w, "You're signed in as "+who.Username+", but you don't have access to Themis yet. Ask a Themis admin to add you.", http.StatusForbidden)
@@ -107,6 +114,20 @@ func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request)
 	})
 }
 
+// finishSetup closes the setup door once an admin has signed in through a
+// real sign-in, since someone can now sign in without kubectl.
+func (a *API) finishSetup(ctx context.Context, who people.Identity) {
+	if a.Setup == nil || who.Token || who.Setup || who.Role != config.RoleAdmin || a.setupFinished.Load() {
+		return
+	}
+	if err := a.Setup.FinishSetup(ctx, who.Username, a.now()); err != nil {
+		a.logger().ErrorContext(ctx, "cannot record that setup finished", telemetry.FieldError, err)
+		return
+	}
+	a.setupFinished.Store(true)
+	a.logger().InfoContext(ctx, "setup finished: an admin signed in, so kubectl port-forward no longer lets anyone in as admin", "user", who.Username)
+}
+
 // actor is who to record as having done something.
 func actor(r *http.Request) string {
 	who, _ := people.From(r.Context())
@@ -120,11 +141,14 @@ type meView struct {
 	Role string `json:"role"`
 	// Token is set for the shared admin token, which proves the token, not who.
 	Token bool `json:"token,omitempty"`
+	// Setup is set for whoever came in through kubectl port-forward before
+	// setup finished.
+	Setup bool `json:"setup,omitempty"`
 }
 
 func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	who, _ := people.From(r.Context())
-	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token})
+	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, Setup: who.Setup})
 }
 
 // signInMethods tells the UI how people sign in, before anyone has.

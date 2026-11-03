@@ -25,7 +25,8 @@ spec:
     - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
 ---
 # The core's gRPC API serves the investigator and agents in the namespaces
-# allowed to reach it; its HTTP API anyone with a token.
+# allowed to reach it; its HTTP API anyone with a token. Its setup port, 8083,
+# is left out on purpose: only kubectl port-forward may reach it.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
