@@ -71,6 +71,7 @@ tr.link { cursor: pointer; }
 tr.link:hover td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
 
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; }
+dl.source { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 

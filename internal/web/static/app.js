@@ -193,20 +193,47 @@ function changesTable(changes) {
     h("caption", { class: "muted" }, "Values that look like secrets are hidden. For commands and arguments, only the fact that they change is shown."));
 }
 
-// suggestedBy names who suggested a fix, and whether that is proven. Themis's
-// own investigator holds a lease; a person shares the admin token, so it
-// proves the token and not which person.
-function suggestedBy(p) {
-  const source = (p.Provenance && p.Provenance.source) || "";
-  if (p.LeaseID) return "Themis's investigator";
-  if (source === "admin-token") return "A person with the admin token";
-  if (source.startsWith("person:")) return `${source.slice("person:".length)} (signed in)`;
-  return p.Authenticated ? `${source} (identity checked)` : `${source || "Unknown"} (identity not checked)`;
+// sourceRows say where a fix came from, as fully as Themis knows: who sent it,
+// what identity Themis checked, and what the sender says about itself. An
+// outside tool's name, model and prompt are its own claims; the identity is
+// what Themis verified.
+function sourceRows(p) {
+  const prov = p.Provenance || {};
+  const src = prov.source || "";
+  const rows = [];
+  const row = (k, v) => rows.push(h("dt", {}, k), h("dd", {}, v));
+  let claimed = false;
+  if (p.LeaseID) {
+    row("From", "Themis's own investigator");
+    row("Identity", "Checked: it held this incident's investigation");
+  } else if (src === "admin-token") {
+    row("From", "A person");
+    row("Identity", "The shared admin token, which proves the token, not which person");
+  } else if (src.startsWith("person:")) {
+    row("From", "A person");
+    row("Identity", `Signed in as ${src.slice("person:".length)}`);
+  } else if (src.startsWith("serviceaccount:")) {
+    const [ns, name] = src.slice("serviceaccount:".length).split("/");
+    claimed = true;
+    row("From", prov.claimedSource ? `An outside tool that calls itself "${prov.claimedSource}"` : "An outside tool");
+    row("Identity", p.Authenticated
+      ? `Checked: Kubernetes service account ${name} in namespace ${ns}`
+      : `Not checked: ${src}`);
+  } else {
+    row("From", src || "Unknown");
+    row("Identity", p.Authenticated ? "Checked" : "Not checked");
+  }
+  const model = [prov.model, prov.promptVersion && `prompt ${prov.promptVersion}`,
+    prov.route && prov.route !== "default" && `route ${prov.route}`].filter(Boolean).join(" · ");
+  row(claimed ? "Model, as it reports" : "Model", model || "Not reported");
+  row("Sent", time(p.CreatedAt));
+  return rows;
 }
 
 function proposalPanel(p) {
   return h("div", { class: "panel" },
     h("h3", {}, "What was suggested"),
+    h("dl", { class: "source" }, sourceRows(p)),
     h("dl", {},
       h("dt", {}, "Status"), h("dd", {}, h("span", { class: `state ${p.Status === "rejected" ? "bad" : "neutral"}` }, label(SUGGESTION_LABEL, p.Status)), p.RejectionReason ? h("div", {}, label(REJECTION_LABEL, p.RejectionReason)) : null),
       h("dt", {}, "Fix"), h("dd", {}, fix(p.Capability, p.Params)),
@@ -215,8 +242,6 @@ function proposalPanel(p) {
       h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
       h("dt", {}, "Checks cited"), h("dd", {}, (p.CitedPredicates || []).map((c) => label(CHECK_LABEL, c)).join("; ") || "—"),
-      h("dt", {}, "Suggested by"), h("dd", {}, suggestedBy(p)),
-      h("dt", {}, "Model"), h("dd", {}, (p.Provenance && p.Provenance.model) || "—"),
       p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null));
 }
 
