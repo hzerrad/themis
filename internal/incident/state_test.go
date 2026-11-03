@@ -9,6 +9,7 @@ import (
 var allStates = []incident.State{
 	incident.Received,
 	incident.Investigating,
+	incident.AwaitingSuggestion,
 	incident.Diagnosed,
 	incident.Inconclusive,
 	incident.Recommended,
@@ -117,6 +118,12 @@ func TestCanTransition_SideExits(t *testing.T) {
 		{incident.Verifying, incident.Canceled, false},
 		{incident.Inconclusive, incident.Diagnosed, true}, // someone suggested a fix
 		{incident.Inconclusive, incident.Authorized, false},
+		{incident.Received, incident.AwaitingSuggestion, true},  // no investigator installed
+		{incident.AwaitingSuggestion, incident.Diagnosed, true}, // someone suggested a fix
+		{incident.AwaitingSuggestion, incident.ClosedNoAction, true},
+		{incident.AwaitingSuggestion, incident.Authorized, false},
+		{incident.AwaitingSuggestion, incident.Investigating, false},
+		{incident.Investigating, incident.AwaitingSuggestion, false},
 	}
 	for _, tt := range tests {
 		if got := incident.CanTransition(tt.from, tt.to); got != tt.want {
@@ -217,8 +224,8 @@ func TestStates_ListsEveryState(t *testing.T) {
 			}
 		}
 	}
-	if n := len(incident.States()); n != 18 {
-		t.Errorf("%d states, want 18: update States when adding one", n)
+	if n := len(incident.States()); n != 19 {
+		t.Errorf("%d states, want 19: update States when adding one", n)
 	}
 }
 

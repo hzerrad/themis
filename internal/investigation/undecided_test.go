@@ -26,6 +26,41 @@ func (e *env) undecided(t *testing.T) string {
 	return id
 }
 
+// waiting is an incident waiting for a suggestion, with no investigator.
+func (e *env) waiting(t *testing.T) string {
+	t.Helper()
+	id := e.newIncident(t, "p", e.target)
+	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		return e.store.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.AwaitingSuggestion, Reason: "x", Actor: "test"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// Without an investigator, an incident nobody suggests a fix for closes once
+// the window passes, like one Themis couldn't decide.
+func TestCloseUndecided_ClosesThoseWaitingForASuggestion(t *testing.T) {
+	e := newEnv(t)
+	id := e.waiting(t)
+	window := config.Config{ExternalProposals: config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}}
+	early := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(30 * time.Minute) }}
+	if err := early.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.AwaitingSuggestion {
+		t.Fatalf("state = %s, want it still waiting", got)
+	}
+	late := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(2 * time.Hour) }}
+	if err := late.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.ClosedNoAction {
+		t.Errorf("state = %s, want closed", got)
+	}
+}
+
 func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
 	e := newEnv(t)
 	id := e.undecided(t)
@@ -45,6 +80,28 @@ func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
 	}
 	if got := e.state(t, id); got != incident.ClosedNoAction {
 		t.Errorf("state = %s, want closed", got)
+	}
+}
+
+// Without an investigator and with no window set, people still get the
+// default window to suggest a fix.
+func TestCloseUndecided_WithoutAnInvestigatorPeopleGetTheDefaultWindow(t *testing.T) {
+	e := newEnv(t)
+	id := e.waiting(t)
+	cfg := config.Config{Investigators: config.Investigators{Disabled: true}}
+	soon := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(time.Minute) }}
+	if err := soon.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.AwaitingSuggestion {
+		t.Fatalf("state = %s a minute in, want it still waiting", got)
+	}
+	later := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(config.DefaultProposalWindow + time.Minute) }}
+	if err := later.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.state(t, id); got != incident.ClosedNoAction {
+		t.Errorf("state = %s after the default window, want closed", got)
 	}
 }
 

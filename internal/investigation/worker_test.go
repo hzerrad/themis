@@ -114,6 +114,36 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	}
 }
 
+// Without an investigator, the evidence and checks are recorded for the
+// policy, and the incident waits for a suggestion instead.
+func TestPrepare_WithoutAnInvestigatorWaitsForASuggestion(t *testing.T) {
+	e := newEnv(t)
+	cfg := e.worker.Config.Current()
+	cfg.Investigators.Disabled = true
+	e.worker.Config = cfg
+	id := e.newIncident(t, "rollout-regression", e.target)
+	for range 2 {
+		if err := e.worker.Prepare(t.Context(), id); err != nil {
+			t.Fatalf("Prepare: %v", err)
+		}
+	}
+	if got := e.state(t, id); got != incident.AwaitingSuggestion {
+		t.Errorf("state = %s, want awaiting_suggestion", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 3 {
+		t.Errorf("%d initial items, want 3", n)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 6 {
+		t.Errorf("%d predicates, want 6", n)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM investigations WHERE incident_id = $1`, id); n != 0 {
+		t.Errorf("%d investigations, want none: nothing would ever pick it up", n)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM transitions WHERE incident_id = $1 AND reason LIKE '%No investigator is installed%'`, id); n != 1 {
+		t.Error("the timeline doesn't say why the incident waits")
+	}
+}
+
 // River delivers at least once: a second run must change nothing.
 func TestPrepare_Idempotent(t *testing.T) {
 	e := newEnv(t)

@@ -95,10 +95,16 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		w.logger().WarnContext(ctx, "cannot snapshot the target's template", telemetry.FieldError, err)
 	}
 
+	// Without an investigator, the incident waits for a person or a tool
+	// outside Themis to suggest a fix; the checks still run for the policy.
+	noInvestigator := w.Config.Current().Investigators.Disabled
+	to, reason := incident.Investigating, evidenceCollected(len(items))
+	if noInvestigator {
+		to, reason = incident.AwaitingSuggestion, awaitingSuggestion(len(items))
+	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: in.ID, From: incident.Received, To: incident.Investigating,
-			Reason: evidenceCollected(len(items)), Actor: actor,
+			ID: in.ID, From: incident.Received, To: to, Reason: reason, Actor: actor,
 		})
 		if errors.Is(err, store.ErrStateConflict) {
 			return nil
@@ -106,7 +112,12 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := w.Store.CreateInvestigation(ctx, tx, in.ID, items, results); err != nil {
+		if noInvestigator {
+			err = w.Store.RecordInitialEvidence(ctx, tx, in.ID, items, results)
+		} else {
+			_, err = w.Store.CreateInvestigation(ctx, tx, in.ID, items, results)
+		}
+		if err != nil {
 			return err
 		}
 		for _, g := range gaps {
@@ -149,6 +160,15 @@ func evidenceCollected(n int) string {
 		return "Investigation started with 1 piece of evidence."
 	}
 	return fmt.Sprintf("Investigation started with %d pieces of evidence.", n)
+}
+
+// awaitingSuggestion says what happened when no investigator is installed.
+func awaitingSuggestion(n int) string {
+	pieces := fmt.Sprintf("%d pieces", n)
+	if n == 1 {
+		pieces = "1 piece"
+	}
+	return "Themis collected " + pieces + " of evidence and ran its checks. No investigator is installed, so it waits for a fix suggested by a person or a tool outside Themis."
 }
 
 // expiredEvents records that the target's first events are gone when its

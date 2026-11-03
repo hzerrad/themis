@@ -283,7 +283,7 @@ func (s *Store) LockIncident(ctx context.Context, tx pgx.Tx, id string) (inciden
 // take a suggestion, newest first. No namespaces means none.
 func (s *Store) OpenIncidents(ctx context.Context, namespaces []string, limit int) ([]Incident, error) {
 	rows, err := s.pool.Query(ctx, `SELECT `+incidentColumns+` FROM incidents
-	WHERE state IN ('investigating', 'inconclusive') AND target_namespace = ANY($1)
+	WHERE state IN ('investigating', 'awaiting_suggestion', 'inconclusive') AND target_namespace = ANY($1)
 	ORDER BY created_at DESC, id DESC LIMIT $2`, namespaces, limit)
 	if err != nil {
 		return nil, fmt.Errorf("open incidents: %w", err)
@@ -291,15 +291,23 @@ func (s *Store) OpenIncidents(ctx context.Context, namespaces []string, limit in
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
 }
 
-// UndecidedBefore returns the incidents left undecided since before t. The
-// last transition says since when; updated_at also moves when an alert joins.
-func (s *Store) UndecidedBefore(ctx context.Context, q Querier, t time.Time, limit int) ([]string, error) {
-	rows, err := q.Query(ctx, `SELECT i.id::text FROM incidents i
-	WHERE i.state = 'inconclusive'
+// Undecided is an incident still waiting for a fix to be suggested.
+type Undecided struct {
+	ID    string
+	State incident.State
+}
+
+// UndecidedBefore returns the incidents left undecided since before t: those
+// the investigation couldn't decide, and those waiting for a suggestion
+// without an investigator. The last transition says since when; updated_at
+// also moves when an alert joins.
+func (s *Store) UndecidedBefore(ctx context.Context, q Querier, t time.Time, limit int) ([]Undecided, error) {
+	rows, err := q.Query(ctx, `SELECT i.id::text, i.state FROM incidents i
+	WHERE i.state IN ('inconclusive', 'awaiting_suggestion')
 	  AND (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) <= $1
 	ORDER BY i.id LIMIT $2`, t, limit)
 	if err != nil {
 		return nil, fmt.Errorf("undecided incidents: %w", err)
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
+	return pgx.CollectRows(rows, pgx.RowToStructByPos[Undecided])
 }

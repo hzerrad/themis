@@ -392,10 +392,10 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 			})
 		}
 		// While the investigation runs, it picks this up when it finishes.
-		if state != incident.Inconclusive {
+		if state != incident.Inconclusive && state != incident.AwaitingSuggestion {
 			return nil
 		}
-		if err := s.advance(ctx, tx, in.ID, "A fix was suggested by "+caller.Source+".", incident.Inconclusive, incident.Diagnosed); err != nil {
+		if err := s.advance(ctx, tx, in.ID, "A fix was suggested by "+caller.Source+".", state, incident.Diagnosed); err != nil {
 			return err
 		}
 		return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: stored.ID, IncidentID: in.ID})
@@ -408,7 +408,7 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 
 // judgeExternal adds to judge what only a caller from outside can get wrong.
 func (s *Server) judgeExternal(ctx context.Context, tx pgx.Tx, c Caller, in store.Incident, state incident.State, p store.Proposal, invalid string) (*rejection, error) {
-	if state != incident.Investigating && state != incident.Inconclusive {
+	if state != incident.Investigating && state != incident.AwaitingSuggestion && state != incident.Inconclusive {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED,
 			"This incident is past the point of taking suggestions.",

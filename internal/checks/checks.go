@@ -63,6 +63,8 @@ type Checker struct {
 	Executor string
 	// OIDC says whether people can sign in through an identity provider.
 	OIDC bool
+	// NoInvestigator says no investigator is installed, by choice.
+	NoInvestigator bool
 	// Dial reaches the executor; nil dials TCP.
 	Dial func(ctx context.Context, addr string) error
 	Now  func() time.Time
@@ -98,6 +100,11 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 
 func (c *Checker) investigator(ctx context.Context) Check {
 	ch := Check{Name: "Investigator"}
+	if c.NoInvestigator {
+		ch.State, ch.Summary = Off, "None is installed: each incident waits for a fix suggested by a person or a tool outside Themis, such as HolmesGPT."
+		ch.Fix = "To have Themis diagnose incidents itself, install the investigator with a model: model.enabled=true and the model's address."
+		return ch
+	}
 	h, err := c.Store.LastHeartbeat(ctx, store.HeartbeatInvestigator)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -136,6 +143,11 @@ var modelFixes = map[string]struct{ summary, fix string }{
 
 func (c *Checker) model(ctx context.Context) Check {
 	ch := Check{Name: "Model"}
+	if c.NoInvestigator {
+		ch.State, ch.Summary = Off, "None: without an investigator, Themis asks no model."
+		ch.Fix = "The model comes with the investigator: model.enabled=true and the model's address."
+		return ch
+	}
 	o, err := c.Store.LastInvestigationOutcome(ctx)
 	switch {
 	case errors.Is(err, store.ErrNotFound):

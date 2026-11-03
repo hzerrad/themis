@@ -157,8 +157,10 @@ func TestChecks_Problems(t *testing.T) {
 		"executor down": {func(c *checks.Checker, _ *fakeStore) {
 			c.Dial = func(context.Context, string) error { return errors.New("refused") }
 		}, "Fixes", checks.Problem, "can't reach the executor"},
-		"setup open": {func(_ *checks.Checker, s *fakeStore) { s.finished = false }, "Sign-in", checks.Warn, "port-forward"},
-		"token only": {func(_ *checks.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", checks.Warn, "emergency token"},
+		"no investigator": {func(c *checks.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", checks.Off, "waits for a fix suggested"},
+		"no model":        {func(c *checks.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", checks.Off, "asks no model"},
+		"setup open":      {func(_ *checks.Checker, s *fakeStore) { s.finished = false }, "Sign-in", checks.Warn, "port-forward"},
+		"token only":      {func(_ *checks.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", checks.Warn, "emergency token"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c, s := healthy()

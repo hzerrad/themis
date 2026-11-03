@@ -11,6 +11,7 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `enrolledNamespaces` | yes | Namespaces Themis may act on. Alerts about any other namespace are recorded as rejected. Each also needs RBAC, which the chart renders per namespace. |
 | `intake.bearerTokenFile` | yes | File holding the token Alertmanager must send. Read on every request, so rotating the Secret needs no restart. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
+| `investigators.disabled` | no | No investigator is installed. Themis collects evidence and runs its checks, then each incident waits (`awaiting_suggestion`) for a fix suggested by a person or a tool outside Themis, and closes without action if none comes within `externalProposals.window`. The chart sets it with `model.enabled: false`. |
 | `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
 | `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |
 | `api.access` | no | Roles for people who sign in, by username or group. |
@@ -153,7 +154,7 @@ externalProposals:
 
 **People** send the same request as JSON to `POST /v1/incidents/{id}/proposals`, signed in with the [approver role](#people-and-roles) or with the admin token. A signed-in person is recorded as `person:<username>`. The admin token is recorded as `admin-token`, since anyone holding it looks the same.
 
-**When a suggestion is taken:** while Themis investigates, and for `window` after it couldn't decide. `window` defaults to 15 minutes with sources and to none without. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
+**When a suggestion is taken:** while Themis investigates, for `window` after it couldn't decide, and, without an investigator, for `window` from when the incident opens. `window` defaults to 15 minutes with sources or without an investigator, and to none otherwise. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
 
 **What policy sees:** rules can read `proposal.source`, `proposal.authenticated` and `proposal.external`, all strings. To send every outside suggestion to a person, or refuse them, write a rule on `proposal.external == "true"`.
 

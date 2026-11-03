@@ -40,15 +40,15 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 	if w.Now != nil {
 		now = w.Now()
 	}
-	window := w.Config.Current().ExternalProposals.EffectiveWindow()
-	ids, err := w.Store.UndecidedBefore(ctx, w.Store.DB(), now.Add(-window), closeUndecidedBatch)
+	window := w.Config.Current().SuggestionWindow()
+	undecided, err := w.Store.UndecidedBefore(ctx, w.Store.DB(), now.Add(-window), closeUndecidedBatch)
 	if err != nil {
 		return err
 	}
-	for _, id := range ids {
+	for _, u := range undecided {
 		err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 			return w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: id, From: incident.Inconclusive, To: incident.ClosedNoAction,
+				ID: u.ID, From: u.State, To: incident.ClosedNoAction,
 				Reason: "Nobody suggested a fix in time, so Themis closed the incident.", Actor: actor,
 			})
 		})
