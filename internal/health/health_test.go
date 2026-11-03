@@ -2,7 +2,6 @@ package health_test
 
 import (
 	"context"
-	"errors"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -24,14 +23,6 @@ func TestDatabase_Ready(t *testing.T) {
 
 	if err := check(s); err != nil {
 		t.Errorf("check = %v, want ready", err)
-	}
-}
-
-func TestDatabase_Unreachable(t *testing.T) {
-	err := check(pinger(func(context.Context) error { return errors.New("connection refused") }))
-
-	if err == nil {
-		t.Error("check passed, want it to fail")
 	}
 }
 

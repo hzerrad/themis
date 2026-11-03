@@ -76,9 +76,9 @@ func directory(t *testing.T) *identity.Directory {
 func TestIdentify(t *testing.T) {
 	d := directory(t)
 	for name, tc := range map[string]struct {
-		method, auth, cookie, header string
-		want                         identity.Identity
-		err                          error
+		method, url, auth, cookie, header string
+		want                              identity.Identity
+		err                               error
 	}{
 		"the admin token":               {method: http.MethodGet, auth: "Bearer admin-secret", want: identity.Identity{Username: "admin", Role: config.RoleAdmin, Token: true}},
 		"a wrong token":                 {method: http.MethodGet, auth: "Bearer guess", err: identity.ErrSignedOut},
@@ -86,12 +86,17 @@ func TestIdentify(t *testing.T) {
 		"a session":                     {method: http.MethodGet, cookie: "live", want: identity.Identity{Username: "bob@example.com", Groups: []string{"sre"}, Role: config.RoleApprover}},
 		"an unknown session":            {method: http.MethodGet, cookie: "stolen", err: identity.ErrSignedOut},
 		"nothing":                       {method: http.MethodGet, err: identity.ErrSignedOut},
-		"a change with a session":       {method: http.MethodPost, cookie: "live", header: "1", want: identity.Identity{Username: "bob@example.com", Groups: []string{"sre"}, Role: config.RoleApprover}},
+		// Without the setup door, nothing is an admin for free.
+		"nothing, from localhost": {method: http.MethodGet, url: "http://localhost:8090/v1/me", err: identity.ErrSignedOut},
+		"a change with a session": {method: http.MethodPost, cookie: "live", header: "1", want: identity.Identity{Username: "bob@example.com", Groups: []string{"sre"}, Role: config.RoleApprover}},
 		// A form on another site can post with the cookie, but can't add the header.
 		"a change without the header": {method: http.MethodPost, cookie: "live", err: identity.ErrNoRequestHeader},
 	} {
 		t.Run(name, func(t *testing.T) {
-			req := httptest.NewRequestWithContext(t.Context(), tc.method, "/v1/incidents", nil)
+			if tc.url == "" {
+				tc.url = "/v1/incidents"
+			}
+			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.url, nil)
 			if tc.auth != "" {
 				req.Header.Set("Authorization", tc.auth)
 			}

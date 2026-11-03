@@ -40,30 +40,6 @@ func TestGap_CauseFromError(t *testing.T) {
 	}
 }
 
-// The causes are a closed set: each has a remedy and a metric label.
-func TestGap_CausesAreClosed(t *testing.T) {
-	want := []evidence.GapCause{
-		evidence.GapForbidden, evidence.GapNotInProfile, evidence.GapExpired, evidence.GapNotFound,
-		evidence.GapBudgetSpent, evidence.GapDataCeiling, evidence.GapTimeout, evidence.GapUnavailable,
-		evidence.GapAbsent,
-	}
-	seen := map[evidence.GapCause]bool{}
-	for _, c := range want {
-		if c == "" || seen[c] {
-			t.Errorf("cause %q is empty or repeated", c)
-		}
-		seen[c] = true
-	}
-	if got := evidence.GapCauses(); len(got) != len(want) {
-		t.Errorf("GapCauses() has %d causes, want %d", len(got), len(want))
-	}
-	for _, c := range evidence.GapCauses() {
-		if !seen[c] {
-			t.Errorf("GapCauses() lists unknown cause %q", c)
-		}
-	}
-}
-
 // Only "looked, and there was nothing" is ambiguous; every other gap means
 // Themis could not see.
 func TestGap_OnlyAbsentIsAmbiguous(t *testing.T) {

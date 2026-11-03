@@ -105,40 +105,22 @@ func TestToAlerts_OnePerAlert(t *testing.T) {
 			if !a.ReceivedAt.Equal(received) {
 				t.Errorf("ReceivedAt = %v, want %v", a.ReceivedAt, received)
 			}
+			// Payload holds that one alert, not the whole group.
+			var payload struct {
+				Status string            `json:"status"`
+				Labels map[string]string `json:"labels"`
+				Alerts []any             `json:"alerts"`
+			}
+			if err := json.Unmarshal(a.Payload, &payload); err != nil {
+				t.Fatalf("Payload is not JSON: %v", err)
+			}
+			if payload.Alerts != nil {
+				t.Error("Payload is the whole group, want the single alert")
+			}
+			if payload.Status != string(a.Status) || payload.Labels["pod"] != tt.pod {
+				t.Errorf("Payload is another alert: status %q, pod %q", payload.Status, payload.Labels["pod"])
+			}
 		})
-	}
-}
-
-// Payload holds that one alert, not the whole group.
-func TestToAlerts_PayloadIsTheSingleAlert(t *testing.T) {
-	alerts, _, err := parseFixture(t, "kube-pod-crashlooping.json").toAlerts(received)
-	if err != nil {
-		t.Fatalf("toAlerts: %v", err)
-	}
-
-	for i, a := range alerts {
-		var got struct {
-			Status string            `json:"status"`
-			Labels map[string]string `json:"labels"`
-			Alerts []any             `json:"alerts"`
-		}
-		if err := json.Unmarshal(a.Payload, &got); err != nil {
-			t.Fatalf("alert %d: Payload is not JSON: %v", i, err)
-		}
-		if got.Alerts != nil {
-			t.Errorf("alert %d: Payload is the whole group, want the single alert", i)
-		}
-		if got.Status != string(a.Status) || got.Labels["pod"] != a.Labels["pod"] {
-			t.Errorf("alert %d: Payload is another alert: status %q, pod %q", i, got.Status, got.Labels["pod"])
-		}
-	}
-}
-
-func TestToAlerts_NoAlerts(t *testing.T) {
-	alerts, invalid, err := mustParse(t, []byte(`{"version":"4","alerts":[]}`)).toAlerts(received)
-
-	if err != nil || len(alerts) != 0 || len(invalid) != 0 {
-		t.Errorf("toAlerts = %v, %v, %v; want nothing", alerts, invalid, err)
 	}
 }
 
@@ -150,7 +132,8 @@ func TestToAlerts_InvalidAlertDoesNotCostTheOthers(t *testing.T) {
 		{"status":"firing","labels":{"namespace":"shop","pod":"b"},"fingerprint":"f1"},
 		{"status":"firing","labels":{"alertname":"","pod":"c"},"fingerprint":"f2"},
 		{"status":"pending","labels":{"alertname":"KubePodOOMKilled","pod":"d"},"fingerprint":"f3"},
-		{"status":"resolved","labels":{"alertname":"KubePodOOMKilled","namespace":"shop","pod":"e"},"fingerprint":"f4"}
+		{"status":"resolved","labels":{"alertname":"KubePodOOMKilled","namespace":"shop","pod":"e"},"fingerprint":"f4"},
+		{"status":"FIRING","labels":{"alertname":"KubePodOOMKilled","pod":"f"},"fingerprint":"f5"}
 	]}`))
 
 	alerts, invalid, err := p.toAlerts(received)
@@ -172,6 +155,8 @@ func TestToAlerts_InvalidAlertDoesNotCostTheOthers(t *testing.T) {
 		{1, "b", "", intake.ErrMissingAlertName, "alert 1"},
 		{2, "c", "", intake.ErrMissingAlertName, "alert 2"},
 		{3, "d", "KubePodOOMKilled", intake.ErrUnsupportedAlertStatus, `"pending"`},
+		// Alertmanager's statuses are lowercase; another case is not one of them.
+		{5, "f", "KubePodOOMKilled", intake.ErrUnsupportedAlertStatus, `"FIRING"`},
 	}
 	if len(invalid) != len(tests) {
 		t.Fatalf("got %d invalid alerts, want %d: %v", len(invalid), len(tests), invalid)
@@ -189,19 +174,6 @@ func TestToAlerts_InvalidAlertDoesNotCostTheOthers(t *testing.T) {
 		}
 		if got.Source != Source || !got.ReceivedAt.Equal(received) || len(got.Payload) == 0 {
 			t.Errorf("alert %d: Source %q, ReceivedAt %v, Payload %d bytes; want all set", tt.index, got.Source, got.ReceivedAt, len(got.Payload))
-		}
-	}
-}
-
-func TestAlertmanagerStatus(t *testing.T) {
-	for _, s := range []intake.AlertStatus{intake.AlertFiring, intake.AlertResolved} {
-		if got, err := parseStatus(string(s)); err != nil || got != s {
-			t.Errorf("parseStatus(%q) = %q, %v; want %q", s, got, err, s)
-		}
-	}
-	for _, s := range []string{"", "pending", "FIRING"} {
-		if _, err := parseStatus(s); !errors.Is(err, intake.ErrUnsupportedAlertStatus) {
-			t.Errorf("parseStatus(%q) error = %v, want ErrUnsupportedAlertStatus", s, err)
 		}
 	}
 }

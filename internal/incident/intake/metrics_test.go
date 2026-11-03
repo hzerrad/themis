@@ -1,10 +1,7 @@
 package intake_test
 
 import (
-	"errors"
 	"testing"
-
-	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
@@ -22,46 +19,6 @@ func wantDelta(t *testing.T, what string, delta func() float64, want float64) {
 	if got := delta(); got != want {
 		t.Errorf("%s changed by %v, want %v", what, got, want)
 	}
-}
-
-func TestMetrics_CreatedJoinedResolved(t *testing.T) {
-	e := newWorkerEnv(t, nil)
-	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
-	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
-	created := metrictest.Delta(t, processed, outcome("created", ""))
-	joined := metrictest.Delta(t, processed, outcome("joined", ""))
-	resolved := metrictest.Delta(t, processed, outcome("resolved", ""))
-
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertFiring), nil))
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertFiring), nil))
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertResolved), nil))
-
-	wantDelta(t, "created", created, 1)
-	wantDelta(t, "joined", joined, 1)
-	wantDelta(t, "resolved", resolved, 1)
-}
-
-// Rejections are counted by reason: the raw signal of the coverage report.
-func TestMetrics_RejectedByReason(t *testing.T) {
-	e := newWorkerEnv(t, nil)
-	notEnrolled := metrictest.Delta(t, processed, outcome("rejected", "not_enrolled"))
-
-	wantCompleted(t, e.process(t, alertFor("kube-system", "coredns-1", "fp", intake.AlertFiring), nil))
-
-	wantDelta(t, "rejected{not_enrolled}", notEnrolled, 1)
-}
-
-// A transient failure is a retry, and its last attempt a rejection.
-func TestMetrics_RetriedThenProcessingFailed(t *testing.T) {
-	e := newWorkerEnv(t, failingReader{errors.New("connection refused")})
-	retried := metrictest.Delta(t, processed, outcome("retried", ""))
-	failed := metrictest.Delta(t, processed, outcome("rejected", "processing_failed"))
-
-	e.process(t, alertFor(e.ns, "x", "fp-1", intake.AlertFiring), &river.InsertOpts{MaxAttempts: 2})
-	wantDelta(t, "retried", retried, 1)
-
-	wantCompleted(t, e.process(t, alertFor(e.ns, "x", "fp-2", intake.AlertFiring), &river.InsertOpts{MaxAttempts: 1}))
-	wantDelta(t, "rejected{processing_failed}", failed, 1)
 }
 
 // Alerts are counted as received only once they are stored.

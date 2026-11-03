@@ -10,6 +10,8 @@ import (
 	"github.com/hzerrad/themis/internal/server/web"
 )
 
+// After an upgrade the browser must load the new page: it revalidates every
+// time, and an unchanged file costs a 304.
 func TestServesThePage(t *testing.T) {
 	mux := http.NewServeMux()
 	web.Register(mux)
@@ -21,6 +23,17 @@ func TestServesThePage(t *testing.T) {
 		}
 		if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "script-src 'self'") {
 			t.Errorf("GET %s has no script policy", path)
+		}
+		tag := rec.Header().Get("ETag")
+		if rec.Header().Get("Cache-Control") != "no-cache" || tag == "" {
+			t.Fatalf("GET %s: Cache-Control %q, ETag %q", path, rec.Header().Get("Cache-Control"), tag)
+		}
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		req.Header.Set("If-None-Match", tag)
+		rec = httptest.NewRecorder()
+		mux.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotModified {
+			t.Errorf("GET %s with its own tag = %d, want 304", path, rec.Code)
 		}
 	}
 }
@@ -66,28 +79,6 @@ func TestPage_SpeaksPlainly(t *testing.T) {
 					t.Errorf("%s shows %q, which uses the internal word %q", path, lit, w)
 				}
 			}
-		}
-	}
-}
-
-// After an upgrade the browser must load the new page: it revalidates every
-// time, and an unchanged file costs a 304.
-func TestPage_IsRevalidated(t *testing.T) {
-	mux := http.NewServeMux()
-	web.Register(mux)
-	for _, path := range []string{"/", "/app.js", "/style.css"} {
-		rec := httptest.NewRecorder()
-		mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
-		tag := rec.Header().Get("ETag")
-		if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-cache" || tag == "" {
-			t.Fatalf("%s = %d, Cache-Control %q, ETag %q", path, rec.Code, rec.Header().Get("Cache-Control"), tag)
-		}
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
-		req.Header.Set("If-None-Match", tag)
-		rec = httptest.NewRecorder()
-		mux.ServeHTTP(rec, req)
-		if rec.Code != http.StatusNotModified {
-			t.Errorf("%s with its own tag = %d, want 304", path, rec.Code)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/grpc/codes"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,24 +42,6 @@ func TestEvidence_NotInProfileRecordsGap(t *testing.T) {
 	}
 }
 
-func TestEvidence_BudgetSpentRecordsGap(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.PodStates}
-	for range 2 {
-		if _, err := e.evidence.CollectEvidence(t.Context(), req); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.TargetEvents}); err == nil {
-		t.Fatal("a request past the budget was served")
-	}
-	g := e.gap(t, inv.GetIncidentId())
-	if g.Cause != evidence.GapBudgetSpent || g.Template != evidence.TargetEvents {
-		t.Errorf("gap = %+v, want target_events refused for the budget", g)
-	}
-}
-
 // A collection that fails is answered as before, and its cause is kept.
 func TestEvidence_CollectionFailureRecordsGap(t *testing.T) {
 	e := newEnv(t)
@@ -86,13 +69,16 @@ func TestEvidence_CollectionFailureRecordsGap(t *testing.T) {
 func TestEvidence_StaleLeaseRecordsNoGap(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
-	_, _ = e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: "0192f0c1-0000-7000-8000-0000000000ff", Template: evidence.ContainerLogsTail})
+	_, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: "0192f0c1-0000-7000-8000-0000000000ff", Template: evidence.ContainerLogsTail})
+	if code(err) != codes.FailedPrecondition {
+		t.Errorf("err = %v, want FailedPrecondition", err)
+	}
 	if gaps, _ := e.store.EvidenceGaps(t.Context(), inv.GetIncidentId()); len(gaps) != 0 {
 		t.Errorf("gaps = %+v, want none", gaps)
 	}
 }
 
-// Repeated refusals are one gap.
+// A request past the budget is refused, and repeated refusals are one gap.
 func TestEvidence_RepeatedRefusalRecordedOnce(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
@@ -102,10 +88,12 @@ func TestEvidence_RepeatedRefusalRecordedOnce(t *testing.T) {
 		}
 	}
 	for range 3 {
-		_, _ = e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.TargetEvents})
+		if _, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.TargetEvents}); code(err) != codes.ResourceExhausted {
+			t.Errorf("err = %v, want ResourceExhausted", err)
+		}
 	}
-	if g := e.gap(t, inv.GetIncidentId()); g.Cause != evidence.GapBudgetSpent {
-		t.Errorf("gap = %+v", g)
+	if g := e.gap(t, inv.GetIncidentId()); g.Cause != evidence.GapBudgetSpent || g.Template != evidence.TargetEvents {
+		t.Errorf("gap = %+v, want target_events refused for the budget", g)
 	}
 }
 

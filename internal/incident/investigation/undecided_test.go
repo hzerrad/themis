@@ -39,47 +39,37 @@ func (e *env) waiting(t *testing.T) string {
 	return id
 }
 
-// Without an investigator, an incident nobody suggests a fix for closes once
-// the window passes, like one Themis couldn't decide.
-func TestCloseUndecided_ClosesThoseWaitingForASuggestion(t *testing.T) {
-	e := newEnv(t)
-	id := e.waiting(t)
-	window := config.Config{ExternalProposals: config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}}
-	early := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(30 * time.Minute) }}
-	if err := early.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.AwaitingSuggestion {
-		t.Fatalf("state = %s, want it still waiting", got)
-	}
-	late := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(2 * time.Hour) }}
-	if err := late.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed", got)
-	}
-}
-
+// An incident Themis couldn't decide, or one waiting for a suggestion without
+// an investigator, stays open for the window, then closes.
 func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
-	e := newEnv(t)
-	id := e.undecided(t)
-	window := config.Config{ExternalProposals: config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}}
+	for name, tt := range map[string]struct {
+		seed   func(*env, *testing.T) string
+		before incident.State
+	}{
+		"undecided":                {(*env).undecided, incident.Inconclusive},
+		"waiting for a suggestion": {(*env).waiting, incident.AwaitingSuggestion},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id := tt.seed(e, t)
+			window := config.Config{ExternalProposals: config.ExternalProposals{Window: config.Duration{Duration: time.Hour}}}
 
-	early := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(30 * time.Minute) }}
-	if err := early.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.Inconclusive {
-		t.Fatalf("state = %s, want it still open", got)
-	}
+			early := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(30 * time.Minute) }}
+			if err := early.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.state(t, id); got != tt.before {
+				t.Fatalf("state = %s, want it still %s", got, tt.before)
+			}
 
-	late := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(2 * time.Hour) }}
-	if err := late.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed", got)
+			late := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(2 * time.Hour) }}
+			if err := late.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.state(t, id); got != incident.ClosedNoAction {
+				t.Errorf("state = %s, want closed", got)
+			}
+		})
 	}
 }
 

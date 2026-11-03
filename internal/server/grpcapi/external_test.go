@@ -180,56 +180,53 @@ func TestExternal_WithholdsEvidenceAboveItsCeiling(t *testing.T) {
 	}
 }
 
-// Themis couldn't decide, and an agent suggests a fix in the time left.
-func TestExternal_SuggestionAfterThemisCouldntDecideGoesToGovernance(t *testing.T) {
-	e := newEnv(t)
-	agent := e.external(t, withWindow)
-	inv := e.lease(t)
-	e.abstain(t, inv)
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Inconclusive {
-		t.Fatalf("state = %s, want it open for a suggestion", got)
-	}
-	resp, err := agent.SubmitProposal(t.Context(), suggestion(inv, "c1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED {
-		t.Fatalf("response = %v", resp)
-	}
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern'`); n != 1 {
-		t.Errorf("%d govern jobs, want 1", n)
-	}
-}
-
-// Without an investigator, an incident waits for a suggestion, and one from
-// outside goes straight to governance.
-func TestExternal_SuggestionWithoutAnInvestigatorGoesToGovernance(t *testing.T) {
-	e := newEnv(t)
-	agent := e.external(t, withWindow)
-	inv := e.lease(t)
-	// As if no investigator were installed: the evidence is there, the
-	// investigation isn't, and the incident waits.
-	if _, err := e.pool.Exec(t.Context(), `DELETE FROM investigations WHERE incident_id = $1`, inv.GetIncidentId()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = 'awaiting_suggestion' WHERE id = $1`, inv.GetIncidentId()); err != nil {
-		t.Fatal(err)
-	}
-	resp, err := agent.SubmitProposal(t.Context(), suggestion(inv, "c1"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resp.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED {
-		t.Fatalf("response = %v", resp)
-	}
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern'`); n != 1 {
-		t.Errorf("%d govern jobs, want 1", n)
+// An incident open for a suggestion takes one from outside, and it goes to
+// governance.
+func TestExternal_SuggestionGoesToGovernance(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		open func(t *testing.T, e *env, inv *themisv1.Investigation)
+	}{{
+		// Themis couldn't decide, and an agent suggests a fix in the time left.
+		name: "after Themis couldn't decide",
+		open: func(t *testing.T, e *env, inv *themisv1.Investigation) {
+			e.abstain(t, inv)
+			if got := e.state(t, inv.GetIncidentId()); got != incident.Inconclusive {
+				t.Fatalf("state = %s, want it open for a suggestion", got)
+			}
+		},
+	}, {
+		// As if no investigator were installed: the evidence is there, the
+		// investigation isn't, and the incident waits.
+		name: "without an investigator",
+		open: func(t *testing.T, e *env, inv *themisv1.Investigation) {
+			if _, err := e.pool.Exec(t.Context(), `DELETE FROM investigations WHERE incident_id = $1`, inv.GetIncidentId()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = 'awaiting_suggestion' WHERE id = $1`, inv.GetIncidentId()); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			agent := e.external(t, withWindow)
+			inv := e.lease(t)
+			tc.open(t, e, inv)
+			resp, err := agent.SubmitProposal(t.Context(), suggestion(inv, "c1"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED {
+				t.Fatalf("response = %v", resp)
+			}
+			if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
+				t.Errorf("state = %s, want diagnosed", got)
+			}
+			if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern'`); n != 1 {
+				t.Errorf("%d govern jobs, want 1", n)
+			}
+		})
 	}
 }
 

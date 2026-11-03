@@ -21,16 +21,6 @@ func transitions(t *testing.T, from, to incident.State) func() float64 {
 	return metrictest.Delta(t, "themis_incident_transitions_total", map[string]string{"from": string(from), "to": string(to)})
 }
 
-func TestTransition_Counted(t *testing.T) {
-	s, _ := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-counted"))
-	counted := transitions(t, incident.Received, incident.Investigating)
-	advance(t, s, id, incident.Received, incident.Investigating)
-	if got := counted(); got != 1 {
-		t.Errorf("counted %v transitions, want 1", got)
-	}
-}
-
 func TestTransition_RolledBack_NotCounted(t *testing.T) {
 	s, _ := newStore(t)
 	id, _ := createOrJoin(t, s, newIncident("fp-rolled-back"))

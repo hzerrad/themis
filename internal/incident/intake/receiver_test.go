@@ -54,6 +54,9 @@ func TestReceive_QueuesValidAndRecordsInvalid(t *testing.T) {
 	if got != (intake.Received{Accepted: 2, Rejected: 1}) {
 		t.Errorf("Received = %+v, want 2 accepted, 1 rejected", got)
 	}
+	// The kind is stored with every queued job; renaming it strands them. River's
+	// default of 25 attempts would retry a stale alert for about 18 days; 10 is
+	// about 4 hours.
 	if n := pgtest.Count(t, pool, `SELECT count(*) FROM river_job WHERE kind = 'process_alert' AND max_attempts = 10`); n != 2 {
 		t.Errorf("process_alert jobs with max_attempts 10 = %d, want 2", n)
 	}

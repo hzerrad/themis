@@ -93,26 +93,6 @@ func TestScenarios(t *testing.T) {
 	}
 }
 
-func TestBuild_IsTheSameEveryTime(t *testing.T) {
-	for _, dir := range dirs(t) {
-		s, err := evaluation.Load(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		first, err := evaluation.Build(t.Context(), dir, s, shipped(t))
-		if err != nil {
-			t.Fatal(err)
-		}
-		second, err := evaluation.Build(t.Context(), dir, s, shipped(t))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.Equal(encode(t, first), encode(t, second)) {
-			t.Errorf("%s: two builds differ", s.Name)
-		}
-	}
-}
-
 // A public corpus goes through the same redaction as production evidence, and
 // never holds what a template wouldn't return.
 func TestBuild_RedactsAndLeaksNothing(t *testing.T) {

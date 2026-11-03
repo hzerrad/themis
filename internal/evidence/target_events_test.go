@@ -82,25 +82,18 @@ func podRef(p *corev1.Pod) corev1.ObjectReference {
 }
 
 // A zero time must not reach the model as year 1: it is no time at all.
-func TestTargetEvents_MissingTimestampsAreLeftOut(t *testing.T) {
+// Events written through events.k8s.io/v1 carry eventTime instead of the
+// legacy timestamps.
+func TestTargetEvents_Timestamps(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	d, pod := k8s.NewRollout(t, ns, "checkout")
 	newEvent(t, ns, "NoTimes", podRef(pod), eventTimes{})
+	newEvent(t, ns, "Killing", podRef(pod), eventTimes{eventTime: time.Date(2026, 10, 27, 9, 2, 3, 0, time.UTC)})
 
 	item := collectTargetEvents(t, deploymentTarget(d))
 	if obj := objectNamed(t, item.Data, "NoTimes"); contains(obj, "0001-01-01") {
 		t.Errorf("a missing time is reported as the zero time: %v", obj)
 	}
-}
-
-// Events written through events.k8s.io/v1 carry eventTime instead of the
-// legacy timestamps.
-func TestTargetEvents_UsesEventTime(t *testing.T) {
-	ns := k8s.NewNamespace(t)
-	d, pod := k8s.NewRollout(t, ns, "checkout")
-	newEvent(t, ns, "Killing", podRef(pod), eventTimes{eventTime: time.Date(2026, 10, 27, 9, 2, 3, 0, time.UTC)})
-
-	item := collectTargetEvents(t, deploymentTarget(d))
 	if obj := objectNamed(t, item.Data, "Killing"); !contains(obj, "2026-10-27T09:02:03") {
 		t.Errorf("the event's eventTime is missing: %v", obj)
 	}

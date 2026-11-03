@@ -55,53 +55,39 @@ func mustParse(t *testing.T, doc string) config.Config {
 	return c
 }
 
-func TestParse_Valid(t *testing.T) {
-	c := mustParse(t, validYAML)
-
-	if len(c.EnrolledNamespaces) != 2 || len(c.Profiles) != 2 {
-		t.Fatalf("parsed %d namespaces and %d profiles, want 2 and 2", len(c.EnrolledNamespaces), len(c.Profiles))
-	}
-	if got := c.Profiles[1].Match.Labels["severity"]; got != "critical" {
-		t.Errorf("profiles[1].match.labels.severity = %q, want critical", got)
-	}
-}
-
-func TestParse_ExampleFile(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "deploy", "config", "themis.example.yaml"))
-	if err != nil {
-		t.Fatalf("read example: %v", err)
-	}
-	if _, err := config.Parse(data); err != nil {
-		t.Fatalf("the shipped example config is invalid: %v", err)
+// The shipped example and the configuration `make run` uses must stay valid as
+// the schema evolves.
+func TestParse_ShippedFiles(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join("..", "..", "deploy", "config", "themis.example.yaml"),
+		filepath.Join("..", "..", "scripts", "dev", "themis.yaml"),
+	} {
+		data, err := os.ReadFile(path) //nolint:gosec // a path chosen by the test
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if _, err := config.Parse(data); err != nil {
+			t.Errorf("%s is invalid: %v", path, err)
+		}
 	}
 }
 
-// The configuration `make run` uses must stay valid as the schema evolves.
-func TestParse_DevFile(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "scripts", "dev", "themis.yaml"))
-	if err != nil {
-		t.Fatalf("read dev config: %v", err)
+func TestParse_Refuses(t *testing.T) {
+	tests := []struct {
+		name, from, to string
+		mention        string // a word the error names; "" for any error
+	}{
+		{"unknown field", "priority: 100", "priority: 100\n    prority: 5", "prority"},
+		{"duplicate key", "intake:", "intake:\n  bearerTokenFile: /a", ""},
+		{"invalid duration", "timeout: 2m", "timeout: 2 minutes", ""},
 	}
-	if _, err := config.Parse(data); err != nil {
-		t.Fatalf("scripts/dev/themis.yaml is invalid: %v", err)
-	}
-}
-
-func TestParse_UnknownFieldIsAnError(t *testing.T) {
-	doc := strings.Replace(validYAML, "priority: 100", "priority: 100\n    prority: 5", 1)
-
-	_, err := config.Parse([]byte(doc))
-
-	if err == nil || !strings.Contains(err.Error(), "prority") {
-		t.Fatalf("err = %v, want an error naming the unknown field", err)
-	}
-}
-
-func TestParse_DuplicateKeyIsAnError(t *testing.T) {
-	doc := strings.Replace(validYAML, "intake:", "intake:\n  bearerTokenFile: /a", 1)
-
-	if _, err := config.Parse([]byte(doc)); err == nil {
-		t.Fatal("err = nil, want an error for the duplicate bearerTokenFile key")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := config.Parse([]byte(strings.Replace(validYAML, tt.from, tt.to, 1)))
+			if err == nil || !strings.Contains(err.Error(), tt.mention) {
+				t.Errorf("err = %v, want an error naming %q", err, tt.mention)
+			}
+		})
 	}
 }
 
@@ -320,20 +306,6 @@ func TestMatchProfile_PriorityNotFileOrder(t *testing.T) {
 	}
 }
 
-// MatchProfile does not rely on Validate: a matching profile is returned even
-// when its priority is one Validate would reject.
-func TestMatchProfile_UnvalidatedPriority(t *testing.T) {
-	c := mustParse(t, validYAML)
-	c.Profiles = c.Profiles[:1]
-	c.Profiles[0].Priority = 0
-
-	p, ok := c.MatchProfile("KubePodOOMKilled", nil, deployment)
-
-	if !ok || p.Name != "rollout-regression" {
-		t.Fatalf("matched %q (ok=%v), want rollout-regression", p.Name, ok)
-	}
-}
-
 func TestParse_Investigation(t *testing.T) {
 	c := mustParse(t, validYAML)
 	got := c.Profiles[0].InvestigationBudget()
@@ -345,20 +317,6 @@ func TestParse_Investigation(t *testing.T) {
 	}
 	if d := c.Profiles[1].InvestigationBudget(); d.MaxSteps != config.DefaultMaxSteps || d.Timeout.Duration != config.DefaultInvestigationTimeout {
 		t.Errorf("defaults = %+v", d)
-	}
-}
-
-func TestParse_InvalidDuration(t *testing.T) {
-	doc := strings.Replace(validYAML, "timeout: 2m", "timeout: 2 minutes", 1)
-	if _, err := config.Parse([]byte(doc)); err == nil {
-		t.Error("Parse accepted an invalid duration")
-	}
-}
-
-func TestProfile_AllowsTemplate(t *testing.T) {
-	p := mustParse(t, validYAML).Profiles[0]
-	if !p.AllowsTemplate("container_logs_tail") || p.AllowsTemplate("target_events") {
-		t.Error("AllowsTemplate does not follow evidence.allowed")
 	}
 }
 

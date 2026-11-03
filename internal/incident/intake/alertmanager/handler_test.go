@@ -80,7 +80,8 @@ func TestHandler_Accepts(t *testing.T) {
 	r := &fakeReceiver{}
 	h, _ := newHandler(t, r)
 
-	rec := post(h, "Bearer "+token, fixture(t))
+	// The scheme is case-insensitive (RFC 7235).
+	rec := post(h, "bearer "+token, fixture(t))
 
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d (%s), want 202", rec.Code, rec.Body)
@@ -122,17 +123,12 @@ func TestHandler_Unauthorized(t *testing.T) {
 	}
 }
 
-// The scheme is case-insensitive (RFC 7235).
-func TestHandler_LowercaseScheme(t *testing.T) {
-	h, _ := newHandler(t, &fakeReceiver{})
-
-	if rec := post(h, "bearer "+token, fixture(t)); rec.Code != http.StatusAccepted {
-		t.Errorf("status = %d, want 202", rec.Code)
-	}
-}
-
-// A rotated Secret takes effect on the next request, without a restart.
+// A rotated Secret takes effect on the next request, without a restart. Every
+// answer is counted by status code, refusals included.
 func TestHandler_TokenRotation(t *testing.T) {
+	const name = "themis_intake_requests_total"
+	accepted := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "202"})
+	unauthorized := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "401"})
 	h, _ := newHandler(t, &fakeReceiver{})
 	if err := os.WriteFile(h.TokenFile, []byte("rotated-token"), 0o600); err != nil {
 		t.Fatalf("rotate token: %v", err)
@@ -143,6 +139,12 @@ func TestHandler_TokenRotation(t *testing.T) {
 	}
 	if rec := post(h, "Bearer rotated-token", fixture(t)); rec.Code != http.StatusAccepted {
 		t.Errorf("new token: status = %d, want 202", rec.Code)
+	}
+	if got := accepted(); got != 1 {
+		t.Errorf("202 count changed by %v, want 1", got)
+	}
+	if got := unauthorized(); got != 1 {
+		t.Errorf("401 count changed by %v, want 1", got)
 	}
 }
 
@@ -240,13 +242,18 @@ func TestHandler_InvalidAlertStillAccepted(t *testing.T) {
 	}
 }
 
+// The JSON key is camelCase; a mistyped tag would silently decode to 0.
 func TestHandler_WarnsWhenTruncated(t *testing.T) {
+	truncated := metrictest.Delta(t, "themis_intake_truncated_alerts_total", map[string]string{"source": alertmanager.Source})
 	h, logs := newHandler(t, &fakeReceiver{})
 
 	post(h, "Bearer "+token, []byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
 
 	if !strings.Contains(logs.String(), "truncated=3") {
 		t.Errorf("logs = %q, want a warning with truncated=3", logs)
+	}
+	if got := truncated(); got != 3 {
+		t.Errorf("truncated count changed by %v, want 3", got)
 	}
 }
 
@@ -274,34 +281,5 @@ func TestHandler_StoresJobs(t *testing.T) {
 	}
 	if n := pgtest.Count(t, pool, `SELECT count(*) FROM river_job WHERE kind = 'process_alert'`); n != 2 {
 		t.Errorf("process_alert jobs = %d, want 2", n)
-	}
-}
-
-// Every answer is counted by status code, refusals included.
-func TestHandler_CountsRequests(t *testing.T) {
-	const name = "themis_intake_requests_total"
-	accepted := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "202"})
-	unauthorized := metrictest.Delta(t, name, map[string]string{"source": alertmanager.Source, "code": "401"})
-	h, _ := newHandler(t, &fakeReceiver{})
-
-	post(h, "Bearer "+token, fixture(t))
-	post(h, "Bearer wrong", fixture(t))
-
-	if got := accepted(); got != 1 {
-		t.Errorf("202 count changed by %v, want 1", got)
-	}
-	if got := unauthorized(); got != 1 {
-		t.Errorf("401 count changed by %v, want 1", got)
-	}
-}
-
-func TestHandler_CountsTruncated(t *testing.T) {
-	truncated := metrictest.Delta(t, "themis_intake_truncated_alerts_total", map[string]string{"source": alertmanager.Source})
-	h, _ := newHandler(t, &fakeReceiver{})
-
-	post(h, "Bearer "+token, []byte(`{"version":"4","alerts":[],"truncatedAlerts":3}`))
-
-	if got := truncated(); got != 3 {
-		t.Errorf("truncated count changed by %v, want 3", got)
 	}
 }

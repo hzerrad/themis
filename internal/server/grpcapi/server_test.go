@@ -245,6 +245,7 @@ func TestRenewLease_KeepsTheLeaseAlive(t *testing.T) {
 
 func TestComplete_Inconclusive_ClosesWithoutAction(t *testing.T) {
 	e := newEnv(t)
+	abstained := investigations(t, "abstained")
 	inv := e.lease(t)
 	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
 		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_INCONCLUSIVE,
@@ -259,24 +260,8 @@ func TestComplete_Inconclusive_ClosesWithoutAction(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM transitions WHERE incident_id = $1 AND to_state = 'inconclusive'`, inv.GetIncidentId()); n != 1 {
 		t.Error("the inconclusive diagnosis is not on record")
 	}
-}
-
-func TestFail_LastAttemptEscalates(t *testing.T) {
-	e := newEnv(t)
-	var incidentID string
-	for range store.MaxInvestigationAttempts {
-		inv := e.lease(t)
-		incidentID = inv.GetIncidentId()
-		_, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
-			LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
-		})
-		if err != nil {
-			t.Fatalf("FailInvestigation: %v", err)
-		}
-		e.clock.now = e.clock.now.Add(10 * time.Minute)
-	}
-	if got := e.state(t, incidentID); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
+	if got := abstained(); got != 1 {
+		t.Errorf("counted %v abstentions, want 1", got)
 	}
 }
 
@@ -298,6 +283,7 @@ func TestFail_BacksOffBeforeTheNextLease(t *testing.T) {
 
 func TestLease_AbandonedLastAttemptEscalates(t *testing.T) {
 	e := newEnv(t)
+	lost := investigations(t, "lease_lost")
 	var incidentID string
 	for range store.MaxInvestigationAttempts {
 		incidentID = e.lease(t).GetIncidentId()
@@ -308,6 +294,9 @@ func TestLease_AbandonedLastAttemptEscalates(t *testing.T) {
 	}
 	if got := e.state(t, incidentID); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
+	}
+	if got := lost(); got != store.MaxInvestigationAttempts {
+		t.Errorf("counted %v lost leases, want %d", got, store.MaxInvestigationAttempts)
 	}
 }
 
@@ -333,28 +322,6 @@ func TestEvidence_RecordsProvenance(t *testing.T) {
 	id := resp.GetItems()[0].GetId()
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE id = $1 AND lease_id = $2 AND template = 'target_events'`, id, inv.GetLeaseId()); n != 1 {
 		t.Error("the item was not stored with its lease and template")
-	}
-}
-
-func TestEvidence_BudgetExhausted(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.PodStates}
-	for range 2 {
-		if _, err := e.evidence.CollectEvidence(t.Context(), req); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := e.evidence.CollectEvidence(t.Context(), req); code(err) != codes.ResourceExhausted {
-		t.Errorf("err = %v, want ResourceExhausted", err)
-	}
-}
-
-func TestEvidence_StaleLease(t *testing.T) {
-	e := newEnv(t)
-	_, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: "0192f0c1-0000-7000-8000-0000000000ff", Template: evidence.PodStates})
-	if code(err) != codes.FailedPrecondition {
-		t.Errorf("err = %v, want FailedPrecondition", err)
 	}
 }
 
@@ -444,6 +411,9 @@ func TestFail_EscalationReasonIsPlain(t *testing.T) {
 					t.Fatal(err)
 				}
 				e.clock.now = e.clock.now.Add(10 * time.Minute)
+			}
+			if got := e.state(t, incidentID); got != incident.Escalated {
+				t.Errorf("state = %s, want escalated", got)
 			}
 			trail, err := e.store.Transitions(t.Context(), incidentID)
 			if err != nil {

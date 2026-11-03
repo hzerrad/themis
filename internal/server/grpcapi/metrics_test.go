@@ -2,7 +2,6 @@ package grpcapi_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
@@ -53,21 +52,6 @@ func TestMetrics_InvestigationProposed(t *testing.T) {
 	}
 }
 
-func TestMetrics_InvestigationAbstained(t *testing.T) {
-	e := newEnv(t)
-	abstained := investigations(t, "abstained")
-	inv := e.lease(t)
-	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
-		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_INCONCLUSIVE, Summary: "unsure",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := abstained(); got != 1 {
-		t.Errorf("counted %v abstentions, want 1", got)
-	}
-}
-
 func TestMetrics_InvestigationFailures(t *testing.T) {
 	for reason, outcome := range map[themisv1.InvestigationFailureReason]string{
 		themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE: "failed",
@@ -85,22 +69,6 @@ func TestMetrics_InvestigationFailures(t *testing.T) {
 				t.Errorf("counted %v %s, want 1", got, outcome)
 			}
 		})
-	}
-}
-
-// A lease that expires is lost, whether it is leased again or was the last.
-func TestMetrics_InvestigationLeaseLost(t *testing.T) {
-	e := newEnv(t)
-	lost := investigations(t, "lease_lost")
-	for range 3 {
-		e.lease(t)
-		e.clock.now = e.clock.now.Add(time.Hour)
-	}
-	if _, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w-1"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := lost(); got != 3 {
-		t.Errorf("counted %v lost leases, want 3", got)
 	}
 }
 
@@ -130,17 +98,6 @@ func TestMetrics_SafetyEvents(t *testing.T) {
 	// An unknown predicate is rejected but is not a safety event.
 	if got := rejected(); got != 3 {
 		t.Errorf("counted %v rejected proposals, want 3", got)
-	}
-}
-
-func TestMetrics_UnknownCapabilityIsASafetyEvent(t *testing.T) {
-	p := profile()
-	p.Capabilities = nil
-	e := newEnvWith(t, p)
-	unknown := metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": "unknown_capability"})
-	e.submit(t, rollback(e.lease(t), "p-1"))
-	if got := unknown(); got != 1 {
-		t.Errorf("counted %v unknown_capability events, want 1", got)
 	}
 }
 

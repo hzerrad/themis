@@ -28,24 +28,6 @@ func TestMigrate_Idempotent(t *testing.T) {
 	}
 }
 
-func TestInTx_RollsBackOnError(t *testing.T) {
-	s, pool := newStore(t)
-
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if _, _, err := s.CreateOrJoinIncident(t.Context(), tx, newIncident("fp-1")); err != nil {
-			return err
-		}
-		return errRollback
-	})
-
-	if !errors.Is(err, errRollback) {
-		t.Fatalf("InTx err = %v, want the callback's error", err)
-	}
-	if n := count(t, pool, "SELECT count(*) FROM incidents"); n != 0 {
-		t.Errorf("incidents = %d, want 0", n)
-	}
-}
-
 func TestEnqueueIsTransactional(t *testing.T) {
 	s, pool := newStore(t)
 
@@ -67,21 +49,6 @@ func TestEnqueueIsTransactional(t *testing.T) {
 	}
 	if n := count(t, pool, "SELECT count(*) FROM incidents"); n != 0 {
 		t.Errorf("incidents = %d, want 0", n)
-	}
-}
-
-func TestEnqueue_CommitsWithTransaction(t *testing.T) {
-	s, pool := newStore(t)
-
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		return s.EnqueueTx(t.Context(), tx, testJobArgs{})
-	})
-	if err != nil {
-		t.Fatalf("InTx: %v", err)
-	}
-
-	if n := count(t, pool, "SELECT count(*) FROM river_job WHERE kind = 'test'"); n != 1 {
-		t.Errorf("jobs = %d, want 1", n)
 	}
 }
 

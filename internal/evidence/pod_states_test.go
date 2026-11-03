@@ -114,59 +114,50 @@ func contains(obj any, s string) bool {
 	return strings.Contains(string(b), s)
 }
 
-func TestPodStates_DescribesEveryPodOfTheTarget(t *testing.T) {
+// One collection of scenario 1, where revision 2's pod is OOMKilled.
+func TestPodStates_Scenario1(t *testing.T) {
 	item := collectPodStates(t, loadScenario1(t))
-	for _, pod := range []string{
-		"checkout-5c6a1e2f3-a1b2c", "checkout-5c6a1e2f3-d3e4f", "checkout-5c6a1e2f3-g5h6i",
-		"checkout-7d9f8b6c4-x2kqp",
-	} {
-		objectNamed(t, item.Data, pod)
-	}
-	if strings.Contains(string(item.Data), "cart-6b7c8d9e0-z9y8x") {
-		t.Error("Data describes a pod of another workload")
-	}
-	if item.Truncated {
-		t.Error("Truncated = true for 4 pods")
-	}
-}
 
-func TestPodStates_RecordsEachPodsRevision(t *testing.T) {
-	item := collectPodStates(t, loadScenario1(t))
-	tests := map[string]string{
-		"checkout-5c6a1e2f3-a1b2c": "1",
-		"checkout-7d9f8b6c4-x2kqp": "2",
-	}
-	for pod, want := range tests {
-		if got := revisionOf(t, objectNamed(t, item.Data, pod)); got != want {
-			t.Errorf("revision of %s = %s, want %s", pod, got, want)
+	t.Run("describes every pod of the target at its revision", func(t *testing.T) {
+		for pod, revision := range map[string]string{
+			"checkout-5c6a1e2f3-a1b2c": "1", "checkout-5c6a1e2f3-d3e4f": "1", "checkout-5c6a1e2f3-g5h6i": "1",
+			"checkout-7d9f8b6c4-x2kqp": "2",
+		} {
+			if got := revisionOf(t, objectNamed(t, item.Data, pod)); got != revision {
+				t.Errorf("revision of %s = %s, want %s", pod, got, revision)
+			}
 		}
-	}
-}
+		if strings.Contains(string(item.Data), "cart-6b7c8d9e0-z9y8x") {
+			t.Error("Data describes a pod of another workload")
+		}
+		if item.Truncated {
+			t.Error("Truncated = true for 4 pods")
+		}
+	})
 
-// The OOM kill is in the container's last state: its current state only says
-// it is backing off.
-func TestPodStates_RecordsLastTermination(t *testing.T) {
-	item := collectPodStates(t, loadScenario1(t))
-	crashing := objectNamed(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
-	for _, want := range []string{"OOMKilled", "CrashLoopBackOff"} {
-		if !contains(crashing, want) {
-			t.Errorf("the crashing pod's object lacks %s: %v", want, crashing)
+	// The OOM kill is in the container's last state: its current state only
+	// says it is backing off.
+	t.Run("records the last termination", func(t *testing.T) {
+		crashing := objectNamed(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
+		for _, want := range []string{"OOMKilled", "CrashLoopBackOff"} {
+			if !contains(crashing, want) {
+				t.Errorf("the crashing pod's object lacks %s: %v", want, crashing)
+			}
 		}
-	}
-	if healthy := objectNamed(t, item.Data, "checkout-5c6a1e2f3-a1b2c"); contains(healthy, "OOMKilled") {
-		t.Errorf("a healthy pod is reported OOMKilled: %v", healthy)
-	}
-}
+		if healthy := objectNamed(t, item.Data, "checkout-5c6a1e2f3-a1b2c"); contains(healthy, "OOMKilled") {
+			t.Errorf("a healthy pod is reported OOMKilled: %v", healthy)
+		}
+	})
 
-// Pod specs carry environment variables, often literal secrets. pod_states
-// describes state, never specs.
-func TestPodStates_LeaksNoEnvironment(t *testing.T) {
-	item := collectPodStates(t, loadScenario1(t))
-	for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "DB_PASSWORD"} {
-		if strings.Contains(string(item.Data), leak) {
-			t.Errorf("Data contains %s", leak)
+	// Pod specs carry environment variables, often literal secrets.
+	// pod_states describes state, never specs.
+	t.Run("leaks no environment", func(t *testing.T) {
+		for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "DB_PASSWORD"} {
+			if strings.Contains(string(item.Data), leak) {
+				t.Errorf("Data contains %s", leak)
+			}
 		}
-	}
+	})
 }
 
 // The client decodes times in the local time zone. Evidence must not depend on

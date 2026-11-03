@@ -21,8 +21,10 @@ func TestMetrics_EvidenceCollectedTruncatedRedacted(t *testing.T) {
 	if _, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	failing := evidence.NewRegistry(fakeTemplate{err: errors.New("unreachable")})
-	_, _ = failing.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
+	failing := evidence.NewRegistry(fakeTemplate{err: evidence.ErrNoPods})
+	if _, err := failing.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrNoPods) {
+		t.Errorf("err = %v, want the template's ErrNoPods", err)
+	}
 
 	if got := collected(); got != 1 {
 		t.Errorf("collected %v, want 1: a failed collection is not evidence", got)
