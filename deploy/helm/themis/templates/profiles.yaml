@@ -7,7 +7,15 @@ metadata:
   labels: {{- include "themis.labels" $ | nindent 4 }}
 spec: {{- toYaml (omit . "name") | nindent 2 }}
 {{- end }}
-{{- with .Values.themisConfig }}
+{{- /* The HolmesGPT adapter is added to the sources of suggestions. */}}
+{{- $spec := deepCopy (.Values.themisConfig | default dict) }}
+{{- if .Values.holmesgpt.enabled }}
+{{- $proposals := get $spec "externalProposals" | default dict }}
+{{- $source := dict "serviceAccount" (printf "%s/%s-holmesgpt" .Release.Namespace .Release.Name) "namespaces" .Values.enrolledNamespaces "capabilities" (list "deployment.rollback-to-revision") "perMinute" .Values.holmesgpt.perMinute "ceiling" "internal" }}
+{{- $_ := set $proposals "sources" (append (get $proposals "sources" | default list) $source) }}
+{{- $_ := set $spec "externalProposals" $proposals }}
+{{- end }}
+{{- with $spec }}
 ---
 apiVersion: themis.dev/v1alpha1
 kind: ThemisConfig

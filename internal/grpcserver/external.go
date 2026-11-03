@@ -368,6 +368,7 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 			ExpectedEffect: req.GetExpectedEffect(), Rationale: req.GetRationale(),
 			CitedEvidenceIDs: req.GetCitedEvidenceIds(), CitedPredicates: req.GetCitedPredicates(),
 			Provenance: prov, Authenticated: true, Status: store.ProposalAccepted,
+			Notes: notes(req.GetNotes()),
 		}
 		r, err := s.judgeExternal(ctx, tx, caller, in, state, p, invalid)
 		if err != nil {

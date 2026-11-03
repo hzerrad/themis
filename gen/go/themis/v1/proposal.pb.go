@@ -146,7 +146,11 @@ type SubmitProposalRequest struct {
 	//	*SubmitProposalRequest_RollbackToRevision
 	Capability isSubmitProposalRequest_Capability `protobuf_oneof:"capability"`
 	// Set instead of lease_id by a caller outside Themis.
-	IncidentId    string `protobuf:"bytes,12,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
+	IncidentId string `protobuf:"bytes,12,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
+	// For people only: what the suggester looked at, such as the commands an
+	// agent ran. Themis shows it with the suggestion and never decides on it.
+	// Longer than 8 KiB is cut.
+	Notes         string `protobuf:"bytes,13,opt,name=notes,proto3" json:"notes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -256,6 +260,13 @@ func (x *SubmitProposalRequest) GetRollbackToRevision() *RollbackToRevisionParam
 func (x *SubmitProposalRequest) GetIncidentId() string {
 	if x != nil {
 		return x.IncidentId
+	}
+	return ""
+}
+
+func (x *SubmitProposalRequest) GetNotes() string {
+	if x != nil {
+		return x.Notes
 	}
 	return ""
 }
@@ -639,7 +650,7 @@ var File_themis_v1_proposal_proto protoreflect.FileDescriptor
 
 const file_themis_v1_proposal_proto_rawDesc = "" +
 	"\n" +
-	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x16themis/v1/common.proto\"\xf9\x03\n" +
+	"\x18themis/v1/proposal.proto\x12\tthemis.v1\x1a\x16themis/v1/common.proto\"\x8f\x04\n" +
 	"\x15SubmitProposalRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12,\n" +
 	"\x12client_proposal_id\x18\x02 \x01(\tR\x10clientProposalId\x12,\n" +
@@ -654,7 +665,8 @@ const file_themis_v1_proposal_proto_rawDesc = "" +
 	"provenance\x12W\n" +
 	"\x14rollback_to_revision\x18\v \x01(\v2#.themis.v1.RollbackToRevisionParamsH\x00R\x12rollbackToRevision\x12\x1f\n" +
 	"\vincident_id\x18\f \x01(\tR\n" +
-	"incidentIdB\f\n" +
+	"incidentId\x12\x14\n" +
+	"\x05notes\x18\r \x01(\tR\x05notesB\f\n" +
 	"\n" +
 	"capabilityJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"6\n" +
 	"\x18RollbackToRevisionParams\x12\x1a\n" +

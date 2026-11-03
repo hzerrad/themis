@@ -46,7 +46,9 @@ type Proposal struct {
 	Status          ProposalStatus
 	RejectionReason string
 	Message         string
-	CreatedAt       time.Time
+	// Notes are what the suggester looked at, for people only.
+	Notes     string
+	CreatedAt time.Time
 }
 
 // InsertProposal stores p, unless its lease already submitted the same
@@ -73,13 +75,13 @@ func (s *Store) InsertProposal(ctx context.Context, tx pgx.Tx, p Proposal) (Prop
 	INSERT INTO proposals (id, incident_id, lease_id, client_proposal_id, capability, capability_version,
 	                       target_group, target_kind, target_namespace, target_name, target_uid,
 	                       params, expected_effect, rationale, cited_evidence_ids, cited_predicates,
-	                       provenance, authenticated, status, rejection_reason, message)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+	                       provenance, authenticated, status, rejection_reason, message, notes)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 	ON CONFLICT `+conflict+` DO NOTHING
 `, id, p.IncidentID, nullIfEmpty(p.LeaseID), p.ClientProposalID, p.Capability, p.CapabilityVersion,
 		t.Group, t.Kind, t.Namespace, t.Name, t.UID,
 		params, p.ExpectedEffect, p.Rationale, nonNil(p.CitedEvidenceIDs), nonNil(p.CitedPredicates),
-		provenance, p.Authenticated, p.Status, p.RejectionReason, p.Message)
+		provenance, p.Authenticated, p.Status, p.RejectionReason, p.Message, p.Notes)
 	if err != nil {
 		return Proposal{}, false, fmt.Errorf("insert proposal: %w", err)
 	}
@@ -137,7 +139,7 @@ func (s *Store) SetProposalStatus(ctx context.Context, tx pgx.Tx, id string, sta
 const proposalColumns = `id::text, incident_id::text, coalesce(lease_id::text, ''), client_proposal_id, capability, capability_version,
 	target_group, target_kind, target_namespace, target_name, target_uid,
 	params, expected_effect, rationale, cited_evidence_ids, cited_predicates,
-	provenance, authenticated, status, rejection_reason, message, created_at`
+	provenance, authenticated, status, rejection_reason, message, notes, created_at`
 
 func (s *Store) queryProposal(ctx context.Context, q Querier, where string, args ...any) (Proposal, error) {
 	p, err := scanProposal(q.QueryRow(ctx, `SELECT `+proposalColumns+` FROM proposals `+where, args...))
@@ -159,7 +161,7 @@ func scanProposal(row pgx.Row) (Proposal, error) {
 	err := row.Scan(&p.ID, &p.IncidentID, &p.LeaseID, &p.ClientProposalID, &p.Capability, &p.CapabilityVersion,
 		&t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID,
 		&params, &p.ExpectedEffect, &p.Rationale, &p.CitedEvidenceIDs, &p.CitedPredicates,
-		&provenance, &p.Authenticated, &p.Status, &p.RejectionReason, &p.Message, &p.CreatedAt)
+		&provenance, &p.Authenticated, &p.Status, &p.RejectionReason, &p.Message, &p.Notes, &p.CreatedAt)
 	if err != nil {
 		return Proposal{}, err
 	}
