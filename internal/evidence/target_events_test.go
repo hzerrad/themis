@@ -1,7 +1,6 @@
 package evidence_test
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -17,7 +16,7 @@ import (
 
 func collectTargetEvents(t *testing.T, target incident.TargetRef) evidence.Item {
 	t.Helper()
-	item, err := evidence.NewTargetEvents().Collect(t.Context(), k8s, target, nil)
+	item, err := evidence.NewTargetEvents().Collect(t.Context(), k8s, read(t, target), nil)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -143,12 +142,5 @@ func TestTargetEvents_BoundsKeepingTheNewest(t *testing.T) {
 	}
 	if strings.Contains(data, "Reason000") {
 		t.Error("the oldest event was kept")
-	}
-}
-
-func TestTargetEvents_UnsupportedKind(t *testing.T) {
-	target := incident.TargetRef{Group: "apps", Kind: "StatefulSet", Namespace: "shop", Name: "db", UID: "u-1"}
-	if _, err := evidence.NewTargetEvents().Collect(t.Context(), k8s, target, nil); !errors.Is(err, evidence.ErrUnsupportedTarget) {
-		t.Errorf("err = %v, want ErrUnsupportedTarget", err)
 	}
 }

@@ -17,7 +17,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // ContainerLogsTail is the end of one container's logs, from a pod of the
@@ -130,23 +130,19 @@ func NewContainerLogsTail(logs LogReader) Template { return containerLogsTail{lo
 
 func (containerLogsTail) Name() string { return ContainerLogsTail }
 
-func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, params map[string]string) (Item, error) {
+func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, w *workload.Workload, params map[string]string) (Item, error) {
 	for k := range params {
 		if k != "pod" && k != "container" && k != "previous" {
 			return Item{}, fmt.Errorf("%w: unknown parameter %q", ErrInvalidParams, k)
 		}
 	}
-	d, err := getDeployment(ctx, c, t)
+	all, err := w.Pods(ctx)
 	if err != nil {
 		return Item{}, err
 	}
-	replicaSets, err := ownedReplicaSets(ctx, c, d)
-	if err != nil {
-		return Item{}, err
-	}
-	pods, err := ownedPods(ctx, c, d, replicaSets)
-	if err != nil {
-		return Item{}, err
+	pods := make([]*corev1.Pod, 0, len(all))
+	for _, p := range all {
+		pods = append(pods, p.Pod)
 	}
 	pod, err := pickPod(pods, params["pod"])
 	if err != nil {
@@ -176,7 +172,7 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 	}
 
 	req := LogRequest{
-		Namespace: t.Namespace, Pod: pod.Name, Container: status.Name, Previous: previous,
+		Namespace: w.Target.Namespace, Pod: pod.Name, Container: status.Name, Previous: previous,
 		TailLines: logTailLines,
 	}
 	raw, read, err := l.read(ctx, req)
@@ -210,7 +206,7 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, t incid
 		return Item{}, fmt.Errorf("recheck pod %s: %w", pod.Name, err)
 	}
 	if now.UID != pod.UID {
-		return Item{}, fmt.Errorf("%w: pod %s was recreated", ErrTargetGone, pod.Name)
+		return Item{}, fmt.Errorf("%w: %s", ErrPodReplaced, pod.Name)
 	}
 
 	logs := tailUTF8(strings.ToValidUTF8(string(raw), "\uFFFD"), MaxLogBytes)
@@ -257,7 +253,7 @@ func pickPod(pods []*corev1.Pod, name string) (*corev1.Pod, error) {
 		return nil, fmt.Errorf("%w: pod %q is not the target's", ErrInvalidParams, name)
 	}
 	if len(pods) == 0 {
-		return nil, fmt.Errorf("%w: the target has no pods", ErrTargetGone)
+		return nil, ErrNoPods
 	}
 	return slices.MinFunc(pods, func(a, b *corev1.Pod) int {
 		return cmp.Or(

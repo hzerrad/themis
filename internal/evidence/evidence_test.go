@@ -13,6 +13,7 @@ import (
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 var k8s *kubetest.Env
@@ -37,17 +38,31 @@ type fakeTemplate struct {
 
 func (fakeTemplate) Name() string { return "fake" }
 
-func (f fakeTemplate) Collect(context.Context, client.Reader, incident.TargetRef, map[string]string) (evidence.Item, error) {
+func (f fakeTemplate) Collect(context.Context, client.Reader, *workload.Workload, map[string]string) (evidence.Item, error) {
 	return f.item, f.err
 }
 
 var target = incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "u-1"}
 
+// fakeWorkload stands for a workload already read, for templates that don't
+// look at it.
+var fakeWorkload = &workload.Workload{Target: target}
+
+// read reads target from the test cluster, as callers do before collecting.
+func read(t *testing.T, target incident.TargetRef) *workload.Workload {
+	t.Helper()
+	w, err := workload.Read(t.Context(), k8s, target)
+	if err != nil {
+		t.Fatalf("read %s: %v", target.Name, err)
+	}
+	return w
+}
+
 func TestRegistry_CollectFillsInMetadata(t *testing.T) {
 	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Data: []byte(`{}`), Truncated: true}})
 	now := time.Date(2026, 10, 27, 9, 0, 0, 0, time.UTC)
 
-	item, err := r.Collect(t.Context(), nil, "fake", target, nil, now)
+	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, now)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -67,7 +82,7 @@ func TestRegistry_CollectFillsInMetadata(t *testing.T) {
 
 func TestRegistry_CollectKeepsTemplateClassification(t *testing.T) {
 	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Classification: evidence.ClassificationSensitive}})
-	item, err := r.Collect(t.Context(), nil, "fake", target, nil, time.Now())
+	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -78,8 +93,8 @@ func TestRegistry_CollectKeepsTemplateClassification(t *testing.T) {
 
 func TestRegistry_CollectGivesEachItemItsOwnID(t *testing.T) {
 	r := evidence.NewRegistry(fakeTemplate{})
-	a, _ := r.Collect(t.Context(), nil, "fake", target, nil, time.Now())
-	b, _ := r.Collect(t.Context(), nil, "fake", target, nil, time.Now())
+	a, _ := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
+	b, _ := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
 	if a.ID == b.ID {
 		t.Errorf("two items share ID %s", a.ID)
 	}
@@ -87,15 +102,15 @@ func TestRegistry_CollectGivesEachItemItsOwnID(t *testing.T) {
 
 func TestRegistry_UnknownTemplate(t *testing.T) {
 	r := evidence.NewRegistry()
-	if _, err := r.Collect(t.Context(), nil, "kubectl_exec", target, nil, time.Now()); !errors.Is(err, evidence.ErrUnknownTemplate) {
+	if _, err := r.Collect(t.Context(), nil, "kubectl_exec", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrUnknownTemplate) {
 		t.Errorf("err = %v, want ErrUnknownTemplate", err)
 	}
 }
 
 func TestRegistry_TemplateErrorIsWrapped(t *testing.T) {
-	r := evidence.NewRegistry(fakeTemplate{err: evidence.ErrUnsupportedTarget})
-	if _, err := r.Collect(t.Context(), nil, "fake", target, nil, time.Now()); !errors.Is(err, evidence.ErrUnsupportedTarget) {
-		t.Errorf("err = %v, want ErrUnsupportedTarget", err)
+	r := evidence.NewRegistry(fakeTemplate{err: evidence.ErrNoPods})
+	if _, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrNoPods) {
+		t.Errorf("err = %v, want ErrNoPods", err)
 	}
 }
 

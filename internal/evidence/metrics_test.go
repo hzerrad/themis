@@ -18,11 +18,11 @@ func TestMetrics_EvidenceCollectedTruncatedRedacted(t *testing.T) {
 	redactions := metrictest.Delta(t, "themis_redactions_total", labels)
 
 	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Data: []byte(`{"env":"password=a token=b"}`), Truncated: true}})
-	if _, err := r.Collect(t.Context(), nil, "fake", target, nil, time.Now()); err != nil {
+	if _, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	failing := evidence.NewRegistry(fakeTemplate{err: errors.New("unreachable")})
-	_, _ = failing.Collect(t.Context(), nil, "fake", target, nil, time.Now())
+	_, _ = failing.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
 
 	if got := collected(); got != 1 {
 		t.Errorf("collected %v, want 1: a failed collection is not evidence", got)

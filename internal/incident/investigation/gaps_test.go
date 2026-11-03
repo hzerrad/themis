@@ -16,6 +16,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // forbidden answers like an API server that denies the core's ServiceAccount.
@@ -23,7 +24,7 @@ type forbidden struct{ name string }
 
 func (f forbidden) Name() string { return f.name }
 
-func (forbidden) Collect(context.Context, client.Reader, incident.TargetRef, map[string]string) (evidence.Item, error) {
+func (forbidden) Collect(context.Context, client.Reader, *workload.Workload, map[string]string) (evidence.Item, error) {
 	return evidence.Item{}, apierrors.NewForbidden(schema.GroupResource{Resource: "events"}, "", errors.New("RBAC: access denied"))
 }
 

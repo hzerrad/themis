@@ -36,7 +36,7 @@ func (f fakeLogs) Logs(_ context.Context, req evidence.LogRequest) (io.ReadClose
 
 func collectLogs(t *testing.T, logs fakeLogs, target incident.TargetRef, params map[string]string) evidence.Item {
 	t.Helper()
-	item, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, target, params)
+	item, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, read(t, target), params)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestLogsTail_NamedPod(t *testing.T) {
 // The pod parameter comes from the model: it cannot reach another workload.
 func TestLogsTail_PodOfAnotherWorkloadRefused(t *testing.T) {
 	logs := fakeLogs{"cart-6b7c8d9e0-z9y8x/app": "cart secrets\n"}
-	_, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, loadScenario1(t), map[string]string{"pod": "cart-6b7c8d9e0-z9y8x"})
+	_, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, read(t, loadScenario1(t)), map[string]string{"pod": "cart-6b7c8d9e0-z9y8x"})
 	if !errors.Is(err, evidence.ErrInvalidParams) {
 		t.Errorf("err = %v, want ErrInvalidParams", err)
 	}
@@ -246,7 +246,7 @@ func TestLogsTail_GoneLogFileOfThisPodIsExplained(t *testing.T) {
 	}
 	gone := `failed to open log file "/var/log/pods/` + target.Namespace + `_checkout-7d9f8b6c4-x2kqp_` + string(pod.UID) + `/app/7.log": open: no such file or directory`
 	logs := fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": gone}
-	item, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, target, map[string]string{"previous": "true"})
+	item, err := evidence.NewContainerLogsTail(logs).Collect(t.Context(), k8s, read(t, target), map[string]string{"previous": "true"})
 	if err != nil {
 		t.Fatal(err)
 	}

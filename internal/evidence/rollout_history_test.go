@@ -2,7 +2,6 @@ package evidence_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ import (
 
 func collectRolloutHistory(t *testing.T, target incident.TargetRef) evidence.Item {
 	t.Helper()
-	item, err := evidence.NewRolloutHistory().Collect(t.Context(), k8s, target, nil)
+	item, err := evidence.NewRolloutHistory().Collect(t.Context(), k8s, read(t, target), nil)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -176,21 +175,6 @@ func TestRolloutHistory_RecordsOwnershipMarkers(t *testing.T) {
 	}
 	if strings.Contains(data, "fixture-s3cr3t-do-not-leak") {
 		t.Error("Data contains the last applied configuration")
-	}
-}
-
-func TestRolloutHistory_UnsupportedKind(t *testing.T) {
-	target := incident.TargetRef{Group: "apps", Kind: "StatefulSet", Namespace: "shop", Name: "db", UID: "u-1"}
-	if _, err := evidence.NewRolloutHistory().Collect(t.Context(), k8s, target, nil); !errors.Is(err, evidence.ErrUnsupportedTarget) {
-		t.Errorf("err = %v, want ErrUnsupportedTarget", err)
-	}
-}
-
-func TestRolloutHistory_DeploymentRecreated(t *testing.T) {
-	target := loadScenario1(t)
-	target.UID = "uid-of-the-deleted-deployment"
-	if _, err := evidence.NewRolloutHistory().Collect(t.Context(), k8s, target, nil); !errors.Is(err, evidence.ErrTargetGone) {
-		t.Errorf("err = %v, want ErrTargetGone", err)
 	}
 }
 

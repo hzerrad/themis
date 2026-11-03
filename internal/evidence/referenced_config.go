@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // ReferencedConfig lists the ConfigMaps and Secrets the target's pod template
@@ -54,18 +54,14 @@ func NewReferencedConfig() Template { return referencedConfig{} }
 
 func (referencedConfig) Name() string { return ReferencedConfig }
 
-func (referencedConfig) Collect(ctx context.Context, c client.Reader, t incident.TargetRef, _ map[string]string) (Item, error) {
-	d, err := getDeployment(ctx, c, t)
-	if err != nil {
-		return Item{}, err
-	}
-	view := ReferencedConfigView{Refs: configRefs(d.Spec.Template.Spec)}
+func (referencedConfig) Collect(ctx context.Context, c client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
+	view := ReferencedConfigView{Refs: configRefs(w.Template.Spec)}
 	for i, r := range view.Refs {
 		if r.Kind != ConfigKindConfigMap {
 			continue
 		}
 		var cm corev1.ConfigMap
-		err := c.Get(ctx, client.ObjectKey{Namespace: t.Namespace, Name: r.Name}, &cm)
+		err := c.Get(ctx, client.ObjectKey{Namespace: w.Target.Namespace, Name: r.Name}, &cm)
 		switch {
 		case apierrors.IsNotFound(err):
 			view.Refs[i].Missing = true

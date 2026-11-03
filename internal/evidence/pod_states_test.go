@@ -2,7 +2,6 @@ package evidence_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -45,7 +44,7 @@ func targetOf(obj *unstructured.Unstructured) incident.TargetRef {
 
 func collectPodStates(t *testing.T, target incident.TargetRef) evidence.Item {
 	t.Helper()
-	item, err := evidence.NewPodStates().Collect(t.Context(), k8s, target, nil)
+	item, err := evidence.NewPodStates().Collect(t.Context(), k8s, read(t, target), nil)
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -206,30 +205,5 @@ func TestPodStates_BoundsThePodCount(t *testing.T) {
 	}
 	if n == 0 || n >= pods {
 		t.Errorf("Data describes %d pods, want some but fewer than %d", n, pods)
-	}
-}
-
-func TestPodStates_UnsupportedKind(t *testing.T) {
-	target := incident.TargetRef{Group: "apps", Kind: "StatefulSet", Namespace: "shop", Name: "db", UID: "u-1"}
-	_, err := evidence.NewPodStates().Collect(t.Context(), k8s, target, nil)
-	if !errors.Is(err, evidence.ErrUnsupportedTarget) {
-		t.Errorf("err = %v, want ErrUnsupportedTarget", err)
-	}
-}
-
-func TestPodStates_DeploymentGone(t *testing.T) {
-	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: k8s.NewNamespace(t), Name: "checkout", UID: "u-1"}
-	if _, err := evidence.NewPodStates().Collect(t.Context(), k8s, target, nil); err == nil {
-		t.Error("Collect succeeded for a missing Deployment")
-	}
-}
-
-// A Deployment deleted and recreated under the same name is another object:
-// its pods are not evidence about the incident's target.
-func TestPodStates_DeploymentRecreated(t *testing.T) {
-	target := loadScenario1(t)
-	target.UID = "uid-of-the-deleted-deployment"
-	if _, err := evidence.NewPodStates().Collect(t.Context(), k8s, target, nil); err == nil {
-		t.Error("Collect succeeded for a recreated Deployment")
 	}
 }
