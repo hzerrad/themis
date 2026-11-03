@@ -1,3 +1,4 @@
+{{- if not (.Values.tokens | default dict).existingSecret }}
 {{- /* Generated once; an upgrade keeps the existing values. */ -}}
 {{- $name := printf "%s-tokens" .Release.Name -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
@@ -14,3 +15,4 @@ data:
   {{- range $key := list "intake" "investigator" "admin" "executor" "settings" }}
   {{ $key }}: {{ get $data $key | default (randAlphaNum 48 | b64enc) }}
   {{- end }}
+{{- end }}

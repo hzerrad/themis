@@ -85,7 +85,7 @@ spec:
           configMap: {name: {{ .Release.Name }}-config}
         - name: tokens
           secret:
-            secretName: {{ .Release.Name }}-tokens
+            secretName: {{ include "themis.tokensSecret" . }}
             items:
               - {key: intake, path: intake}
               - {key: investigator, path: investigator}
