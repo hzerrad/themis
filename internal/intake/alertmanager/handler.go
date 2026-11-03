@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/intake"
 	"github.com/hzerrad/themis/internal/telemetry"
 )
@@ -35,6 +36,10 @@ type Handler struct {
 
 	// TokenFile is read on every request, so rotation needs no restart.
 	TokenFile string
+
+	// Heartbeat records alerts arriving, and Refused webhooks sent with a
+	// wrong token, for the status page. Nil records nothing.
+	Heartbeat, Refused *checks.Heartbeat
 
 	Logger *slog.Logger
 	Now    func() time.Time
@@ -68,6 +73,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !bearerMatches(r.Header.Get("Authorization"), want) {
+		h.Refused.Beat(ctx, "")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -89,6 +95,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	h.Heartbeat.Beat(ctx, payload.Receiver)
 	if payload.TruncatedAlerts > 0 {
 		intake.ObserveTruncated(Source, payload.TruncatedAlerts)
 		log.WarnContext(ctx, "Alertmanager dropped alerts from a notification; raise max_alerts on the Themis receiver",

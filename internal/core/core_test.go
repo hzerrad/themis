@@ -221,6 +221,11 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("POST status = %d, want 202", resp.StatusCode)
 	}
+	// The status page now says alerts arrive, through which receiver.
+	if code, body := get("http://" + o.SetupAddr + "/v1/status"); code != http.StatusOK ||
+		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through its \"themis\" receiver`) {
+		t.Errorf("/v1/status = %d %s", code, body)
+	}
 
 	db, err := pgx.Connect(t.Context(), dbURL)
 	if err != nil {

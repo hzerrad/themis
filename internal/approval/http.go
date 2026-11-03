@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/governance"
 	"github.com/hzerrad/themis/internal/incident"
@@ -52,6 +53,11 @@ type API struct {
 	Remedy remedy.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Checks say whether each part of the install works. Nil means the
+	// status page isn't served.
+	Checks interface {
+		Checks(ctx context.Context) []checks.Check
+	}
 	// Setup records when the first admin signs in for real, which closes the
 	// setup door. Nil means there is no door.
 	Setup people.SetupStore
@@ -78,6 +84,14 @@ func (a *API) Register(mux *http.ServeMux) {
 	if a.Accounts != nil {
 		a.registerAccounts(mux)
 	}
+	if a.Checks != nil {
+		mux.Handle("GET /v1/status", a.authed(config.RoleViewer, a.status, nil))
+	}
+}
+
+// status says whether each part of the install works.
+func (a *API) status(w http.ResponseWriter, r *http.Request) {
+	a.reply(w, r, map[string][]checks.Check{"checks": a.Checks.Checks(r.Context())})
 }
 
 // authed serves h to whoever has role, or to anyone signed in when role is
