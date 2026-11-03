@@ -130,7 +130,7 @@ button.primary, a.button.primary { background: var(--accent); border-color: var(
 button.danger { color: var(--bad); border-color: var(--bad); }
 button:disabled { opacity: .5; cursor: default; }
 
-input[type=text], input[type=password] {
+input[type=text], input[type=password], select {
   font: inherit;
   padding: 7px 10px;
   border: 1px solid var(--line);

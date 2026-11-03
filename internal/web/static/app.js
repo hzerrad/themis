@@ -45,7 +45,9 @@ async function api(path, options = {}) {
     throw new Error("unauthorized");
   }
   if (!resp.ok) throw new Error((await resp.text()).trim() || resp.statusText);
-  return resp.json();
+  // Changes such as creating an account answer with no body.
+  const text = await resp.text();
+  return text ? JSON.parse(text) : null;
 }
 
 const STATE_TONE = {
@@ -134,8 +136,31 @@ function render(...nodes) {
 const ROLES = ["viewer", "responder", "approver", "admin"];
 const can = (role) => me && ROLES.indexOf(me.role) >= ROLES.indexOf(role);
 
+// passwordForm signs in with a Themis account.
+function passwordForm(primary) {
+  const username = h("input", { type: "text", placeholder: "username", autocomplete: "username", autocapitalize: "none" });
+  const password = h("input", { type: "password", placeholder: "password", autocomplete: "current-password" });
+  const error = h("div", { class: "error" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const resp = await fetch("/auth/password", { method: "POST", headers: headers(), body: JSON.stringify({ username: username.value.trim(), password: password.value }) });
+    if (!resp.ok) {
+      error.textContent = (await resp.text()).trim();
+      password.value = "";
+      return;
+    }
+    me = null;
+    route();
+  };
+  const form = h("form", { onsubmit: submit },
+    h("div", { class: "actions" }, username, password, h("button", { class: primary ? "primary" : "", type: "submit" }, "Sign in")),
+    error);
+  return { form, focus: () => username.focus() };
+}
+
 async function login() {
-  let methods = { oidc: false };
+  let methods = { oidc: false, password: false };
   try { methods = await (await fetch("/v1/sign-in")).json(); } catch {}
   const input = h("input", { type: "password", placeholder: "admin token", autocomplete: "off" });
   const submit = (e) => {
@@ -147,7 +172,7 @@ async function login() {
     h("p", { class: "muted" }, "The emergency token is for scripts and for when sign-in is broken. It is kept for this browser tab only."),
     h("div", { class: "actions" }, input, h("button", { type: "submit" }, "Continue")));
   const emergency = h("details", {}, h("summary", { class: "muted" }, "Use the emergency token"), tokenForm);
-  if (!methods.oidc) {
+  if (!methods.oidc && !methods.password) {
     render(h("div", { class: "panel" },
       h("h1", {}, "Sign-in isn't set up yet"),
       h("p", {}, "Open Themis through kubectl port-forward to set it up. You'll be an admin until someone signs in for real:"),
@@ -156,10 +181,95 @@ async function login() {
       emergency));
     return;
   }
+  const pw = methods.password ? passwordForm(!methods.oidc) : null;
   render(h("div", { class: "panel" },
     h("h1", {}, "Sign in"),
-    h("p", {}, h("a", { class: "button primary", href: "/auth/login" }, "Sign in with your account")),
+    methods.oidc ? h("p", {}, h("a", { class: "button primary", href: "/auth/login" }, "Sign in with your identity provider")) : null,
+    pw ? [methods.oidc ? h("p", { class: "muted" }, "Or with a Themis account:") : null, pw.form] : null,
     emergency));
+  if (pw && !methods.oidc) pw.focus();
+}
+
+// accounts lets admins manage who signs in with a password. During setup,
+// it's where the first admin account is made.
+async function accounts() {
+  const list = await api("/v1/accounts");
+  const error = h("div", { class: "error" });
+  const act = async (path, options) => {
+    error.textContent = "";
+    try {
+      await api(path, options);
+      route();
+    } catch (e) {
+      error.textContent = e.message;
+    }
+  };
+  const roleSelect = (value) => h("select", {}, ROLES.map((r) => h("option", { value: r, selected: r === value }, r)));
+  const username = h("input", { type: "text", placeholder: "username", autocomplete: "off", autocapitalize: "none" });
+  const role = roleSelect(me.setup && !list.length ? "admin" : "approver");
+  const password = h("input", { type: "password", placeholder: "password, 12 characters or more", autocomplete: "new-password" });
+  const create = (e) => {
+    e.preventDefault();
+    act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: username.value.trim(), role: role.value, password: password.value }) });
+  };
+  const hasAdmin = list.some((a) => a.role === "admin");
+  const first = me.setup && !hasAdmin;
+  // During setup, once an admin account exists, signing in with it finishes setup.
+  const finish = me.setup && hasAdmin ? passwordForm(true) : null;
+  const rows = list.map((a) => {
+    const self = me.account && me.username === a.username;
+    const r = roleSelect(a.role);
+    r.disabled = self;
+    r.addEventListener("change", () => act(`/v1/accounts/${encodeURIComponent(a.username)}`, { method: "PATCH", body: JSON.stringify({ role: r.value }) }));
+    const pw = h("input", { type: "password", placeholder: "new password", autocomplete: "new-password" });
+    const reset = h("button", { onclick: () => {
+      if (pw.value) act(`/v1/accounts/${encodeURIComponent(a.username)}`, { method: "PATCH", body: JSON.stringify({ password: pw.value }) });
+    } }, "Set password");
+    const remove = h("button", { class: "danger", disabled: self, onclick: () => act(`/v1/accounts/${encodeURIComponent(a.username)}`, { method: "DELETE" }) }, "Delete");
+    return h("tr", {},
+      h("td", {}, a.username, a.locked ? h("div", { class: "muted" }, "locked after wrong passwords") : null),
+      h("td", {}, r),
+      h("td", { class: "muted" }, `${a.createdBy} · ${time(a.createdAt)}`),
+      h("td", {}, h("div", { class: "actions" }, pw, reset, remove)));
+  });
+  render(
+    finish ? h("div", { class: "panel" },
+      h("h1", {}, "Now sign in with your admin account"),
+      h("p", { class: "muted" }, "That finishes setup: from then on, kubectl port-forward alone no longer makes anyone an admin."),
+      finish.form) : null,
+    h("h1", {}, first ? "Create your admin account" : "Accounts"),
+    h("p", { class: "muted" }, first
+      ? "Then sign in with it here. That finishes setup: from then on, kubectl port-forward alone no longer makes anyone an admin."
+      : "People who sign in with a username and password. People who sign in through your identity provider get their roles from Themis's settings instead."),
+    list.length ? h("table", {}, h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}))), h("tbody", {}, rows)) : null,
+    h("div", { class: "panel" },
+      h("h3", {}, "New account"),
+      h("form", { onsubmit: create }, h("div", { class: "actions" }, username, role, password, h("button", { class: "primary", type: "submit" }, "Create")))),
+    error);
+}
+
+// password lets someone signed in with an account change its password.
+function changePassword() {
+  const current = h("input", { type: "password", placeholder: "current password", autocomplete: "current-password" });
+  const next = h("input", { type: "password", placeholder: "new password, 12 characters or more", autocomplete: "new-password" });
+  const error = h("div", { class: "error" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    try {
+      await api("/v1/me/password", { method: "POST", body: JSON.stringify({ current: current.value, new: next.value }) });
+      // A new password ends every session, this one too.
+      me = null;
+      route();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  render(h("div", { class: "panel" },
+    h("h1", {}, "Change your password"),
+    h("p", { class: "muted" }, "You'll be signed out everywhere, then sign in again with the new one."),
+    h("form", { onsubmit: submit }, h("div", { class: "actions" }, current, next, h("button", { class: "primary", type: "submit" }, "Change password"))),
+    error));
 }
 
 function noAccess() {
@@ -472,8 +582,13 @@ async function route() {
   document.getElementById("logout").hidden = !me || me.setup;
   if (!me) return login();
   if (!me.role) return noAccess();
+  document.getElementById("nav-accounts").hidden = !can("admin");
+  document.getElementById("nav-password").hidden = !me.account;
   const m = location.hash.match(/^#\/incidents\/([\w-]+)$/);
-  const run = m ? () => detail(m[1]) : async () => { await list(); timer = setTimeout(route, POLL_MS); };
+  const run = m ? () => detail(m[1])
+    : location.hash === "#/accounts" && can("admin") ? accounts
+    : location.hash === "#/password" && me.account ? async () => changePassword()
+    : async () => { await list(); timer = setTimeout(route, POLL_MS); };
   run().catch(showError);
 }
 

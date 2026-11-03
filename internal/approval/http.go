@@ -39,8 +39,13 @@ type API struct {
 	TokenFile string
 	// Access gives people signed in through OIDC their roles.
 	Access []config.AccessBinding
-	// Sessions holds people signed in through OIDC; nil without OIDC.
+	// Sessions holds people signed in, through OIDC or with an account.
 	Sessions people.Sessions
+	// OIDC says whether people can sign in through an identity provider.
+	OIDC bool
+	// Accounts keeps the accounts people sign in to with a password. Nil
+	// means no one can.
+	Accounts Accounts
 	Logger   *slog.Logger
 	Now      func() time.Time
 	// Remedy says what Themis couldn't see and how to let it.
@@ -70,6 +75,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
 	mux.Handle("POST /v1/actions/{id}/approve", a.authed(config.RoleApprover, a.approve, a.actionFields))
 	mux.Handle("POST /v1/actions/{id}/deny", a.authed(config.RoleApprover, a.deny, a.actionFields))
+	if a.Accounts != nil {
+		a.registerAccounts(mux)
+	}
 }
 
 // authed serves h to whoever has role, or to anyone signed in when role is
@@ -77,6 +85,9 @@ func (a *API) Register(mux *http.ServeMux) {
 // debug level.
 func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
 	directory := &people.Directory{TokenFile: a.TokenFile, Access: a.Access, Sessions: a.Sessions, Now: a.now}
+	if a.Accounts != nil {
+		directory.Accounts = a.Accounts
+	}
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		w := &statusWriter{ResponseWriter: rw, status: http.StatusOK}
 		defer func() {
@@ -144,16 +155,26 @@ type meView struct {
 	// Setup is set for whoever came in through kubectl port-forward before
 	// setup finished.
 	Setup bool `json:"setup,omitempty"`
+	// Account is set for someone signed in with a Themis account.
+	Account bool `json:"account,omitempty"`
 }
 
 func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	who, _ := people.From(r.Context())
-	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, Setup: who.Setup})
+	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, Setup: who.Setup, Account: who.Account})
 }
 
 // signInMethods tells the UI how people sign in, before anyone has.
 func (a *API) signInMethods(w http.ResponseWriter, r *http.Request) {
-	a.reply(w, r, map[string]bool{"oidc": a.Sessions != nil, "token": true})
+	password := false
+	if a.Accounts != nil {
+		var err error
+		if password, err = a.Accounts.HasAccounts(r.Context()); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+	a.reply(w, r, map[string]bool{"oidc": a.OIDC, "password": password, "token": true})
 }
 
 func incidentFields(r *http.Request) []slog.Attr {

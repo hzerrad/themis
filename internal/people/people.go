@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/hzerrad/themis/internal/auth"
@@ -38,6 +39,8 @@ type Identity struct {
 	// Setup is set for whoever came in through kubectl port-forward before
 	// setup finished: Kubernetes allowed them, but Themis doesn't know who.
 	Setup bool
+	// Account is set for someone signed in with a Themis account's password.
+	Account bool
 }
 
 // Can reports whether i has role, or one more trusted.
@@ -82,7 +85,15 @@ type Directory struct {
 	Access    []config.AccessBinding
 	// Sessions is nil when no one signs in through OIDC.
 	Sessions Sessions
+	// Accounts give people who sign in with a password their roles. Nil
+	// means no one does.
+	Accounts Accounts
 	Now      func() time.Time
+}
+
+// Accounts look up the accounts people sign in to with a password.
+type Accounts interface {
+	Account(ctx context.Context, username string) (store.Account, error)
 }
 
 // Identify says who sent r. A bearer token must be the admin token; without
@@ -104,7 +115,7 @@ func (d *Directory) Identify(r *http.Request) (Identity, error) {
 		if !headerSent(r) {
 			return Identity{}, ErrNoRequestHeader
 		}
-		return Identity{Username: se.Username, Groups: se.Groups, Role: RoleOf(d.Access, se.Username, se.Groups)}, nil
+		return d.sessionIdentity(r.Context(), se)
 	case !errors.Is(err, ErrSignedOut):
 		return Identity{}, err
 	case throughSetup(r):
@@ -116,6 +127,25 @@ func (d *Directory) Identify(r *http.Request) (Identity, error) {
 		return Identity{Username: SetupUser, Role: config.RoleAdmin, Setup: true}, nil
 	}
 	return Identity{}, ErrSignedOut
+}
+
+// sessionIdentity is who se signed in as. An account's role is read on every
+// request, so a change applies at once; OIDC roles come from the bindings.
+func (d *Directory) sessionIdentity(ctx context.Context, se store.Session) (Identity, error) {
+	if !strings.HasPrefix(se.Subject, store.AccountSubjectPrefix) {
+		return Identity{Username: se.Username, Groups: se.Groups, Role: RoleOf(d.Access, se.Username, se.Groups)}, nil
+	}
+	if d.Accounts == nil {
+		return Identity{}, ErrSignedOut
+	}
+	a, err := d.Accounts.Account(ctx, se.Username)
+	if errors.Is(err, store.ErrNotFound) {
+		return Identity{}, ErrSignedOut
+	}
+	if err != nil {
+		return Identity{}, errors.Join(ErrUnavailable, err)
+	}
+	return Identity{Username: a.Username, Role: a.Role, Account: true}, nil
 }
 
 // session is the live session r's cookie names.
