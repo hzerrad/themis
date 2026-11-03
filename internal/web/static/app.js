@@ -298,6 +298,78 @@ function alertmanagerSetup() {
     h("p", { class: "muted" }, "Once a crash-loop or out-of-memory alert fires, this page shows alerts arriving."));
 }
 
+// modelStep sets the model the install left unset. What the install set is
+// shown locked: a change here would be undone by the next upgrade.
+function modelStep(v, done) {
+  const byInstall = (name) => v.byInstall.includes(name);
+  const locked = h("span", { class: "muted" }, " Set by Helm: change it in the chart's values.");
+  const field = (name, input) => byInstall(name) ? [input, locked] : input;
+  const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", disabled: byInstall("model.baseURL"), "aria-label": "Model address" });
+  const name = h("input", { type: "text", value: v.name, placeholder: "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name"), "aria-label": "Model name" });
+  const key = h("input", { type: "password", autocomplete: "off", disabled: byInstall("model.apiKey"),
+    placeholder: v.apiKeySet ? "set: leave empty to keep it" : "if the model needs one", "aria-label": "API key" });
+  const strict = h("input", { type: "checkbox", checked: v.strictOutput, disabled: byInstall("model.strictOutput") });
+  const error = h("div", { class: "error" });
+  const save = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const change = {};
+    if (!byInstall("model.baseURL")) { change.baseURL = url.value.trim(); change.strictOutput = strict.checked; }
+    if (!byInstall("model.name")) change.name = name.value.trim();
+    if (!byInstall("model.apiKey") && key.value) change.apiKey = key.value;
+    try {
+      await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change) });
+      route();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  const all = ["model.baseURL", "model.name"].every(byInstall);
+  return h("div", { class: "panel step" },
+    h("h3", {}, `2. The model ${done ? "· done" : ""}`),
+    all ? h("p", {}, `Set by Helm: ${v.name} at ${v.baseURL}. Change it in the chart's values.`)
+      : h("form", { onsubmit: save },
+        h("p", { class: "muted" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. The investigator uses it from its next investigation."),
+        h("dl", {},
+          h("dt", {}, "Address"), h("dd", {}, field("model.baseURL", url)),
+          h("dt", {}, "Model"), h("dd", {}, field("model.name", name)),
+          h("dt", {}, "API key"), h("dd", {}, field("model.apiKey", key),
+            h("div", { class: "muted" }, "Kept encrypted, and never shown again.")),
+          h("dt", {}, "Strict format"), h("dd", {}, h("label", {}, field("model.strictOutput", strict),
+            " Ask the model to follow Themis's reply format exactly. Turn it off for OpenAI, which refuses it."))),
+        h("div", { class: "actions" }, h("button", { class: "primary", type: "submit" }, "Save")),
+        error));
+}
+
+// setup walks through what an install needs, in order, each step marked
+// done when the status page says so.
+async function setup() {
+  const { checks } = await api("/v1/status");
+  const check = (name) => checks.find((c) => c.name === name) || { state: "waiting" };
+  const done = (name) => check(name).state === "ok";
+  let model = null;
+  try { model = await api("/v1/settings/model"); } catch {}
+  const signIn = check("Sign-in");
+  const alerts = check("Alerts");
+  render(
+    h("h1", {}, "Setup"),
+    h("p", { class: "muted" }, "What Helm already set is skipped or shown locked. Each step is marked done when it works."),
+    h("div", { class: "panel step" },
+      h("h3", {}, `1. Sign-in ${done("Sign-in") ? "· done" : ""}`),
+      h("p", {}, signIn.summary),
+      done("Sign-in") ? null : h("p", {}, h("a", { href: "#/accounts" }, "Create accounts"), ", or set the chart's oidc values for your identity provider.")),
+    check("Investigator").state === "off"
+      ? h("div", { class: "panel step" }, h("h3", {}, "2. The model · not used"), h("p", {}, check("Investigator").summary))
+      : model ? modelStep(model, done("Model")) : null,
+    h("div", { class: "panel step" },
+      h("h3", {}, `3. Alerts ${done("Alerts") ? "· done" : ""}`),
+      h("p", {}, alerts.summary),
+      done("Alerts") ? null : alertmanagerSetup()),
+    h("div", { class: "panel step" },
+      h("h3", {}, "4. Check"),
+      h("p", {}, h("a", { href: "#/status" }, "Status"), " checks every part, and says how to fix what doesn't work.")));
+}
+
 // status says whether each part of the install works, and how to fix what doesn't.
 async function status() {
   const { checks } = await api("/v1/status");
@@ -715,11 +787,13 @@ async function route() {
   if (!me) return login();
   if (!me.role) return noAccess();
   document.getElementById("nav-accounts").hidden = !can("admin");
+  document.getElementById("nav-setup").hidden = !can("admin");
   document.getElementById("nav-password").hidden = !me.account;
   const m = location.hash.match(/^#\/incidents\/([\w-]+)$/);
   const run = m ? () => detail(m[1])
     : location.hash === "#/accounts" && can("admin") ? accounts
-    : location.hash === "#/status" || (location.hash === "" && me.setup) ? status
+    : location.hash === "#/status" ? status
+    : (location.hash === "#/setup" || (location.hash === "" && me.setup)) && can("admin") ? setup
     : location.hash === "#/password" && me.account ? async () => changePassword()
     : async () => { await list(); timer = setTimeout(route, POLL_MS); };
   run().catch(showError);

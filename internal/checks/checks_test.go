@@ -11,6 +11,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/checks"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -157,6 +158,7 @@ func TestChecks_Problems(t *testing.T) {
 		"executor down": {func(c *checks.Checker, _ *fakeStore) {
 			c.Dial = func(context.Context, string) error { return errors.New("refused") }
 		}, "Fixes", checks.Problem, "can't reach the executor"},
+		"no model set":    {func(c *checks.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", checks.Problem, "No model is set"},
 		"no investigator": {func(c *checks.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", checks.Off, "waits for a fix suggested"},
 		"no model":        {func(c *checks.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", checks.Off, "asks no model"},
 		"setup open":      {func(_ *checks.Checker, s *fakeStore) { s.finished = false }, "Sign-in", checks.Warn, "port-forward"},
@@ -171,6 +173,12 @@ func TestChecks_Problems(t *testing.T) {
 			}
 		})
 	}
+}
+
+type fixedView settings.ModelView
+
+func (f fixedView) View(context.Context) (settings.ModelView, error) {
+	return settings.ModelView(f), nil
 }
 
 type recorder struct{ beats []string }

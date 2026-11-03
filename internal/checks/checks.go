@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -65,6 +66,11 @@ type Checker struct {
 	OIDC bool
 	// NoInvestigator says no investigator is installed, by choice.
 	NoInvestigator bool
+	// Model says what model the install and setup set. Nil means only the
+	// install sets it.
+	Model interface {
+		View(ctx context.Context) (settings.ModelView, error)
+	}
 	// Dial reaches the executor; nil dials TCP.
 	Dial func(ctx context.Context, addr string) error
 	Now  func() time.Time
@@ -147,6 +153,17 @@ func (c *Checker) model(ctx context.Context) Check {
 		ch.State, ch.Summary = Off, "None: without an investigator, Themis asks no model."
 		ch.Fix = "The model comes with the investigator: model.enabled=true and the model's address."
 		return ch
+	}
+	if c.Model != nil {
+		v, err := c.Model.View(ctx)
+		if err != nil {
+			return failed(ch, err)
+		}
+		if !v.Complete {
+			ch.State, ch.Summary = Problem, "No model is set, so incidents aren't investigated."
+			ch.Fix = "Set the model's address and name on the Setup page, or in the chart's model values."
+			return ch
+		}
 	}
 	o, err := c.Store.LastInvestigationOutcome(ctx)
 	switch {

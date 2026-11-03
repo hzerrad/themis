@@ -64,6 +64,13 @@ type Config struct {
 	// Notifications announce escalations to humans.
 	Notifications Notifications `json:"notifications,omitzero"`
 
+	// Settings are those made in Themis's setup, kept in its database.
+	Settings *Settings `json:"settings,omitempty"`
+
+	// Model is what the install itself set for the investigator's model, so
+	// setup leaves those alone. The chart sets it.
+	Model Model `json:"model,omitzero"`
+
 	// ExternalProposals lets callers outside Themis suggest fixes.
 	ExternalProposals ExternalProposals `json:"externalProposals,omitzero"`
 
@@ -74,6 +81,22 @@ type Config struct {
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins. Required unless resources is set.
 	Profiles []Profile `json:"profiles,omitempty"`
+}
+
+// Settings configures the settings made in Themis's setup.
+type Settings struct {
+	// KeyFile holds the secret that encrypts secret settings, such as the
+	// model's key. Losing it loses them; changing it makes them unreadable.
+	KeyFile string `json:"keyFile" jsonschema:"minLength=1"`
+}
+
+// Model says which of the investigator's model settings the install set.
+// Those win over setup's.
+type Model struct {
+	BaseURL string `json:"baseURL,omitempty"`
+	Name    string `json:"name,omitempty"`
+	// APIKey says the install gives the investigator a key.
+	APIKey bool `json:"apiKey,omitempty"`
 }
 
 // Resources configures reading configuration from custom resources.

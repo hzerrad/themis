@@ -57,6 +57,22 @@ EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE: EvidenceGapCause
 EVIDENCE_GAP_CAUSE_DATA_CEILING: EvidenceGapCause
 EVIDENCE_GAP_CAUSE_BUDGET_SPENT: EvidenceGapCause
 
+class GetModelSettingsRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class GetModelSettingsResponse(_message.Message):
+    __slots__ = ("base_url", "model", "api_key", "strict_output")
+    BASE_URL_FIELD_NUMBER: _ClassVar[int]
+    MODEL_FIELD_NUMBER: _ClassVar[int]
+    API_KEY_FIELD_NUMBER: _ClassVar[int]
+    STRICT_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    base_url: str
+    model: str
+    api_key: str
+    strict_output: bool
+    def __init__(self, base_url: _Optional[str] = ..., model: _Optional[str] = ..., api_key: _Optional[str] = ..., strict_output: _Optional[bool] = ...) -> None: ...
+
 class LeaseInvestigationRequest(_message.Message):
     __slots__ = ("worker_id",)
     WORKER_ID_FIELD_NUMBER: _ClassVar[int]

@@ -34,6 +34,11 @@ class InvestigationServiceStub:
                 request_serializer=themis_dot_v1_dot_investigation__pb2.FailInvestigationRequest.SerializeToString,
                 response_deserializer=themis_dot_v1_dot_investigation__pb2.FailInvestigationResponse.FromString,
                 _registered_method=True)
+        self.GetModelSettings = channel.unary_unary(
+                '/themis.v1.InvestigationService/GetModelSettings',
+                request_serializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.SerializeToString,
+                response_deserializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.FromString,
+                _registered_method=True)
 
 
 class InvestigationServiceServicer:
@@ -63,6 +68,14 @@ class InvestigationServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetModelSettings(self, request, context):
+        """GetModelSettings returns the model settings made in Themis's setup, for
+        whatever the investigator's own environment leaves unset.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InvestigationServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -85,6 +98,11 @@ def add_InvestigationServiceServicer_to_server(servicer, server):
                     servicer.FailInvestigation,
                     request_deserializer=themis_dot_v1_dot_investigation__pb2.FailInvestigationRequest.FromString,
                     response_serializer=themis_dot_v1_dot_investigation__pb2.FailInvestigationResponse.SerializeToString,
+            ),
+            'GetModelSettings': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetModelSettings,
+                    request_deserializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.FromString,
+                    response_serializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -195,6 +213,33 @@ class InvestigationService:
             '/themis.v1.InvestigationService/FailInvestigation',
             themis_dot_v1_dot_investigation__pb2.FailInvestigationRequest.SerializeToString,
             themis_dot_v1_dot_investigation__pb2.FailInvestigationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetModelSettings(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/themis.v1.InvestigationService/GetModelSettings',
+            themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.SerializeToString,
+            themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.FromString,
             options,
             channel_credentials,
             insecure,

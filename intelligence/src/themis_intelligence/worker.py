@@ -55,11 +55,14 @@ class Worker:
         core: WorkerCore,
         new_model: Callable[[], Model],
         worker_id: str | None = None,
+        ready: Callable[[], Awaitable[bool]] | None = None,
         heartbeat_s: float = 20.0,
         retry_s: float = 2.0,
     ) -> None:
         self.core = core
         self.new_model = new_model
+        # ready says whether a model is set; without one, no work is leased.
+        self.ready = ready
         self.worker_id = worker_id or socket.gethostname()
         self.heartbeat_s = heartbeat_s
         self.retry_s = retry_s
@@ -76,6 +79,8 @@ class Worker:
 
     async def run_once(self) -> bool:
         """Investigates one leased incident; False when there was nothing to lease."""
+        if self.ready is not None and not await self.ready():
+            return False
         job = await self.core.lease(self.worker_id)
         if job is None:
             return False

@@ -60,6 +60,9 @@ type API struct {
 	// for the setup steps Themis shows.
 	Intake    config.Intake
 	Namespace string
+	// Settings are the model settings made in Themis's setup. Nil means
+	// setup can't change them.
+	Settings ModelSettings
 	// Checks say whether each part of the install works. Nil means the
 	// status page isn't served.
 	Checks interface {
@@ -96,6 +99,10 @@ func (a *API) Register(mux *http.ServeMux) {
 	}
 	if a.Config != nil {
 		mux.Handle("GET /v1/setup/alertmanager", a.authed(config.RoleAdmin, a.alertmanagerSetup, nil))
+	}
+	if a.Settings != nil {
+		mux.Handle("GET /v1/settings/model", a.authed(config.RoleAdmin, a.modelSettings, nil))
+		mux.Handle("PUT /v1/settings/model", a.authed(config.RoleAdmin, a.setModelSettings, nil))
 	}
 }
 

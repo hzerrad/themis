@@ -24,6 +24,7 @@ import (
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/predicate"
+	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 
@@ -55,6 +56,12 @@ type Server struct {
 	// Reviewer proves who a caller outside Themis is. Without one, there are
 	// no such callers.
 	Reviewer TokenReviewer
+
+	// Settings are the model settings made in Themis's setup, for the
+	// investigator. Nil means none.
+	Settings interface {
+		Model(ctx context.Context) (settings.Model, error)
+	}
 
 	// Heartbeat records that the investigator asked for work. Nil records
 	// nothing.

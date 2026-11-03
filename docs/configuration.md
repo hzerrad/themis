@@ -13,6 +13,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `intake.url` | no | Where Alertmanager reaches the intake, for the setup steps the Status page shows. The chart sets it. |
 | `intake.tokenSecret` | no | The Secret, in Themis's namespace, whose `intake` key holds the token, for the same steps. The chart sets it. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
+| `settings.keyFile` | no | File holding the secret that encrypts secret settings made on the Setup page, such as the model's key. The chart generates it once, in the `themis-tokens` Secret, and keeps it across upgrades. Losing or changing it makes those settings unreadable: set them again. |
+| `model.baseURL`, `model.name`, `model.apiKey` | no | What the install set for the investigator's model; the chart sets them from its values. The Setup page can't change these, and sets only what's left. |
 | `investigators.disabled` | no | No investigator is installed. Themis collects evidence and runs its checks, then each incident waits (`awaiting_suggestion`) for a fix suggested by a person or a tool outside Themis, and closes without action if none comes within `externalProposals.window`. The chart sets it with `model.enabled: false`. |
 | `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
 | `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |

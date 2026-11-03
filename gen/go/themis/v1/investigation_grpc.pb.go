@@ -23,6 +23,7 @@ const (
 	InvestigationService_RenewLease_FullMethodName            = "/themis.v1.InvestigationService/RenewLease"
 	InvestigationService_CompleteInvestigation_FullMethodName = "/themis.v1.InvestigationService/CompleteInvestigation"
 	InvestigationService_FailInvestigation_FullMethodName     = "/themis.v1.InvestigationService/FailInvestigation"
+	InvestigationService_GetModelSettings_FullMethodName      = "/themis.v1.InvestigationService/GetModelSettings"
 )
 
 // InvestigationServiceClient is the client API for InvestigationService service.
@@ -33,6 +34,9 @@ type InvestigationServiceClient interface {
 	RenewLease(ctx context.Context, in *RenewLeaseRequest, opts ...grpc.CallOption) (*RenewLeaseResponse, error)
 	CompleteInvestigation(ctx context.Context, in *CompleteInvestigationRequest, opts ...grpc.CallOption) (*CompleteInvestigationResponse, error)
 	FailInvestigation(ctx context.Context, in *FailInvestigationRequest, opts ...grpc.CallOption) (*FailInvestigationResponse, error)
+	// GetModelSettings returns the model settings made in Themis's setup, for
+	// whatever the investigator's own environment leaves unset.
+	GetModelSettings(ctx context.Context, in *GetModelSettingsRequest, opts ...grpc.CallOption) (*GetModelSettingsResponse, error)
 }
 
 type investigationServiceClient struct {
@@ -83,6 +87,16 @@ func (c *investigationServiceClient) FailInvestigation(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *investigationServiceClient) GetModelSettings(ctx context.Context, in *GetModelSettingsRequest, opts ...grpc.CallOption) (*GetModelSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetModelSettingsResponse)
+	err := c.cc.Invoke(ctx, InvestigationService_GetModelSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InvestigationServiceServer is the server API for InvestigationService service.
 // All implementations must embed UnimplementedInvestigationServiceServer
 // for forward compatibility.
@@ -91,6 +105,9 @@ type InvestigationServiceServer interface {
 	RenewLease(context.Context, *RenewLeaseRequest) (*RenewLeaseResponse, error)
 	CompleteInvestigation(context.Context, *CompleteInvestigationRequest) (*CompleteInvestigationResponse, error)
 	FailInvestigation(context.Context, *FailInvestigationRequest) (*FailInvestigationResponse, error)
+	// GetModelSettings returns the model settings made in Themis's setup, for
+	// whatever the investigator's own environment leaves unset.
+	GetModelSettings(context.Context, *GetModelSettingsRequest) (*GetModelSettingsResponse, error)
 	mustEmbedUnimplementedInvestigationServiceServer()
 }
 
@@ -112,6 +129,9 @@ func (UnimplementedInvestigationServiceServer) CompleteInvestigation(context.Con
 }
 func (UnimplementedInvestigationServiceServer) FailInvestigation(context.Context, *FailInvestigationRequest) (*FailInvestigationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method FailInvestigation not implemented")
+}
+func (UnimplementedInvestigationServiceServer) GetModelSettings(context.Context, *GetModelSettingsRequest) (*GetModelSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetModelSettings not implemented")
 }
 func (UnimplementedInvestigationServiceServer) mustEmbedUnimplementedInvestigationServiceServer() {}
 func (UnimplementedInvestigationServiceServer) testEmbeddedByValue()                              {}
@@ -206,6 +226,24 @@ func _InvestigationService_FailInvestigation_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InvestigationService_GetModelSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetModelSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InvestigationServiceServer).GetModelSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InvestigationService_GetModelSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InvestigationServiceServer).GetModelSettings(ctx, req.(*GetModelSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // InvestigationService_ServiceDesc is the grpc.ServiceDesc for InvestigationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +266,10 @@ var InvestigationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FailInvestigation",
 			Handler:    _InvestigationService_FailInvestigation_Handler,
+		},
+		{
+			MethodName: "GetModelSettings",
+			Handler:    _InvestigationService_GetModelSettings_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

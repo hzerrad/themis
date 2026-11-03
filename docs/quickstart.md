@@ -48,7 +48,7 @@ To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODE
 |---|---|
 | `enrolledNamespaces` | The namespaces Themis may read and, with the executor, change. It gets a Role in each, and nothing else. |
 | `executor.enabled` | Installs the only part that can change workloads. Without it, Themis only diagnoses and suggests. |
-| `model.baseURL`, `model.name` | Your model. Both are required, unless `model.enabled=false`: then Themis installs no investigator, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT. |
+| `model.baseURL`, `model.name` | Your model. Leave them out to set the model on the **Setup** page instead, where its key is kept encrypted. With `model.enabled=false`, Themis installs no investigator, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT. |
 | `model.apiKeySecret` | The Secret with an `apiKey` key, if the model needs one |
 
 The bundled PostgreSQL is for trying Themis. For anything longer, set `database.existingSecret` to a Secret with a `DATABASE_URL` key. All values are in the [chart README](../deploy/helm/themis/README.md#values).
