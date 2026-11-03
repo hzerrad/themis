@@ -7,6 +7,11 @@ CREATE TABLE heartbeats (
   detail    text NOT NULL DEFAULT ''
 );
 
+-- An install from before heartbeats has had alerts already: start from the
+-- latest one stored, so the status page doesn't say none ever arrived.
+INSERT INTO heartbeats (component, seen_at)
+SELECT 'alertmanager', max(received_at) FROM occurrences HAVING max(received_at) IS NOT NULL;
+
 -- Why an investigation attempt failed, as a fixed word, so the status page
 -- can say how to fix it. failure keeps the sentence.
 ALTER TABLE investigations ADD COLUMN failure_kind text;
