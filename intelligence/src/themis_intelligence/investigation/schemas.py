@@ -1,10 +1,14 @@
 """What the model may answer at each step of an investigation."""
 
-from typing import Literal
+import json
+from collections.abc import Sequence
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = "4"
+from themis.v1 import common_pb2
+
+SCHEMA_VERSION = "5"
 
 PredicateName = Literal[
     "rollout_recent",
@@ -68,9 +72,9 @@ class HypothesisOut(BaseModel):
 
 
 class ProposalOut(BaseModel):
-    capability: Literal["deployment.rollback-to-revision"]
+    capability: str = Field(description="One of the allowed fixes, by name.")
     target: TargetOut
-    revision: int = Field(description="The prior revision to roll back to.")
+    params: dict[str, Any] = Field(description="The fix's parameters, as its schema describes.")
     expected_effect: str
     rationale: str
     cited_evidence_ids: list[str]
@@ -84,3 +88,24 @@ class StepDecision(BaseModel):
     summary: str = ""
     hypotheses: list[HypothesisOut] = Field(default_factory=list[HypothesisOut])
     proposal: ProposalOut | None = Field(default=None, description="For propose.")
+
+
+def reply_schema(capabilities: Sequence[common_pb2.Capability]) -> dict[str, Any]:
+    """The step decision's JSON Schema, with the proposal narrowed to the fixes
+    on offer and their parameters, so the model is guided to valid ones. The
+    core still checks every suggestion against the fix's own schema."""
+    schema = StepDecision.model_json_schema()
+    proposal = schema["$defs"]["ProposalOut"]["properties"]
+    names = [c.name for c in capabilities]
+    if names:
+        proposal["capability"] = {
+            "type": "string",
+            "enum": names,
+            "description": "One of the allowed fixes, by name.",
+        }
+    params = [json.loads(c.params_schema) for c in capabilities if c.params_schema]
+    if len(params) == 1:
+        proposal["params"] = params[0]
+    elif params:
+        proposal["params"] = {"anyOf": params}
+    return schema

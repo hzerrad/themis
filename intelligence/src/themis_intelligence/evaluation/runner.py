@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from pydantic import ValidationError
 
-from themis.v1 import investigation_pb2
+from themis.v1 import investigation_pb2, proposal_pb2
 from themis_intelligence.evaluation.bundle import Bundle, job_of
 from themis_intelligence.evaluation.replay import ModelUse, RecordingModel, ReplayCore
 from themis_intelligence.evaluation.score import (
@@ -96,7 +96,7 @@ def _record(
                 name=p.target.name,
                 uid=p.target.uid,
             ),
-            revision=p.rollback_to_revision.revision,
+            revision=revision_of(p),
             cited_evidence_ids=list(p.cited_evidence_ids),
             cited_predicates=list(p.cited_predicates),
             expected_effect=p.expected_effect,
@@ -219,3 +219,11 @@ async def run_all(
                 out.stopped = f"Stopped after {errors} errors in a row: {record.failure}"
                 return out
     return out
+
+
+def revision_of(p: proposal_pb2.SubmitProposalRequest) -> int:
+    """The revision a rollback names, in either form; 0 for any other fix."""
+    if p.HasField("rollback_to_revision"):
+        return p.rollback_to_revision.revision
+    revision = p.params.fields.get("revision")
+    return int(revision.number_value) if revision is not None else 0

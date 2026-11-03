@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 
 import grpc
+from google.protobuf import struct_pb2
 
 from themis.v1 import common_pb2, proposal_pb2, proposal_pb2_grpc
 from themis_intelligence.holmesgpt.decide import SCHEMA, NoSuggestion, decide, revisions
@@ -16,6 +17,8 @@ log = logging.getLogger(__name__)
 
 CALL_TIMEOUT_S = 30.0
 SOURCE = "holmesgpt"
+# The only fix this adapter suggests: HolmesGPT is asked for a rollback.
+ROLLBACK = "deployment.rollback-to-revision"
 
 # The states in which Themis takes a suggestion and nothing else is working on
 # it. While Themis's own investigator runs, HolmesGPT isn't asked.
@@ -146,8 +149,9 @@ class Agent:
                 incident_id=incident_id,
                 client_proposal_id=f"{SOURCE}-{incident_id}",
                 target=target,
-                rollback_to_revision=proposal_pb2.RollbackToRevisionParams(
-                    revision=outcome.revision
+                capability_name=ROLLBACK,
+                params=struct_pb2.Struct(
+                    fields={"revision": struct_pb2.Value(number_value=outcome.revision)}
                 ),
                 rationale=outcome.rationale,
                 expected_effect=f"The Deployment runs revision {outcome.revision} and recovers.",

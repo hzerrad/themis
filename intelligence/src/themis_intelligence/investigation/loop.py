@@ -5,9 +5,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import resources
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 import grpc
+from google.protobuf import struct_pb2
 from pydantic import BaseModel
 
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
@@ -18,6 +19,7 @@ from themis_intelligence.investigation.schemas import (
     HypothesisOut,
     ProposalOut,
     StepDecision,
+    reply_schema,
 )
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
@@ -28,7 +30,7 @@ from themis_intelligence.platform.contract import (
     Usage,
 )
 
-PROMPT_VERSION = "rollout_v3"
+PROMPT_VERSION = "rollout_v4"
 LOGS_TEMPLATE = "container_logs_tail"
 MAX_OUTPUT_TOKENS = 2048
 STEP_DEADLINE_S = 120.0
@@ -131,8 +133,17 @@ def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
     return (
         text.replace("{root_causes}", causes)
         .replace("{templates}", templates)
-        .replace("{capabilities}", ", ".join(job.candidate_capabilities) or "none")
+        .replace("{capabilities}", capabilities(job))
         .replace("{max_steps}", str(max_steps))
+    )
+
+
+def capabilities(job: investigation_pb2.Investigation) -> str:
+    """The fixes on offer, each with what it does and its parameters' schema."""
+    if not job.capabilities:
+        return "  " + (", ".join(job.candidate_capabilities) or "none")
+    return "\n".join(
+        f"  - {c.name}: {c.description} Parameters: {c.params_schema}" for c in job.capabilities
     )
 
 
@@ -210,8 +221,15 @@ def proposal_request(
         cited_evidence_ids=p.cited_evidence_ids,
         cited_predicates=p.cited_predicates,
         provenance=provenance,
-        rollback_to_revision=proposal_pb2.RollbackToRevisionParams(revision=p.revision),
+        capability_name=p.capability,
+        params=params_struct(p.params),
     )
+
+
+def params_struct(params: dict[str, Any]) -> struct_pb2.Struct:
+    s = struct_pb2.Struct()
+    s.update(params)
+    return s
 
 
 async def investigate(
@@ -255,6 +273,9 @@ async def investigate(
         if visible(i):
             level = higher(level, classification(i))
     allowed = {t.name for t in job.allowed_templates}
+    # The fixes on offer, and a reply schema that only allows them.
+    offered = [c.name for c in job.capabilities] or list(job.candidate_capabilities)
+    schema = reply_schema(job.capabilities)
     seen = {i.template for i in job.initial_evidence}
     nudged = False
     # A proposal waits for the logs when the profile allows reading them.
@@ -334,6 +355,7 @@ async def investigate(
                 messages=messages,
                 deadline_s=step_deadline_s,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
+                json_schema=schema,
             ),
             StepDecision,
         )
@@ -382,6 +404,13 @@ async def investigate(
                 if decision.proposal is None:
                     invalid += 1
                     tell("A propose decision needs a proposal.")
+                    continue
+                if offered and decision.proposal.capability not in offered:
+                    invalid += 1
+                    tell(
+                        f"{fence(repr(decision.proposal.capability))} is not an allowed fix. "
+                        f"Allowed fixes: {', '.join(offered)}."
+                    )
                     continue
                 if not logs_read:
                     # Models asked to read the logs first may just propose again

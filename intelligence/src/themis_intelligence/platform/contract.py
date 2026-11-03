@@ -25,6 +25,9 @@ class ModelRequest(BaseModel):
     deadline_s: float
     max_output_tokens: int
     allow_repair: bool = True
+    # The reply's JSON Schema when it varies with the request, such as the
+    # fixes on offer; None uses the reply type's own.
+    json_schema: dict[str, Any] | None = None
 
 
 class Usage(BaseModel):

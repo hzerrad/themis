@@ -151,7 +151,7 @@ class ModelClient:
                                 model=self.endpoint.model,
                                 messages=messages,
                                 max_output_tokens=max_output,
-                                json_schema=schema.model_json_schema(),
+                                json_schema=req.json_schema or schema.model_json_schema(),
                                 reasoning_effort=self.endpoint.reasoning_effort,
                                 strict=self.endpoint.strict_output,
                             )

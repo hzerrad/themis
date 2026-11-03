@@ -123,7 +123,10 @@ async def test_asks_each_waiting_incident_once() -> None:
     assert await agent.run_once() == 0
     assert [r.incident_id for r in themis.submitted] == ["a", "c"]
     req = themis.submitted[0]
-    assert req.rollback_to_revision.revision == 1 and req.client_proposal_id == "holmesgpt-a"
+    assert req.capability_name == "deployment.rollback-to-revision"
+    assert (
+        req.params.fields["revision"].number_value == 1 and req.client_proposal_id == "holmesgpt-a"
+    )
     assert req.provenance.source == "holmesgpt" and req.target == TARGET
     # Two turns: free to run tools, then the verdict in the same conversation.
     investigate, conclude = seen[0], seen[1]

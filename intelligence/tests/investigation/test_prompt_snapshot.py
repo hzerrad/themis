@@ -8,7 +8,7 @@ from pathlib import Path
 
 from themis_intelligence.evaluation.bundle import job_of, load_bundles
 from themis_intelligence.investigation.loop import PROMPT_VERSION, incident_prompt, system_prompt
-from themis_intelligence.investigation.schemas import SCHEMA_VERSION, StepDecision
+from themis_intelligence.investigation.schemas import SCHEMA_VERSION, reply_schema
 
 ROOT = Path(__file__).parents[3]
 SNAPSHOT = Path(__file__).parent / "golden" / "rollout-oom-first-request.txt"
@@ -17,7 +17,8 @@ SNAPSHOT = Path(__file__).parent / "golden" / "rollout-oom-first-request.txt"
 def first_request() -> str:
     b = load_bundles(ROOT / "eval" / "scenarios", ["rollout-oom"])[0]
     job = job_of(b)
-    schema = json.dumps(StepDecision.model_json_schema(), indent=2, sort_keys=True)
+    # The schema the loop sends: narrowed to the fixes on offer.
+    schema = json.dumps(reply_schema(job.capabilities), indent=2, sort_keys=True)
     return (
         f"# prompt {PROMPT_VERSION}, schema {SCHEMA_VERSION}\n\n"
         f"## system\n\n{system_prompt(job, b.max_steps)}\n\n"

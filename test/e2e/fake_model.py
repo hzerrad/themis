@@ -50,7 +50,7 @@ def decide(messages: list[dict[str, str]]) -> dict[str, object]:
         "proposal": {
             "capability": "deployment.rollback-to-revision",
             "target": target,
-            "revision": prior,
+            "params": {"revision": prior},
             "expected_effect": "pods stop being OOMKilled",
             "rationale": f"revision {current} is OOMKilled since its rollout; revision {prior} served without failures",
             "cited_evidence_ids": cited,
