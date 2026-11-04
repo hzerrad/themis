@@ -233,7 +233,7 @@ A profile runs every check unless its `checks` lists the ones to run. A name The
 | Predicate | True when |
 |---|---|
 | `rollout_recent` | The current revision rolled out within the last 6 hours |
-| `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`. |
+| `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`, and so do missing events: an earlier failure could be among them. A pod failure from before the rollout still makes it `false`. |
 | `prior_revision_was_healthy` | Pods of the previous revision are ready and never failed |
 | `oom_killed_new_revision` | A container of the current revision was OOMKilled |
 | `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. `unknown` when a required ConfigMap is missing or doesn't say when it changed. Secrets are never read, so a change to one can't be seen. |

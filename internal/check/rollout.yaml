@@ -21,7 +21,7 @@
 - name: failure_onset_after_rollout
   version: "1"
   description: The failures started after the rollout
-  reads: [rollout_history, pod_states]
+  reads: [rollout_history, pod_states, target_events]
   let:
     early: failures.filter(f, f.at != null && f.at < rollout_at)
     undated: failures.filter(f, f.at == null)
@@ -29,13 +29,18 @@
     - when: rollout_at == null
       answer: unknown
       reason: the rollout time is unknown
-    - when: size(failures) == 0
-      answer: unknown
-      reason: no failure observed
     - when: size(early) > 0
       answer: false
       reason: ${early[0].what} at ${early[0].at} predates revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, "early[0].id"]
+    # The events may hold an earlier failure: without them, Themis can only
+    # say that none it saw came first, which isn't enough to act on.
+    - when: ids.target_events == ""
+      answer: unknown
+      reason: no target events
+    - when: size(failures) == 0
+      answer: unknown
+      reason: no failure observed
     - when: size(undated) > 0
       answer: unknown
       reason: ${size(undated)} failures have no time

@@ -156,6 +156,13 @@ func TestFailureOnsetAfterRollout(t *testing.T) {
 	assertTruth(t, run("failure_onset_after_rollout", replace(t, b, evidence.TargetEvents, events(backOff, early))), check.False)
 
 	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.RolloutHistory)), check.Unknown)
+
+	// Without the events an earlier failure could be hiding there: the pods
+	// alone can't make it true, though they can still show it false.
+	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.TargetEvents)), check.Unknown)
+	crashedBefore := oomPod()
+	crashedBefore.Containers[0].LastTermination.FinishedAt = rolloutAt.Add(-time.Hour)
+	assertTruth(t, run("failure_onset_after_rollout", replace(t, without(b, evidence.TargetEvents), evidence.PodStates, pods(crashedBefore))), check.False)
 }
 
 // A failure without a time could predate the rollout (Review Focus 5).
