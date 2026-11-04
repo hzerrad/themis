@@ -379,8 +379,12 @@ func relay(t *testing.T, addr, target string) {
 func TestRun_RefusesToStart(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	tests := map[string]func(o *core.Options){
-		"invalid config":                 func(o *core.Options) { o.ConfigPath = writeFile(t, "bad.yaml", "enrolledNamespaces: []\n") },
-		"no database URL":                func(o *core.Options) { o.DatabaseURL = "" },
+		"invalid config":  func(o *core.Options) { o.ConfigPath = writeFile(t, "bad.yaml", "enrolledNamespaces: []\n") },
+		"no database URL": func(o *core.Options) { o.DatabaseURL = "" },
+		// The catalog checks every profile before anything starts.
+		"profile naming an unknown template": func(o *core.Options) {
+			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
+		},
 		"setup address others can reach": func(o *core.Options) { o.SetupAddr = "0.0.0.0:8083" },
 		"unreadable executor token": func(o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)

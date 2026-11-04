@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/riverqueue/river"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	appsv1 "k8s.io/api/apps/v1"
@@ -103,10 +105,12 @@ func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []
 	return incidentID, proposalID
 }
 
+// govern runs the govern job once, as River would.
 func (e *env) govern(t *testing.T, proposalID string) {
 	t.Helper()
-	if err := e.worker.Govern(t.Context(), proposalID); err != nil {
-		t.Fatalf("Govern: %v", err)
+	job := &river.Job[governance.GovernArgs]{Args: governance.GovernArgs{ProposalID: proposalID}}
+	if err := e.worker.Work(t.Context(), job); err != nil {
+		t.Fatalf("Work: %v", err)
 	}
 }
 

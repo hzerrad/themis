@@ -246,3 +246,26 @@ func TestRestoreWorker_EscalatesOnTheLastAttempt(t *testing.T) {
 		t.Errorf("reason = %q", got)
 	}
 }
+
+// When Themis no longer knows how to put a fix back, it leaves the fix in
+// place and tells the person it hands the incident to why.
+func TestRestore_CannotPutItBack(t *testing.T) {
+	for name, tc := range map[string]struct {
+		forget func(w *governance.Worker)
+		want   string
+	}{
+		"profile removed": {func(w *governance.Worker) { w.Config = config.Config{} }, "The rollout-regression profile was removed from the configuration, so Themis left its change in place."},
+		"fix unknown":     {func(w *governance.Worker) { w.Fixes = nil }, "Themis doesn't know how to put this fix back, so it left its change in place."},
+	} {
+		e := shipped(t)
+		id, fix := e.restoring(t)
+		tc.forget(e.worker)
+		e.restore(t, fix)
+		if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != tc.want {
+			t.Errorf("%s: %s, %q; want escalated, saying %q", name, got, e.lastReason(t, id), tc.want)
+		}
+		if n := len(e.actions(t, id)); n != 1 {
+			t.Errorf("%s: %d actions, want only the fix", name, n)
+		}
+	}
+}
