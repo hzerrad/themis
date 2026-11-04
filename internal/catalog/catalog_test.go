@@ -64,7 +64,7 @@ const (
 	packYAML = `
 name: crashes
 description: Pods crash
-root_causes: [{name: application_bug, description: the code fails}]
+rootCauses: [{name: application_bug, description: the code fails}]
 profile:
   priority: 10
   match: {alertNames: [KubePodCrashLooping], targetKinds: [Deployment.apps]}
@@ -128,7 +128,7 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			"root cause with no description", func(f fstest.MapFS) {
 				replace(f, "crashes/scenario.yaml", "description: the code fails", "description: ''")
 			},
-			"scenario pack crashes: scenario.yaml: root_causes[0]: application_bug needs a description",
+			"scenario pack crashes: scenario.yaml: rootCauses[0]: application_bug needs a description",
 		},
 		{
 			"check that doesn't compile", func(f fstest.MapFS) {

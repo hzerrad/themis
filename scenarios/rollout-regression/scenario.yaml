@@ -8,7 +8,7 @@ description: A new version of a Deployment fails where the version before it wor
 # What the investigator may name as the root cause, most likely first, and
 # what each means. A closed list makes answers comparable; other keeps it
 # honest when none fits.
-root_causes:
+rootCauses:
   - name: memory_limit_regression
     description: the new revision's memory limit is too low
   - name: bad_configuration

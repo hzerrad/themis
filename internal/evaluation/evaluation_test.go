@@ -83,7 +83,8 @@ func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := evaluation.Build(t.Context(), oom, s, os.DirFS(packs), cat.Profiles[0])
+	rollout, _ := cat.Profile("rollout-regression")
+	b, err := evaluation.Build(t.Context(), oom, s, os.DirFS(packs), rollout)
 	if err != nil {
 		t.Fatal(err)
 	}

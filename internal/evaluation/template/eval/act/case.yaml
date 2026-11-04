@@ -25,7 +25,7 @@ evidence:
   initial: [rollout_history, pod_states, target_events]
   allowed: [rollout_history, pod_states, target_events, container_logs_tail]
 truth:
-  # The root causes accepted as correct, from root_causes in the pack's
+  # The root causes accepted as correct, from rootCauses in the pack's
   # scenario.yaml. TODO
   root_causes: []
   # propose: the right answer is the fix.

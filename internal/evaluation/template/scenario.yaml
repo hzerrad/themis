@@ -13,7 +13,7 @@ description: "TODO: say which incident this pack handles and what Themis does ab
 # them. A name is lowercase letters, digits and _; the description is what
 # the investigator reads, in a few plain words. Keep insufficient_evidence
 # and other, so an honest answer is always on the list. TODO
-root_causes:
+rootCauses:
   - name: {{name_}}_cause
     description: "TODO: what went wrong, in a few plain words"
   - name: insufficient_evidence

@@ -62,11 +62,10 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 	if err != nil {
 		return r, errors.Join(append(errs, err)...)
 	}
-	i := slices.IndexFunc(cat.Profiles, func(p config.Profile) bool { return p.Name == name })
-	if i < 0 {
+	profile, ok := cat.Profile(name)
+	if !ok {
 		return r, errors.Join(append(errs, fmt.Errorf("no scenario pack is named %s", name))...)
 	}
-	profile := cat.Profiles[i]
 	var causes []string
 	for _, c := range cat.RootCauses.For(name) {
 		causes = append(causes, c.Name)

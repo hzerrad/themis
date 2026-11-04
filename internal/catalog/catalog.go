@@ -33,6 +33,15 @@ type Catalog struct {
 	RootCauses RootCauses
 }
 
+// Profile is the profile of the scenario pack named.
+func (c Catalog) Profile(name string) (config.Profile, bool) {
+	i := slices.IndexFunc(c.Profiles, func(p config.Profile) bool { return p.Name == name })
+	if i < 0 {
+		return config.Profile{}, false
+	}
+	return c.Profiles[i], true
+}
+
 // RootCauses are each scenario pack's root causes, by the pack's name, which
 // is its profile's.
 type RootCauses map[string][]RootCause

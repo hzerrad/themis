@@ -34,7 +34,7 @@ This creates the folder above, every file saying what to fill in, marked `TODO`.
 ```yaml
 name: rollout-regression
 description: A new version of a Deployment fails where the version before it worked; Themis suggests rolling back to it.
-root_causes:
+rootCauses:
   - name: memory_limit_regression
     description: the new revision's memory limit is too low
   - name: image_pull_failure
@@ -64,7 +64,7 @@ profile:
         decision: require_approval
 ```
 
-`name` is the folder's, and the profile's. `root_causes` are what the pack can tell apart: the investigator names one for each hypothesis it makes, most likely first, and each case's `truth.root_causes` picks from them. A name is lowercase letters, digits and `_`; its description is what the investigator reads, so a few plain words. List them in the order the investigator should read them, and keep `insufficient_evidence` and `other`, so an honest answer is always on the list: the evaluation counts declining as right where the truth is `insufficient_evidence`. A pack may reuse another pack's names, such as `application_bug`. A profile of an operator's own, with a name no pack has, gets every pack's root causes.
+`name` is the folder's, and the profile's. `rootCauses` are what the pack can tell apart: the investigator names one for each hypothesis it makes, most likely first, and each case's `truth.root_causes` picks from them. A name is lowercase letters, digits and `_`; its description is what the investigator reads, so a few plain words. List them in the order the investigator should read them, and keep `insufficient_evidence` and `other`, so an honest answer is always on the list: the evaluation counts declining as right where the truth is `insufficient_evidence`. A pack may reuse another pack's names, such as `application_bug`. A profile of an operator's own, with a name no pack has, gets every pack's root causes.
 
 `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
 
@@ -100,7 +100,7 @@ truth:
     oom_killed_new_revision: "true"
 ```
 
-`cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `root_causes`.
+`cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `rootCauses`.
 
 A pack needs both kinds of case:
 
