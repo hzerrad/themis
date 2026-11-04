@@ -54,7 +54,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if !ok {
 		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))
 	}
-	done, ok := w.registry()[applied.Capability]
+	done, ok := w.Fixes[applied.Capability]
 	if !ok {
 		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
@@ -65,7 +65,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if err != nil {
 		return err
 	}
-	undo, ok := w.registry()[name]
+	undo, ok := w.Fixes[name]
 	if !ok {
 		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}

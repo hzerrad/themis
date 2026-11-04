@@ -68,6 +68,12 @@ func NewPodStates() Template { return podStates{} }
 
 func (podStates) Name() string { return PodStates }
 
+func (podStates) Description() string {
+	return "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+}
+
+func (podStates) Params() []string { return nil }
+
 func (podStates) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
 	pods, err := w.Pods(ctx)
 	if err != nil {

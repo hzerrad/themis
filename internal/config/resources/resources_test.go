@@ -28,14 +28,22 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{platform: k8s.NewNamespace(t), team: k8s.NewNamespace(t), out: k8s.NewNamespace(t)}
 	base := config.Config{EnrolledNamespaces: []string{f.team}, Resources: &config.Resources{Namespace: f.platform}}
-	f.live = resources.New(base, k8s.Client, k8s.Client, func(p config.Profile) error {
-		if p.Policy.Mode == "" && len(p.Policy.Rules) > 0 && p.Policy.Rules[0].When == "bad" {
-			return errors.New("rule bad doesn't compile")
-		}
-		return nil
-	}, slog.Default())
+	f.live = resources.New(base, k8s.Client, k8s.Client, checker{}, slog.Default())
 	return f
 }
+
+// checker refuses a profile whose first rule is "bad", as if it didn't
+// compile.
+type checker struct{}
+
+func (checker) CheckProfile(p config.Profile) error {
+	if p.Policy.Mode == "" && len(p.Policy.Rules) > 0 && p.Policy.Rules[0].When == "bad" {
+		return errors.New("rule bad doesn't compile")
+	}
+	return nil
+}
+
+func (checker) CheckSources(config.ExternalProposals) error { return nil }
 
 func profile(ns, name string, priority int64, mutate ...func(map[string]any)) *unstructured.Unstructured {
 	spec := map[string]any{
@@ -300,7 +308,7 @@ func waitFor(t *testing.T, what string, done func() bool) {
 func TestThemisConfigNamesWhoMaySuggestFixes(t *testing.T) {
 	f := newFixture(t)
 	tc := themisConfig(map[string]any{"externalProposals": map[string]any{"sources": []any{map[string]any{
-		"serviceAccount": "agents/triage", "namespaces": []any{f.team}, "capabilities": []any{config.KnownCapabilities[0]},
+		"serviceAccount": "agents/triage", "namespaces": []any{f.team}, "capabilities": []any{"deployment.rollback-to-revision"},
 	}}}})
 	apply(t, tc)
 	if _, ok := f.refresh(t).ExternalProposals.Source("agents/triage"); !ok {

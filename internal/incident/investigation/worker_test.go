@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -53,7 +54,8 @@ func newEnv(t *testing.T) *env {
 			Config:   config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile()}},
 			Store:    s,
 			Reader:   k8s,
-			Registry: evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents()),
+			Evidence: evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents()),
+			Checks:   check.Rollout(),
 			Now:      func() time.Time { return time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC) },
 		},
 		store: s, pool: pool, target: target,

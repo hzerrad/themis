@@ -85,7 +85,7 @@ func (s *Server) CollectEvidence(ctx context.Context, req *themisv1.CollectEvide
 func (s *Server) refused(ctx context.Context, inv store.Investigation, req *themisv1.CollectEvidenceRequest, err error) {
 	cause, ok := refusals[status.Code(err)]
 	// A template Themis does not have is not evidence it could have collected.
-	if _, exists := s.Registry[req.GetTemplate()]; !ok || (cause == evidence.GapNotInProfile && !exists) {
+	if _, exists := s.Evidence[req.GetTemplate()]; !ok || (cause == evidence.GapNotInProfile && !exists) {
 		return
 	}
 	s.recordGap(ctx, inv, req, cause, "")
@@ -137,5 +137,5 @@ func (s *Server) collect(ctx context.Context, template string, t incident.Target
 	if err != nil {
 		return evidence.Item{}, err
 	}
-	return s.Registry.Collect(ctx, s.Reader, template, w, params, s.now())
+	return s.Evidence.Collect(ctx, s.Reader, template, w, params, s.now())
 }

@@ -83,8 +83,8 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 	}
 	for _, name := range profile.Evidence.Allowed {
 		t := &themisv1.EvidenceTemplate{Name: name}
-		if d, ok := Templates[name]; ok {
-			t.Description, t.Params = d.GetDescription(), d.GetParams()
+		if d, ok := s.Evidence[name]; ok {
+			t.Description, t.Params = d.Description(), d.Params()
 		}
 		out.AllowedTemplates = append(out.AllowedTemplates, t)
 	}
@@ -264,7 +264,7 @@ func (s *Server) recordReportedGaps(ctx context.Context, tx pgx.Tx, inv store.In
 	var causes []evidence.GapCause
 	for _, g := range gaps {
 		cause, ok := reportedCauses[g.GetCause()]
-		if _, exists := s.Registry[g.GetTemplate()]; !ok || !exists {
+		if _, exists := s.Evidence[g.GetTemplate()]; !ok || !exists {
 			continue
 		}
 		err := s.Store.InsertEvidenceGap(ctx, tx, store.EvidenceGap{

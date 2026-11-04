@@ -4,15 +4,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/hzerrad/themis/internal/capability/builtin"
+	"github.com/hzerrad/themis/internal/capability"
 	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 // resultDryRunFailed is a Failed result refused by the API server's dry run.
 const resultDryRunFailed = "dry_run_failed"
-
-// capabilities the executor can run.
-var capabilities = telemetry.Bounded(builtin.Default().Names())
 
 var actionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 	Name: "themis_actions_total",
@@ -21,11 +18,21 @@ var actionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 
 func init() {
 	metrics.Registry.MustRegister(actionsTotal)
-	for _, c := range capabilities {
+}
+
+// initMetrics starts the series of every fix at zero.
+func initMetrics(fixes capability.Registry) {
+	for _, c := range fixes.Names() {
 		for _, r := range []string{string(Succeeded), string(Stale), resultDryRunFailed, string(Failed), string(Ambiguous)} {
 			actionsTotal.WithLabelValues(c, r)
 		}
 	}
+}
+
+// capabilityLabel is a fix's name as a label: one this executor doesn't know
+// is Other, so a stored name can't add series.
+func (e *Executor) capabilityLabel(name string) string {
+	return telemetry.Bounded(e.Fixes.Names()).Value(name)
 }
 
 func (r Result) label() string {

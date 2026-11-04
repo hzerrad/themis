@@ -24,6 +24,7 @@ import (
 	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/executor"
 	"github.com/hzerrad/themis/internal/kubewarn"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
@@ -80,7 +81,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	}
 
 	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(grpcapi.RequireToken(tokenFile), telemetry.UnaryServerFields()))
-	(&executor.Server{Executor: &executor.Executor{Store: s, Client: c, Logger: log}}).Register(srv)
+	(&executor.Server{Executor: newExecutor(s, c, log)}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", grpcAddr, err)
@@ -120,6 +121,11 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 		_ = metricsSrv.Shutdown(shutdownCtx)
 	}
 	return probes.Shutdown(shutdownCtx)
+}
+
+// newExecutor carries out the fixes Themis ships with.
+func newExecutor(s *store.Store, c client.Client, log *slog.Logger) *executor.Executor {
+	return executor.New(s, c, catalog.Fixes(), log)
 }
 
 // metricsHandler serves the executor's metrics on /metrics.

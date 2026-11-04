@@ -36,7 +36,9 @@ type fakeTemplate struct {
 	err  error
 }
 
-func (fakeTemplate) Name() string { return "fake" }
+func (fakeTemplate) Name() string        { return "fake" }
+func (fakeTemplate) Description() string { return "" }
+func (fakeTemplate) Params() []string    { return nil }
 
 func (f fakeTemplate) Collect(context.Context, client.Reader, *workload.Workload, map[string]string) (evidence.Item, error) {
 	return f.item, f.err

@@ -14,7 +14,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/verification"
@@ -50,8 +49,14 @@ type Executor struct {
 	Client client.Client
 	Logger *slog.Logger
 	Now    func() time.Time
-	// Fixes are the fixes it can carry out; nil means those Themis ships with.
+	// Fixes are the fixes it can carry out.
 	Fixes capability.Registry
+}
+
+// New returns an executor of fixes, with their metrics started at zero.
+func New(s *store.Store, c client.Client, fixes capability.Registry, log *slog.Logger) *Executor {
+	initMetrics(fixes)
+	return &Executor{Store: s, Client: c, Fixes: fixes, Logger: log}
 }
 
 // Execute runs an action once. The execution record is committed before it
@@ -102,7 +107,7 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	if err != nil || recomputed != a.Digest {
 		return Result{Status: Stale, Message: "Not applied: the stored fix was altered after it was approved."}
 	}
-	f, ok := e.registry()[a.Capability]
+	f, ok := e.Fixes[a.Capability]
 	if !ok {
 		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
 	}
@@ -166,7 +171,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		if err := e.Store.SetActionState(ctx, tx, a.ID, store.ActionExecuting, actionStates[res.Status]); err != nil {
 			return err
 		}
-		store.AfterCommit(tx, actionsTotal.WithLabelValues(capabilities.Value(a.Capability), res.label()).Inc)
+		store.AfterCommit(tx, actionsTotal.WithLabelValues(e.capabilityLabel(a.Capability), res.label()).Inc)
 		_, restore := a.Restores()
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
@@ -200,12 +205,4 @@ func (e *Executor) logger() *slog.Logger {
 		return e.Logger
 	}
 	return slog.Default()
-}
-
-// fixes are the fixes this executor can carry out.
-func (e *Executor) registry() capability.Registry {
-	if e.Fixes != nil {
-		return e.Fixes
-	}
-	return builtin.Default()
 }

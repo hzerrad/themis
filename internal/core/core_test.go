@@ -21,11 +21,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
-	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/core"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
@@ -382,11 +379,8 @@ func relay(t *testing.T, addr, target string) {
 func TestRun_RefusesToStart(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	tests := map[string]func(o *core.Options){
-		"invalid config":  func(o *core.Options) { o.ConfigPath = writeFile(t, "bad.yaml", "enrolledNamespaces: []\n") },
-		"no database URL": func(o *core.Options) { o.DatabaseURL = "" },
-		"unknown template": func(o *core.Options) {
-			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
-		},
+		"invalid config":                 func(o *core.Options) { o.ConfigPath = writeFile(t, "bad.yaml", "enrolledNamespaces: []\n") },
+		"no database URL":                func(o *core.Options) { o.DatabaseURL = "" },
 		"setup address others can reach": func(o *core.Options) { o.SetupAddr = "0.0.0.0:8083" },
 		"unreadable executor token": func(o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
@@ -423,51 +417,5 @@ func TestRun_RefusesToStart(t *testing.T) {
 				t.Fatal("Run did not refuse to start")
 			}
 		})
-	}
-}
-
-// With configuration from resources, the core checks each IncidentProfile as
-// it does the file's: one naming an unknown evidence template is refused on
-// the resource, where the platform team sees why, and the core still starts.
-func TestRun_RefusesAProfileResourceWithAnUnknownTemplate(t *testing.T) {
-	ns := k8s.NewNamespace(t)
-	p := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{
-		"priority": int64(10),
-		"match":    map[string]any{"alertNames": []any{"KubePodCrashLooping"}, "targetKinds": []any{"Deployment.apps"}},
-		"evidence": map[string]any{"allowed": []any{"pod_state"}},
-	}}}
-	p.SetGroupVersionKind(resources.IncidentProfileKind)
-	p.SetNamespace(ns)
-	p.SetName("typo")
-	k8s.Create(t, p)
-	fileConfig := readFile(t, writeConfig(t, ns))
-	configPath := writeFile(t, "resources.yaml", fileConfig[:strings.Index(fileConfig, "profiles:")]+"resources:\n  namespace: "+ns+"\n")
-	dbURL := pgtest.NewDatabase(t)
-	start(t, func() core.Options {
-		return core.Options{
-			ConfigPath:  configPath,
-			DatabaseURL: dbURL,
-			Kubernetes:  k8s.Config,
-			HTTPAddr:    freeAddr(t),
-			ProbeAddr:   freeAddr(t),
-			MetricsAddr: "0",
-			GRPCAddr:    freeAddr(t),
-			Workers:     1,
-			Logger:      slog.New(slog.DiscardHandler),
-		}
-	})
-
-	if err := k8s.Get(t.Context(), client.ObjectKeyFromObject(p), p); err != nil {
-		t.Fatal(err)
-	}
-	conditions, _, _ := unstructured.NestedSlice(p.Object, "status", "conditions")
-	var got map[string]any
-	for _, c := range conditions {
-		if m, ok := c.(map[string]any); ok && m["type"] == "Accepted" {
-			got = m
-		}
-	}
-	if got["status"] != "False" || !strings.Contains(fmt.Sprint(got["message"]), `unknown evidence template "pod_state"`) {
-		t.Errorf("Accepted condition = %v, want refused for the unknown template", got)
 	}
 }

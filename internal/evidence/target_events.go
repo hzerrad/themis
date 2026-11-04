@@ -46,6 +46,12 @@ func NewTargetEvents() Template { return targetEvents{} }
 
 func (targetEvents) Name() string { return TargetEvents }
 
+func (targetEvents) Description() string {
+	return "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+}
+
+func (targetEvents) Params() []string { return nil }
+
 func (targetEvents) Collect(ctx context.Context, c client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
 	revisions, err := w.Revisions(ctx)
 	if err != nil {

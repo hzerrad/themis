@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -90,10 +91,7 @@ func approved(t *testing.T) (*env, store.Action) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gov, err := governance.NewWorker(config.Config{Profiles: []config.Profile{profile()}}, s, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	gov := &governance.Worker{Config: config.Config{Profiles: []config.Profile{profile()}}, Store: s, Reader: k8s, Fixes: catalog.Fixes()}
 	gov.Now = func() time.Time { return now }
 	if err := gov.Govern(ctx, proposalID); err != nil {
 		t.Fatalf("Govern: %v", err)
@@ -125,7 +123,9 @@ func deployment(t *testing.T, ns string) *appsv1.Deployment {
 }
 
 func (e *env) executor(c client.Client) *executor.Executor {
-	return &executor.Executor{Store: e.store, Client: c, Now: func() time.Time { return now.Add(time.Minute) }}
+	x := executor.New(e.store, c, catalog.Fixes(), nil)
+	x.Now = func() time.Time { return now.Add(time.Minute) }
+	return x
 }
 
 func (e *env) image(t *testing.T) string {
@@ -404,10 +404,7 @@ func restorePlanned(t *testing.T, e *env, a store.Action) store.Action {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	gov, err := governance.NewWorker(config.Config{Profiles: []config.Profile{profile()}}, e.store, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	gov := &governance.Worker{Config: config.Config{Profiles: []config.Profile{profile()}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
 	if err := gov.Restore(ctx, a.ID); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}

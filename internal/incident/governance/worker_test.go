@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -55,10 +56,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile("rollout-regression"), profile("other")}}
-	w, err := governance.NewWorker(cfg, s, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = func() time.Time { return now }
 	return &env{worker: w, store: s, pool: pool, target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)}}
 }

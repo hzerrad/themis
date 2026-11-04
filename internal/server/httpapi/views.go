@@ -85,13 +85,13 @@ type detailView struct {
 	Missing []string `json:",omitempty"`
 }
 
-func viewAction(a store.Action) actionView {
+func viewAction(a store.Action, fixes capability.Registry) actionView {
 	return actionView{
 		ID: a.ID, IncidentID: a.IncidentID, ProposalID: a.ProposalID,
 		Capability: a.Capability, CapabilityVersion: a.CapabilityVersion,
 		Target: a.Target, Params: a.Params, BlastRadius: a.BlastRadius, Risk: a.Risk,
 		Decision: a.Decision, DecisionReason: a.DecisionReason, PolicyID: a.PolicyID, PolicyDigest: a.PolicyDigest,
 		Digest: a.Digest, State: a.State, ExpiresAt: a.ExpiresAt, CreatedAt: a.CreatedAt,
-		Changes: changes(a),
+		Changes: changes(a, fixes),
 	}
 }

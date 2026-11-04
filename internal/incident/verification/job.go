@@ -12,7 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
@@ -42,6 +41,9 @@ type Worker struct {
 	Reader client.Reader
 	Now    func() time.Time
 	Poll   time.Duration
+	// Fixes are the fixes Themis can carry out, which read how a target is
+	// doing after them.
+	Fixes capability.Registry
 }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
@@ -78,7 +80,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	if in.State != incident.Verifying {
 		return true, nil
 	}
-	fix, err := fixOf(a)
+	fix, err := w.fixOf(a)
 	if err != nil {
 		return false, err
 	}
@@ -152,8 +154,8 @@ type observed struct {
 }
 
 // fixOf is the fix that carried out a.
-func fixOf(a store.Action) (capability.Capability, error) {
-	fix, ok := builtin.Default()[a.Capability]
+func (w *Worker) fixOf(a store.Action) (capability.Capability, error) {
+	fix, ok := w.Fixes[a.Capability]
 	if !ok {
 		return nil, fmt.Errorf("the fix %s isn't one Themis knows", a.Capability)
 	}
@@ -197,7 +199,7 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	if in.State != incident.Restoring {
 		return true, nil
 	}
-	fix, err := fixOf(a)
+	fix, err := w.fixOf(a)
 	if err != nil {
 		return false, err
 	}

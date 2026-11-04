@@ -216,11 +216,6 @@ func (e ExternalProposals) validate(add func(path, format string, args ...any)) 
 		if len(s.Capabilities) == 0 {
 			add(path+".capabilities", "at least one capability is required")
 		}
-		for j, name := range s.Capabilities {
-			if !slices.Contains(KnownCapabilities, name) {
-				add(fmt.Sprintf("%s.capabilities[%d]", path, j), "unknown capability %q", name)
-			}
-		}
 		if s.PerMinute < 0 {
 			add(path+".perMinute", "must be positive")
 		}
@@ -495,9 +490,6 @@ const (
 	DefaultInvestigationTimeout = 5 * time.Minute
 )
 
-// KnownCapabilities are the remediations Themis can execute.
-var KnownCapabilities = []string{"deployment.rollback-to-revision"}
-
 // InvestigationBudget returns p's investigation bounds with defaults filled in.
 func (p Profile) InvestigationBudget() Investigation {
 	b := p.Investigation
@@ -736,11 +728,6 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 	for j, name := range p.Evidence.Initial {
 		if !p.AllowsTemplate(name) {
 			add(fmt.Sprintf("evidence.initial[%d]", j), "template %q is not in evidence.allowed", name)
-		}
-	}
-	for j, name := range p.Capabilities {
-		if !slices.Contains(KnownCapabilities, name) {
-			add(fmt.Sprintf("capabilities[%d]", j), "unknown capability %q", name)
 		}
 	}
 	if p.Investigation.MaxSteps < 0 {

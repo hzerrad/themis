@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/hint"
@@ -54,7 +55,7 @@ func newEnv(t *testing.T) *env {
 	e := &env{store: s, pool: pool, clock: now}
 	mux := http.NewServeMux()
 	(&httpapi.API{
-		Store: s, TokenFile: file, Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
 	}).Register(mux)
 	e.handler = mux

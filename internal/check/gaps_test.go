@@ -9,7 +9,7 @@ import (
 )
 
 func TestNeeds_CoversEveryCheck(t *testing.T) {
-	for _, r := range check.Evaluate(evidence.Bundle{}, rolloutAt) {
+	for _, r := range check.Rollout().Evaluate(evidence.Bundle{}, rolloutAt) {
 		if len(check.Needs[r.Name]) == 0 {
 			t.Errorf("%s declares no evidence it reads", r.Name)
 		}
@@ -20,7 +20,7 @@ func TestNeeds_CoversEveryCheck(t *testing.T) {
 // blind when Themis couldn't see that evidence, which the operator can fix,
 // and ambiguous when it was there but did not settle the check.
 func TestAttribute(t *testing.T) {
-	unknown := check.Evaluate(evidence.Bundle{}, rolloutAt)
+	unknown := check.Rollout().Evaluate(evidence.Bundle{}, rolloutAt)
 	tests := []struct {
 		name    string
 		results []check.Result

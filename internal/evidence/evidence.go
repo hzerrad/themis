@@ -58,6 +58,10 @@ type Item struct {
 // read and checked to be the incident's, and c reads anything else.
 type Template interface {
 	Name() string
+	// Description says what the template reads, for investigators; Params
+	// names the parameters it takes, if any.
+	Description() string
+	Params() []string
 	Collect(ctx context.Context, c client.Reader, w *workload.Workload, params map[string]string) (Item, error)
 }
 

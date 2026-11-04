@@ -63,8 +63,9 @@ type Live struct {
 	Reader client.Reader
 	// Writer reports on them in their status.
 	Writer client.Client
-	// Check refuses a profile Themis cannot run, beyond its own validation.
-	Check  func(config.Profile) error
+	// Check refuses what this install can't run, beyond the resource's own
+	// validation. Nil refuses nothing more.
+	Check  Checker
 	Logger *slog.Logger
 
 	current atomic.Pointer[config.Config]
@@ -74,8 +75,16 @@ type Live struct {
 	profiles map[string]config.Profile
 }
 
+// Checker refuses what this install of Themis can't run: a profile naming
+// evidence or fixes it doesn't have, or a policy that doesn't compile, and
+// outside agents allowed fixes it doesn't have.
+type Checker interface {
+	CheckProfile(config.Profile) error
+	CheckSources(config.ExternalProposals) error
+}
+
 // New returns a Live with no resources read yet.
-func New(base config.Config, r client.Reader, w client.Client, check func(config.Profile) error, log *slog.Logger) *Live {
+func New(base config.Config, r client.Reader, w client.Client, check Checker, log *slog.Logger) *Live {
 	l := &Live{base: base, Reader: r, Writer: w, Check: check, Logger: log, profiles: map[string]config.Profile{}}
 	l.current.Store(&base)
 	return l
@@ -210,6 +219,11 @@ func (l *Live) parseSettings(u *unstructured.Unstructured) (config.ThemisConfigS
 	if err := spec.ExternalProposals.Validate(); err != nil {
 		return spec, nil, fmt.Errorf("externalProposals: %w", err)
 	}
+	if l.Check != nil {
+		if err := l.Check.CheckSources(spec.ExternalProposals); err != nil {
+			return spec, nil, fmt.Errorf("externalProposals: %w", err)
+		}
+	}
 	if m := spec.AutonomyCeiling; m != "" && m != config.ModeGuarded && m != config.ModeObserve {
 		return spec, nil, fmt.Errorf("autonomyCeiling must be guarded or observe, got %q", m)
 	}
@@ -245,7 +259,7 @@ func (l *Live) parseProfile(u *unstructured.Unstructured, cfg config.Config) (co
 		return p, err
 	}
 	if l.Check != nil {
-		if err := l.Check(p); err != nil {
+		if err := l.Check.CheckProfile(p); err != nil {
 			return p, err
 		}
 	}

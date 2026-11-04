@@ -29,10 +29,13 @@ const actor = "investigation"
 type PrepareWorker struct {
 	river.WorkerDefaults[InvestigateArgs]
 
-	Config   config.Provider
-	Store    *store.Store
-	Reader   client.Reader
-	Registry evidence.Registry
+	Config config.Provider
+	Store  *store.Store
+	Reader client.Reader
+	// Evidence is the templates it reads with; Checks decide from what they
+	// read.
+	Evidence evidence.Registry
+	Checks   check.List
 	Logger   *slog.Logger
 	Now      func() time.Time
 
@@ -79,7 +82,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		gaps  []store.EvidenceGap
 	)
 	for _, name := range profile.Evidence.Initial {
-		item, err := w.Registry.Collect(ctx, w.Reader, name, target, nil, now)
+		item, err := w.Evidence.Collect(ctx, w.Reader, name, target, nil, now)
 		if err != nil {
 			// Missing evidence makes predicates unknown; it does not stop the
 			// investigation, and the incident says why it is missing.
@@ -96,7 +99,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		return err
 	}
 	gaps = append(gaps, expired...)
-	results := check.Attribute(check.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
+	results := check.Attribute(w.Checks.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
 	// Without an investigator, the incident waits for a person or a tool
 	// outside Themis to suggest a fix; the checks still run for the policy.
 	noInvestigator := w.Config.Current().Investigators.Disabled

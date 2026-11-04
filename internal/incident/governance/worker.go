@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
@@ -33,25 +32,12 @@ type Worker struct {
 	Store  *store.Store
 	Reader client.Reader
 	Now    func() time.Time
-	// Fixes are the fixes Themis can carry out; nil means those it ships with.
+	// Fixes are the fixes Themis can carry out.
 	Fixes capability.Registry
 
 	// policies holds compiled policies by digest of their source: profiles
 	// can change while Themis runs.
 	policies sync.Map
-}
-
-// NewWorker compiles the policy of every profile configured now, so an
-// invalid rule stops the core from starting.
-func NewWorker(cfg config.Provider, s *store.Store, r client.Reader) (*Worker, error) {
-	w := &Worker{Config: cfg, Store: s, Reader: r}
-	var errs []error
-	for _, p := range cfg.Current().Profiles {
-		if _, err := w.policy(p); err != nil {
-			errs = append(errs, fmt.Errorf("profile %s: %w", p.Name, err))
-		}
-	}
-	return w, errors.Join(errs...)
 }
 
 // policy returns p's compiled policy.
@@ -93,7 +79,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if !ok {
 		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
 	}
-	f, ok := w.registry()[p.Capability]
+	f, ok := w.Fixes[p.Capability]
 	if !ok {
 		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
@@ -200,12 +186,4 @@ func (w *Worker) now() time.Time {
 		return w.Now()
 	}
 	return time.Now()
-}
-
-// fixes are the fixes this worker can carry out.
-func (w *Worker) registry() capability.Registry {
-	if w.Fixes != nil {
-		return w.Fixes
-	}
-	return builtin.Default()
 }

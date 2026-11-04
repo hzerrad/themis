@@ -200,8 +200,8 @@ func TestGitOpsManaged(t *testing.T) {
 	assertTruth(t, check.GitOpsManaged(without(b, evidence.RolloutHistory)), check.Unknown)
 }
 
-func TestEvaluate_EveryResultCitesEvidence(t *testing.T) {
-	results := check.Evaluate(scenario1(t), now)
+func TestRollout_EveryResultCitesEvidence(t *testing.T) {
+	results := check.Rollout().Evaluate(scenario1(t), now)
 	names := map[string]bool{}
 	for _, r := range results {
 		if r.Name == "" || r.Version == "" {

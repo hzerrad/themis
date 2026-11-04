@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -127,10 +128,7 @@ func TestRestore_PolicyAskingAPersonEscalates(t *testing.T) {
 	e := newEnv(t)
 	p := profile("rollout-regression")
 	p.Policy.Rules = append([]config.PolicyRule{{Name: "ask-first", When: `action.restore == "true"`, Decision: config.DecisionRequireApproval}}, p.Policy.Rules...)
-	w, err := governance.NewWorker(config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, e.store, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = e.worker.Now
 	id, fix := e.restoring(t)
 	e.worker = w

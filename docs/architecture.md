@@ -72,16 +72,17 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/incident` | An incident and its states |
 | `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |
 | `internal/incident/investigation` | Hands incidents to an investigator, and waits for a suggested fix when there is none |
-| `internal/incident/governance` | Policy, approvals, and putting a failed fix back |
+| `internal/incident/governance` | Deciding each action by policy, approvals, and putting a failed fix back |
 | `internal/incident/execution` | Passes approved actions to the executor |
 | `internal/incident/verification` | Decides whether the fix worked |
 | `internal/incident/reconciliation` | Notices targets changed outside Themis |
 | `internal/incident/notification` | Tells people when an incident is handed to them |
 | `internal/capability` | **What Themis can change.** The interface every fix implements, and the registry |
 | `internal/capability/rollback` | `deployment.rollback-to-revision` |
-| `internal/capability/builtin` | The fixes Themis ships with |
 | `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout" |
 | `internal/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
+| `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts; and whether a profile asks for anything it doesn't have |
+| `internal/policy` | Policy rules: compiling them, and deciding an action with them |
 | `internal/workload` | The target as Themis reads it: whether it is still the same object, its template, revisions, pods and replica counts. Everything else asks here |
 | `internal/server/httpapi`, `internal/server/grpcapi`, `internal/server/web` | The HTTP API, the investigators' gRPC API, and the UI |
 | `internal/identity` | Who is calling: accounts, sessions, sign-in, the setup door |
@@ -93,4 +94,4 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/evaluation`, `eval/` | Replaying recorded model replies against the scenarios |
 | `internal/testutil` | Test helpers: a real API server, PostgreSQL, metrics |
 
-`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in `internal/capability/builtin`; nothing else in the core changes.
+`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in the catalog's constructor in `internal/catalog`; nothing else in the core changes.

@@ -50,6 +50,10 @@ _Avoid_: remedy, fix
 A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout".
 _Avoid_: predicate, rule, signal
 
+**Catalog**:
+Everything this install of Themis can read, check and change: its fixes, evidence templates and checks.
+_Avoid_: registry (one kind of lookup inside it), plugins
+
 **Investigator**:
 What reads the evidence and checks and suggests a fix or declines to: Themis's own model-driven one, or a tool outside Themis.
 _Avoid_: agent, AI, model

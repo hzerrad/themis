@@ -46,9 +46,10 @@ type Server struct {
 	themisv1.UnimplementedEvidenceServiceServer
 	themisv1.UnimplementedProposalServiceServer
 
-	Store    *store.Store
-	Config   config.Provider
-	Registry evidence.Registry
+	Store  *store.Store
+	Config config.Provider
+	// Evidence is the templates investigators may ask for.
+	Evidence evidence.Registry
 	Reader   client.Reader
 	Logger   *slog.Logger
 	Now      func() time.Time
@@ -64,7 +65,7 @@ type Server struct {
 		Model(ctx context.Context) (settings.Model, error)
 	}
 
-	// Fixes are the fixes Themis can carry out; nil means those it ships with.
+	// Fixes are the fixes Themis can carry out, which suggestions name.
 	Fixes capability.Registry
 
 	// Heartbeat records that the investigator asked for work. Nil records
@@ -213,24 +214,4 @@ func predicateToProto(r check.Result) *themisv1.PredicateResult {
 	return &themisv1.PredicateResult{
 		Name: r.Name, Value: truths[r.Value], Reason: r.Reason, EvidenceIds: r.EvidenceIDs, PredicateVersion: r.Version,
 	}
-}
-
-// Templates describe the evidence templates to investigators.
-var Templates = map[string]*themisv1.EvidenceTemplate{
-	evidence.RolloutHistory: {
-		Description: "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits.",
-	},
-	evidence.PodStates: {
-		Description: "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows).",
-	},
-	evidence.TargetEvents: {
-		Description: "Recent events of the Deployment, its ReplicaSets and its pods, newest first.",
-	},
-	evidence.ReferencedConfig: {
-		Description: "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values.",
-	},
-	evidence.ContainerLogsTail: {
-		Description: "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
-		Params:      []string{"pod", "container", "previous"},
-	},
 }

@@ -22,7 +22,9 @@ import (
 // forbidden answers like an API server that denies the core's ServiceAccount.
 type forbidden struct{ name string }
 
-func (f forbidden) Name() string { return f.name }
+func (f forbidden) Name() string      { return f.name }
+func (forbidden) Description() string { return "" }
+func (forbidden) Params() []string    { return nil }
 
 func (forbidden) Collect(context.Context, client.Reader, *workload.Workload, map[string]string) (evidence.Item, error) {
 	return evidence.Item{}, apierrors.NewForbidden(schema.GroupResource{Resource: "events"}, "", errors.New("RBAC: access denied"))
@@ -32,7 +34,7 @@ func (forbidden) Collect(context.Context, client.Reader, *workload.Workload, map
 // silence: it is recorded with its cause, and the investigation goes on.
 func TestPrepare_ForbiddenTemplateRecordsGap(t *testing.T) {
 	e := newEnv(t)
-	e.worker.Registry = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
+	e.worker.Evidence = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
 	id := e.newIncident(t, "rollout-regression", e.target)
 
 	if err := e.worker.Prepare(t.Context(), id); err != nil {
@@ -60,7 +62,7 @@ func TestPrepare_ForbiddenTemplateRecordsGap(t *testing.T) {
 // Prepare runs at least once: a second run records the gap once.
 func TestPrepare_GapRecordedOnce(t *testing.T) {
 	e := newEnv(t)
-	e.worker.Registry = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
+	e.worker.Evidence = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
 	id := e.newIncident(t, "rollout-regression", e.target)
 	for range 2 {
 		if err := e.worker.Prepare(t.Context(), id); err != nil {
@@ -88,7 +90,7 @@ func TestPrepare_NoGapWhenEverythingIsRead(t *testing.T) {
 // history is blind, and says which evidence and why.
 func TestPrepare_ForbiddenHistoryMakesChecksBlind(t *testing.T) {
 	e := newEnv(t)
-	e.worker.Registry = evidence.NewRegistry(forbidden{evidence.RolloutHistory}, evidence.NewPodStates(), evidence.NewTargetEvents())
+	e.worker.Evidence = evidence.NewRegistry(forbidden{evidence.RolloutHistory}, evidence.NewPodStates(), evidence.NewTargetEvents())
 	id := e.newIncident(t, "rollout-regression", e.target)
 	if err := e.worker.Prepare(t.Context(), id); err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 )
 
 func TestExecutorMetrics_Served(t *testing.T) {
+	newExecutor(nil, nil, nil)
 	rec := httptest.NewRecorder()
 	metricsHandler().ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/metrics", nil))
 	if rec.Code != http.StatusOK {

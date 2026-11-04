@@ -130,6 +130,12 @@ func NewContainerLogsTail(logs LogReader) Template { return containerLogsTail{lo
 
 func (containerLogsTail) Name() string { return ContainerLogsTail }
 
+func (containerLogsTail) Description() string {
+	return "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended."
+}
+
+func (containerLogsTail) Params() []string { return []string{"pod", "container", "previous"} }
+
 func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, w *workload.Workload, params map[string]string) (Item, error) {
 	for k := range params {
 		if k != "pod" && k != "container" && k != "previous" {
