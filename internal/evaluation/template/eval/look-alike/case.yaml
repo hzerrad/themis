@@ -1,0 +1,27 @@
+# A look-alike: an incident that looks like the one this pack is for, but
+# where acting would be wrong, so Themis must not suggest the fix. Rename this
+# folder, and name below, after what happens in it, for example
+# {{name}}-traffic-spike. Fill in every TODO, describe the cluster in
+# cluster.yaml, then run `make eval-bundles` to write bundle.json.
+# docs/scenarios.md explains each field.
+
+name: {{name}}-look-alike
+version: 1
+description: "TODO: what is wrong in this cluster, and why the fix would be wrong"
+tags: [{{name}}, look-alike]
+source: synthetic
+difficulty: medium
+incident_class: {{name_}}
+now: "2026-01-01T12:00:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events]
+  allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+truth:
+  # The root causes accepted as correct, from the investigator's list. TODO
+  root_causes: []
+  # abstain: the right answer is no fix.
+  decision: abstain
+  # The fix would do harm here, not merely be wrong.
+  rollback_is_harmful: true
+  predicates: {}

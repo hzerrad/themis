@@ -109,4 +109,24 @@ jobs:
           enable-cache: true
       - run: make lint-python
       - run: make test-python
-      - run: make eval-replay
+
+  scenarios:
+    name: Scenario packs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          working-directory: intelligence
+          enable-cache: true
+      # Every pack is complete and its cases replay through the saved replies
+      # with the safety gate passing.
+      - run: make scenario-check

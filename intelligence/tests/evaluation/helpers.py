@@ -10,7 +10,7 @@ import httpx
 from themis_intelligence.evaluation.bundle import Bundle, load_bundles
 from themis_intelligence.platform.contract import ProviderRequest, ProviderResponse, Usage
 
-SCENARIOS = Path(__file__).parents[3] / "eval" / "scenarios"
+SCENARIOS = Path(__file__).parents[3] / "scenarios"
 
 
 def oom(**truth: Any) -> Bundle:

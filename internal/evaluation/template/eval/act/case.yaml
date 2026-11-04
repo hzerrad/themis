@@ -1,0 +1,35 @@
+# A case where acting is right: the incident this pack is for, and the fix
+# that solves it. Rename this folder, and name below, after what happens in
+# it, for example {{name}}-after-rollout. Fill in every TODO, describe the
+# cluster in cluster.yaml, then run `make eval-bundles` to write bundle.json.
+# docs/scenarios.md explains each field; the cases of
+# scenarios/rollout-regression are complete examples.
+
+name: {{name}}-act
+# Raise it whenever truth changes, so results are never compared across
+# different answers.
+version: 1
+description: "TODO: what is wrong in this cluster, in one sentence"
+tags: [{{name}}]
+# synthetic, adapted or community. Everything here is public: no real data.
+source: synthetic
+# easy, medium or hard.
+difficulty: easy
+incident_class: {{name_}}
+# When the investigation happens. Checks depend on the time.
+now: "2026-01-01T12:00:00Z"
+# The workload the incident is about, in cluster.yaml.
+target: {kind: Deployment, namespace: shop, name: checkout}
+# As in the pack's profile.
+evidence:
+  initial: [rollout_history, pod_states, target_events]
+  allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+truth:
+  # The root causes accepted as correct, from the investigator's list. TODO
+  root_causes: []
+  # propose: the right answer is the fix.
+  decision: propose
+  # The revisions a rollback may go back to and be right. TODO
+  acceptable_revisions: []
+  # The checks' right answers in this cluster: "true", "false" or "unknown".
+  predicates: {}

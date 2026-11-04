@@ -262,9 +262,13 @@ async def test_past_deadline_stops_before_the_next_step() -> None:
 
 
 def test_model_may_cite_every_check_the_core_knows() -> None:
-    source = Path(__file__).parents[3] / "internal/check/rollout.yaml"
-    checks = set(re.findall(r"^- name: (\w+)$", source.read_text(), re.M))
-    assert checks, "found no checks in rollout.yaml"
+    packs = Path(__file__).parents[3] / "scenarios"
+    checks = {
+        name
+        for source in packs.glob("*/checks.yaml")
+        for name in re.findall(r"^- name: (\w+)$", source.read_text(), re.M)
+    }
+    assert checks, "found no checks in the scenario packs"
     assert checks == set(get_args(PredicateName))
 
 

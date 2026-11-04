@@ -99,16 +99,38 @@ class Bundle(BaseModel):
     policy: PolicyCheck
 
 
-def load_bundles(root: Path, names: list[str] | None = None) -> list[Bundle]:
-    """Reads every scenario under root, or only those named, in name order."""
-    dirs = sorted(p.parent for p in root.glob("*/bundle.json"))
+def bundle_dirs(
+    root: Path, names: list[str] | None = None, packs: list[str] | None = None
+) -> list[Path]:
+    """The cases of every scenario pack under root, each pack's in its eval
+    folder, or only those of the packs or cases named, in pack and case order."""
+    dirs = sorted(p.parent for p in root.glob("*/eval/*/bundle.json"))
+    seen: set[str] = set()
+    for d in dirs:
+        if d.name in seen:
+            raise ValueError(f"two scenario packs have a case named {d.name}")
+        seen.add(d.name)
+    if packs:
+        missing = sorted(set(packs) - {d.parents[1].name for d in dirs})
+        if missing:
+            raise ValueError(f"no such scenario pack: {', '.join(missing)}")
+        dirs = [d for d in dirs if d.parents[1].name in packs]
     if names:
-        known = {d.name for d in dirs}
-        missing = sorted(set(names) - known)
+        missing = sorted(set(names) - {d.name for d in dirs})
         if missing:
             raise ValueError(f"no such scenario: {', '.join(missing)}")
         dirs = [d for d in dirs if d.name in names]
-    return [Bundle.model_validate_json((d / "bundle.json").read_bytes()) for d in dirs]
+    return dirs
+
+
+def load_bundles(
+    root: Path, names: list[str] | None = None, packs: list[str] | None = None
+) -> list[Bundle]:
+    """Reads the cases bundle_dirs finds."""
+    return [
+        Bundle.model_validate_json((d / "bundle.json").read_bytes())
+        for d in bundle_dirs(root, names, packs)
+    ]
 
 
 def target_proto(b: Bundle) -> common_pb2.TargetRef:

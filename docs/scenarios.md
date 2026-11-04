@@ -1,0 +1,153 @@
+# Scenario packs
+
+A scenario pack is one kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the fix it may suggest, its policy, and the cases that prove it. Adding a scenario means adding one folder under [`scenarios/`](../scenarios), mostly YAML, and nothing anywhere else. [`scenarios/rollout-regression`](../scenarios/rollout-regression) is a complete example.
+
+## Layout
+
+```text
+scenarios/my-scenario/
+├── scenario.yaml        the pack's name, description and profile
+├── checks.yaml          the checks it adds, if any
+├── README.md            what it covers, its evidence, its fix, its look-alikes
+└── eval/
+    ├── my-scenario-act/         a case where acting is right
+    │   ├── case.yaml
+    │   ├── cluster.yaml
+    │   ├── logs/<pod>.txt       optional
+    │   └── bundle.json          generated
+    └── my-scenario-look-alike/  a case where acting is wrong
+        └── ...
+```
+
+`scenario.yaml` and `checks.yaml` are built into Themis. Every pack is on unless an operator disables it.
+
+## Start one
+
+```sh
+make scenario NAME=my-scenario
+```
+
+This creates the folder above, every file saying what to fill in, marked `TODO`. `make scenario-check NAME=my-scenario` fails until nothing is left to fill in.
+
+## scenario.yaml
+
+```yaml
+name: rollout-regression
+description: A new version of a Deployment fails where the version before it worked; Themis suggests rolling back to it.
+profile:
+  priority: 100
+  match:
+    alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
+    targetKinds: [Deployment.apps]
+  evidence:
+    initial: [rollout_history, pod_states, target_events, referenced_config]
+    allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+  checks: [rollout_recent, failure_onset_after_rollout, oom_killed_new_revision, gitops_managed]
+  capabilities: [deployment.rollback-to-revision]
+  policy:
+    rules:
+      - name: gitops-owns-the-target
+        when: predicates.gitops_managed != "false"
+        decision: deny
+      - name: rollback-needs-approval
+        when: action.capability == "deployment.rollback-to-revision"
+        decision: require_approval
+```
+
+`name` is the folder's, and the profile's. `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
+
+List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
+
+## Checks
+
+`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run any pack's checks, so reuse one that exists, such as `gitops_managed`, rather than defining it again: a check name belongs to one pack.
+
+## Cases and look-alikes
+
+Each folder under `eval/` is a case: a cluster with a known fault, and the right answer. Themis's real evidence templates and the pack's checks read the cluster, and a model's investigation is replayed against what they make of it. [eval/README.md](../eval/README.md) says how cases are replayed and scored.
+
+```yaml
+# eval/rollout-oom/case.yaml
+name: rollout-oom
+version: 1
+description: Revision 2 lowered the memory limit, and its pods are OOMKilled. Revision 1 is healthy.
+source: synthetic
+difficulty: easy
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+truth:
+  root_causes: [memory_limit_regression]
+  decision: propose
+  acceptable_revisions: [1]
+  predicates:
+    rollout_recent: "true"
+    oom_killed_new_revision: "true"
+```
+
+`cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` come from the investigator's list in [`schemas.py`](../intelligence/src/themis_intelligence/investigation/schemas.py).
+
+A pack needs both kinds of case:
+
+- **acting is right**: `decision: propose`, the incident the pack is for;
+- **a look-alike**: `decision: abstain`, an incident that looks the same but where the fix would be wrong, such as a crash that started before the rollout. Set `rollback_is_harmful: true` when acting would do harm, not merely be wrong.
+
+Look-alikes are what keep Themis from acting on a resemblance: write one for each way the pack's alerts can fire for another reason, and say in the README which case covers which.
+
+After writing or changing a case, `make eval-bundles` writes its `bundle.json`; review the diff. Then record a model's replies to the pack's cases, which CI replays: `make eval-record NAME=my-scenario`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model. Use only synthetic or fully redacted data: everything here is public.
+
+## The conformance suite
+
+```sh
+make scenario-check NAME=my-scenario   # one pack
+make scenario-check                    # every pack, as CI does
+```
+
+It checks that:
+
+- `scenario.yaml` and `README.md` are there, with nothing left marked `TODO`;
+- the pack loads with every other pack: `scenario.yaml` parses, its checks compile, and its profile names only evidence, checks and fixes Themis has, with a policy that compiles;
+- it has at least one case where acting is right and one look-alike;
+- every case's checks give its `truth.predicates`, and its `bundle.json` is what Themis makes of it today;
+- replaying every case through the recorded replies passes the safety gate.
+
+A pack that passes:
+
+```text
+rollout-regression: ok, 14 cases: 5 where acting is right, 8 look-alikes
+```
+
+A fresh scaffold:
+
+```text
+my-scenario: not ready
+  - scenario.yaml: replace the parts marked TODO
+  - README.md: replace the parts marked TODO
+  - eval/my-scenario-act: case.yaml: replace the parts marked TODO
+  - eval/my-scenario-act: case.yaml: truth.root_causes needs a class
+  - eval/my-scenario-act: case.yaml: truth.acceptable_revisions is required when the right decision is to propose
+  - eval/my-scenario-look-alike: case.yaml: replace the parts marked TODO
+  - eval/my-scenario-look-alike: case.yaml: truth.root_causes needs a class
+  - eval: no case where acting is right (truth.decision: propose)
+  - eval: no look-alike, a case that looks like this scenario but where acting is wrong (truth.decision: abstain)
+```
+
+A broken pack also stops Themis from starting, with a message naming the pack.
+
+Today the investigator knows check names and root causes from fixed lists in [`schemas.py`](../intelligence/src/themis_intelligence/investigation/schemas.py): a pack adding a check adds its name there too, until Themis sends them.
+
+## For operators
+
+Every pack is on. To turn one off, name it in the configuration file, or in the chart's values:
+
+```yaml
+scenarios:
+  disabled: [rollout-regression]
+```
+
+Its profile and checks are then left out. A name no pack has stops Themis from starting.
+
+To change a pack's profile, such as to tighten its policy, write a profile of your own with the pack's name, in the configuration file or as an `IncidentProfile` in Themis's namespace: it replaces the pack's entirely. Copy the pack's `profile` to start from. See [Configuration](configuration.md#profiles).

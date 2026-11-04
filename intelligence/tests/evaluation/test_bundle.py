@@ -23,7 +23,7 @@ def test_job_matches_the_bundle() -> None:
     assert job.initial_evidence[0].classification == common_pb2.DATA_CLASSIFICATION_INTERNAL
 
 
-ALL = load_bundles(Path(__file__).parents[3] / "eval" / "scenarios")
+ALL = load_bundles(Path(__file__).parents[3] / "scenarios")
 
 
 def test_the_corpus_covers_the_spec() -> None:
@@ -46,11 +46,14 @@ def test_prompt_gives_nothing_away(b: Bundle) -> None:
         assert prompt.count(answer) == 1
 
 
-def test_load_refuses_an_unknown_scenario() -> None:
-    root = Path(__file__).parents[3] / "eval" / "scenarios"
-    assert [b.scenario for b in load_bundles(root, ["rollout-oom"])] == ["rollout-oom"]
+def test_load_refuses_an_unknown_case_or_pack() -> None:
+    root = Path(__file__).parents[3] / "scenarios"
+    picked = load_bundles(root, ["rollout-oom"], ["rollout-regression"])
+    assert [b.scenario for b in picked] == ["rollout-oom"]
     with pytest.raises(ValueError, match="no-such"):
         load_bundles(root, ["no-such"])
+    with pytest.raises(ValueError, match="no-pack"):
+        load_bundles(root, packs=["no-pack"])
 
 
 async def test_replay_serves_and_counts_evidence() -> None:

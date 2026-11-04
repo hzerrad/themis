@@ -1,4 +1,4 @@
-# The checks Themis ships with, about rollouts, in the order it reports them.
+# The checks of the rollout-regression pack, in the order Themis reports them.
 # docs/checks.md says what each field means and what the expressions see.
 
 - name: rollout_recent

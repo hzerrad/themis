@@ -4,6 +4,9 @@
 !cmd/
 !gen/
 !internal/
+!scenarios/
+scenarios/*/eval/
+scenarios/*/README.md
 !intelligence/pyproject.toml
 !intelligence/uv.lock
 !intelligence/README.md

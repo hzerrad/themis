@@ -51,8 +51,8 @@ endif
 	$(UV) run ruff check --fix
 
 .PHONY: eval-bundles
-eval-bundles: ## Rebuild the evaluation bundles from their scenarios
-	go test ./internal/evaluation -run 'TestScenarios$$' -update
+eval-bundles: ## Rebuild every scenario pack case's evaluation bundle
+	go test ./internal/evaluation -run 'TestPacks$$' -count=1 -update
 
 # The model whose replies CI replays, and where to reach it to record them.
 EVAL_BASE_URL ?= http://127.0.0.1:11434/v1
@@ -60,13 +60,25 @@ EVAL_MODEL    ?= qwen3:8b
 EVAL_SAVED    := eval/recordings/qwen3-8b
 
 .PHONY: eval-record eval-replay
-eval-record: ## Run the model once on every scenario and save its replies for CI; review the report before committing
-	rm -rf $(EVAL_SAVED)
+eval-record: ## Run the model once on every case, or one pack's with NAME=..., and save its replies for CI; review the report before committing
+	$(if $(NAME),,rm -rf $(EVAL_SAVED))
 	$(UV) run python -m themis_intelligence.evaluation --runs 1 --base-url $(EVAL_BASE_URL) --model $(EVAL_MODEL) \
-		--context-tokens 16384 --step-deadline 600 --record ../$(EVAL_SAVED) --out ../eval/out/record
+		--context-tokens 16384 --step-deadline 600 --record ../$(EVAL_SAVED) --out ../eval/out/record $(if $(NAME),--pack $(NAME))
 
 eval-replay: ## Replay the saved replies through the real loop and scorer: fails on harm, or if the prompt changed since recording
 	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_SAVED) --out ../eval/out/replay --gate
+
+# Scenario packs: one folder each under scenarios/; see docs/scenarios.md.
+
+.PHONY: scenario scenario-check
+scenario: ## Create a scenario pack to fill in: make scenario NAME=my-scenario
+	@test -n "$(NAME)" || { echo "set NAME, for example make scenario NAME=my-scenario"; exit 1; }
+	@go run ./scripts/scenario new $(NAME)
+
+scenario-check: ## Check every scenario pack, or one with NAME=..., and replay its cases: fails until it is complete
+	go run ./scripts/scenario check $(NAME)
+	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_SAVED) --out ../eval/out/scenario-check \
+		--gate $(if $(NAME),--pack $(NAME))
 
 .PHONY: eval-local
 eval-local: ## Evaluate a local model on every scenario; start Ollama with OLLAMA_CONTEXT_LENGTH=16384

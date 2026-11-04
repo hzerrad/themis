@@ -15,7 +15,7 @@ SNAPSHOT = Path(__file__).parent / "golden" / "rollout-oom-first-request.txt"
 
 
 def first_request() -> str:
-    b = load_bundles(ROOT / "eval" / "scenarios", ["rollout-oom"])[0]
+    b = load_bundles(ROOT / "scenarios", ["rollout-oom"])[0]
     job = job_of(b)
     # The schema the loop sends: narrowed to the fixes on offer.
     schema = json.dumps(reply_schema(job.capabilities), indent=2, sort_keys=True)

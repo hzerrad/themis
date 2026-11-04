@@ -74,7 +74,7 @@ make vuln      # known vulnerabilities in the Go and Python dependencies
 
 To run the components on your machine against kind while you work on them, see [Running locally](docs/demo.md#running-locally).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions. To teach Themis a new kind of incident, add a scenario pack: see [docs/scenarios.md](docs/scenarios.md).
 
 ## License
 

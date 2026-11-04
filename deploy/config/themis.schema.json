@@ -313,6 +313,21 @@
       ],
       "description": "Resources reads profiles and global settings from custom resources,\ninstead of the profiles below."
     },
+    "scenarios": {
+      "properties": {
+        "disabled": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Disabled names the packs to turn off: their profiles and checks are\nleft out."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Scenarios are the scenario packs Themis ships, each with its own\nprofile."
+    },
     "profiles": {
       "items": {
         "properties": {
@@ -504,7 +519,7 @@
         "description": "Profile is one incident class and the alerts that belong to it."
       },
       "type": "array",
-      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins. Required unless resources is set."
+      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins. One named like a scenario pack's profile replaces it."
     }
   },
   "additionalProperties": false,

@@ -25,39 +25,19 @@ api:
   #   - {role: admin, users: [alice@example.com]}
   #   - {role: approver, groups: [sre]}
 
-profiles:
-  - name: rollout-regression
-    priority: 100
-    match:
-      alertNames:
-        - KubePodCrashLooping
-        - KubeDeploymentReplicasMismatch
-        - KubePodOOMKilled
-      targetKinds:
-        - Deployment.apps
-    evidence:
-      initial: [rollout_history, pod_states, target_events, referenced_config]
-      allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
-    capabilities: [deployment.rollback-to-revision]
-    policy:
-      mode: guarded
-      approvalTimeout: 30m
-      rules:
-        - name: gitops-owns-the-target
-          when: predicates.gitops_managed != "false"
-          decision: deny
-        - name: rollback-needs-a-bad-rollout
-          when: >-
-            action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
-            (predicates.rollout_recent != "true" ||
-             predicates.failure_onset_after_rollout != "true" ||
-             predicates.config_changed_before_failure != "false" ||
-             (predicates.oom_killed_new_revision != "true" &&
-              predicates.prior_revision_was_healthy != "true"))
-          decision: deny
-        - name: rollback-needs-approval
-          when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
-          decision: require_approval
-    verification:
-      window: 5m
-      stability: 2m
+# Profiles come from the scenario packs Themis ships, one each, such as
+# rollout-regression in scenarios/rollout-regression/scenario.yaml. Every pack
+# is on unless disabled here.
+# scenarios:
+#   disabled: [rollout-regression]
+
+# Optional: profiles of your own. One named like a pack's replaces it, for
+# example to tighten its policy: copy the pack's profile to start from.
+# profiles:
+#   - name: rollout-regression
+#     priority: 100
+#     match:
+#       alertNames: [KubePodCrashLooping]
+#       targetKinds: [Deployment.apps]
+#     evidence:
+#       allowed: [rollout_history, pod_states, target_events]
