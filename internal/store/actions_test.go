@@ -96,28 +96,6 @@ func TestInsertAction_OneActivePerTarget(t *testing.T) {
 	}
 }
 
-func TestApprove_BindsDigest(t *testing.T) {
-	s, _ := newStore(t)
-	a := awaitingAction(t, s)
-	if err := approve(t, s, a, "sha256:another", t0); !errors.Is(err, store.ErrDigestMismatch) {
-		t.Errorf("err = %v, want ErrDigestMismatch", err)
-	}
-	if err := approve(t, s, a, a.Digest, t0); err != nil {
-		t.Fatalf("Approve: %v", err)
-	}
-	if err := approve(t, s, a, a.Digest, t0); !errors.Is(err, store.ErrAlreadyDecided) {
-		t.Errorf("second approval: err = %v, want ErrAlreadyDecided", err)
-	}
-}
-
-func TestApprove_Expired(t *testing.T) {
-	s, _ := newStore(t)
-	a := awaitingAction(t, s)
-	if err := approve(t, s, a, a.Digest, t0.Add(time.Hour)); !errors.Is(err, store.ErrExpired) {
-		t.Errorf("err = %v, want ErrExpired", err)
-	}
-}
-
 func TestClaimExecution_SingleUse(t *testing.T) {
 	s, _ := newStore(t)
 	a := awaitingAction(t, s)

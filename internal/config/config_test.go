@@ -291,17 +291,11 @@ func TestMatchProfile(t *testing.T) {
 			}
 		})
 	}
-}
 
-// Priority, not position in the file, decides the winner.
-func TestMatchProfile_PriorityNotFileOrder(t *testing.T) {
-	c := mustParse(t, validYAML)
+	// Priority, not position in the file, decides the winner.
 	c.Profiles[0], c.Profiles[1] = c.Profiles[1], c.Profiles[0]
-
-	p, ok := c.MatchProfile("KubePodCrashLooping", map[string]string{"severity": "critical"}, deployment)
-
-	if !ok || p.Name != "critical-crashloop" {
-		t.Fatalf("matched %q (ok=%v), want critical-crashloop", p.Name, ok)
+	if p, ok := c.MatchProfile("KubePodCrashLooping", map[string]string{"severity": "critical"}, deployment); !ok || p.Name != "critical-crashloop" {
+		t.Errorf("profiles swapped: matched %q (ok=%v), want critical-crashloop", p.Name, ok)
 	}
 }
 

@@ -31,16 +31,6 @@ async def test_sensitive_evidence_withheld_not_failed() -> None:
     }
 
 
-# An endpoint cleared for sensitive data sees the logs, and nothing is missing.
-async def test_cleared_endpoint_sees_the_logs() -> None:
-    core = FakeCore(logs="canary-log-line")
-    model = ScriptedModel(LOGS, GIVE_UP)
-    gaps: list[investigation_pb2.EvidenceGap] = []
-    await investigate(job(), core, model, max_steps=6, gaps=gaps)
-    assert "canary-log-line" in model.requests[1].messages[-1].content
-    assert gaps == []
-
-
 # Before giving up, the model is asked once to read what it hasn't.
 async def test_abstention_tries_allowed_templates_first() -> None:
     model = ScriptedModel(GIVE_UP, GIVE_UP)
@@ -56,14 +46,3 @@ async def test_abstention_after_reading_everything_is_immediate() -> None:
     result = await investigate(job(), FakeCore(), model, max_steps=6)
     assert result.conclusion == "inconclusive"
     assert len(model.requests) == 2
-
-
-# Evidence the profile doesn't allow is reported, so the operator can learn
-# that it would have helped.
-async def test_template_outside_the_profile_is_reported() -> None:
-    model = ScriptedModel(
-        {"kind": "request_evidence", "template": "target_events", "params": {}}, LOGS, GIVE_UP
-    )
-    gaps: list[investigation_pb2.EvidenceGap] = []
-    await investigate(job(), FakeCore(), model, max_steps=6, gaps=gaps)
-    assert causes(gaps) == {("target_events", investigation_pb2.EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE)}

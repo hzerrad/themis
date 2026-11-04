@@ -9,6 +9,7 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
+// A sign-in finishes once, and not at all once it has expired.
 func TestSignIn_IsUsedOnce(t *testing.T) {
 	s, _ := newStore(t)
 	in := store.SignIn{State: "st", Nonce: "n", Verifier: "v", ExpiresAt: t0.Add(5 * time.Minute)}
@@ -22,15 +23,11 @@ func TestSignIn_IsUsedOnce(t *testing.T) {
 	if _, err := s.FinishSignIn(t.Context(), "st", t0.Add(time.Minute)); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("second FinishSignIn: %v, want ErrNotFound", err)
 	}
-}
-
-func TestSignIn_Expires(t *testing.T) {
-	s, _ := newStore(t)
-	in := store.SignIn{State: "st", Nonce: "n", Verifier: "v", ExpiresAt: t0.Add(5 * time.Minute)}
-	if err := s.StartSignIn(t.Context(), in, t0); err != nil {
+	late := store.SignIn{State: "late", Nonce: "n", Verifier: "v", ExpiresAt: t0.Add(5 * time.Minute)}
+	if err := s.StartSignIn(t.Context(), late, t0); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.FinishSignIn(t.Context(), "st", t0.Add(5*time.Minute)); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.FinishSignIn(t.Context(), "late", t0.Add(5*time.Minute)); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("FinishSignIn after expiry: %v, want ErrNotFound", err)
 	}
 }

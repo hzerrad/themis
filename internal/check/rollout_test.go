@@ -291,10 +291,8 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestConfigChangedBeforeFailure_WithoutTheListIsUnknown(t *testing.T) {
+	// Without the list of referenced config, nothing can be said.
 	if got := check.ConfigChangedBeforeFailure(evidence.Bundle{}); got.Value != check.Unknown {
-		t.Errorf("value = %s, want unknown", got.Value)
+		t.Errorf("without the list: value = %s, want unknown", got.Value)
 	}
 }

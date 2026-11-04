@@ -21,25 +21,6 @@ func transitions(t *testing.T, from, to incident.State) func() float64 {
 	return metrictest.Delta(t, "themis_incident_transitions_total", map[string]string{"from": string(from), "to": string(to)})
 }
 
-func TestTransition_RolledBack_NotCounted(t *testing.T) {
-	s, _ := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-rolled-back"))
-	counted := transitions(t, incident.Received, incident.Investigating)
-	errAbort := errors.New("abort")
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if err := s.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.Investigating, Reason: "test", Actor: "test"}); err != nil {
-			return err
-		}
-		return errAbort
-	})
-	if !errors.Is(err, errAbort) {
-		t.Fatalf("InTx: %v", err)
-	}
-	if got := counted(); got != 0 {
-		t.Errorf("counted %v rolled-back transitions, want 0", got)
-	}
-}
-
 func TestTransition_CountsEscalationsAndStages(t *testing.T) {
 	s, _ := newStore(t)
 	id, _ := createOrJoin(t, s, newIncident("fp-escalated"))
@@ -84,8 +65,8 @@ func TestTransition_StageDurationSurvivesJoins(t *testing.T) {
 	}
 }
 
-// Each committed transition is one info line with its incident; a rolled-back
-// one logs nothing.
+// Each committed transition is one info line with its incident and one count; a
+// rolled-back one logs and counts nothing.
 func TestTransition_Logged(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()
@@ -94,6 +75,7 @@ func TestTransition_Logged(t *testing.T) {
 
 	s, _ := newStore(t)
 	id, _ := createOrJoin(t, s, newIncident("fp-logged"))
+	counted := transitions(t, incident.Received, incident.Investigating)
 	_ = s.InTx(t.Context(), func(tx pgx.Tx) error {
 		if err := s.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.Investigating, Reason: "rolled back", Actor: "test"}); err != nil {
 			return err
@@ -101,6 +83,9 @@ func TestTransition_Logged(t *testing.T) {
 		return errors.New("abort")
 	})
 	advance(t, s, id, incident.Received, incident.Investigating)
+	if got := counted(); got != 1 {
+		t.Errorf("counted %v transitions, want the committed one", got)
+	}
 
 	var lines []map[string]any
 	for _, l := range strings.Split(strings.TrimSpace(buf.String()), "\n") {

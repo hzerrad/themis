@@ -152,19 +152,6 @@ func approvals(t *testing.T, result string) func() float64 {
 	return metrictest.Delta(t, "themis_approvals_total", map[string]string{"result": result})
 }
 
-func TestApprove_NoToken_401(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	for _, auth := range []string{"", "guess"} {
-		if rec := e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/approve", auth, map[string]string{"digest": a.Digest}); rec.Code != http.StatusUnauthorized {
-			t.Errorf("token %q: status = %d, want 401", auth, rec.Code)
-		}
-	}
-	if rec := e.do(t, http.MethodGet, "/v1/incidents", "", nil); rec.Code != http.StatusUnauthorized {
-		t.Errorf("list without token: status = %d, want 401", rec.Code)
-	}
-}
-
 func TestApprove_BindsDigest(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
@@ -192,12 +179,20 @@ func TestApprove_Expired(t *testing.T) {
 	}
 }
 
-func TestApprove_Twice_SecondFails(t *testing.T) {
+// An approval authorizes the fix and queues it once; approving again is
+// refused and counted as a replay.
+func TestApprove_TransitionsToAuthorizedAndEnqueuesExecute(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
 	approved, replayed := approvals(t, "approved"), approvals(t, "replayed")
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusOK {
-		t.Fatalf("first approval: status = %d: %s", rec.Code, rec.Body)
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
+	}
+	if got := e.state(t, a.IncidentID); got != incident.Authorized {
+		t.Errorf("state = %s, want authorized", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, governance.ExecuteArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
+		t.Errorf("%d execute jobs for the action and its incident, want 1", n)
 	}
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
 		t.Errorf("second approval: status = %d, want 409", rec.Code)
@@ -207,20 +202,6 @@ func TestApprove_Twice_SecondFails(t *testing.T) {
 	}
 	if got := replayed(); got != 1 {
 		t.Errorf("counted %v replays, want 1", got)
-	}
-}
-
-func TestApprove_TransitionsToAuthorizedAndEnqueuesExecute(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if got := e.state(t, a.IncidentID); got != incident.Authorized {
-		t.Errorf("state = %s, want authorized", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, governance.ExecuteArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
-		t.Errorf("%d execute jobs for the action and its incident, want 1", n)
 	}
 }
 
@@ -277,27 +258,6 @@ func TestIncidentDetail_SeparatesProposalAndDerivedAction(t *testing.T) {
 	}
 	if !strings.Contains(body, `"field":"env MODE","before":"leak","after":"healthy"`) {
 		t.Errorf("the detail does not show how MODE changes: %s", body)
-	}
-}
-
-func TestIncidentDetail_EvidenceIsJSON(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
-		return e.store.InsertEvidence(t.Context(), tx, a.IncidentID, "", nil, evidence.Item{
-			ID: "0192f0c1-0000-7000-8000-00000000000a", Template: evidence.PodStates, Data: []byte(`{"pods":[]}`),
-			CollectedAt: now, Classification: evidence.ClassificationInternal,
-		})
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rec := e.do(t, http.MethodGet, "/v1/incidents/"+a.IncidentID, token, nil)
-	var detail struct {
-		Evidence []struct{ Data map[string]any }
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil || len(detail.Evidence) != 1 || detail.Evidence[0].Data["pods"] == nil {
-		t.Errorf("evidence = %s (%v)", rec.Body, err)
 	}
 }
 

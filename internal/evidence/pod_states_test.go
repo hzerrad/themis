@@ -116,6 +116,11 @@ func contains(obj any, s string) bool {
 
 // One collection of scenario 1, where revision 2's pod is OOMKilled.
 func TestPodStates_Scenario1(t *testing.T) {
+	// The client decodes times in the local zone: evidence is written in UTC.
+	local := time.Local
+	time.Local = time.FixedZone("UTC+1", 60*60)
+	t.Cleanup(func() { time.Local = local })
+
 	item := collectPodStates(t, loadScenario1(t))
 
 	t.Run("describes every pod of the target at its revision", func(t *testing.T) {
@@ -147,6 +152,9 @@ func TestPodStates_Scenario1(t *testing.T) {
 		if healthy := objectNamed(t, item.Data, "checkout-5c6a1e2f3-a1b2c"); contains(healthy, "OOMKilled") {
 			t.Errorf("a healthy pod is reported OOMKilled: %v", healthy)
 		}
+		if !contains(crashing, `"2026-10-27T09:14:02Z"`) {
+			t.Errorf("the OOM kill's finish time is not in UTC: %v", crashing)
+		}
 	})
 
 	// Pod specs carry environment variables, often literal secrets.
@@ -158,20 +166,6 @@ func TestPodStates_Scenario1(t *testing.T) {
 			}
 		}
 	})
-}
-
-// The client decodes times in the local time zone. Evidence must not depend on
-// where Themis runs.
-func TestPodStates_TimesAreUTC(t *testing.T) {
-	local := time.Local
-	time.Local = time.FixedZone("UTC+1", 60*60)
-	t.Cleanup(func() { time.Local = local })
-
-	item := collectPodStates(t, loadScenario1(t))
-	crashing := objectNamed(t, item.Data, "checkout-7d9f8b6c4-x2kqp")
-	if !contains(crashing, `"2026-10-27T09:14:02Z"`) {
-		t.Errorf("the OOM kill's finish time is not in UTC: %v", crashing)
-	}
 }
 
 func TestPodStates_BoundsThePodCount(t *testing.T) {

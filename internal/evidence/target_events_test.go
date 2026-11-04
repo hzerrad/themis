@@ -24,7 +24,13 @@ func collectTargetEvents(t *testing.T, target incident.TargetRef) evidence.Item 
 }
 
 func TestTargetEvents_IncludesTheTargetAndItsPods(t *testing.T) {
-	data := string(collectTargetEvents(t, loadScenario1(t)).Data)
+	// The client decodes times in the local zone: evidence is written in UTC.
+	local := time.Local
+	time.Local = time.FixedZone("UTC+1", 60*60)
+	t.Cleanup(func() { time.Local = local })
+
+	item := collectTargetEvents(t, loadScenario1(t))
+	data := string(item.Data)
 	for _, want := range []string{"ScalingReplicaSet", "BackOff"} {
 		if !strings.Contains(data, want) {
 			t.Errorf("Data lacks the %s event: %s", want, data)
@@ -33,14 +39,7 @@ func TestTargetEvents_IncludesTheTargetAndItsPods(t *testing.T) {
 	if strings.Contains(data, "cart") {
 		t.Errorf("Data has an event of another workload: %s", data)
 	}
-}
-
-func TestTargetEvents_RecordsTimesInUTC(t *testing.T) {
-	local := time.Local
-	time.Local = time.FixedZone("UTC+1", 60*60)
-	t.Cleanup(func() { time.Local = local })
-
-	backOff := objectNamed(t, collectTargetEvents(t, loadScenario1(t)).Data, "BackOff")
+	backOff := objectNamed(t, item.Data, "BackOff")
 	for _, want := range []string{`"2026-10-27T09:01:30Z"`, `"2026-10-27T09:14:05Z"`} {
 		if !contains(backOff, want) {
 			t.Errorf("the BackOff event lacks %s: %v", want, backOff)

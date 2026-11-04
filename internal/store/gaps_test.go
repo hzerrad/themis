@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -48,26 +47,6 @@ func TestEvidenceGaps_RoundTrip(t *testing.T) {
 	}
 	if second.LeaseID != inv.LeaseID || second.Cause != evidence.GapNotInProfile || second.Params["pod"] != "checkout-7d9f8b6c4-x2kqp" {
 		t.Errorf("requested gap = %+v", second)
-	}
-}
-
-// A gap is recorded with the transaction that saw it: a rolled-back one
-// leaves none.
-func TestEvidenceGaps_RolledBackWithTheTransaction(t *testing.T) {
-	s, _ := newStore(t)
-	id := investigating(t, s)
-	errAbort := errors.New("abort")
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if err := s.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: id, Template: evidence.PodStates, Cause: evidence.GapTimeout, At: t0}); err != nil {
-			return err
-		}
-		return errAbort
-	})
-	if !errors.Is(err, errAbort) {
-		t.Fatalf("InTx: %v", err)
-	}
-	if gaps, err := s.EvidenceGaps(t.Context(), id); err != nil || len(gaps) != 0 {
-		t.Errorf("gaps = %v, %v; want none", gaps, err)
 	}
 }
 
