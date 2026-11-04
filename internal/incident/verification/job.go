@@ -11,6 +11,8 @@ import (
 	"github.com/riverqueue/river"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
@@ -59,7 +61,8 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	return river.JobSnooze(poll)
 }
 
-// Verify observes the target once and reports whether the outcome is final.
+// Verify reads the target once through the fix and reports whether the
+// outcome is final.
 func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	a, err := w.Store.Action(ctx, w.Store.DB(), args.ActionID)
 	if err != nil {
@@ -69,45 +72,51 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if _, ok := a.Params["restores"].(string); ok {
+	if _, ok := a.Restores(); ok {
 		return w.verifyRestore(ctx, a, in, args)
 	}
 	if in.State != incident.Verifying {
 		return true, nil
 	}
-	applied, _ := a.Params["templateHash"].(string)
+	fix, err := fixOf(a)
+	if err != nil {
+		return false, err
+	}
 	profile, _ := w.Config.Current().Profile(in.Profile)
 	v := profile.EffectiveVerification()
 	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
 
+	var from json.RawMessage
+	switch rec, err := w.Store.Verification(ctx, w.Store.DB(), a.ID); {
+	case err == nil:
+		from = rec.Start
+	case !errors.Is(err, store.ErrNotFound):
+		return false, err
+	}
 	now := w.now()
-	obs, restarts, err := Observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
+	reading, err := fix.Check(ctx, w.Reader, in.Target, a.Mark, from, args.WindowStart)
 	if err != nil {
 		return false, err
 	}
 
 	final := false
 	err = w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		rec, err := w.Store.StartVerification(ctx, tx, store.Verification{
-			ActionID: a.ID, WindowStart: args.WindowStart, ReadyBefore: obs.ReadyReplicas, RestartsBase: restarts,
-		})
+		rec, err := w.Store.StartVerification(ctx, tx, store.Verification{ActionID: a.ID, WindowStart: args.WindowStart, Start: reading.Start})
 		if err != nil {
 			return err
 		}
-		obs.ReadyBefore = rec.ReadyBefore
-		obs.RestartDelta = max(restarts-rec.RestartsBase, 0)
-		if obs.Healthy() {
+		var stableFor time.Duration
+		if reading.Health == capability.Healthy {
 			if rec.HealthySince == nil {
 				rec.HealthySince = &now
 			}
-			obs.StableFor = now.Sub(*rec.HealthySince)
+			stableFor = now.Sub(*rec.HealthySince)
 		} else {
 			rec.HealthySince = nil
 		}
 
-		outcome, done := Evaluate(obs, criteria, now.Sub(rec.WindowStart))
-		rec.Observation, err = json.Marshal(obs)
-		if err != nil {
+		outcome, done := Evaluate(reading, stableFor, criteria, now.Sub(rec.WindowStart))
+		if rec.Observation, err = json.Marshal(observed{Health: reading.Health, Facts: reading.Facts}); err != nil {
 			return err
 		}
 		if done {
@@ -118,10 +127,10 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 		}
 		final = true
 		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(outcome)).Inc)
-		reason := Explain(outcome, obs)
+		reason := Explain(outcome, reading)
 		if outcome == Unchanged || outcome == Worsened {
 			// Put back what the fix changed, so people find the workload as
-			// they left it (design §6.7).
+			// they left it.
 			if err := w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: reason + " Themis is putting the workload back as it was.", Actor: "verify",
 			}); err != nil {
@@ -136,48 +145,19 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	return final, err
 }
 
-// Observe reads the target and observes it. A target deleted or replaced is
-// a foreign change; generation is not, since annotation updates bump it.
-func Observe(ctx context.Context, c client.Reader, t incident.TargetRef, since time.Time, applied string) (Observation, int32, error) {
-	w, err := workload.Read(ctx, c, t)
-	if errors.Is(err, workload.ErrGone) || errors.Is(err, workload.ErrReplaced) {
-		return Observation{ForeignSpecChange: true}, 0, nil
-	}
-	if err != nil {
-		return Observation{}, 0, err
-	}
-	return ObserveWorkload(ctx, w, since, applied)
+// observed is what a verification shows of its latest reading.
+type observed struct {
+	Health capability.Health
+	Facts  string
 }
 
-// ObserveWorkload reports the workload's state, and the restarts of its
-// current revision's containers. A template other than the applied one is a
-// foreign change.
-func ObserveWorkload(ctx context.Context, w *workload.Workload, since time.Time, applied string) (Observation, int32, error) {
-	r := w.Replicas
-	o := Observation{
-		DesiredReplicas:   r.Desired,
-		ReadyReplicas:     r.Ready,
-		RolloutComplete:   r.Observed && r.Updated == r.Desired && r.Available == r.Desired && r.Total == r.Desired,
-		Updated:           r.Observed && r.Updated == r.Desired,
-		ForeignSpecChange: w.TemplateHash != applied,
+// fixOf is the fix that carried out a.
+func fixOf(a store.Action) (capability.Capability, error) {
+	fix, ok := builtin.Default()[a.Capability]
+	if !ok {
+		return nil, fmt.Errorf("the fix %s isn't one Themis knows", a.Capability)
 	}
-	pods, err := w.Pods(ctx)
-	if err != nil {
-		return Observation{}, 0, err
-	}
-	var restarts int32
-	for _, p := range pods {
-		if p.Revision != w.Revision {
-			continue
-		}
-		for _, cs := range p.Status.ContainerStatuses {
-			restarts += cs.RestartCount
-			if term := cs.LastTerminationState.Terminated; term != nil && term.Reason == "OOMKilled" && !term.FinishedAt.Time.Before(since) {
-				o.NewOOMKills++
-			}
-		}
-	}
-	return o, restarts, nil
+	return fix, nil
 }
 
 func (w *Worker) escalate(ctx context.Context, actionID, reason string) error {
@@ -217,22 +197,24 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	if in.State != incident.Restoring {
 		return true, nil
 	}
-	applied, _ := a.Params["templateHash"].(string)
-	obs, _, err := Observe(ctx, w.Reader, in.Target, args.WindowStart, applied)
+	fix, err := fixOf(a)
+	if err != nil {
+		return false, err
+	}
+	reading, err := fix.Check(ctx, w.Reader, in.Target, a.Mark, nil, args.WindowStart)
 	if err != nil {
 		return false, err
 	}
 	profile, _ := w.Config.Current().Profile(in.Profile)
 	window := profile.EffectiveVerification().Window.Duration
-	pods := fmt.Sprintf("%d of %d pods are ready", obs.ReadyReplicas, obs.DesiredReplicas)
 	var reason string
 	switch {
-	case obs.ForeignSpecChange:
+	case reading.Changed:
 		reason = "Themis put the workload back, but it was then changed outside Themis. A person needs to take over."
-	case obs.Updated:
-		reason = "Themis put the workload back as it was before it acted: " + pods + ". A person needs to take over."
+	case reading.Applied:
+		reason = "Themis put the workload back as it was before it acted: " + reading.Facts + " A person needs to take over."
 	case w.now().Sub(args.WindowStart) >= window:
-		reason = "Themis put the workload back, but Kubernetes didn't finish rolling it out in time: " + pods + ". A person needs to take over."
+		reason = "Themis put the workload back, but Kubernetes didn't finish rolling it out in time: " + reading.Facts + " A person needs to take over."
 	default:
 		return false, nil
 	}

@@ -16,7 +16,6 @@ import (
 
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
-	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/workload"
@@ -83,11 +82,13 @@ func (w *Worker) one(ctx context.Context, in store.Incident) error {
 	if by == "" {
 		by = "an unknown writer"
 	}
-	obs, _, err := verification.ObserveWorkload(ctx, target, target.WrittenAt, target.TemplateHash)
+	// Fixed means rolled out, every replica ready, and nothing out of memory
+	// since the change.
+	state, err := target.State(ctx, target.WrittenAt)
 	if err != nil {
 		return err
 	}
-	if obs.Healthy() {
+	if state.RolloutComplete && state.Ready >= state.Desired && state.OOMKills == 0 {
 		to := incident.SelfResolved
 		if !incident.CanTransition(in.State, to) {
 			to = incident.Canceled
