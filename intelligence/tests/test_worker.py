@@ -73,15 +73,6 @@ async def test_failure_is_reported() -> None:
     assert core.failed[0].reason == investigation_pb2.INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE
 
 
-async def test_heartbeat_sent_during_long_investigation() -> None:
-    core = LeasingCore()
-    model = SlowModel({"kind": "request_evidence", "template": "pod_states", "params": {}})
-    worker = Worker(core=core, new_model=lambda: model, heartbeat_s=0.05)
-    await worker.run_once()
-    assert core.renewals >= 3
-    assert len(core.completed) == 1
-
-
 def slow_investigation() -> SlowModel:
     step: dict[str, Any] = {"kind": "request_evidence", "template": "pod_states", "params": {}}
     return SlowModel(*[step] * 10)

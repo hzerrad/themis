@@ -222,6 +222,8 @@ func cookieNamed(t *testing.T, rec *httptest.ResponseRecorder, name string) *htt
 	return nil
 }
 
+// A sign-in starts a session, and can't be finished twice, so a leaked
+// callback URL is useless.
 func TestSignIn_StartsASession(t *testing.T) {
 	r := newRig(t)
 	state, c := r.login(t)
@@ -242,6 +244,9 @@ func TestSignIn_StartsASession(t *testing.T) {
 	}
 	if !se.ExpiresAt.Equal(now.Add(config.DefaultSessionTTL)) {
 		t.Errorf("session expires at %s, want %s", se.ExpiresAt, now.Add(config.DefaultSessionTTL))
+	}
+	if rec := r.callback(t, state, c); rec.Code != http.StatusBadRequest {
+		t.Errorf("second callback = %d, want 400", rec.Code)
 	}
 }
 
@@ -286,18 +291,6 @@ func TestSignIn_Refused(t *testing.T) {
 				t.Errorf("a session was started: %v", r.store.sessions)
 			}
 		})
-	}
-}
-
-// A sign-in can't be finished twice, so a leaked callback URL is useless.
-func TestSignIn_IsUsedOnce(t *testing.T) {
-	r := newRig(t)
-	state, c := r.login(t)
-	if rec := r.callback(t, state, c); rec.Code != http.StatusFound {
-		t.Fatalf("first callback = %d: %s", rec.Code, rec.Body)
-	}
-	if rec := r.callback(t, state, c); rec.Code != http.StatusBadRequest {
-		t.Errorf("second callback = %d, want 400", rec.Code)
 	}
 }
 

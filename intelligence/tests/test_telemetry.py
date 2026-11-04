@@ -2,15 +2,18 @@ import asyncio
 import json
 import logging
 import socket
+import threading
 import urllib.request
 from collections.abc import Iterator
 from typing import Any
+from wsgiref.simple_server import WSGIServer
 
 import grpc
 import httpx
 import pytest
 import respx
 from prometheus_client import REGISTRY
+from prometheus_client import start_http_server as serve
 from pydantic import BaseModel
 
 from tests.investigation.fakes import FakeRpcError, ScriptedModel
@@ -258,6 +261,8 @@ async def test_core_requests_counted_by_method_and_code() -> None:
     assert value("themis_core_requests_total", **labels) == before + 1
 
 
+# Route values are bounded by test_unknown_route_is_recorded_as_other: the
+# registry is shared by the whole run, so it holds every test's routes.
 def test_metric_labels_allowlisted() -> None:
     telemetry.configure_routes(["priced", "free"])
     telemetry.init_route("free", priced=False)
@@ -275,8 +280,6 @@ def test_metric_labels_allowlisted() -> None:
                 values.setdefault(name, set()).add(v)
         for name, vs in values.items():
             assert len(vs) <= telemetry.LABEL_CEILING, f"{family.name}{{{name}}}: {len(vs)} values"
-        routes = values.get("route", set())
-        assert routes <= {"priced", "free", telemetry.OTHER}, f"{family.name}: routes {routes}"
     assert seen >= 8
 
 
@@ -286,11 +289,23 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def test_metrics_served_on_their_port() -> None:
+def test_metrics_served_on_their_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    servers: list[tuple[WSGIServer, threading.Thread]] = []
+
+    def start(port: int) -> None:
+        servers.append(serve(port))
+
+    monkeypatch.setattr(telemetry, "start_http_server", start)
     port = free_port()
     telemetry.serve_metrics(port)
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as resp:
-        assert b"themis_budget_exhausted_total" in resp.read()
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=5) as resp:
+            assert b"themis_budget_exhausted_total" in resp.read()
+    finally:
+        for server, thread in servers:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
 
 def test_metrics_server_disabled_with_port_zero(monkeypatch: pytest.MonkeyPatch) -> None:

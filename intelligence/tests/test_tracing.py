@@ -129,11 +129,15 @@ def test_log_line_carries_trace_id() -> None:
             lines.append(json.loads(telemetry.JSONFormatter().format(record)))
 
     log = logging.getLogger("tracing-test")
-    log.addHandler(Keep())
+    keep = Keep()
+    log.addHandler(keep)
     log.setLevel(logging.INFO)
-    with tracing.tracer.start_as_current_span("investigation") as span:
-        log.info("traced")
-    log.info("untraced")
+    try:
+        with tracing.tracer.start_as_current_span("investigation") as span:
+            log.info("traced")
+        log.info("untraced")
+    finally:
+        log.removeHandler(keep)
     assert lines[0]["trace_id"] == f"{span.get_span_context().trace_id:032x}"
     assert "trace_id" not in lines[1]
 

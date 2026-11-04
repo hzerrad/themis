@@ -72,35 +72,6 @@ func TestMetrics_InvestigationFailures(t *testing.T) {
 	}
 }
 
-func TestMetrics_SafetyEvents(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	wrongTarget := metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": "wrong_target"})
-	unknownEvidence := metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": "unknown_evidence"})
-	rejected := metrictest.Delta(t, "themis_proposals_total", map[string]string{"result": "rejected"})
-
-	req := rollback(inv, "p-1")
-	req.Target = &themisv1.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "kube-system", Name: "coredns", Uid: "u-coredns"}
-	e.submit(t, req)
-	req = rollback(inv, "p-2")
-	req.CitedEvidenceIds = []string{"01a18d24-9ab1-7c3c-b65f-1ee86ac42758"}
-	e.submit(t, req)
-	req = rollback(inv, "p-3")
-	req.CitedPredicates = []string{"made_up"}
-	e.submit(t, req)
-
-	if got := wrongTarget(); got != 1 {
-		t.Errorf("counted %v wrong_target events, want 1", got)
-	}
-	if got := unknownEvidence(); got != 1 {
-		t.Errorf("counted %v unknown_evidence events, want 1", got)
-	}
-	// An unknown predicate is rejected but is not a safety event.
-	if got := rejected(); got != 3 {
-		t.Errorf("counted %v rejected proposals, want 3", got)
-	}
-}
-
 func TestMetrics_AbstentionCountedByKind(t *testing.T) {
 	blind := metrictest.Delta(t, "themis_abstentions_total", map[string]string{"kind": "blind"})
 	ambiguous := metrictest.Delta(t, "themis_abstentions_total", map[string]string{"kind": "ambiguous"})

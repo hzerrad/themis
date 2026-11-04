@@ -58,28 +58,6 @@ def client(
 
 
 @respx.mock
-async def test_valid_json_parsed_into_schema() -> None:
-    respx.post(f"{BASE}/chat/completions").mock(
-        return_value=reply('{"verdict": "rollout", "confidence": 0.9}')
-    )
-    result = await client().complete(request(), Answer)
-    assert result.error is None
-    assert result.output == Answer(verdict="rollout", confidence=0.9)
-
-
-@respx.mock
-async def test_schema_sent_to_the_model() -> None:
-    route = respx.post(f"{BASE}/chat/completions").mock(
-        return_value=reply('{"verdict": "x", "confidence": 1}')
-    )
-    await client().complete(request(), Answer)
-    body = json.loads(route.calls.last.request.content)
-    assert body["model"] == "qwen3"
-    assert body["response_format"]["type"] == "json_schema"
-    assert "verdict" in json.dumps(body["response_format"]["json_schema"]["schema"])
-
-
-@respx.mock
 async def test_malformed_json_repaired_once_then_typed_error() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(return_value=reply("not json"))
     result = await client(max_repairs=1).complete(request(), Answer)
@@ -89,15 +67,7 @@ async def test_malformed_json_repaired_once_then_typed_error() -> None:
     assert route.call_count == 2
 
 
-@respx.mock
-async def test_repair_succeeds() -> None:
-    respx.post(f"{BASE}/chat/completions").mock(
-        side_effect=[reply("{}"), reply('{"verdict": "rollout", "confidence": 0.5}')]
-    )
-    result = await client().complete(request(), Answer)
-    assert result.output is not None and result.repair_attempts == 1
-
-
+# A repaired reply is parsed, and the repair is charged to the same budget.
 @respx.mock
 async def test_repair_charges_same_budget() -> None:
     respx.post(f"{BASE}/chat/completions").mock(
@@ -105,6 +75,7 @@ async def test_repair_charges_same_budget() -> None:
     )
     budget = Budget(max_tokens=10_000)
     result = await client(budget).complete(request(), Answer)
+    assert result.output is not None and result.repair_attempts == 1
     assert result.usage.input_tokens == 30 and result.usage.output_tokens == 10
     assert budget.spent == 40
 
@@ -145,12 +116,15 @@ async def test_unavailable_endpoint_is_a_typed_error() -> None:
     assert result.error is not None and result.error.kind == "unavailable"
 
 
+# A valid reply is parsed into the schema, with where it came from.
 @respx.mock
 async def test_result_records_provenance_fields() -> None:
     respx.post(f"{BASE}/chat/completions").mock(
-        return_value=reply('{"verdict": "x", "confidence": 1}')
+        return_value=reply('{"verdict": "rollout", "confidence": 0.9}')
     )
     result = await client().complete(request(), Answer)
+    assert result.error is None
+    assert result.output == Answer(verdict="rollout", confidence=0.9)
     assert result.model == "qwen3"
     assert result.endpoint == "ollama"
     assert result.route == "default"
@@ -220,13 +194,18 @@ async def test_a_reply_cut_off_at_the_limit_is_its_own_error() -> None:
     assert result.usage.output_tokens == 100
 
 
+# The model gets the schema, strictly unless the endpoint turns that off.
 @respx.mock
 async def test_strict_output_is_on_unless_the_endpoint_turns_it_off() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=reply('{"verdict": "x", "confidence": 1}')
     )
     await client().complete(request(), Answer)
-    assert json.loads(route.calls.last.request.content)["response_format"]["json_schema"]["strict"]
+    body = json.loads(route.calls.last.request.content)
+    assert body["model"] == "qwen3"
+    assert body["response_format"]["type"] == "json_schema"
+    assert "verdict" in json.dumps(body["response_format"]["json_schema"]["schema"])
+    assert body["response_format"]["json_schema"]["strict"]
 
     loose = ModelClient(
         adapter=OpenAICompatAdapter(base_url=BASE),

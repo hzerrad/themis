@@ -12,6 +12,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/riverqueue/river"
 
+	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -32,14 +33,26 @@ func TestMigrate_Idempotent(t *testing.T) {
 	}
 }
 
+// Everything written in the caller's transaction is rolled back with it:
+// incidents, jobs, job batches, evidence gaps and rejected alerts.
 func TestEnqueueIsTransactional(t *testing.T) {
 	s, pool := newStore(t)
 
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if _, _, err := s.CreateOrJoinIncident(t.Context(), tx, newIncident("fp-1")); err != nil {
+		id, _, err := s.CreateOrJoinIncident(t.Context(), tx, newIncident("fp-1"))
+		if err != nil {
 			return err
 		}
 		if err := s.EnqueueTx(t.Context(), tx, testJobArgs{}); err != nil {
+			return err
+		}
+		if err := s.EnqueueManyTx(t.Context(), tx, []river.JobArgs{testJobArgs{}, testJobArgs{}}); err != nil {
+			return err
+		}
+		if err := s.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: id, Template: evidence.PodStates, Cause: evidence.GapTimeout, At: t0}); err != nil {
+			return err
+		}
+		if _, err := s.InsertRejectedAlert(t.Context(), tx, newRejection(store.RejectionInvalidAlert)); err != nil {
 			return err
 		}
 		return errRollback
@@ -48,11 +61,10 @@ func TestEnqueueIsTransactional(t *testing.T) {
 	if !errors.Is(err, errRollback) {
 		t.Fatalf("InTx err = %v, want the callback's error", err)
 	}
-	if n := count(t, pool, "SELECT count(*) FROM river_job"); n != 0 {
-		t.Errorf("jobs = %d, want 0", n)
-	}
-	if n := count(t, pool, "SELECT count(*) FROM incidents"); n != 0 {
-		t.Errorf("incidents = %d, want 0", n)
+	for _, table := range []string{"river_job", "incidents", "evidence_gaps", "rejected_alerts"} {
+		if n := count(t, pool, "SELECT count(*) FROM "+table); n != 0 {
+			t.Errorf("%s = %d rows, want 0", table, n)
+		}
 	}
 }
 
@@ -78,24 +90,6 @@ func TestEnqueueManyTx_CommitsAll(t *testing.T) {
 	// Each job keeps its own args' insert options.
 	if n := count(t, pool, "SELECT count(*) FROM river_job WHERE kind = 'bounded' AND max_attempts = 3"); n != 1 {
 		t.Errorf("bounded jobs with max_attempts 3 = %d, want 1", n)
-	}
-}
-
-func TestEnqueueManyTx_RolledBackWithCaller(t *testing.T) {
-	s, pool := newStore(t)
-
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if err := s.EnqueueManyTx(t.Context(), tx, []river.JobArgs{testJobArgs{}, testJobArgs{}}); err != nil {
-			return err
-		}
-		return errRollback
-	})
-
-	if !errors.Is(err, errRollback) {
-		t.Fatalf("InTx err = %v, want the callback's error", err)
-	}
-	if n := count(t, pool, "SELECT count(*) FROM river_job"); n != 0 {
-		t.Errorf("jobs = %d, want 0", n)
 	}
 }
 

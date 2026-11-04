@@ -30,7 +30,8 @@ func lines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	return out
 }
 
-// A context's fields reach its children, never its parent or its siblings.
+// A context's fields reach its children, never its parent or its siblings, and
+// a logger made With more fields keeps them.
 func TestLogger_AddsContextFields(t *testing.T) {
 	var buf bytes.Buffer
 	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo)
@@ -57,6 +58,12 @@ func TestLogger_AddsContextFields(t *testing.T) {
 	}
 	if _, ok := got[2][telemetry.FieldActionID]; ok {
 		t.Error("the nested context's field leaked to its parent")
+	}
+
+	buf.Reset()
+	log.With("key", "value").InfoContext(ctx, "derived")
+	if derived := lines(t, &buf)[0]; derived[telemetry.FieldIncidentID] != "inc-1" || derived["key"] != "value" {
+		t.Errorf("got %v, want incident_id and key", derived)
 	}
 }
 
@@ -117,17 +124,5 @@ func TestLogger_Component_OnEveryLine(t *testing.T) {
 		if l[telemetry.FieldComponent] != "executor" {
 			t.Errorf("line %d: component = %v, want executor", i, l[telemetry.FieldComponent])
 		}
-	}
-}
-
-func TestLogger_With_KeepsContextFields(t *testing.T) {
-	var buf bytes.Buffer
-	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo).With("key", "value")
-
-	log.InfoContext(telemetry.WithAttrs(context.Background(), slog.String(telemetry.FieldIncidentID, "inc-1")), "derived")
-
-	got := lines(t, &buf)[0]
-	if got[telemetry.FieldIncidentID] != "inc-1" || got["key"] != "value" {
-		t.Errorf("got %v, want incident_id and key", got)
 	}
 }

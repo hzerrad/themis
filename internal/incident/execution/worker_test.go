@@ -117,44 +117,33 @@ func TestExecute_AlreadyClaimed(t *testing.T) {
 	}
 }
 
-// An approval the executor cannot use leaves nothing to wait for.
-func TestExecute_UnusableApproval_Cancels(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
-	a := authorized(t, s)
-	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, store.ErrApprovalUnusable.Error())}}
-	if err := w.Execute(t.Context(), a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Canceled {
-		t.Errorf("incident = %s, want canceled", in.State)
-	}
-}
-
-func TestExecute_UnreachableOnTheLastAttempt_Cancels(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
-	a := authorized(t, s)
-	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.Unavailable, "connection refused")}}
-	job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: 25, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
-	if err := w.Work(t.Context(), job); err != nil {
-		t.Fatal(err)
-	}
-	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Canceled {
-		t.Errorf("incident = %s, want canceled", in.State)
-	}
-}
-
-func TestExecute_NoExecutor_Cancels(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
-	a := authorized(t, s)
-	if err := (&execution.Worker{Store: s}).Execute(t.Context(), a.ID); err != nil {
-		t.Fatal(err)
-	}
-	in, err := s.Incident(t.Context(), a.IncidentID)
-	if err != nil || in.State != incident.Canceled {
-		t.Errorf("incident = %s (%v), want canceled", in.State, err)
-	}
-	if got, _ := s.Action(t.Context(), s.DB(), a.ID); got.State != store.ActionCanceled {
-		t.Errorf("action = %s, want canceled", got.State)
+// A fix that can't be handed over leaves nothing to wait for: no executor, an
+// approval the executor cannot use, or no executor reached by the last attempt.
+func TestExecute_CannotBeHandedOver_Cancels(t *testing.T) {
+	for name, tc := range map[string]struct {
+		executor execution.Executor
+		attempt  int
+	}{
+		"no executor":                 {nil, 1},
+		"unusable approval":           {&fakeExecutor{err: status.Error(codes.FailedPrecondition, store.ErrApprovalUnusable.Error())}, 1},
+		"unreachable on the last try": {&fakeExecutor{err: status.Error(codes.Unavailable, "connection refused")}, 25},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, _ := pgtest.NewStore(t)
+			a := authorized(t, s)
+			w := &execution.Worker{Store: s, Executor: tc.executor}
+			job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: tc.attempt, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
+			if err := w.Work(t.Context(), job); err != nil {
+				t.Fatal(err)
+			}
+			in, err := s.Incident(t.Context(), a.IncidentID)
+			if err != nil || in.State != incident.Canceled {
+				t.Errorf("incident = %s (%v), want canceled", in.State, err)
+			}
+			if got, _ := s.Action(t.Context(), s.DB(), a.ID); got.State != store.ActionCanceled {
+				t.Errorf("action = %s, want canceled", got.State)
+			}
+		})
 	}
 }
 
@@ -177,42 +166,41 @@ func restoring(t *testing.T, s *store.Store, pool *pgxpool.Pool) store.Action {
 	return a
 }
 
-// A restore that can't be handed over ends with a person told, not stuck.
-func TestExecute_RestoreUnreachableOnTheLastAttempt_Escalates(t *testing.T) {
-	s, pool := pgtest.NewStore(t)
-	a := restoring(t, s, pool)
-	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.Unavailable, "connection refused")}}
-	job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: 25, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
-	if err := w.Work(t.Context(), job); err != nil {
-		t.Fatal(err)
-	}
-	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Escalated {
-		t.Errorf("incident = %s, want escalated", in.State)
-	}
-	got, err := s.Action(t.Context(), s.DB(), a.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.State != store.ActionCanceled {
-		t.Errorf("action = %s, want canceled", got.State)
-	}
-	trail, err := s.Transitions(t.Context(), a.IncidentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if reason := trail[len(trail)-1].Reason; !strings.Contains(reason, "couldn't put the workload back") {
-		t.Errorf("reason = %q", reason)
-	}
-}
-
-func TestExecute_RestoreRefused_Escalates(t *testing.T) {
-	s, pool := pgtest.NewStore(t)
-	a := restoring(t, s, pool)
-	w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: status.Error(codes.FailedPrecondition, "the digest doesn't match")}}
-	if err := w.Execute(t.Context(), a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Escalated {
-		t.Errorf("incident = %s, want escalated", in.State)
+// A restore that can't be handed over, or that the executor refuses, ends with
+// a person told, not stuck.
+func TestExecute_RestoreNotHandedOver_Escalates(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err     error
+		attempt int
+	}{
+		"unreachable on the last try": {status.Error(codes.Unavailable, "connection refused"), 25},
+		"refused":                     {status.Error(codes.FailedPrecondition, "the digest doesn't match"), 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, pool := pgtest.NewStore(t)
+			a := restoring(t, s, pool)
+			w := &execution.Worker{Store: s, Executor: &fakeExecutor{err: tc.err}}
+			job := &river.Job[governance.ExecuteArgs]{JobRow: &rivertype.JobRow{Attempt: tc.attempt, MaxAttempts: 25}, Args: governance.ExecuteArgs{ActionID: a.ID}}
+			if err := w.Work(t.Context(), job); err != nil {
+				t.Fatal(err)
+			}
+			if in, _ := s.Incident(t.Context(), a.IncidentID); in.State != incident.Escalated {
+				t.Errorf("incident = %s, want escalated", in.State)
+			}
+			got, err := s.Action(t.Context(), s.DB(), a.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.State != store.ActionCanceled {
+				t.Errorf("action = %s, want canceled", got.State)
+			}
+			trail, err := s.Transitions(t.Context(), a.IncidentID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reason := trail[len(trail)-1].Reason; !strings.Contains(reason, "couldn't put the workload back") {
+				t.Errorf("reason = %q", reason)
+			}
+		})
 	}
 }

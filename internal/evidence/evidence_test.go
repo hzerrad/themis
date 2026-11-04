@@ -78,16 +78,11 @@ func TestRegistry_CollectFillsInMetadata(t *testing.T) {
 	if string(item.Data) != `{}` || !item.Truncated {
 		t.Error("the template's answer was not kept")
 	}
-}
 
-func TestRegistry_CollectKeepsTemplateClassification(t *testing.T) {
-	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Classification: evidence.ClassificationSensitive}})
-	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
-	if err != nil {
-		t.Fatalf("Collect: %v", err)
-	}
-	if item.Classification != evidence.ClassificationSensitive {
-		t.Errorf("Classification = %q, want sensitive", item.Classification)
+	// A template that declares its evidence sensitive keeps that classification.
+	sensitive := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Classification: evidence.ClassificationSensitive}})
+	if item, err := sensitive.Collect(t.Context(), nil, "fake", fakeWorkload, nil, now); err != nil || item.Classification != evidence.ClassificationSensitive {
+		t.Errorf("Classification = %q (%v), want sensitive", item.Classification, err)
 	}
 }
 
