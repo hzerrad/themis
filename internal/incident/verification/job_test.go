@@ -70,7 +70,7 @@ func executed(t *testing.T) *env {
 		a := store.Action{
 			IncidentID: id, ProposalID: p.ID, Capability: "deployment.rollback-to-revision", CapabilityVersion: "1",
 			Target: digest.TargetIdentity{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: target.UID, Generation: d.Generation},
-			Params: map[string]any{"revision": int64(1), "templateHash": restoredHash(t, ns)}, BlastRadius: map[string]any{}, Constraints: map[string]any{}, State: store.ActionSucceeded, Digest: "sha256:d",
+			Params: map[string]any{"revision": int64(1), "templateHash": restoredHash(t, ns)}, Mark: restoredHash(t, ns), BlastRadius: map[string]any{}, Constraints: map[string]any{}, State: store.ActionSucceeded, Digest: "sha256:d",
 		}
 		a.ID, err = s.InsertAction(ctx, tx, a)
 		if err != nil {
@@ -146,13 +146,19 @@ func (e *env) rolledBack(t *testing.T) {
 	}
 }
 
+// verify runs the job once, as River would, and reports whether the outcome
+// is final: a job not yet final asks to look again later.
 func (e *env) verify(t *testing.T) bool {
 	t.Helper()
-	final, err := e.worker.Verify(t.Context(), e.args)
-	if err != nil {
-		t.Fatalf("Verify: %v", err)
+	job := &river.Job[verification.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 1, MaxAttempts: 10}, Args: e.args}
+	err := e.worker.Work(t.Context(), job)
+	if snooze, ok := errors.AsType[*rivertype.JobSnoozeError](err); ok && snooze.Duration > 0 {
+		return false
 	}
-	return final
+	if err != nil {
+		t.Fatalf("Work: %v", err)
+	}
+	return true
 }
 
 func (e *env) state(t *testing.T) incident.State {
@@ -164,8 +170,11 @@ func (e *env) state(t *testing.T) incident.State {
 	return in.State
 }
 
+// A rollback that stays healthy long enough resolves the incident, counted
+// once however many times it was looked at.
 func TestJob_StableRollback_Resolves(t *testing.T) {
 	e := executed(t)
+	resolved := outcomes(t, verification.Resolved)
 	e.rolledBack(t)
 	if e.verify(t) {
 		t.Fatal("final before the target was stable for long enough")
@@ -176,6 +185,9 @@ func TestJob_StableRollback_Resolves(t *testing.T) {
 	}
 	if got := e.state(t); got != incident.Resolved {
 		t.Errorf("state = %s, want resolved", got)
+	}
+	if got := resolved(); got != 1 {
+		t.Errorf("counted %v resolved outcomes, want 1", got)
 	}
 }
 
@@ -229,29 +241,6 @@ func TestJob_ResumesAfterRestart_UsesPersistedWindowStart(t *testing.T) {
 	}
 }
 
-func TestJob_HumanEditDuringWindow_Inconclusive(t *testing.T) {
-	e := executed(t)
-	e.rolledBack(t)
-	d := deploymentIn(t, e.ns)
-	d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
-	if err := k8s.Update(t.Context(), d); err != nil {
-		t.Fatal(err)
-	}
-	if !e.verify(t) {
-		t.Fatal("contamination was not final")
-	}
-	if got := e.outcome(t); got != string(verification.Inconclusive) {
-		t.Errorf("outcome = %q, want inconclusive", got)
-	}
-	trail, err := e.store.Transitions(t.Context(), e.inc)
-	if err != nil || !strings.Contains(trail[len(trail)-1].Reason, "changed outside Themis") {
-		t.Errorf("the escalation does not say why: %+v", trail[len(trail)-1])
-	}
-	if got := e.state(t); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
-	}
-}
-
 // failingReader stands in for an API server that refuses every read.
 type failingReader struct{}
 
@@ -263,8 +252,11 @@ func (failingReader) List(context.Context, client.ObjectList, ...client.ListOpti
 	return errors.New("forbidden")
 }
 
+// A target that can't be read on the last attempt escalates, counted as
+// inconclusive, rather than being left verifying.
 func TestJob_UnobservableOnTheLastAttempt_Escalates(t *testing.T) {
 	e := executed(t)
+	inconclusive := outcomes(t, verification.Inconclusive)
 	w := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Now: func() time.Time { return windowStart }}
 	job := &river.Job[verification.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 10, MaxAttempts: 10}, Args: e.args}
 	if err := w.Work(t.Context(), job); err != nil {
@@ -273,37 +265,14 @@ func TestJob_UnobservableOnTheLastAttempt_Escalates(t *testing.T) {
 	if got := e.state(t); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
 	}
+	if got := inconclusive(); got != 1 {
+		t.Errorf("counted %v inconclusive outcomes, want 1", got)
+	}
 }
 
 func outcomes(t *testing.T, outcome verification.Outcome) func() float64 {
 	t.Helper()
 	return metrictest.Delta(t, "themis_verification_outcomes_total", map[string]string{"outcome": string(outcome)})
-}
-
-// Only the final outcome is counted, not each observation.
-func TestMetrics_FinalOutcomeCountedOnce(t *testing.T) {
-	e := executed(t)
-	resolved := outcomes(t, verification.Resolved)
-	e.rolledBack(t)
-	e.verify(t)
-	e.clock = windowStart.Add(3 * time.Minute)
-	e.verify(t)
-	if got := resolved(); got != 1 {
-		t.Errorf("counted %v resolved outcomes, want 1", got)
-	}
-}
-
-func TestMetrics_UnobservableCountsAsInconclusive(t *testing.T) {
-	e := executed(t)
-	inconclusive := outcomes(t, verification.Inconclusive)
-	w := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Now: func() time.Time { return windowStart }}
-	job := &river.Job[verification.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 10, MaxAttempts: 10}, Args: e.args}
-	if err := w.Work(t.Context(), job); err != nil {
-		t.Fatal(err)
-	}
-	if got := inconclusive(); got != 1 {
-		t.Errorf("counted %v inconclusive outcomes, want 1", got)
-	}
 }
 
 // restoring has the fix put back: the incident restoring, and a restore of
@@ -321,6 +290,7 @@ func (e *env) restoring(t *testing.T) {
 		}
 		r := fix
 		r.Params = map[string]any{"revision": int64(1), "templateHash": restoredHash(t, e.ns), "restores": fix.ID}
+		r.Mark = restoredHash(t, e.ns)
 		r.State = store.ActionSucceeded
 		r.ID, err = e.store.InsertAction(ctx, tx, r)
 		e.args = verification.VerifyArgs{ActionID: r.ID, WindowStart: e.clock}
@@ -341,19 +311,34 @@ func (e *env) lastReason(t *testing.T) string {
 }
 
 // Once the workload runs the template from before Themis acted, healthy or
-// not, the incident goes to a person.
+// not, the incident goes to a person, told whether someone changed it since.
 func TestRestore_CheckedThenEscalated(t *testing.T) {
-	e := executed(t)
-	e.rolledBack(t)
-	e.restoring(t)
-	if !e.verify(t) {
-		t.Fatal("not final once the template was rolled out")
-	}
-	if got := e.state(t); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
-	}
-	if got := e.lastReason(t); got != "Themis put the workload back as it was before it acted: 3 of 3 pods are ready. A person needs to take over." {
-		t.Errorf("reason = %q", got)
+	for name, tc := range map[string]struct {
+		edit bool
+		want string
+	}{
+		"rolled out":                {false, "Themis put the workload back as it was before it acted: 3 of 3 pods are ready. A person needs to take over."},
+		"changed after it was back": {true, "Themis put the workload back, but it was then changed outside Themis. A person needs to take over."},
+	} {
+		e := executed(t)
+		e.rolledBack(t)
+		e.restoring(t)
+		if tc.edit {
+			d := deploymentIn(t, e.ns)
+			d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
+			if err := k8s.Update(t.Context(), d); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !e.verify(t) {
+			t.Fatalf("%s: not final", name)
+		}
+		if got := e.state(t); got != incident.Escalated {
+			t.Errorf("%s: state = %s, want escalated", name, got)
+		}
+		if got := e.lastReason(t); got != tc.want {
+			t.Errorf("%s: reason = %q", name, got)
+		}
 	}
 }
 

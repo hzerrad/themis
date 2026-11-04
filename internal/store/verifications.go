@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -11,23 +12,23 @@ import (
 
 // Verification is the persisted progress of an action's verification.
 type Verification struct {
-	ActionID     string
-	WindowStart  time.Time
-	ReadyBefore  int32
-	RestartsBase int32
+	ActionID    string
+	WindowStart time.Time
+	// Start is the fix's record of how the target was when checking began.
+	Start        json.RawMessage
 	HealthySince *time.Time
 	Outcome      string
 	Observation  []byte
 }
 
-// StartVerification records the baseline once and returns the stored
-// verification, so a rerun keeps the first baseline.
+// StartVerification records where checking began once and returns the stored
+// verification, so a rerun keeps the first start.
 func (s *Store) StartVerification(ctx context.Context, tx pgx.Tx, v Verification) (Verification, error) {
 	_, err := tx.Exec(ctx, `
-	INSERT INTO verifications (action_id, window_start, ready_before, restarts_base)
-	VALUES ($1, $2, $3, $4)
+	INSERT INTO verifications (action_id, window_start, start_state)
+	VALUES ($1, $2, $3)
 	ON CONFLICT (action_id) DO NOTHING
-`, v.ActionID, v.WindowStart, v.ReadyBefore, v.RestartsBase)
+`, v.ActionID, v.WindowStart, jsonOr(v.Start, "{}"))
 	if err != nil {
 		return Verification{}, fmt.Errorf("start verification of %s: %w", v.ActionID, err)
 	}
@@ -37,9 +38,9 @@ func (s *Store) StartVerification(ctx context.Context, tx pgx.Tx, v Verification
 func (s *Store) Verification(ctx context.Context, q Querier, actionID string) (Verification, error) {
 	var v Verification
 	err := q.QueryRow(ctx, `
-	SELECT action_id::text, window_start, ready_before, restarts_base, healthy_since, outcome, observation
+	SELECT action_id::text, window_start, start_state, healthy_since, outcome, observation
 	FROM verifications WHERE action_id = $1
-`, actionID).Scan(&v.ActionID, &v.WindowStart, &v.ReadyBefore, &v.RestartsBase, &v.HealthySince, &v.Outcome, &v.Observation)
+`, actionID).Scan(&v.ActionID, &v.WindowStart, &v.Start, &v.HealthySince, &v.Outcome, &v.Observation)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Verification{}, fmt.Errorf("verification of %s: %w", actionID, ErrNotFound)
 	}

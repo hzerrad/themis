@@ -531,9 +531,11 @@ function proposalPanel(p, predicates) {
         h("summary", { class: "muted" }, "As it reports, unchecked"), h("pre", {}, p.Notes)))] : null));
 }
 
-// observed says what the fix check last saw, in pods.
+// observed says what the fix check last saw, in the fix's own words. Checks
+// from before fixes described themselves counted pods.
 function observed(o) {
   if (!o) return null;
+  if (o.Facts) return o.Facts;
   return `${o.ReadyReplicas} of ${o.DesiredReplicas} pods ready · ${o.RestartDelta} restarts · ${o.NewOOMKills} out-of-memory kills`;
 }
 

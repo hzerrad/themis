@@ -323,3 +323,45 @@ func managedBy(d *appsv1.Deployment) string {
 	}
 	return ""
 }
+
+// State is how the workload's current revision is doing: what Kubernetes
+// reports about its rollout, and the trouble its containers had. It reports;
+// what counts as healthy is the reader's call.
+type State struct {
+	Desired, Ready int32
+
+	// Updated is set once every pod runs the current template, healthy or
+	// not; RolloutComplete once they are all available too.
+	Updated, RolloutComplete bool
+
+	// Restarts counts container restarts in the current revision's pods,
+	// and OOMKills those since a given time that ran out of memory.
+	Restarts int32
+	OOMKills int
+}
+
+// State reads how the current revision is doing, counting OOM kills since.
+func (w *Workload) State(ctx context.Context, since time.Time) (State, error) {
+	r := w.Replicas
+	s := State{
+		Desired: r.Desired, Ready: r.Ready,
+		Updated:         r.Observed && r.Updated == r.Desired,
+		RolloutComplete: r.Observed && r.Updated == r.Desired && r.Available == r.Desired && r.Total == r.Desired,
+	}
+	pods, err := w.Pods(ctx)
+	if err != nil {
+		return State{}, err
+	}
+	for _, p := range pods {
+		if p.Revision != w.Revision {
+			continue
+		}
+		for _, cs := range p.Status.ContainerStatuses {
+			s.Restarts += cs.RestartCount
+			if term := cs.LastTerminationState.Terminated; term != nil && term.Reason == "OOMKilled" && !term.FinishedAt.Time.Before(since) {
+				s.OOMKills++
+			}
+		}
+	}
+	return s, nil
+}

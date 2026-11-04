@@ -80,8 +80,12 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	}
 
 	// Anything else is someone's later change, not Themis's to undo. From here
-	// the digest binds this template, so the executor refuses any later one.
-	if hash, ok := applied.Params["templateHash"].(string); !ok || hash != plan.Target.SpecHash {
+	// the digest binds this state, so the executor refuses any later one.
+	live, err := done.Mark(ctx, w.Reader, in.Target)
+	if err != nil {
+		return err
+	}
+	if live != applied.Mark {
 		return w.escalate(ctx, in.ID, "The workload changed after Themis's fix, so Themis left it as it is. A person needs to take over.")
 	}
 
@@ -144,7 +148,7 @@ func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo cap
 		BlastRadius: plan.BlastRadius,
 		Risk:        plan.Risk,
 		Decision:    string(Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
-		Digest: dg, State: store.ActionAuthorized,
+		Digest: dg, Mark: plan.Mark, State: store.ActionAuthorized,
 	}, nil
 }
 

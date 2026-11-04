@@ -1,11 +1,15 @@
 package store_test
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/incident"
@@ -208,4 +212,45 @@ var allStates = []incident.State{
 	incident.SelfResolved,
 	incident.Rejected,
 	incident.Canceled,
+}
+
+// Upgrading moves a rollback's template hash into its action's mark, and a
+// verification's counts into its start, so checks in flight carry on.
+func TestMigrate_MovesMarksAndStarts(t *testing.T) {
+	ctx := t.Context()
+	s, pool := newStore(t)
+	a := awaitingAction(t, s)
+	err := s.InTx(ctx, func(tx pgx.Tx) error {
+		_, err := s.StartVerification(ctx, tx, store.Verification{ActionID: a.ID, WindowStart: t0, Start: []byte(`{"ready": 2, "restarts": 5}`)})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrations, err := goose.NewProvider(goose.DialectPostgres, stdlib.OpenDBFromPool(pool), os.DirFS("migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrations.DownTo(ctx, 25); err != nil {
+		t.Fatalf("down to 25: %v", err)
+	}
+	if err := store.Migrate(ctx, pool); err != nil {
+		t.Fatalf("up again: %v", err)
+	}
+
+	got, err := s.Action(ctx, s.DB(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Mark != "sha256:t" {
+		t.Errorf("mark = %q, want the template hash the rollback bound", got.Mark)
+	}
+	v, err := s.Verification(ctx, s.DB(), a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var start map[string]int
+	if err := json.Unmarshal(v.Start, &start); err != nil || start["ready"] != 2 || start["restarts"] != 5 {
+		t.Errorf("start = %s, %v; want ready 2 and restarts 5", v.Start, err)
+	}
 }

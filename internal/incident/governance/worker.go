@@ -169,7 +169,7 @@ func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capabi
 		BlastRadius: plan.BlastRadius,
 		Risk:        plan.Risk,
 		Decision:    string(d.Outcome), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
-		Digest: dg, State: store.ActionDenied,
+		Digest: dg, Mark: plan.Mark, State: store.ActionDenied,
 	}
 	if d.Outcome != Deny {
 		expires := w.now().Add(pol.ApprovalTimeout.Duration)

@@ -58,9 +58,11 @@ type Action struct {
 	PolicyDigest      string
 	Constraints       map[string]any
 	Digest            string
-	State             ActionState
-	ExpiresAt         *time.Time
-	CreatedAt         time.Time
+	// Mark identifies the state the fix leaves the target in.
+	Mark      string
+	State     ActionState
+	ExpiresAt *time.Time
+	CreatedAt time.Time
 }
 
 // Restores returns the action a restore puts back, and whether a is one.
@@ -100,14 +102,14 @@ func (s *Store) InsertAction(ctx context.Context, tx pgx.Tx, a Action) (string, 
 	                     target_generation, target_spec_hash, target_manager,
 	                     params, pre_state, desired_state, blast_radius, risk,
 	                     decision, decision_reason, policy_id, policy_digest, constraints,
-	                     digest, state, expires_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+	                     digest, state, expires_at, mark)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
 	ON CONFLICT (target_uid) WHERE state IN ('awaiting_approval', 'authorized', 'executing') DO NOTHING
 `, id, a.IncidentID, a.ProposalID, a.Capability, a.CapabilityVersion,
 		t.Group, t.Kind, t.Namespace, t.Name, t.UID, t.Generation, t.SpecHash, t.Manager,
 		encoded[0], jsonOr(a.PreState, "{}"), jsonOr(a.Desired, "{}"), encoded[1], a.Risk,
 		a.Decision, a.DecisionReason, a.PolicyID, a.PolicyDigest, encoded[2],
-		a.Digest, a.State, a.ExpiresAt)
+		a.Digest, a.State, a.ExpiresAt, a.Mark)
 	if err != nil {
 		return "", fmt.Errorf("insert action: %w", err)
 	}
@@ -122,7 +124,7 @@ const actionColumns = `id::text, incident_id::text, proposal_id::text, capabilit
 	target_generation, target_spec_hash, target_manager,
 	params, pre_state, desired_state, blast_radius, risk,
 	decision, decision_reason, policy_id, policy_digest, constraints,
-	digest, state, expires_at, created_at`
+	digest, state, expires_at, created_at, mark`
 
 func scanAction(row pgx.Row) (Action, error) {
 	var (
@@ -135,7 +137,7 @@ func scanAction(row pgx.Row) (Action, error) {
 		&t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &t.Generation, &t.SpecHash, &t.Manager,
 		&params, &preState, &desired, &blastRadius, &a.Risk,
 		&a.Decision, &a.DecisionReason, &a.PolicyID, &a.PolicyDigest, &constraints,
-		&a.Digest, &a.State, &a.ExpiresAt, &a.CreatedAt)
+		&a.Digest, &a.State, &a.ExpiresAt, &a.CreatedAt, &a.Mark)
 	if err != nil {
 		return Action{}, err
 	}
