@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -93,6 +94,17 @@ func newEnv(t *testing.T) *env {
 	return newEnvWith(t, profile())
 }
 
+// rolloutChecks are the checks the rollout-regression pack's profile runs,
+// whatever other packs are there.
+func rolloutChecks(t *testing.T, cat catalog.Catalog) check.List {
+	t.Helper()
+	p, ok := cat.Profile("rollout-regression")
+	if !ok {
+		t.Fatal("no rollout-regression pack")
+	}
+	return cat.Checks.For(p.Checks)
+}
+
 func newEnvWith(t *testing.T, p config.Profile) *env {
 	t.Helper()
 	s, pool := pgtest.NewStore(t)
@@ -113,7 +125,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 
 	logs := &syncBuffer{}
 	gs := &grpcapi.Server{
-		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
+		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
 	tokenFile := filepath.Join(t.TempDir(), "token")
@@ -134,7 +146,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		proposals:      themisv1.NewProposalServiceClient(conn),
 		server:         gs,
 	}
-	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Evidence: cat.Evidence, Checks: cat.Checks, Now: clk.Now}
+	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Evidence: cat.Evidence, Checks: rolloutChecks(t, cat), Now: clk.Now}
 	if err := prepare.Prepare(t.Context(), e.newIncident(t)); err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -210,6 +222,10 @@ func TestLease_ReturnsJobWithInitialEvidenceAndPredicates(t *testing.T) {
 	}
 	if len(inv.GetCandidateCapabilities()) != 1 || inv.GetBudget().GetMaxSteps() == 0 {
 		t.Errorf("capabilities = %v, budget = %v", inv.GetCandidateCapabilities(), inv.GetBudget())
+	}
+	// The root causes of the profile's pack, described.
+	if causes := inv.GetRootCauses(); len(causes) != 12 || causes[0].GetName() != "memory_limit_regression" || causes[0].GetDescription() == "" {
+		t.Errorf("root causes = %v, want the rollout-regression pack's 12", causes)
 	}
 
 	again, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w-2"})

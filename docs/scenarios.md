@@ -1,12 +1,12 @@
 # Scenario packs
 
-A scenario pack is one kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the fix it may suggest, its policy, and the cases that prove it. Adding a scenario means adding one folder under [`scenarios/`](../scenarios), mostly YAML, and nothing anywhere else. [`scenarios/rollout-regression`](../scenarios/rollout-regression) is a complete example.
+A scenario pack is one kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the root causes it tells apart, the fix it may suggest, its policy, and the cases that prove it. Adding a scenario means adding one folder under [`scenarios/`](../scenarios), mostly YAML, and nothing anywhere else. [`scenarios/rollout-regression`](../scenarios/rollout-regression) is a complete example.
 
 ## Layout
 
 ```text
 scenarios/my-scenario/
-├── scenario.yaml        the pack's name, description and profile
+├── scenario.yaml        the pack's name, description, root causes and profile
 ├── checks.yaml          the checks it adds, if any
 ├── README.md            what it covers, its evidence, its fix, its look-alikes
 └── eval/
@@ -34,6 +34,16 @@ This creates the folder above, every file saying what to fill in, marked `TODO`.
 ```yaml
 name: rollout-regression
 description: A new version of a Deployment fails where the version before it worked; Themis suggests rolling back to it.
+rootCauses:
+  - name: memory_limit_regression
+    description: the new revision's memory limit is too low
+  - name: image_pull_failure
+    description: its image can't be pulled
+  # ...
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
 profile:
   priority: 100
   match:
@@ -54,7 +64,9 @@ profile:
         decision: require_approval
 ```
 
-`name` is the folder's, and the profile's. `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
+`name` is the folder's, and the profile's. `rootCauses` are what the pack can tell apart: the investigator names one for each hypothesis it makes, most likely first, and each case's `truth.root_causes` picks from them. A name is lowercase letters, digits and `_`; its description is what the investigator reads, so a few plain words. List them in the order the investigator should read them, and keep `insufficient_evidence` and `other`, so an honest answer is always on the list: the evaluation counts declining as right where the truth is `insufficient_evidence`. A pack may reuse another pack's names, such as `application_bug`. A profile of an operator's own, with a name no pack has, gets every pack's root causes.
+
+`profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
 
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
 
@@ -88,7 +100,7 @@ truth:
     oom_killed_new_revision: "true"
 ```
 
-`cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` come from the investigator's list in [`schemas.py`](../intelligence/src/themis_intelligence/investigation/schemas.py).
+`cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `rootCauses`.
 
 A pack needs both kinds of case:
 
@@ -109,9 +121,9 @@ make scenario-check                    # every pack, as CI does
 It checks that:
 
 - `scenario.yaml` and `README.md` are there, with nothing left marked `TODO`;
-- the pack loads with every other pack: `scenario.yaml` parses, its checks compile, and its profile names only evidence, checks and fixes Themis has, with a policy that compiles;
+- the pack loads with every other pack: `scenario.yaml` parses, lists its root causes, its checks compile, and its profile names only evidence, checks and fixes Themis has, with a policy that compiles;
 - it has at least one case where acting is right and one look-alike;
-- every case's checks give its `truth.predicates`, and its `bundle.json` is what Themis makes of it today;
+- every case's `truth.root_causes` are among the pack's, its checks give its `truth.predicates`, and its `bundle.json` is what Themis makes of it today;
 - replaying every case through the recorded replies passes the safety gate.
 
 A pack that passes:
@@ -137,7 +149,7 @@ my-scenario: not ready
 
 A broken pack also stops Themis from starting, with a message naming the pack.
 
-Today the investigator knows check names and root causes from fixed lists in [`schemas.py`](../intelligence/src/themis_intelligence/investigation/schemas.py): a pack adding a check adds its name there too, until Themis sends them.
+The investigator learns everything a pack adds from Themis with each investigation: the checks its profile runs, with their answers, and the pack's root causes. A pack adding a check or a root cause changes nothing outside its folder.
 
 ## For operators
 

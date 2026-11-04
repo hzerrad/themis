@@ -827,8 +827,11 @@ type Investigation struct {
 	CandidateCapabilities []string      `protobuf:"bytes,10,rep,name=candidate_capabilities,json=candidateCapabilities,proto3" json:"candidate_capabilities,omitempty"`
 	Budget                *Budget       `protobuf:"bytes,11,opt,name=budget,proto3" json:"budget,omitempty"`
 	Capabilities          []*Capability `protobuf:"bytes,12,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The root causes a hypothesis may name: those of the profile's scenario
+	// pack.
+	RootCauses    []*RootCause `protobuf:"bytes,13,rep,name=root_causes,json=rootCauses,proto3" json:"root_causes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Investigation) Reset() {
@@ -941,6 +944,13 @@ func (x *Investigation) GetBudget() *Budget {
 func (x *Investigation) GetCapabilities() []*Capability {
 	if x != nil {
 		return x.Capabilities
+	}
+	return nil
+}
+
+func (x *Investigation) GetRootCauses() []*RootCause {
+	if x != nil {
+		return x.RootCauses
 	}
 	return nil
 }
@@ -1193,7 +1203,7 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\btemplate\x18\x01 \x01(\tR\btemplate\x121\n" +
 	"\x05cause\x18\x02 \x01(\x0e2\x1b.themis.v1.EvidenceGapCauseR\x05cause\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\"\x1b\n" +
-	"\x19FailInvestigationResponse\"\x86\x05\n" +
+	"\x19FailInvestigationResponse\"\xbd\x05\n" +
 	"\rInvestigation\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12A\n" +
 	"\x0elease_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rleaseDeadline\x12\x1f\n" +
@@ -1210,7 +1220,9 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\x16candidate_capabilities\x18\n" +
 	" \x03(\tR\x15candidateCapabilities\x12)\n" +
 	"\x06budget\x18\v \x01(\v2\x11.themis.v1.BudgetR\x06budget\x129\n" +
-	"\fcapabilities\x18\f \x03(\v2\x15.themis.v1.CapabilityR\fcapabilities\"\x95\x02\n" +
+	"\fcapabilities\x18\f \x03(\v2\x15.themis.v1.CapabilityR\fcapabilities\x125\n" +
+	"\vroot_causes\x18\r \x03(\v2\x14.themis.v1.RootCauseR\n" +
+	"rootCauses\"\x95\x02\n" +
 	"\n" +
 	"Hypothesis\x12(\n" +
 	"\x10root_cause_class\x18\x01 \x01(\tR\x0erootCauseClass\x12\x18\n" +
@@ -1301,6 +1313,7 @@ var file_themis_v1_investigation_proto_goTypes = []any{
 	(*PredicateResult)(nil),               // 24: themis.v1.PredicateResult
 	(*Budget)(nil),                        // 25: themis.v1.Budget
 	(*Capability)(nil),                    // 26: themis.v1.Capability
+	(*RootCause)(nil),                     // 27: themis.v1.RootCause
 }
 var file_themis_v1_investigation_proto_depIdxs = []int32{
 	15, // 0: themis.v1.LeaseInvestigationResponse.investigation:type_name -> themis.v1.Investigation
@@ -1321,22 +1334,23 @@ var file_themis_v1_investigation_proto_depIdxs = []int32{
 	17, // 15: themis.v1.Investigation.allowed_templates:type_name -> themis.v1.EvidenceTemplate
 	25, // 16: themis.v1.Investigation.budget:type_name -> themis.v1.Budget
 	26, // 17: themis.v1.Investigation.capabilities:type_name -> themis.v1.Capability
-	0,  // 18: themis.v1.Hypothesis.status:type_name -> themis.v1.HypothesisStatus
-	6,  // 19: themis.v1.InvestigationService.LeaseInvestigation:input_type -> themis.v1.LeaseInvestigationRequest
-	8,  // 20: themis.v1.InvestigationService.RenewLease:input_type -> themis.v1.RenewLeaseRequest
-	10, // 21: themis.v1.InvestigationService.CompleteInvestigation:input_type -> themis.v1.CompleteInvestigationRequest
-	12, // 22: themis.v1.InvestigationService.FailInvestigation:input_type -> themis.v1.FailInvestigationRequest
-	4,  // 23: themis.v1.InvestigationService.GetModelSettings:input_type -> themis.v1.GetModelSettingsRequest
-	7,  // 24: themis.v1.InvestigationService.LeaseInvestigation:output_type -> themis.v1.LeaseInvestigationResponse
-	9,  // 25: themis.v1.InvestigationService.RenewLease:output_type -> themis.v1.RenewLeaseResponse
-	11, // 26: themis.v1.InvestigationService.CompleteInvestigation:output_type -> themis.v1.CompleteInvestigationResponse
-	14, // 27: themis.v1.InvestigationService.FailInvestigation:output_type -> themis.v1.FailInvestigationResponse
-	5,  // 28: themis.v1.InvestigationService.GetModelSettings:output_type -> themis.v1.GetModelSettingsResponse
-	24, // [24:29] is the sub-list for method output_type
-	19, // [19:24] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	27, // 18: themis.v1.Investigation.root_causes:type_name -> themis.v1.RootCause
+	0,  // 19: themis.v1.Hypothesis.status:type_name -> themis.v1.HypothesisStatus
+	6,  // 20: themis.v1.InvestigationService.LeaseInvestigation:input_type -> themis.v1.LeaseInvestigationRequest
+	8,  // 21: themis.v1.InvestigationService.RenewLease:input_type -> themis.v1.RenewLeaseRequest
+	10, // 22: themis.v1.InvestigationService.CompleteInvestigation:input_type -> themis.v1.CompleteInvestigationRequest
+	12, // 23: themis.v1.InvestigationService.FailInvestigation:input_type -> themis.v1.FailInvestigationRequest
+	4,  // 24: themis.v1.InvestigationService.GetModelSettings:input_type -> themis.v1.GetModelSettingsRequest
+	7,  // 25: themis.v1.InvestigationService.LeaseInvestigation:output_type -> themis.v1.LeaseInvestigationResponse
+	9,  // 26: themis.v1.InvestigationService.RenewLease:output_type -> themis.v1.RenewLeaseResponse
+	11, // 27: themis.v1.InvestigationService.CompleteInvestigation:output_type -> themis.v1.CompleteInvestigationResponse
+	14, // 28: themis.v1.InvestigationService.FailInvestigation:output_type -> themis.v1.FailInvestigationResponse
+	5,  // 29: themis.v1.InvestigationService.GetModelSettings:output_type -> themis.v1.GetModelSettingsResponse
+	25, // [25:30] is the sub-list for method output_type
+	20, // [20:25] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_themis_v1_investigation_proto_init() }

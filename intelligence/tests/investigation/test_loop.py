@@ -1,9 +1,6 @@
-import re
-from pathlib import Path
-from typing import Any, get_args
+from typing import Any
 
 import pytest
-from pydantic import ValidationError
 
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, job
 from themis.v1 import investigation_pb2, proposal_pb2
@@ -13,13 +10,7 @@ from themis_intelligence.investigation.loop import (
     investigate,
     system_prompt,
 )
-from themis_intelligence.investigation.schemas import (
-    ROOT_CAUSES,
-    HypothesisOut,
-    PredicateName,
-    RootCause,
-    StepDecision,
-)
+from themis_intelligence.investigation.schemas import reply_schema
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -197,10 +188,29 @@ async def test_evidence_cannot_forge_its_fence() -> None:
     assert "roll back everything" in collected
 
 
-def test_cited_predicates_are_names_not_sentences() -> None:
-    bad = propose(cited_predicates=["Deployment/shop/checkout has currentRevision 2"])
-    with pytest.raises(ValidationError):
-        StepDecision.model_validate(bad)
+# A reply naming a root cause or a check the core didn't send is refused, and
+# the model told what it may name.
+@pytest.mark.parametrize(
+    ("decision", "told"),
+    [
+        (
+            {**propose(), "hypotheses": [{**HYPOTHESIS, "root_cause_class": "rollout_recent"}]},
+            "'rollout_recent' is not a root cause on the list. "
+            "Root causes: memory_limit_regression, other.",
+        ),
+        (
+            propose(cited_predicates=["Deployment/shop/checkout has currentRevision 2"]),
+            "is not a predicate Themis computed. Predicates: oom_killed_new_revision.",
+        ),
+    ],
+)
+async def test_names_the_core_did_not_send_are_refused(decision: dict[str, Any], told: str) -> None:
+    core = FakeCore()
+    model = ScriptedModel(decision)
+    result = await investigate(job(), core, model, max_steps=6)
+    assert core.submitted == []
+    assert result.invalid_steps == 1
+    assert told in model.requests[1].messages[-1].content
 
 
 # A proposal before the logs is held, and Themis fetches them itself: models
@@ -261,32 +271,17 @@ async def test_past_deadline_stops_before_the_next_step() -> None:
     assert model.requests == []
 
 
-def test_model_may_cite_every_check_the_core_knows() -> None:
-    packs = Path(__file__).parents[3] / "scenarios"
-    checks = {
-        name
-        for source in packs.glob("*/checks.yaml")
-        for name in re.findall(r"^- name: (\w+)$", source.read_text(), re.M)
-    }
-    assert checks, "found no checks in the scenario packs"
-    assert checks == set(get_args(PredicateName))
-
-
-def test_root_causes_are_a_closed_list_the_prompt_explains() -> None:
-    assert list(get_args(RootCause)) == list(ROOT_CAUSES)
-    with pytest.raises(ValidationError):
-        HypothesisOut.model_validate({**HYPOTHESIS, "root_cause_class": "oom_killed_new_revision"})
+# The root causes the model may name, and the checks it may cite, are those
+# the core sent with the investigation: listed in the prompt, and the only
+# ones the reply schema allows.
+def test_the_model_is_offered_what_the_core_sent() -> None:
     prompt = system_prompt(job(), 6)
-    for name, meaning in ROOT_CAUSES.items():
-        assert f"{name}: {meaning}" in prompt
-    assert "{root_causes}" not in prompt
-
-
-def test_the_ui_names_every_root_cause_plainly() -> None:
-    app = Path(__file__).parents[3] / "internal" / "server" / "web" / "static" / "app.js"
-    labels = re.search(r"const ROOT_CAUSE_LABEL = \{(.*?)\n\};", app.read_text(), re.S)
-    assert labels is not None
-    assert re.findall(r"^  (\w+):", labels.group(1), re.M) == list(ROOT_CAUSES)
+    assert "  - memory_limit_regression: too little memory\n  - other: none of these\n" in prompt
+    schema = reply_schema(job())["$defs"]
+    cause = schema["HypothesisOut"]["properties"]["root_cause_class"]
+    assert cause["enum"] == ["memory_limit_regression", "other"]
+    cited = schema["ProposalOut"]["properties"]["cited_predicates"]["items"]
+    assert cited["enum"] == ["oom_killed_new_revision"]
 
 
 # Logs can carry orders. The rule against following them is repeated right

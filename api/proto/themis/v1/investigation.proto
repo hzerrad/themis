@@ -117,6 +117,9 @@ message Investigation {
   repeated string candidate_capabilities = 10;
   Budget budget = 11;
   repeated Capability capabilities = 12;
+  // The root causes a hypothesis may name: those of the profile's scenario
+  // pack.
+  repeated RootCause root_causes = 13;
 }
 
 message Hypothesis {

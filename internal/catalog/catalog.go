@@ -1,7 +1,7 @@
 // Package catalog is everything this install of Themis can read, check and
 // change: its evidence templates, checks and fixes, and the scenario packs
-// that bring checks and profiles. It is built once, and each part goes to the
-// code that uses it.
+// that bring checks, profiles and root causes. It is built once, and each
+// part goes to the code that uses it.
 package catalog
 
 import (
@@ -29,6 +29,39 @@ type Catalog struct {
 	// Profiles are the scenario packs' profiles, in the packs' name order.
 	// A profile of the install's own with the same name replaces one.
 	Profiles []config.Profile
+	// RootCauses are the root causes each pack can diagnose.
+	RootCauses RootCauses
+}
+
+// Profile is the profile of the scenario pack named.
+func (c Catalog) Profile(name string) (config.Profile, bool) {
+	i := slices.IndexFunc(c.Profiles, func(p config.Profile) bool { return p.Name == name })
+	if i < 0 {
+		return config.Profile{}, false
+	}
+	return c.Profiles[i], true
+}
+
+// RootCauses are each scenario pack's root causes, by the pack's name, which
+// is its profile's.
+type RootCauses map[string][]RootCause
+
+// For is the root causes an investigation under the profile named may name:
+// its pack's, or, for a profile of the install's own with a name no pack has,
+// every pack's, each once, in the packs' name order.
+func (r RootCauses) For(profile string) []RootCause {
+	if causes, ok := r[profile]; ok {
+		return causes
+	}
+	var out []RootCause
+	for _, pack := range slices.Sorted(maps.Keys(r)) {
+		for _, c := range r[pack] {
+			if !slices.ContainsFunc(out, func(o RootCause) bool { return o.Name == c.Name }) {
+				out = append(out, c)
+			}
+		}
+	}
+	return out
 }
 
 // Themis is what Themis ships with, every scenario pack on. logs reads
@@ -59,7 +92,7 @@ func Build(logs evidence.LogReader, packs fs.FS, disabled []string) (Catalog, er
 	if err != nil {
 		return Catalog{}, err
 	}
-	c := Catalog{Fixes: Fixes(), Evidence: templates}
+	c := Catalog{Fixes: Fixes(), Evidence: templates, RootCauses: RootCauses{}}
 	if err := c.add(enabled); err != nil {
 		return Catalog{}, err
 	}
@@ -102,6 +135,7 @@ func (c *Catalog) add(packs []pack) error {
 		}
 		priorityOf[p.profile.Priority] = p.name
 		c.Profiles = append(c.Profiles, p.profile)
+		c.RootCauses[p.name] = p.rootCauses
 	}
 	return errors.Join(errs...)
 }

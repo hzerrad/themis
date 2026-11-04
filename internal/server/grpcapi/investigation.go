@@ -81,6 +81,9 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 	for _, r := range results {
 		out.Predicates = append(out.Predicates, s.predicateToProto(r))
 	}
+	for _, c := range s.RootCauses.For(inv.Profile) {
+		out.RootCauses = append(out.RootCauses, &themisv1.RootCause{Name: c.Name, Description: c.Description})
+	}
 	for _, name := range profile.Evidence.Allowed {
 		t := &themisv1.EvidenceTemplate{Name: name}
 		if d, ok := s.Evidence[name]; ok {

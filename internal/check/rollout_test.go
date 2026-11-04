@@ -93,13 +93,18 @@ func replace(t *testing.T, b evidence.Bundle, template string, view any) evidenc
 	return out
 }
 
-// rollout is the checks Themis ships with, as the catalog compiles them.
+// rollout is the checks the rollout-regression pack's profile runs, as the
+// catalog compiles them.
 var rollout = func() check.List {
 	c, err := catalog.Themis(nil)
 	if err != nil {
 		panic(err)
 	}
-	return c.Checks
+	p, ok := c.Profile("rollout-regression")
+	if !ok {
+		panic("no rollout-regression pack")
+	}
+	return c.Checks.For(p.Checks)
 }()
 
 // run evaluates the check named name on b, as of now.

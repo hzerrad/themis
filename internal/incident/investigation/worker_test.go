@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -60,11 +61,22 @@ func newEnv(t *testing.T) *env {
 			Store:    s,
 			Reader:   k8s,
 			Evidence: evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents()),
-			Checks:   cat.Checks,
+			Checks:   rolloutChecks(t, cat),
 			Now:      func() time.Time { return time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC) },
 		},
 		store: s, pool: pool, target: target,
 	}
+}
+
+// rolloutChecks are the checks the rollout-regression pack's profile runs,
+// whatever other packs are there.
+func rolloutChecks(t *testing.T, cat catalog.Catalog) check.List {
+	t.Helper()
+	p, ok := cat.Profile("rollout-regression")
+	if !ok {
+		t.Fatal("no rollout-regression pack")
+	}
+	return cat.Checks.For(p.Checks)
 }
 
 func targetOf(obj *unstructured.Unstructured) incident.TargetRef {

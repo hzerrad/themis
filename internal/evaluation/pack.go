@@ -62,17 +62,20 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 	if err != nil {
 		return r, errors.Join(append(errs, err)...)
 	}
-	i := slices.IndexFunc(cat.Profiles, func(p config.Profile) bool { return p.Name == name })
-	if i < 0 {
+	profile, ok := cat.Profile(name)
+	if !ok {
 		return r, errors.Join(append(errs, fmt.Errorf("no scenario pack is named %s", name))...)
 	}
-	profile := cat.Profiles[i]
+	var causes []string
+	for _, c := range cat.RootCauses.For(name) {
+		causes = append(causes, c.Name)
+	}
 
 	for _, e := range cases {
 		if !e.IsDir() {
 			continue
 		}
-		s, err := checkCase(ctx, filepath.Join(dir, "eval", e.Name()), packs, profile, update)
+		s, err := checkCase(ctx, filepath.Join(dir, "eval", e.Name()), packs, profile, causes, update)
 		if err != nil {
 			errs = append(errs, prefixed("eval/"+e.Name(), err))
 			continue
@@ -94,14 +97,14 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 	return r, errors.Join(errs...)
 }
 
-// checkCase builds the case in dir and compares it with its answers and its
-// committed bundle, or rewrites the bundle.
-func checkCase(ctx context.Context, dir string, packs fs.FS, profile config.Profile, update bool) (Case, error) {
+// checkCase builds the case in dir, of a pack declaring causes, and compares
+// it with its answers and its committed bundle, or rewrites the bundle.
+func checkCase(ctx context.Context, dir string, packs fs.FS, profile config.Profile, causes []string, update bool) (Case, error) {
 	var errs []error
 	if err := filled(filepath.Join(dir, "case.yaml")); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		errs = append(errs, fmt.Errorf("case.yaml: %w", err))
 	}
-	s, err := Load(dir)
+	s, err := Load(dir, causes)
 	if err != nil {
 		return s, errors.Join(append(errs, err)...)
 	}

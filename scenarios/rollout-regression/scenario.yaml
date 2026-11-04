@@ -5,6 +5,35 @@
 name: rollout-regression
 description: A new version of a Deployment fails where the version before it worked; Themis suggests rolling back to it.
 
+# What the investigator may name as the root cause, most likely first, and
+# what each means. A closed list makes answers comparable; other keeps it
+# honest when none fits.
+rootCauses:
+  - name: memory_limit_regression
+    description: the new revision's memory limit is too low
+  - name: bad_configuration
+    description: the new revision's settings are wrong
+  - name: image_pull_failure
+    description: its image can't be pulled
+  - name: application_bug
+    description: its code fails, whichever revision runs
+  - name: configuration_change
+    description: a ConfigMap or Secret changed outside the rollout
+  - name: dependency_failure
+    description: something it calls is failing
+  - name: insufficient_capacity
+    description: no room in the cluster for its pods
+  - name: node_problem
+    description: a node is unhealthy or evicting pods
+  - name: storage_full
+    description: a disk or volume is full
+  - name: traffic_spike
+    description: more load than it can take
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
 # The profile Themis uses for these incidents, in the format of the
 # configuration file's profiles. Its name is the pack's.
 profile:

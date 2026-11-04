@@ -138,6 +138,14 @@ class Capability(_message.Message):
     params_schema: str
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., params_schema: _Optional[str] = ...) -> None: ...
 
+class RootCause(_message.Message):
+    __slots__ = ("name", "description")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    description: str
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
+
 class Provenance(_message.Message):
     __slots__ = ("source", "model", "prompt_version", "route")
     SOURCE_FIELD_NUMBER: _ClassVar[int]

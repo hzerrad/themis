@@ -64,6 +64,7 @@ const (
 	packYAML = `
 name: crashes
 description: Pods crash
+rootCauses: [{name: application_bug, description: the code fails}]
 profile:
   priority: 10
   match: {alertNames: [KubePodCrashLooping], targetKinds: [Deployment.apps]}
@@ -124,6 +125,12 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			`scenario pack crashes: scenario.yaml: name "crash" must be the folder's, "crashes"`,
 		},
 		{
+			"root cause with no description", func(f fstest.MapFS) {
+				replace(f, "crashes/scenario.yaml", "description: the code fails", "description: ''")
+			},
+			"scenario pack crashes: scenario.yaml: rootCauses[0]: application_bug needs a description",
+		},
+		{
 			"check that doesn't compile", func(f fstest.MapFS) {
 				replace(f, "crashes/checks.yaml", "size(pod_states.pods) > 0", "size(pod_state.pods) > 0")
 			},
@@ -156,6 +163,11 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			}
 			if _, ok := cat.Checks.Get("has_pods"); !ok || len(cat.Profiles) != 2 || cat.Profiles[0].Name != "crashes" {
 				t.Errorf("checks %d, profiles %+v: want the pack's check and profile", len(cat.Checks), cat.Profiles)
+			}
+			// A profile of the install's own that no pack has may name every
+			// pack's root causes, each once.
+			if own := cat.RootCauses.For("own"); len(own) != 12 || own[0].Description != "the code fails" {
+				t.Errorf("root causes for a profile of one's own = %+v, want crashes' then rollout-regression's others", own)
 			}
 		})
 	}

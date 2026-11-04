@@ -20,9 +20,13 @@ func shipped(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
+	rollout, ok := cat.Profile("rollout-regression")
+	if !ok {
+		t.Fatal("no rollout-regression pack")
+	}
 	e := newEnv(t)
 	p := profile("rollout-regression")
-	p.Policy = cat.Profiles[0].Policy
+	p.Policy = rollout.Policy
 	w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = e.worker.Now
 	e.worker = w
