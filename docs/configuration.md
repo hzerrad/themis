@@ -197,6 +197,7 @@ profiles:
     evidence:
       initial: [rollout_history, pod_states, target_events, referenced_config]
       allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+    checks: [rollout_recent, oom_killed_new_revision]   # optional; none means all
     capabilities: [deployment.rollback-to-revision]
     investigation: {maxSteps: 8, maxEvidenceRequests: 6, timeout: 5m}
     policy: {...}
@@ -225,7 +226,9 @@ No template returns pod specs, where environment variables often hold literal se
 
 ### Predicates
 
-Deterministic facts, computed by code from the evidence. Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
+Deterministic facts, decided from the evidence by checks Themis ships with ([how a check is written](checks.md)). Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
+
+A profile runs every check unless its `checks` lists the ones to run. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs: a rule that reads another can't be evaluated, so it denies, as the shipped rules would for every fix if `gitops_managed` or a check they read is left out.
 
 | Predicate | True when |
 |---|---|

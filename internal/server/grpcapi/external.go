@@ -491,7 +491,7 @@ func (s *Server) GetIncident(ctx context.Context, req *themisv1.GetIncidentReque
 		}
 	}
 	for _, r := range results {
-		resp.Predicates = append(resp.Predicates, predicateToProto(r))
+		resp.Predicates = append(resp.Predicates, s.predicateToProto(r))
 	}
 	if profile, ok := s.Config.Current().Profile(in.Profile); ok {
 		var allowed []string

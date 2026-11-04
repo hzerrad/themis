@@ -76,14 +76,6 @@ const OUTCOME_LABEL = {
   resolved: "it worked", contained: "it helped, not fully", unchanged: "it didn't help",
   worsened: "it made things worse", inconclusive: "can't tell",
 };
-const CHECK_LABEL = {
-  rollout_recent: "A rollout happened recently",
-  failure_onset_after_rollout: "The failures started after the rollout",
-  prior_revision_was_healthy: "The previous version was healthy",
-  oom_killed_new_revision: "The new version runs out of memory",
-  gitops_managed: "Managed by GitOps (Argo CD or Flux)",
-  config_changed_before_failure: "Its config changed before the failures began",
-};
 const ROOT_CAUSE_LABEL = {
   memory_limit_regression: "The new version's memory limit is too low",
   bad_configuration: "The new version's settings are wrong",
@@ -505,15 +497,16 @@ function sourceRows(p) {
 }
 
 // citedChecks names the checks a suggestion cites, each with what Themis
-// found: a check's name alone reads as a claim, true or not.
-function citedChecks(names, predicates) {
+// found: a check's name alone reads as a claim, true or not. d is the
+// incident's detail, with its checks' answers and descriptions.
+function citedChecks(names, d) {
   return (names || []).map((c) => {
-    const found = (predicates || []).find((x) => x.Name === c);
-    return `${label(CHECK_LABEL, c)}: ${found ? label(ANSWER_LABEL, found.Value) : "not checked"}`;
+    const found = (d.Predicates || []).find((x) => x.Name === c);
+    return `${label(d.Checks || {}, c)}: ${found ? label(ANSWER_LABEL, found.Value) : "not checked"}`;
   }).join("; ");
 }
 
-function proposalPanel(p, predicates) {
+function proposalPanel(p, d) {
   return h("div", { class: "panel" },
     h("h3", {}, "What was suggested"),
     h("dl", { class: "source" }, sourceRows(p)),
@@ -524,7 +517,7 @@ function proposalPanel(p, predicates) {
       h("dt", {}, "Expected effect"), h("dd", {}, p.ExpectedEffect || "—"),
       h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
-      h("dt", {}, "Checks cited"), h("dd", {}, citedChecks(p.CitedPredicates, predicates) || "—"),
+      h("dt", {}, "Checks cited"), h("dd", {}, citedChecks(p.CitedPredicates, d) || "—"),
       p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null,
       // What the suggester says it looked at: for people, nothing decides on it.
       p.Notes ? [h("dt", {}, "What it looked at"), h("dd", {}, h("details", {},
@@ -653,11 +646,11 @@ function missing(messages) {
     h("ul", {}, messages.map((m) => h("li", {}, m))));
 }
 
-function rejectedAttempts(proposals, predicates) {
+function rejectedAttempts(proposals, d) {
   if (proposals.length === 0) return null;
   return h("details", { class: "panel rejected" },
     h("summary", {}, `Suggestions Themis refused (${proposals.length})`),
-    proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p, predicates))));
+    proposals.map((p) => h("div", { class: "grid" }, proposalPanel(p, d))));
 }
 
 // SUGGESTABLE are the states in which a person may suggest a fix.
@@ -736,9 +729,9 @@ async function detail(id) {
 
     actions.map((a) => {
       const p = proposals.find((x) => x.ID === a.ProposalID);
-      return h("div", { class: "grid" }, p ? proposalPanel(p, d.Predicates) : h("div"), actionPanel(a, reload));
+      return h("div", { class: "grid" }, p ? proposalPanel(p, d) : h("div"), actionPanel(a, reload));
     }),
-    rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID)), d.Predicates),
+    rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID)), d),
     SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(inc, d.Evidence || [], reload) : null,
 
     h("h2", {}, "Investigation"),
@@ -756,7 +749,7 @@ async function detail(id) {
     h("div", { class: "panel" }, h("table", {},
       h("thead", {}, h("tr", {}, ["Check", "Answer", "Why", "Evidence"].map((c) => h("th", {}, c)))),
       h("tbody", {}, (d.Predicates || []).map((p) => h("tr", {},
-        h("td", {}, label(CHECK_LABEL, p.Name)),
+        h("td", {}, label(d.Checks || {}, p.Name)),
         h("td", { class: `truth-${p.Value}` }, label(ANSWER_LABEL, p.Value)),
         h("td", {}, p.Reason),
         h("td", { class: "mono muted" }, (p.EvidenceIDs || []).map(short).join(", "))))))),

@@ -50,6 +50,8 @@ type Server struct {
 	Config config.Provider
 	// Evidence is the templates investigators may ask for.
 	Evidence evidence.Registry
+	// Checks are the checks Themis runs, which suggestions cite.
+	Checks   check.List
 	Reader   client.Reader
 	Logger   *slog.Logger
 	Now      func() time.Time
@@ -210,8 +212,12 @@ var truths = map[check.Truth]themisv1.Truth{
 	check.Unknown: themisv1.Truth_TRUTH_UNKNOWN,
 }
 
-func predicateToProto(r check.Result) *themisv1.PredicateResult {
-	return &themisv1.PredicateResult{
+func (s *Server) predicateToProto(r check.Result) *themisv1.PredicateResult {
+	p := &themisv1.PredicateResult{
 		Name: r.Name, Value: truths[r.Value], Reason: r.Reason, EvidenceIds: r.EvidenceIDs, PredicateVersion: r.Version,
 	}
+	if c, ok := s.Checks.Get(r.Name); ok {
+		p.Description = c.Description
+	}
+	return p
 }

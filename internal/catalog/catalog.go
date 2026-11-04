@@ -6,6 +6,7 @@ package catalog
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/hzerrad/themis/internal/capability"
@@ -25,18 +26,22 @@ type Catalog struct {
 
 // Themis is what Themis ships with. logs reads containers' logs for the
 // container-logs template.
-func Themis(logs evidence.LogReader) Catalog {
-	return Catalog{
-		Fixes: Fixes(),
-		Evidence: evidence.NewRegistry(
-			evidence.NewRolloutHistory(),
-			evidence.NewPodStates(),
-			evidence.NewTargetEvents(),
-			evidence.NewReferencedConfig(),
-			evidence.NewContainerLogsTail(logs),
-		),
-		Checks: check.Rollout(),
+//
+// Its checks are compiled here, so one that doesn't compile stops Themis from
+// starting.
+func Themis(logs evidence.LogReader) (Catalog, error) {
+	templates := evidence.NewRegistry(
+		evidence.NewRolloutHistory(),
+		evidence.NewPodStates(),
+		evidence.NewTargetEvents(),
+		evidence.NewReferencedConfig(),
+		evidence.NewContainerLogsTail(logs),
+	)
+	checks, err := check.Themis(slices.Sorted(maps.Keys(templates)))
+	if err != nil {
+		return Catalog{}, err
 	}
+	return Catalog{Fixes: Fixes(), Evidence: templates, Checks: checks}, nil
 }
 
 // Fixes is the fixes Themis ships with, for the executor, which needs no
@@ -46,8 +51,8 @@ func Fixes() capability.Registry {
 }
 
 // CheckProfile says what in p this catalog can't do, one error per problem:
-// evidence templates and fixes it doesn't have, and a policy that doesn't
-// compile.
+// evidence templates, checks and fixes it doesn't have, and a policy that
+// doesn't compile.
 func (c Catalog) CheckProfile(p config.Profile) error {
 	var errs []error
 	var named []string
@@ -56,6 +61,11 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 			errs = append(errs, fmt.Errorf("unknown evidence template %q", name))
 		}
 		named = append(named, name)
+	}
+	for _, name := range p.Checks {
+		if _, ok := c.Checks.Get(name); !ok {
+			errs = append(errs, fmt.Errorf("unknown check %q", name))
+		}
 	}
 	for _, name := range p.Capabilities {
 		if _, ok := c.Fixes[name]; !ok {

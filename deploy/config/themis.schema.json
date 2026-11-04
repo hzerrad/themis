@@ -391,6 +391,14 @@
             ],
             "description": "Evidence lists the templates investigations of this profile may use."
           },
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "description": "Checks are the checks this profile runs, by name; none means every\ncheck Themis has."
+          },
           "capabilities": {
             "items": {
               "type": "string"

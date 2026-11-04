@@ -34,6 +34,13 @@ spec:
                 items:
                   type: string
                 type: array
+              checks:
+                description: |-
+                  Checks are the checks this profile runs, by name; none means every
+                  check Themis has.
+                items:
+                  type: string
+                type: array
               evidence:
                 description: Evidence lists the templates investigations of this profile
                   may use.

@@ -60,18 +60,20 @@ class TargetRef(_message.Message):
     def __init__(self, kind: _Optional[str] = ..., namespace: _Optional[str] = ..., name: _Optional[str] = ..., uid: _Optional[str] = ..., group: _Optional[str] = ...) -> None: ...
 
 class PredicateResult(_message.Message):
-    __slots__ = ("name", "value", "reason", "evidence_ids", "predicate_version")
+    __slots__ = ("name", "value", "reason", "evidence_ids", "predicate_version", "description")
     NAME_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
     REASON_FIELD_NUMBER: _ClassVar[int]
     EVIDENCE_IDS_FIELD_NUMBER: _ClassVar[int]
     PREDICATE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     name: str
     value: Truth
     reason: str
     evidence_ids: _containers.RepeatedScalarFieldContainer[str]
     predicate_version: str
-    def __init__(self, name: _Optional[str] = ..., value: _Optional[_Union[Truth, str]] = ..., reason: _Optional[str] = ..., evidence_ids: _Optional[_Iterable[str]] = ..., predicate_version: _Optional[str] = ...) -> None: ...
+    description: str
+    def __init__(self, name: _Optional[str] = ..., value: _Optional[_Union[Truth, str]] = ..., reason: _Optional[str] = ..., evidence_ids: _Optional[_Iterable[str]] = ..., predicate_version: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class EvidenceItem(_message.Message):
     __slots__ = ("id", "template", "target", "content_type", "data", "truncated", "original_bytes", "redactions", "collected_at", "classification", "template_version", "attributes", "window_start", "window_end", "content_digest")

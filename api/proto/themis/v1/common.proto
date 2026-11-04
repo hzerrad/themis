@@ -40,6 +40,8 @@ message PredicateResult {
   string reason = 3;
   repeated string evidence_ids = 4;
   string predicate_version = 5;
+  // What the check finds when it is true, in plain words.
+  string description = 6;
 }
 
 message EvidenceItem {

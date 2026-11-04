@@ -76,7 +76,7 @@ func TestPrepare_ForbiddenHistoryMakesChecksBlind(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range results {
-		if r.Name != check.NameRolloutRecent {
+		if r.Name != "rollout_recent" {
 			continue
 		}
 		if r.Value != check.Unknown || !r.Blind || len(r.Gaps) != 1 || r.Gaps[0] != (check.Gap{Template: evidence.RolloutHistory, Cause: evidence.GapForbidden}) {

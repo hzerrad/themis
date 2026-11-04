@@ -17,7 +17,7 @@ The Kubernetes object a target names, as Themis reads it: its pod template, the 
 _Avoid_: app, service, deployment (unless the kind is meant)
 
 **Profile**:
-A named set of rules for a group of workloads: which evidence Themis may read, which capabilities it may suggest, and which policy decides.
+A named set of rules for a group of workloads: which evidence Themis may read, which checks it runs, which capabilities it may suggest, and which policy decides.
 _Avoid_: config, ruleset
 
 **Supersede**:
@@ -47,7 +47,7 @@ Plain advice to the operator on how to close a gap, such as a permission to gran
 _Avoid_: remedy, fix
 
 **Check**:
-A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout".
+A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout". It is unknown when the evidence it reads is missing or doesn't settle it, never guessed.
 _Avoid_: predicate, rule, signal
 
 **Catalog**:
