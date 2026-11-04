@@ -3,7 +3,7 @@ package verification
 import (
 	"time"
 
-	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability"
 )
 
 type Outcome string

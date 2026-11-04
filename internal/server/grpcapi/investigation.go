@@ -11,101 +11,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
-
-func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInvestigationRequest) (*themisv1.LeaseInvestigationResponse, error) {
-	now := s.now()
-	s.Heartbeat.Beat(ctx, req.GetWorkerId())
-	var (
-		inv store.Investigation
-		ok  bool
-	)
-	err := s.Store.InTx(ctx, func(tx pgx.Tx) error {
-		expired, err := s.Store.ExpireInvestigations(ctx, tx, now)
-		if err != nil {
-			return err
-		}
-		for _, id := range expired {
-			if err := s.abandon(ctx, tx, id, "The investigator stopped responding during its last attempt."); err != nil {
-				return err
-			}
-		}
-		inv, ok, err = s.Store.LeaseInvestigation(ctx, tx, req.GetWorkerId(), now, s.leaseFor())
-		return err
-	})
-	if err != nil {
-		return nil, s.internal(ctx, err)
-	}
-	if !ok {
-		return &themisv1.LeaseInvestigationResponse{}, nil
-	}
-
-	profile, err := s.profile(inv)
-	if err != nil {
-		return nil, err
-	}
-	items, err := s.Store.Evidence(ctx, inv.IncidentID)
-	if err != nil {
-		return nil, s.internal(ctx, err)
-	}
-	results, err := s.Store.Predicates(ctx, inv.IncidentID)
-	if err != nil {
-		return nil, s.internal(ctx, err)
-	}
-
-	budget := profile.InvestigationBudget()
-	out := &themisv1.Investigation{
-		LeaseId:               inv.LeaseID,
-		LeaseDeadline:         timestamppb.New(inv.LeaseDeadline),
-		IncidentId:            inv.IncidentID,
-		Profile:               inv.Profile,
-		Target:                targetToProto(inv.Target),
-		CandidateCapabilities: profile.Capabilities,
-		Capabilities:          s.capabilities(profile.Capabilities),
-		Budget: &themisv1.Budget{
-			MaxSteps: int32(budget.MaxSteps), //nolint:gosec // validated config
-			Deadline: timestamppb.New(now.Add(budget.Timeout.Duration)),
-		},
-	}
-	for _, it := range items {
-		out.InitialEvidence = append(out.InitialEvidence, itemToProto(it))
-	}
-	for _, r := range results {
-		out.Predicates = append(out.Predicates, s.predicateToProto(r))
-	}
-	for _, c := range s.RootCauses.For(inv.Profile) {
-		out.RootCauses = append(out.RootCauses, &themisv1.RootCause{Name: c.Name, Description: c.Description})
-	}
-	for _, name := range profile.Evidence.Allowed {
-		t := &themisv1.EvidenceTemplate{Name: name}
-		if d, ok := s.Evidence[name]; ok {
-			t.Description, t.Params = d.Description(), d.Params()
-		}
-		out.AllowedTemplates = append(out.AllowedTemplates, t)
-	}
-	return &themisv1.LeaseInvestigationResponse{Investigation: out}, nil
-}
-
-func (s *Server) RenewLease(ctx context.Context, req *themisv1.RenewLeaseRequest) (*themisv1.RenewLeaseResponse, error) {
-	var deadline *timestamppb.Timestamp
-	err := s.Store.InTx(ctx, func(tx pgx.Tx) error {
-		d, err := s.Store.RenewLease(ctx, tx, req.GetLeaseId(), s.now(), s.leaseFor())
-		deadline = timestamppb.New(d)
-		return err
-	})
-	if err != nil {
-		return nil, s.internal(ctx, err)
-	}
-	return &themisv1.RenewLeaseResponse{LeaseDeadline: deadline}, nil
-}
 
 func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.CompleteInvestigationRequest) (*themisv1.CompleteInvestigationResponse, error) {
 	conclusion, ok := map[themisv1.InvestigationConclusion]string{
@@ -153,16 +66,16 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 				return err
 			}
 			if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-				if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
+				if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
 					return err
 				}
 				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 			}
 			// Someone may yet suggest a fix: an expiry job closes it if not.
 			if s.Config.Current().ExternalProposals.EffectiveWindow() > 0 {
-				return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive)
+				return s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive)
 			}
-			return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
+			return s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
 		store.CountInvestigation(tx, store.InvestigationProposed)
@@ -171,12 +84,12 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 			return err
 		}
 		if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-			if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Diagnosed); err != nil {
+			if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Diagnosed); err != nil {
 				return err
 			}
 			return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 		}
-		return s.advance(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
+		return s.Store.TransitionPath(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", actor, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
 	if err != nil {
 		return nil, s.internal(ctx, err)
@@ -349,7 +262,7 @@ func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 	if !ok {
 		return s.escalate(ctx, tx, incidentID, reason)
 	}
-	err = s.advance(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", incident.Investigating, incident.Diagnosed)
+	err = s.Store.TransitionPath(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", actor, incident.Investigating, incident.Diagnosed)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
@@ -360,36 +273,9 @@ func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
-	err := s.advance(ctx, tx, incidentID, reason, incident.Investigating, incident.Escalated)
+	err := s.Store.TransitionPath(ctx, tx, incidentID, reason, actor, incident.Investigating, incident.Escalated)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
 	return err
-}
-
-// advance moves an incident along path, from path[0].
-func (s *Server) advance(ctx context.Context, tx pgx.Tx, incidentID, reason string, path ...incident.State) error {
-	for i := 1; i < len(path); i++ {
-		err := s.Store.Transition(ctx, tx, store.TransitionArgs{ID: incidentID, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// GetModelSettings returns the model settings made in Themis's setup. The
-// investigator uses them for whatever its own environment leaves unset.
-func (s *Server) GetModelSettings(ctx context.Context, _ *themisv1.GetModelSettingsRequest) (*themisv1.GetModelSettingsResponse, error) {
-	// An investigator waiting for a model asks this instead of for work: it
-	// is still there.
-	s.Heartbeat.Beat(ctx, "")
-	if s.Settings == nil {
-		return &themisv1.GetModelSettingsResponse{}, nil
-	}
-	m, err := s.Settings.Model(ctx)
-	if err != nil {
-		return nil, s.internal(ctx, err)
-	}
-	return &themisv1.GetModelSettingsResponse{BaseUrl: m.BaseURL, Model: m.Name, ApiKey: m.APIKey, StrictOutput: m.StrictOutput}, nil
 }

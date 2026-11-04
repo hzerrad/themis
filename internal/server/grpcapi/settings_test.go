@@ -7,7 +7,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/hzerrad/themis/internal/settings"
+	"github.com/hzerrad/themis/internal/config/settings"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )

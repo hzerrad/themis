@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 )
 
@@ -42,7 +43,7 @@ func TestAlertmanagerSetup(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	var got struct{ Steps []httpapi.SetupStep }
+	var got struct{ Steps []alertmanager.SetupStep }
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got.Steps) != 3 {
 		t.Fatalf("setup = %d %q, %v", rec.Code, rec.Body, err)
 	}

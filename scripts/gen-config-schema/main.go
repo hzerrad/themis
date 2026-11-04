@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident"
 )
 
 func main() {
@@ -42,7 +43,7 @@ func run(out, crds string) error {
 	// The kind syntax lives in Go; copy it in rather than repeating it in a
 	// struct tag.
 	kinds := s.Properties.Value("profiles").Items.Properties.Value("match").Properties.Value("targetKinds").Items
-	kinds.Pattern = config.TargetKindPattern
+	kinds.Pattern = incident.KindGroupPattern
 	if err := writeCRDs(r, crds); err != nil {
 		return err
 	}

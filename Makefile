@@ -52,7 +52,7 @@ endif
 
 .PHONY: eval-bundles
 eval-bundles: ## Rebuild every scenario pack case's evaluation bundle
-	go test ./internal/evaluation -run 'TestPacks$$' -count=1 -update
+	go test ./eval -run 'TestPacks$$' -count=1 -update
 
 # The model whose replies CI replays, and where to reach it to record them.
 EVAL_BASE_URL ?= http://127.0.0.1:11434/v1

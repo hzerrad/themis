@@ -1,10 +1,13 @@
 package governance
 
 import (
+	"errors"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/hzerrad/themis/internal/policy"
+	"github.com/hzerrad/themis/internal/incident/governance/policy"
+	"github.com/hzerrad/themis/internal/store"
 )
 
 var (
@@ -17,12 +20,39 @@ var (
 		Name: "themis_gitops_refusals_total",
 		Help: "Actions denied on a target that a GitOps controller manages.",
 	})
+
+	approvalsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_approvals_total",
+		Help: "Approval decisions: approved, denied, expired; and refused attempts: digest_mismatch for a digest other than the one shown, replayed for an action already decided.",
+	}, []string{"result"})
+)
+
+// Results of an approval, or of an attempt the store refused.
+const (
+	resultApproved       = "approved"
+	resultDenied         = "denied"
+	resultExpired        = "expired"
+	resultDigestMismatch = "digest_mismatch"
+	resultReplayed       = "replayed"
 )
 
 func init() {
-	metrics.Registry.MustRegister(policyDecisions, gitOpsRefusals)
+	metrics.Registry.MustRegister(policyDecisions, gitOpsRefusals, approvalsTotal)
 	for _, d := range []string{string(policy.Allow), string(policy.RequireApproval), string(policy.Deny), decisionError} {
 		policyDecisions.WithLabelValues(d)
+	}
+	for _, r := range []string{resultApproved, resultDenied, resultExpired, resultDigestMismatch, resultReplayed} {
+		approvalsTotal.WithLabelValues(r)
+	}
+}
+
+// countRefusal counts an attempt the store refused, which rolled back.
+func countRefusal(err error) {
+	switch {
+	case errors.Is(err, store.ErrDigestMismatch):
+		approvalsTotal.WithLabelValues(resultDigestMismatch).Inc()
+	case errors.Is(err, store.ErrAlreadyDecided):
+		approvalsTotal.WithLabelValues(resultReplayed).Inc()
 	}
 }
 

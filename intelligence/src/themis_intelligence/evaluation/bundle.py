@@ -1,4 +1,4 @@
-"""Scenario bundles, as internal/evaluation writes them, and the job each one becomes."""
+"""Scenario bundles, as the Go package in eval/ writes them, and the job each one becomes."""
 
 from pathlib import Path
 from typing import Literal

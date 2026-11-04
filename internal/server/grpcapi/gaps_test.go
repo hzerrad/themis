@@ -8,7 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/store"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"

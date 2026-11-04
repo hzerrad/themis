@@ -8,7 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/digest"
@@ -38,21 +37,12 @@ func newEnv(t *testing.T) *env {
 	s, pool := pgtest.NewStore(t)
 	ns := k8s.NewNamespace(t)
 	k8s.Load(t, ns, scenario1)
-	d := deployment(t, ns)
+	d := k8s.Deployment(t, ns, "checkout")
 	return &env{
 		store: s, pool: pool, ns: ns,
 		worker: &reconciliation.Worker{Store: s, Reader: k8s, Now: later},
 		target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)},
 	}
-}
-
-func deployment(t *testing.T, ns string) *appsv1.Deployment {
-	t.Helper()
-	var d appsv1.Deployment
-	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: ns, Name: "checkout"}, &d); err != nil {
-		t.Fatal(err)
-	}
-	return &d
 }
 
 // open creates an incident in state with the target's current template
@@ -109,7 +99,7 @@ func (e *env) open(t *testing.T, to incident.State) string {
 // edit changes the template, as kubectl set env would.
 func (e *env) edit(t *testing.T) {
 	t.Helper()
-	d := deployment(t, e.ns)
+	d := k8s.Deployment(t, e.ns, "checkout")
 	d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
 	if err := k8s.Update(t.Context(), d); err != nil {
 		t.Fatal(err)
@@ -119,7 +109,7 @@ func (e *env) edit(t *testing.T) {
 // heal completes the rollout with every replica ready.
 func (e *env) heal(t *testing.T) {
 	t.Helper()
-	d := deployment(t, e.ns)
+	d := k8s.Deployment(t, e.ns, "checkout")
 	d.Status.ObservedGeneration = d.Generation
 	d.Status.Replicas, d.Status.UpdatedReplicas, d.Status.ReadyReplicas, d.Status.AvailableReplicas, d.Status.UnavailableReplicas = 3, 3, 3, 3, 0
 	if err := k8s.Status().Update(t.Context(), d); err != nil {
@@ -219,7 +209,7 @@ func TestReconcile_WaitsForAChangeToSettle(t *testing.T) {
 func TestReconcile_TargetGone_Cancels(t *testing.T) {
 	e := newEnv(t)
 	id := e.open(t, incident.Investigating)
-	if err := k8s.Delete(t.Context(), deployment(t, e.ns)); err != nil {
+	if err := k8s.Delete(t.Context(), k8s.Deployment(t, e.ns, "checkout")); err != nil {
 		t.Fatal(err)
 	}
 	e.reconcile(t)
@@ -254,7 +244,7 @@ func TestReconcile_UnreadableTargetDoesNotStopTheOthers(t *testing.T) {
 	k8s.Load(t, ns, scenario1)
 	other := &env{
 		store: e.store, pool: e.pool, ns: ns,
-		target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(deployment(t, ns).UID)},
+		target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(k8s.Deployment(t, ns, "checkout").UID)},
 	}
 	stuck := other.open(t, incident.AwaitingApproval)
 	other.edit(t)

@@ -3,7 +3,7 @@ package grpcapi_test
 import (
 	"testing"
 
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 

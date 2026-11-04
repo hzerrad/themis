@@ -100,7 +100,7 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 	if !ok {
 		return store.IncidentArgs{}, &rejected{
 			store.RejectionNoProfile,
-			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, config.TargetKind(ref), ref.Namespace, ref.Name),
+			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, ref.KindGroup(), ref.Namespace, ref.Name),
 		}, nil
 	}
 

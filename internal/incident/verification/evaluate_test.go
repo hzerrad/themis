@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/incident/verification"
 )
 

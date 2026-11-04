@@ -8,8 +8,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )

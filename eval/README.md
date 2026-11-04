@@ -9,7 +9,7 @@ The evaluation cases live with their [scenario packs](../docs/scenarios.md), in 
 | `logs/<pod>.txt` | What each pod logged, if anything |
 | `bundle.json` | Generated: what Themis's real evidence templates, redaction and the pack's checks make of the cluster |
 
-Run `make eval-bundles` after changing a case, or code that changes what evidence looks like, and review the diff. `make scenario-check` and `go test ./internal/evaluation` fail if a bundle is stale, or if a check disagrees with `truth.predicates`.
+Run `make eval-bundles` after changing a case, or code that changes what evidence looks like, and review the diff. `make scenario-check` and `go test ./eval` fail if a bundle is stale, or if a check disagrees with `truth.predicates`.
 
 Change `version` whenever you change `truth`, so results are never compared across different answers.
 

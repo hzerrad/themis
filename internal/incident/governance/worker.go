@@ -12,16 +12,21 @@ import (
 	"github.com/riverqueue/river"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/policy"
+	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
 )
 
 const actor = "governance"
+
+// ManagedCheck is the check governance overrides with what it reads live:
+// whether GitOps owns the target. A scenario pack's check of this name is
+// overridden.
+const ManagedCheck = "gitops_managed"
 
 // Worker works govern jobs: it derives an action from live state, decides it
 // by policy, and stores it with the incident's next state.
@@ -104,7 +109,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	}
 	// Live ownership wins over what the evidence said.
 	if plan.ManagedBy != "" {
-		predicates[check.NameGitOpsManaged] = check.True.String()
+		predicates[ManagedCheck] = check.True.String()
 	}
 	pol, err := w.policy(profile)
 	if err != nil {
@@ -126,7 +131,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, "Another fix is already in progress on this workload."); err != nil {
 				return err
 			}
-			return w.advance(ctx, tx, in.ID, "Another fix is already in progress on this workload.", incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+			return w.Store.TransitionPath(ctx, tx, in.ID, "Another fix is already in progress on this workload.", actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
 		}
 		if err != nil {
 			return err
@@ -136,9 +141,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
 		if decision.Outcome == policy.Deny {
-			return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
+			return w.Store.TransitionPath(ctx, tx, in.ID, decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
-		return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
+		return w.Store.TransitionPath(ctx, tx, in.ID, decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
 }
 
@@ -167,18 +172,8 @@ func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capabi
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		return w.advance(ctx, tx, incidentID, reason, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+		return w.Store.TransitionPath(ctx, tx, incidentID, reason, actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
 	})
-}
-
-func (w *Worker) advance(ctx context.Context, tx pgx.Tx, incidentID, reason string, path ...incident.State) error {
-	for i := 1; i < len(path); i++ {
-		err := w.Store.Transition(ctx, tx, store.TransitionArgs{ID: incidentID, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (w *Worker) now() time.Time {

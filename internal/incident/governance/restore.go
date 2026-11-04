@@ -8,11 +8,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/policy"
+	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -111,7 +111,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		predicates[r.Name] = r.Value.String()
 	}
 	if plan.ManagedBy != "" {
-		predicates[check.NameGitOpsManaged] = check.True.String()
+		predicates[ManagedCheck] = check.True.String()
 	}
 	pol, err := w.policy(profile)
 	if err != nil {

@@ -12,12 +12,12 @@ import (
 	"github.com/riverqueue/river"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/workload"
 )
 

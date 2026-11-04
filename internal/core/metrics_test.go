@@ -9,8 +9,8 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/executor"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 

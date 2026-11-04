@@ -22,14 +22,15 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/hzerrad/themis/internal/catalog"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -60,8 +61,8 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// token is the investigators' bearer token in tests.
-const token = "investigator-s3cret"
+// investigatorToken is the investigators' bearer token in tests.
+const investigatorToken = "investigator-s3cret"
 
 type env struct {
 	server *grpcapi.Server
@@ -129,7 +130,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
 	tokenFile := filepath.Join(t.TempDir(), "token")
-	if err := os.WriteFile(tokenFile, []byte(token), 0o600); err != nil {
+	if err := os.WriteFile(tokenFile, []byte(investigatorToken), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer(grpc.ChainUnaryInterceptor(gs.Interceptor(tokenFile)))
@@ -137,7 +138,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 	lis := bufconn.Listen(1 << 20)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
-	conn := dial(t, lis, grpc.WithPerRPCCredentials(grpcapi.BearerToken(token)))
+	conn := dial(t, lis, grpc.WithPerRPCCredentials(token.GRPCCredentials(investigatorToken)))
 
 	e := &env{
 		lis: lis, logs: logs, store: s, pool: pool, clock: clk, target: target,

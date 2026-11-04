@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/identity"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -62,7 +61,7 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 	if !a.decode(w, r, &in) {
 		return
 	}
-	if err := errors.Join(identity.CheckUsername(in.Username), checkRole(in.Role), identity.CheckNewPassword(in.Username, in.Password)); err != nil {
+	if err := errors.Join(identity.CheckUsername(in.Username), identity.CheckRole(in.Role), identity.CheckNewPassword(in.Username, in.Password)); err != nil {
 		http.Error(w, sentence(err), http.StatusBadRequest)
 		return
 	}
@@ -100,7 +99,7 @@ func (a *API) changeAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Role != "" {
-		if err := checkRole(in.Role); err != nil {
+		if err := identity.CheckRole(in.Role); err != nil {
 			http.Error(w, sentence(err), http.StatusBadRequest)
 			return
 		}
@@ -206,13 +205,6 @@ func (a *API) failAccount(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 	a.fail(w, r, err)
-}
-
-func checkRole(role string) error {
-	if !slices.Contains(config.Roles, role) {
-		return errors.New("the role must be viewer, responder, approver or admin")
-	}
-	return nil
 }
 
 // self reports whether the account named username is the caller's own.

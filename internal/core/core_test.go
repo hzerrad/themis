@@ -27,7 +27,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/core"
-	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
@@ -72,7 +72,7 @@ func themisCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
 }
 
 const (
-	token              = "smoke-token"
+	smokeToken         = "smoke-token"
 	investigatorSecret = "investigator-token"
 	adminSecret        = "admin-token"
 )
@@ -107,7 +107,7 @@ func readFile(t *testing.T, path string) string {
 
 func writeConfig(t *testing.T, ns string) string {
 	t.Helper()
-	tokenFile := writeFile(t, "token", token+"\n")
+	tokenFile := writeFile(t, "token", smokeToken+"\n")
 	investigatorToken := writeFile(t, "investigator-token", investigatorSecret+"\n")
 	adminToken := writeFile(t, "admin-token", adminSecret+"\n")
 	return writeFile(t, "themis.yaml", fmt.Sprintf(`
@@ -259,7 +259,7 @@ api:
 	if err != nil {
 		t.Fatalf("build request: %v", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Bearer "+smokeToken)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("post alert: %v", err)
@@ -289,7 +289,7 @@ api:
 	})
 	// The investigation is prepared and offered to investigators over gRPC.
 	conn, err := grpc.NewClient(o.GRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(grpcapi.BearerToken(investigatorSecret)))
+		grpc.WithPerRPCCredentials(token.GRPCCredentials(investigatorSecret)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/server/httpapi"
-	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 

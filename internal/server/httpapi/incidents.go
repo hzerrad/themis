@@ -1,0 +1,112 @@
+package httpapi
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
+	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/store"
+)
+
+func (a *API) list(w http.ResponseWriter, r *http.Request) {
+	incidents, err := a.Store.ListIncidents(r.Context(), 100)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	out := make([]incidentView, 0, len(incidents))
+	for _, in := range incidents {
+		out = append(out, viewIncident(in))
+	}
+	a.reply(w, r, out)
+}
+
+func (a *API) detail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	in, err := a.Store.Incident(ctx, r.PathValue("id"))
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	d := detailView{Incident: viewIncident(in), Checks: map[string]string{}}
+	for _, c := range a.CheckList {
+		d.Checks[c.Name] = c.Description
+	}
+	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	items, err := a.Store.Evidence(ctx, in.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// Raw evidence, such as logs, is for responders.
+	who, _ := identity.From(ctx)
+	for _, it := range items {
+		v := evidenceView{Item: it}
+		if who.Can(config.RoleResponder) {
+			v.Data = it.Data
+		}
+		d.Evidence = append(d.Evidence, v)
+	}
+	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
+		d.Investigation = &inv
+		// Once someone's suggestion moves it on, what's next matters more.
+		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction) {
+			d.Headline = hint.Headline(inv.Blind)
+		}
+	} else if !errors.Is(err, store.ErrNotFound) {
+		a.fail(w, r, err)
+		return
+	}
+	gaps, err := a.Store.EvidenceGaps(ctx, in.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	d.Missing = a.Remedy.Messages(in, gaps)
+	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	actions, err := a.Store.IncidentActions(ctx, a.Store.DB(), in.ID)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	for _, act := range actions {
+		v := viewAction(act, a.Fixes)
+		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
+			v.Execution = &e
+		}
+		if ver, err := a.Store.Verification(ctx, a.Store.DB(), act.ID); err == nil {
+			v.Verification = &verificationView{Verification: ver, Observation: ver.Observation}
+		}
+		d.Actions = append(d.Actions, v)
+	}
+	a.reply(w, r, d)
+}
+
+// changes lists what an action changes, as its fix describes it, and says so
+// when it cannot.
+func changes(a store.Action, fixes capability.Registry) []capability.Change {
+	unknown := []capability.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
+	f, ok := fixes[a.Capability]
+	if !ok {
+		return unknown
+	}
+	list, err := f.Changes(a.PreState, a.Desired)
+	if err != nil {
+		return unknown
+	}
+	return list
+}

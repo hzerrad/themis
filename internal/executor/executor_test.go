@@ -14,22 +14,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/hzerrad/themis/internal/catalog"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/executor"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/incident/verification"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
@@ -62,7 +61,7 @@ func approved(t *testing.T) (*env, store.Action) {
 	s, pool := pgtest.NewStore(t)
 	ns := k8s.NewNamespace(t)
 	k8s.Load(t, ns, scenario1)
-	d := deployment(t, ns)
+	d := k8s.Deployment(t, ns, "checkout")
 	e := &env{store: s, pool: pool, target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)}}
 
 	var incidentID, proposalID string
@@ -77,7 +76,7 @@ func approved(t *testing.T) (*env, store.Action) {
 				return err
 			}
 		}
-		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: check.NameGitOpsManaged, Version: "1", Value: check.False}}); err != nil {
+		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: governance.ManagedCheck, Version: "1", Value: check.False}}); err != nil {
 			return err
 		}
 		p, _, err := s.InsertProposal(ctx, tx, store.Proposal{
@@ -113,15 +112,6 @@ func approved(t *testing.T) (*env, store.Action) {
 	return e, a
 }
 
-func deployment(t *testing.T, ns string) *appsv1.Deployment {
-	t.Helper()
-	var d appsv1.Deployment
-	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: ns, Name: "checkout"}, &d); err != nil {
-		t.Fatal(err)
-	}
-	return &d
-}
-
 func (e *env) executor(c client.Client) *executor.Executor {
 	x := executor.New(e.store, c, catalog.Fixes(), nil)
 	x.Now = func() time.Time { return now.Add(time.Minute) }
@@ -130,7 +120,7 @@ func (e *env) executor(c client.Client) *executor.Executor {
 
 func (e *env) image(t *testing.T) string {
 	t.Helper()
-	return deployment(t, e.target.Namespace).Spec.Template.Spec.Containers[0].Image
+	return k8s.Deployment(t, e.target.Namespace, "checkout").Spec.Template.Spec.Containers[0].Image
 }
 
 func (e *env) actionState(t *testing.T, id string) store.ActionState {
@@ -184,12 +174,12 @@ func TestExecute_Twice_WritesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gen := deployment(t, e.target.Namespace).Generation
+	gen := k8s.Deployment(t, e.target.Namespace, "checkout").Generation
 	second, err := x.Execute(t.Context(), a.ID)
 	if err != nil {
 		t.Fatalf("second Execute: %v", err)
 	}
-	if second != first || deployment(t, e.target.Namespace).Generation != gen {
+	if second != first || k8s.Deployment(t, e.target.Namespace, "checkout").Generation != gen {
 		t.Errorf("second execution = %+v, generation moved from %d", second, gen)
 	}
 	if got := succeeded(); got != 1 {
@@ -216,7 +206,7 @@ func TestExecute_DigestTampered_Refuses(t *testing.T) {
 
 func TestExecute_SpecChangedSinceApproval_Stale(t *testing.T) {
 	e, a := approved(t)
-	d := deployment(t, e.target.Namespace)
+	d := k8s.Deployment(t, e.target.Namespace, "checkout")
 	d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
 	if err := k8s.Update(t.Context(), d); err != nil {
 		t.Fatal(err)
@@ -233,7 +223,7 @@ func TestExecute_SpecChangedSinceApproval_Stale(t *testing.T) {
 // resourceVersion is not bound: a status update after approval is fine.
 func TestExecute_StatusOnlyChange_StillExecutes(t *testing.T) {
 	e, a := approved(t)
-	d := deployment(t, e.target.Namespace)
+	d := k8s.Deployment(t, e.target.Namespace, "checkout")
 	d.Status.ReadyReplicas, d.Status.AvailableReplicas = 2, 2
 	if err := k8s.Status().Update(t.Context(), d); err != nil {
 		t.Fatal(err)
@@ -394,7 +384,7 @@ func restorePlanned(t *testing.T, e *env, a store.Action) store.Action {
 		t.Fatal(err)
 	}
 	// The Deployment controller would number the restored template anew.
-	d := deployment(t, e.target.Namespace)
+	d := k8s.Deployment(t, e.target.Namespace, "checkout")
 	d.Annotations["deployment.kubernetes.io/revision"] = "3"
 	if err := k8s.Update(ctx, d); err != nil {
 		t.Fatal(err)
@@ -444,7 +434,7 @@ func TestExecute_RestorePutsTheTemplateBack(t *testing.T) {
 func TestExecute_StaleRestoreEscalates(t *testing.T) {
 	e, a := approved(t)
 	r := restorePlanned(t, e, a)
-	d := deployment(t, e.target.Namespace)
+	d := k8s.Deployment(t, e.target.Namespace, "checkout")
 	d.Spec.Template.Annotations = map[string]string{"edited": "by-a-human"}
 	if err := k8s.Update(t.Context(), d); err != nil {
 		t.Fatal(err)

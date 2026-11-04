@@ -10,7 +10,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 )
 

@@ -23,15 +23,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/hzerrad/themis/internal/auth"
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/resources"
-	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/health"
-	"github.com/hzerrad/themis/internal/hint"
-	"github.com/hzerrad/themis/internal/identity"
-	"github.com/hzerrad/themis/internal/incident/execution"
+	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
@@ -39,13 +36,13 @@ import (
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/incident/reconciliation"
 	"github.com/hzerrad/themis/internal/incident/verification"
-	"github.com/hzerrad/themis/internal/selfcheck"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/server/httpapi"
-	"github.com/hzerrad/themis/internal/server/web"
-	"github.com/hzerrad/themis/internal/settings"
+	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/scenarios"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -194,14 +191,14 @@ func Run(ctx context.Context, o Options) error {
 	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
-	telemetry.AddUnscopedWorker(workers, &httpapi.ExpireWorker{Store: s})
+	telemetry.AddUnscopedWorker(workers, &governance.ExpireWorker{Store: s})
 	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
 		return err
 	}
 	defer closeExecutor()
-	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
+	telemetry.AddIncidentWorker(workers, &governance.ExecuteWorker{Store: s, Executor: executor})
 	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes})
 	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
 	telemetry.AddIncidentWorker(workers, &notification.Worker{Store: s, Config: cfg.Notifications, Remedy: hint.Writer{Config: current}})
@@ -214,7 +211,7 @@ func Run(ctx context.Context, o Options) error {
 		investigation.Queue: o.Workers,
 	}, []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
-			return httpapi.ExpireArgs{}, nil
+			return governance.ExpireArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}),
 		river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) {
 			return reconciliation.Args{}, nil
@@ -227,8 +224,8 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 
-	beat := func(component string) *selfcheck.Heartbeat {
-		return &selfcheck.Heartbeat{Store: s, Component: component, Logger: log}
+	beat := func(component string) *statuspage.Heartbeat {
+		return &statuspage.Heartbeat{Store: s, Component: component, Logger: log}
 	}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
@@ -240,7 +237,7 @@ func Run(ctx context.Context, o Options) error {
 	mux := http.NewServeMux()
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
 	api.Sessions, api.Accounts = s, s
-	checker := &selfcheck.Checker{Config: current, Store: s, Access: selfcheck.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
+	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
 	}
@@ -263,7 +260,7 @@ func Run(ctx context.Context, o Options) error {
 	(&identity.Passwords{Store: s, Logger: log}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
 	api.Register(mux)
-	web.Register(mux)
+	httpapi.RegisterUI(mux)
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
 		TokenFile: cfg.Intake.BearerTokenFile,
@@ -275,7 +272,7 @@ func Run(ctx context.Context, o Options) error {
 	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		return err
 	}
-	if err := mgr.AddReadyzCheck("database", health.Database(s)); err != nil {
+	if err := mgr.AddReadyzCheck("database", databaseReady(s)); err != nil {
 		return err
 	}
 	if err := mgr.Add(runner); err != nil {
@@ -389,17 +386,17 @@ func (s *server) NeedLeaderElection() bool { return false }
 
 // dialExecutor connects to the executor, or returns nil when none is
 // configured.
-func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
+func dialExecutor(cfg *config.Executor) (governance.Executor, func(), error) {
 	if cfg == nil {
 		return nil, func() {}, nil
 	}
-	token, err := auth.ReadToken(cfg.BearerTokenFile)
+	secret, err := token.Read(cfg.BearerTokenFile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("executor token: %w", err)
 	}
 	conn, err := grpc.NewClient(cfg.Address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithPerRPCCredentials(grpcapi.BearerToken(token)),
+		grpc.WithPerRPCCredentials(token.GRPCCredentials(secret)),
 		grpc.WithChainUnaryInterceptor(telemetry.UnaryClientFields()),
 		telemetry.GRPCClientTracing())
 	if err != nil {

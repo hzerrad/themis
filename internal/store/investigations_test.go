@@ -7,10 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/hzerrad/themis/internal/check"
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
 
 var t0 = time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC)
@@ -339,5 +340,78 @@ func TestLease_LostWhenTheIncidentCloses(t *testing.T) {
 	}
 	if _, ok := lease(t, s, t0.Add(2*leaseFor)); ok {
 		t.Error("the investigation of a closed incident was leased again")
+	}
+}
+
+func insertGap(t *testing.T, s *store.Store, g store.EvidenceGap) {
+	t.Helper()
+	if err := s.InTx(t.Context(), func(tx pgx.Tx) error { return s.InsertEvidenceGap(t.Context(), tx, g) }); err != nil {
+		t.Fatalf("InsertEvidenceGap: %v", err)
+	}
+}
+
+func TestEvidenceGaps_RoundTrip(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	inv, _ := lease(t, s, t0)
+	at := t0.Add(time.Minute).UTC()
+
+	insertGap(t, s, store.EvidenceGap{
+		IncidentID: id, Template: evidence.RolloutHistory, Cause: evidence.GapForbidden,
+		Detail: `replicasets.apps is forbidden`, At: at,
+	})
+	insertGap(t, s, store.EvidenceGap{
+		IncidentID: id, LeaseID: inv.LeaseID, Template: evidence.ContainerLogsTail,
+		Params: map[string]string{"pod": "checkout-7d9f8b6c4-x2kqp"}, Cause: evidence.GapNotInProfile, At: at.Add(time.Second),
+	})
+
+	gaps, err := s.EvidenceGaps(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gaps) != 2 {
+		t.Fatalf("got %d gaps, want 2", len(gaps))
+	}
+	first, second := gaps[0], gaps[1]
+	if first.Template != evidence.RolloutHistory || first.Cause != evidence.GapForbidden || first.LeaseID != "" ||
+		first.Detail != "replicasets.apps is forbidden" || !first.At.Equal(at) {
+		t.Errorf("initial gap = %+v", first)
+	}
+	if second.LeaseID != inv.LeaseID || second.Cause != evidence.GapNotInProfile || second.Params["pod"] != "checkout-7d9f8b6c4-x2kqp" {
+		t.Errorf("requested gap = %+v", second)
+	}
+}
+
+// Only the closed set of causes is stored.
+func TestEvidenceGaps_UnknownCauseRefused(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: id, Template: evidence.PodStates, Cause: "gremlins", At: t0})
+	})
+	if err == nil {
+		t.Error("a gap with an unknown cause was stored")
+	}
+}
+
+// Asking again for what was refused says nothing new, and must not grow the
+// table.
+func TestEvidenceGaps_OncePerLeaseTemplateAndCause(t *testing.T) {
+	s, _ := newStore(t)
+	id := investigating(t, s)
+	inv, _ := lease(t, s, t0)
+	counted := metrictest.Delta(t, "themis_missing_evidence_total", map[string]string{"template": evidence.TargetEvents, "cause": string(evidence.GapBudgetSpent)})
+	for range 3 {
+		insertGap(t, s, store.EvidenceGap{IncidentID: id, LeaseID: inv.LeaseID, Template: evidence.TargetEvents, Cause: evidence.GapBudgetSpent, At: t0})
+	}
+	insertGap(t, s, store.EvidenceGap{IncidentID: id, LeaseID: inv.LeaseID, Template: evidence.PodStates, Cause: evidence.GapBudgetSpent, At: t0})
+	for range 2 {
+		insertGap(t, s, store.EvidenceGap{IncidentID: id, Template: evidence.RolloutHistory, Cause: evidence.GapForbidden, At: t0})
+	}
+	if gaps, err := s.EvidenceGaps(t.Context(), id); err != nil || len(gaps) != 3 {
+		t.Errorf("got %d gaps, %v; want one per lease, template and cause: 3", len(gaps), err)
+	}
+	if got := counted(); got != 1 {
+		t.Errorf("counted %v, want 1", got)
 	}
 }

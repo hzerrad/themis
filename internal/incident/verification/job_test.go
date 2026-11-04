@@ -15,11 +15,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/store"

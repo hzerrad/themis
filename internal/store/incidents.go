@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 )
 
 var (
@@ -127,6 +127,18 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 
 	if tst.To == incident.Escalated || tst.To == incident.ContainedEscalated {
 		return s.EnqueueTx(ctx, tx, EscalationArgs{IncidentID: tst.ID, From: tst.From, To: tst.To, Reason: tst.Reason, At: time.Now().UTC()})
+	}
+	return nil
+}
+
+// TransitionPath walks an incident along path, one transition at a time,
+// each with the same reason and actor.
+func (s *Store) TransitionPath(ctx context.Context, tx pgx.Tx, id, reason, actor string, path ...incident.State) error {
+	for i := 1; i < len(path); i++ {
+		err := s.Transition(ctx, tx, TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
