@@ -25,7 +25,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `notifications.externalURL` | no | Where people reach the UI, used for links in notices. |
 | `externalProposals` | no | Who outside Themis may suggest fixes; see [below](#fixes-suggested-from-outside). |
 | `resources.namespace` | no | Read profiles and global settings from custom resources, with this as Themis's own namespace. The chart sets it. |
-| `profiles` | without `resources` | Incident classes, below. Set either this or `resources`, not both. |
+| `scenarios.disabled` | no | [Scenario packs](scenarios.md) to turn off, by name. Every pack is on otherwise, each bringing its profile and checks. A name no pack has stops Themis from starting. |
+| `profiles` | no | Incident classes of your own, below, on top of the scenario packs'. Set either this or `resources`, not both. |
 
 ## People and roles
 
@@ -101,7 +102,7 @@ Its spec is a [profile](#profiles), without `name`: the resource's name is the p
 
 Anyone who can write an `IncidentProfile` in a namespace chooses what Themis may read and propose there, so grant it with Kubernetes RBAC as you would other write access. A team can't reach another namespace, and it can't go past the `ThemisConfig` ceiling.
 
-The chart's `profiles` value installs resources in Themis's namespace.
+The chart's `profiles` value installs resources in Themis's namespace. An `IncidentProfile` there with the same name as a scenario pack's profile replaces it; if it is refused, the pack's applies.
 
 ### ThemisConfig
 
@@ -186,6 +187,8 @@ The chart adds the adapter as a source with its own service account, limited to 
 
 A profile says which alerts belong to an incident class, what an investigation may look at, what it may propose, and how proposals are decided.
 
+Each [scenario pack](scenarios.md) brings one, named after the pack: `rollout-regression` is in [`scenarios/rollout-regression/scenario.yaml`](../scenarios/rollout-regression/scenario.yaml). A profile of your own, in the file or as an `IncidentProfile`, with the same name replaces the pack's entirely, so you can tighten its policy without changing Themis: copy the pack's profile and edit it. On equal priority, your own profile wins over a pack's.
+
 ```yaml
 profiles:
   - name: rollout-regression
@@ -206,7 +209,7 @@ profiles:
 
 ### Matching alerts
 
-An alert is resolved to the workload it is about: the object its labels name (`deployment`, `statefulset`, `daemonset`, `job_name`, `persistentvolumeclaim`, `pod`), followed up controller owner references to the top. A `themis_target=<Kind.group>/<name>` label overrides that. The highest-priority profile whose `alertNames`, `labels` and `targetKinds` all match wins; priorities must be unique. Alerts that match no profile are recorded as rejected, with the reason.
+An alert is resolved to the workload it is about: the object its labels name (`deployment`, `statefulset`, `daemonset`, `job_name`, `persistentvolumeclaim`, `pod`), followed up controller owner references to the top. A `themis_target=<Kind.group>/<name>` label overrides that. The highest-priority profile whose `alertNames`, `labels` and `targetKinds` all match wins; priorities must be unique among your profiles, and among the packs'. Alerts that match no profile are recorded as rejected, with the reason.
 
 Alerts with the same profile and target join one open incident.
 
@@ -226,7 +229,7 @@ No template returns pod specs, where environment variables often hold literal se
 
 ### Predicates
 
-Deterministic facts, decided from the evidence by checks Themis ships with ([how a check is written](checks.md)). Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
+Deterministic facts, decided from the evidence by the checks the scenario packs bring ([how a check is written](checks.md)). Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
 
 A profile runs every check unless its `checks` lists the ones to run. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused.
 

@@ -79,9 +79,10 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/incident/notification` | Tells people when an incident is handed to them |
 | `internal/capability` | **What Themis can change.** The interface every fix implements, and the registry |
 | `internal/capability/rollback` | `deployment.rollback-to-revision` |
-| `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. Themis's own are in `rollout.yaml`; see [checks.md](checks.md) |
+| `scenarios/` | **The incidents Themis handles**, one scenario pack per folder: its profile, its checks and the evaluation cases that prove it, built into the binary; see [scenarios.md](scenarios.md) |
+| `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. The checks themselves are in the scenario packs; see [checks.md](checks.md) |
 | `internal/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
-| `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts; and whether a profile asks for anything it doesn't have |
+| `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts: it loads the scenario packs, and says whether a profile asks for anything it doesn't have |
 | `internal/policy` | Policy rules: compiling them, and deciding an action with them |
 | `internal/workload` | The target as Themis reads it: whether it is still the same object, its template, revisions, pods and replica counts. Everything else asks here |
 | `internal/server/httpapi`, `internal/server/grpcapi`, `internal/server/web` | The HTTP API, the investigators' gRPC API, and the UI |
@@ -91,7 +92,7 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/store` | PostgreSQL, and its migrations |
 | `internal/config`, `internal/config/resources`, `internal/settings` | Configuration from the file, from custom resources, and from the Setup page |
 | `internal/auth`, `internal/digest`, `internal/telemetry`, `internal/health`, `internal/kubewarn` | Shared plumbing: tokens, the action digest, metrics and traces, probes, API warnings |
-| `internal/evaluation`, `eval/` | Replaying recorded model replies against the scenarios |
+| `internal/evaluation`, `eval/`, `scripts/scenario` | Building each scenario pack case's bundle, the conformance suite and the pack scaffold; the recorded model replies the cases are replayed against |
 | `internal/testutil` | Test helpers: a real API server, PostgreSQL, metrics |
 
-`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in the catalog's constructor in `internal/catalog`; nothing else in the core changes. A new check is a YAML definition, no Go; see [checks.md](checks.md).
+`scenarios/`, `capability` and `evidence` are where Themis grows. A new kind of incident is a scenario pack: one folder under `scenarios/`, mostly YAML, with its profile, its checks and the cases that prove it, and no change anywhere else; see [scenarios.md](scenarios.md). A new check is a YAML definition in a pack, no Go; see [checks.md](checks.md). A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in the catalog's constructor in `internal/catalog`; nothing else in the core changes.

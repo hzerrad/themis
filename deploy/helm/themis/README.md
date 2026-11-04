@@ -156,7 +156,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
-| `profiles` | one profile | Incident classes, policy and verification, installed as `IncidentProfile` resources; see [Configuration](../../../docs/configuration.md#configuration-resources) |
+| `scenarios.disabled` | `[]` | [Scenario packs](../../../docs/scenarios.md) to turn off, by name; every pack is on otherwise. A name no pack has stops Themis from starting |
+| `profiles` | `[]` | Incident classes of your own, installed as `IncidentProfile` resources. One named like a scenario pack's profile replaces it; see [Configuration](../../../docs/configuration.md#configuration-resources) |
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
 | `networkPolicy.agentNamespaces` | `[]` | Namespaces whose pods may reach the core's gRPC API, for [agents that suggest fixes](../../../docs/configuration.md#fixes-suggested-from-outside) |
 | `resources.{core,executor,intelligence}` | small | Container resources |
