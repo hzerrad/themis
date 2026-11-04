@@ -236,6 +236,9 @@ func TestDeny_ClosesWithoutAction(t *testing.T) {
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
 		t.Errorf("approval after denial: status = %d, want 409", rec.Code)
 	}
+	if rec := e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/deny", token, map[string]string{}); rec.Code != http.StatusConflict {
+		t.Errorf("second denial: status = %d, want 409", rec.Code)
+	}
 	if got := denied(); got != 1 {
 		t.Errorf("counted %v denials, want 1", got)
 	}

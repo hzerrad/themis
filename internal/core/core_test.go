@@ -20,7 +20,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
+	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/core"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
@@ -32,7 +37,12 @@ import (
 var k8s *kubetest.Env
 
 func TestMain(m *testing.M) {
-	env, stop, err := kubetest.Start()
+	crds, err := themisCRDs()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	env, stop, err := kubetest.Start(crds...)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "start envtest (run `make envtest` first):", err)
 		os.Exit(1)
@@ -41,6 +51,24 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	stop()
 	os.Exit(code)
+}
+
+// themisCRDs reads the chart's custom resource definitions, so the core can
+// read its configuration from resources.
+func themisCRDs() ([]*apiextensionsv1.CustomResourceDefinition, error) {
+	var crds []*apiextensionsv1.CustomResourceDefinition
+	for _, f := range []string{"incidentprofiles.yaml", "themisconfigs.yaml"} {
+		data, err := os.ReadFile(filepath.Join("../../deploy/helm/themis/crds", f)) //nolint:gosec // fixed paths
+		if err != nil {
+			return nil, err
+		}
+		var crd apiextensionsv1.CustomResourceDefinition
+		if err := yaml.Unmarshal(data, &crd); err != nil {
+			return nil, err
+		}
+		crds = append(crds, &crd)
+	}
+	return crds, nil
 }
 
 const (
@@ -176,7 +204,10 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	_, pod := k8s.NewRollout(t, ns, "checkout")
 	dbURL := pgtest.NewDatabase(t)
-	configPath := writeConfig(t, ns)
+	// The executor is configured but not running.
+	executorAddr := freeAddr(t)
+	configPath := writeFile(t, "with-executor.yaml", readFile(t, writeConfig(t, ns))+fmt.Sprintf("executor:\n  address: %s\n  bearerTokenFile: %s\n",
+		executorAddr, writeFile(t, "executor-token", "executor-secret\n")))
 	o, exited, cancel := start(t, func() core.Options {
 		return core.Options{
 			ConfigPath:  configPath,
@@ -221,9 +252,11 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("POST status = %d, want 202", resp.StatusCode)
 	}
-	// The status page now says alerts arrive, through which receiver.
+	// The status page now says alerts arrive, through which receiver, and
+	// that the configured executor can't be reached.
 	if code, body := get("http://" + o.SetupAddr + "/v1/status"); code != http.StatusOK ||
-		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through its \"themis\" receiver`) {
+		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through its \"themis\" receiver`) ||
+		!strings.Contains(body, "can't reach the executor at "+executorAddr) {
 		t.Errorf("/v1/status = %d %s", code, body)
 	}
 
@@ -355,6 +388,10 @@ func TestRun_RefusesToStart(t *testing.T) {
 			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
 		},
 		"setup address others can reach": func(o *core.Options) { o.SetupAddr = "0.0.0.0:8083" },
+		"unreadable executor token": func(o *core.Options) {
+			o.DatabaseURL = pgtest.NewDatabase(t)
+			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n")
+		},
 		"unreachable database": func(o *core.Options) {
 			o.DatabaseURL = "postgres://themis:themis@" + freeAddr(t) + "/themis?sslmode=disable&connect_timeout=2"
 		},
@@ -386,5 +423,51 @@ func TestRun_RefusesToStart(t *testing.T) {
 				t.Fatal("Run did not refuse to start")
 			}
 		})
+	}
+}
+
+// With configuration from resources, the core checks each IncidentProfile as
+// it does the file's: one naming an unknown evidence template is refused on
+// the resource, where the platform team sees why, and the core still starts.
+func TestRun_RefusesAProfileResourceWithAnUnknownTemplate(t *testing.T) {
+	ns := k8s.NewNamespace(t)
+	p := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{
+		"priority": int64(10),
+		"match":    map[string]any{"alertNames": []any{"KubePodCrashLooping"}, "targetKinds": []any{"Deployment.apps"}},
+		"evidence": map[string]any{"allowed": []any{"pod_state"}},
+	}}}
+	p.SetGroupVersionKind(resources.IncidentProfileKind)
+	p.SetNamespace(ns)
+	p.SetName("typo")
+	k8s.Create(t, p)
+	fileConfig := readFile(t, writeConfig(t, ns))
+	configPath := writeFile(t, "resources.yaml", fileConfig[:strings.Index(fileConfig, "profiles:")]+"resources:\n  namespace: "+ns+"\n")
+	dbURL := pgtest.NewDatabase(t)
+	start(t, func() core.Options {
+		return core.Options{
+			ConfigPath:  configPath,
+			DatabaseURL: dbURL,
+			Kubernetes:  k8s.Config,
+			HTTPAddr:    freeAddr(t),
+			ProbeAddr:   freeAddr(t),
+			MetricsAddr: "0",
+			GRPCAddr:    freeAddr(t),
+			Workers:     1,
+			Logger:      slog.New(slog.DiscardHandler),
+		}
+	})
+
+	if err := k8s.Get(t.Context(), client.ObjectKeyFromObject(p), p); err != nil {
+		t.Fatal(err)
+	}
+	conditions, _, _ := unstructured.NestedSlice(p.Object, "status", "conditions")
+	var got map[string]any
+	for _, c := range conditions {
+		if m, ok := c.(map[string]any); ok && m["type"] == "Accepted" {
+			got = m
+		}
+	}
+	if got["status"] != "False" || !strings.Contains(fmt.Sprint(got["message"]), `unknown evidence template "pod_state"`) {
+		t.Errorf("Accepted condition = %v, want refused for the unknown template", got)
 	}
 }

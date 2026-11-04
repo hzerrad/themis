@@ -12,7 +12,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	appsv1 "k8s.io/api/apps/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
@@ -27,6 +31,8 @@ import (
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+
+	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
@@ -237,13 +243,21 @@ func TestExecute_StatusOnlyChange_StillExecutes(t *testing.T) {
 	}
 }
 
-func TestExecute_NotAuthorized(t *testing.T) {
+// The executor refuses, in terms the core acts on, an action no one approved
+// or that doesn't exist, and writes nothing.
+func TestExecuteAction_RefusesUnapprovedAndUnknownActions(t *testing.T) {
 	e, a := approved(t)
 	if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET state = 'awaiting_approval' WHERE id = $1`, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.executor(k8s.Client).Execute(t.Context(), a.ID); !errors.Is(err, store.ErrNotAuthorized) {
-		t.Errorf("err = %v, want ErrNotAuthorized", err)
+	s := &executor.Server{Executor: e.executor(k8s.Client)}
+	for id, want := range map[string]codes.Code{a.ID: codes.FailedPrecondition, "0192f0c1-0000-7000-8000-0000000000ff": codes.NotFound} {
+		if _, err := s.ExecuteAction(t.Context(), &themisv1.ExecuteActionRequest{ActionId: id}); status.Code(err) != want {
+			t.Errorf("ExecuteAction(%s) = %v, want %s", id, err, want)
+		}
+	}
+	if got := e.image(t); got != "example/checkout:2.4.0" {
+		t.Errorf("image = %s, want untouched", got)
 	}
 }
 
@@ -284,19 +298,34 @@ func TestExecute_DryRunFailure_NoWrite(t *testing.T) {
 	}
 }
 
-// After a request is sent, a timeout leaves the write unknown: it is never
-// retried blindly.
-func TestExecute_TimeoutAfterSend_Ambiguous(t *testing.T) {
-	e, a := approved(t)
-	res, err := e.executor(failing(t, false, context.DeadlineExceeded)).Execute(t.Context(), a.ID)
-	if err != nil {
-		t.Fatal(err)
+// How the real write fails decides what the incident says: a timeout after
+// sending leaves the write unknown and is never retried blindly, while an
+// answer from the API server means nothing was written.
+func TestExecute_WriteFailure(t *testing.T) {
+	deployments := schema.GroupResource{Group: "apps", Resource: "deployments"}
+	tests := map[string]struct {
+		err    error
+		status executor.Status
+		state  store.ActionState
+	}{
+		"timeout after send": {context.DeadlineExceeded, executor.Ambiguous, store.ActionAmbiguous},
+		"changed meanwhile":  {apierrors.NewConflict(deployments, "checkout", errors.New("modified")), executor.Stale, store.ActionStale},
+		"rejected":           {apierrors.NewForbidden(deployments, "checkout", errors.New("no")), executor.Failed, store.ActionFailed},
 	}
-	if res.Status != executor.Ambiguous {
-		t.Errorf("result = %+v, want ambiguous", res)
-	}
-	if got := e.actionState(t, a.ID); got != store.ActionAmbiguous {
-		t.Errorf("action = %s, want ambiguous", got)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			e, a := approved(t)
+			res, err := e.executor(failing(t, false, tt.err)).Execute(t.Context(), a.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Status != tt.status {
+				t.Errorf("result = %+v, want %s", res, tt.status)
+			}
+			if got := e.actionState(t, a.ID); got != tt.state {
+				t.Errorf("action = %s, want %s", got, tt.state)
+			}
+		})
 	}
 }
 

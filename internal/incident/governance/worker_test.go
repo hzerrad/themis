@@ -232,14 +232,36 @@ func TestGovern_Idempotent(t *testing.T) {
 	}
 }
 
-func TestGovern_RevisionMissing_ClosesWithoutAction(t *testing.T) {
-	e := newEnv(t)
-	id, p := e.diagnosed(t, "rollout-regression", 9, predicates)
-	e.govern(t, p)
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed_no_action", got)
+// A suggestion Themis can't turn into a fix closes the incident without one.
+func TestGovern_ClosesWithoutAction(t *testing.T) {
+	tests := map[string]struct {
+		profile  string
+		revision int64
+		mutate   func(t *testing.T, e *env, proposalID string)
+	}{
+		"revision missing": {profile: "rollout-regression", revision: 9},
+		"invalid revision": {profile: "rollout-regression", revision: 0},
+		"profile removed":  {profile: "removed", revision: 1},
+		"unknown fix": {profile: "rollout-regression", revision: 1, mutate: func(t *testing.T, e *env, proposalID string) {
+			if _, err := e.pool.Exec(t.Context(), `UPDATE proposals SET capability = 'deployment.teleport' WHERE id = $1`, proposalID); err != nil {
+				t.Fatal(err)
+			}
+		}},
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM actions WHERE incident_id = $1`, id); n != 0 {
-		t.Errorf("%d actions, want none", n)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id, p := e.diagnosed(t, tt.profile, tt.revision, predicates)
+			if tt.mutate != nil {
+				tt.mutate(t, e, p)
+			}
+			e.govern(t, p)
+			if got := e.state(t, id); got != incident.ClosedNoAction {
+				t.Errorf("state = %s, want closed_no_action", got)
+			}
+			if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM actions WHERE incident_id = $1`, id); n != 0 {
+				t.Errorf("%d actions, want none", n)
+			}
+		})
 	}
 }

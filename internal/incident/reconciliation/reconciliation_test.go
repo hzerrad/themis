@@ -1,6 +1,8 @@
 package reconciliation_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -223,5 +225,47 @@ func TestReconcile_TargetGone_Cancels(t *testing.T) {
 	e.reconcile(t)
 	if got := e.incident(t, id).State; got != incident.Canceled {
 		t.Errorf("state = %s, want canceled", got)
+	}
+}
+
+// unreadable fails every read in one namespace, as when the API server
+// errors there.
+type unreadable struct {
+	client.Reader
+	ns string
+}
+
+func (r unreadable) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if key.Namespace == r.ns {
+		return errors.New("the server is currently unable to handle the request")
+	}
+	return r.Reader.Get(ctx, key, obj, opts...)
+}
+
+// A target that can't be read leaves its incident as it was, and the others
+// are still reconciled.
+func TestReconcile_UnreadableTargetDoesNotStopTheOthers(t *testing.T) {
+	e := newEnv(t)
+	fixed := e.open(t, incident.AwaitingApproval)
+	e.edit(t)
+	e.heal(t)
+
+	ns := k8s.NewNamespace(t)
+	k8s.Load(t, ns, scenario1)
+	other := &env{
+		store: e.store, pool: e.pool, ns: ns,
+		target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(deployment(t, ns).UID)},
+	}
+	stuck := other.open(t, incident.AwaitingApproval)
+	other.edit(t)
+	other.heal(t)
+
+	e.worker.Reader = unreadable{Reader: k8s, ns: ns}
+	e.reconcile(t)
+	if got := e.incident(t, stuck).State; got != incident.AwaitingApproval {
+		t.Errorf("unreadable target's incident = %s, want awaiting_approval", got)
+	}
+	if got := e.incident(t, fixed).State; got != incident.SelfResolved {
+		t.Errorf("readable target's incident = %s, want self_resolved", got)
 	}
 }

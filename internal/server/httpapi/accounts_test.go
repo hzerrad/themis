@@ -133,6 +133,7 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 	expect(t, "root changing their own role", f.send(http.MethodPatch, "/v1/accounts/root", root, map[string]string{"role": "viewer"}), http.StatusForbidden)
 	expect(t, "root deleting themselves", f.send(http.MethodDelete, "/v1/accounts/root", root, nil), http.StatusForbidden)
 	expect(t, "changing an unknown account", f.send(http.MethodPatch, "/v1/accounts/nobody", root, map[string]string{"role": "viewer"}), http.StatusNotFound)
+	expect(t, "deleting an unknown account", f.send(http.MethodDelete, "/v1/accounts/nobody", root, nil), http.StatusNotFound)
 
 	b := f.signIn("bob", "bob's long password")
 	expect(t, "bob listing accounts", f.send(http.MethodGet, "/v1/accounts", b, nil), http.StatusForbidden)
@@ -141,8 +142,19 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 		t.Errorf("bob's role after the change = %v, want viewer", me["role"])
 	}
 
+	// An admin resetting a password ends that person's sessions, as their
+	// own change does.
+	expect(t, "root changing nothing about bob", f.send(http.MethodPatch, "/v1/accounts/bob", root, map[string]string{}), http.StatusBadRequest)
+	expect(t, "root giving bob a short password", f.send(http.MethodPatch, "/v1/accounts/bob", root, map[string]string{"password": "short"}), http.StatusBadRequest)
+	expect(t, "root resetting bob's password", f.send(http.MethodPatch, "/v1/accounts/bob", root, map[string]string{"password": "bob's reset long password"}), http.StatusNoContent)
+	if code, _ := f.me(b); code != http.StatusUnauthorized {
+		t.Errorf("bob's session after an admin reset his password = %d, want 401", code)
+	}
+	b = f.signIn("bob", "bob's reset long password")
+
 	expect(t, "bob, with a wrong current password", f.send(http.MethodPost, "/v1/me/password", b, map[string]string{"current": "a guess", "new": "bob's new long password"}), http.StatusForbidden)
-	expect(t, "bob changing his password", f.send(http.MethodPost, "/v1/me/password", b, map[string]string{"current": "bob's long password", "new": "bob's new long password"}), http.StatusNoContent)
+	expect(t, "bob choosing a short password", f.send(http.MethodPost, "/v1/me/password", b, map[string]string{"current": "bob's reset long password", "new": "short"}), http.StatusBadRequest)
+	expect(t, "bob changing his password", f.send(http.MethodPost, "/v1/me/password", b, map[string]string{"current": "bob's reset long password", "new": "bob's new long password"}), http.StatusNoContent)
 	if code, _ := f.me(b); code != http.StatusUnauthorized {
 		t.Errorf("bob's old session after a new password = %d, want 401", code)
 	}
