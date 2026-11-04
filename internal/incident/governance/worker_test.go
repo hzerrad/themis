@@ -1,7 +1,9 @@
 package governance_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -265,5 +267,69 @@ func TestGovern_ClosesWithoutAction(t *testing.T) {
 				t.Errorf("%d actions, want none", n)
 			}
 		})
+	}
+}
+
+// A rule that can't be evaluated forbids the fix, and is counted as a failed
+// rule, not as a denial a rule decided.
+func TestGovern_RuleThatFailsForbids(t *testing.T) {
+	e := newEnv(t)
+	p := profile("rollout-regression")
+	p.Policy.Rules = append([]config.PolicyRule{{Name: "typo", When: `predicates.no_such_check == "true"`, Decision: config.DecisionRequireApproval}}, p.Policy.Rules...)
+	e.worker.Config = config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}
+	failed, deny := decisions(t, "error"), decisions(t, "deny")
+	id, proposal := e.diagnosed(t, "rollout-regression", 1, predicates)
+	e.govern(t, proposal)
+
+	if a := e.action(t, id); a.State != store.ActionDenied || a.PolicyID != "typo" || !strings.Contains(a.DecisionReason, "couldn't be evaluated") {
+		t.Errorf("action = %s by %s: %q, want denied by typo, which couldn't be evaluated", a.State, a.PolicyID, a.DecisionReason)
+	}
+	if got := e.state(t, id); got != incident.ClosedNoAction {
+		t.Errorf("state = %s, want closed_no_action", got)
+	}
+	if f, d := failed(), deny(); f != 1 || d != 0 {
+		t.Errorf("counted %v failed rules and %v denials, want 1 and 0", f, d)
+	}
+}
+
+// unreachable stands in for an API server Themis can't reach.
+type unreachable struct{ client.Reader }
+
+func (unreachable) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return errors.New("the API server is unreachable")
+}
+
+func (unreachable) List(context.Context, client.ObjectList, ...client.ListOption) error {
+	return errors.New("the API server is unreachable")
+}
+
+// When the cluster can't be read, Themis decides nothing: the job fails, to
+// be retried, and the incident waits where it was.
+func TestGovern_UnreadableClusterIsRetried(t *testing.T) {
+	e := newEnv(t)
+	id, p := e.diagnosed(t, "rollout-regression", 1, predicates)
+	e.worker.Reader = unreachable{}
+	if err := e.worker.Govern(t.Context(), p); err == nil {
+		t.Error("Govern = nil, want an error so the job is retried")
+	}
+	if got := e.state(t, id); got != incident.Diagnosed {
+		t.Errorf("state = %s, want diagnosed", got)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM actions WHERE incident_id = $1`, id); n != 0 {
+		t.Errorf("%d actions, want none", n)
+	}
+}
+
+// Job kinds are stored with queued jobs: renaming one strands every job of
+// the old name across an upgrade.
+func TestJobKinds(t *testing.T) {
+	for _, tt := range []struct{ got, want string }{
+		{governance.GovernArgs{}.Kind(), "govern"},
+		{governance.ExecuteArgs{}.Kind(), "execute"},
+		{governance.RestoreArgs{}.Kind(), "restore"},
+	} {
+		if tt.got != tt.want {
+			t.Errorf("kind %q, want %q", tt.got, tt.want)
+		}
 	}
 }
