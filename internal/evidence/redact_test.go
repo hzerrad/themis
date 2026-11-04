@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/hzerrad/themis/internal/evidence"
 )
@@ -72,16 +71,5 @@ func TestRedact_LeavesOrdinaryTextAlone(t *testing.T) {
 	got, n := evidence.Redact(data, evidence.DefaultRules)
 	if string(got) != string(data) || n != 0 {
 		t.Errorf("Redact = %s, %d; want the input unchanged", got, n)
-	}
-}
-
-func TestRegistry_CollectRedacts(t *testing.T) {
-	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Data: []byte(`{"logs":"Authorization: Bearer abcdef123456"}`)}})
-	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
-	if err != nil {
-		t.Fatalf("Collect: %v", err)
-	}
-	if strings.Contains(string(item.Data), "abcdef123456") || item.Redactions != 1 {
-		t.Errorf("Collect = %s with %d redactions, want the token redacted once", item.Data, item.Redactions)
 	}
 }

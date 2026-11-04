@@ -133,7 +133,8 @@ func TestPeople_ChangesNeedTheRequestHeader(t *testing.T) {
 	}
 }
 
-// Raw evidence, such as logs, is for responders and above.
+// Raw evidence, such as logs, is for responders and above, who get its data
+// as JSON; a viewer is only told it exists.
 func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 	e := signedIn(t)
 	a := e.awaiting(t)
@@ -156,6 +157,14 @@ func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 		}
 		if !strings.Contains(rec.Body.String(), evidence.ContainerLogsTail) {
 			t.Errorf("%s isn't told the evidence exists", who)
+		}
+		if sees {
+			var detail struct {
+				Evidence []struct{ Data map[string]any }
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &detail); err != nil || len(detail.Evidence) != 1 || detail.Evidence[0].Data["logs"] != "canary-line" {
+				t.Errorf("%s: evidence = %s (%v), want its data as JSON", who, rec.Body, err)
+			}
 		}
 	}
 }

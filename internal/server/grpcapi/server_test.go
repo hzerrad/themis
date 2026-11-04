@@ -243,6 +243,8 @@ func TestRenewLease_KeepsTheLeaseAlive(t *testing.T) {
 	}
 }
 
+// An inconclusive diagnosis closes the incident, and with nothing missing it is
+// ambiguous, not blind.
 func TestComplete_Inconclusive_ClosesWithoutAction(t *testing.T) {
 	e := newEnv(t)
 	abstained := investigations(t, "abstained")
@@ -262,6 +264,13 @@ func TestComplete_Inconclusive_ClosesWithoutAction(t *testing.T) {
 	}
 	if got := abstained(); got != 1 {
 		t.Errorf("counted %v abstentions, want 1", got)
+	}
+	rec, err := e.store.IncidentInvestigation(t.Context(), inv.GetIncidentId())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Blind {
+		t.Error("an investigation with nothing missing is blind")
 	}
 }
 
@@ -297,15 +306,6 @@ func TestLease_AbandonedLastAttemptEscalates(t *testing.T) {
 	}
 	if got := lost(); got != store.MaxInvestigationAttempts {
 		t.Errorf("counted %v lost leases, want %d", got, store.MaxInvestigationAttempts)
-	}
-}
-
-func TestEvidence_TemplateNotInProfile_PermissionDenied(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	_, err := e.evidence.CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.ContainerLogsTail})
-	if code(err) != codes.PermissionDenied {
-		t.Errorf("err = %v, want PermissionDenied", err)
 	}
 }
 

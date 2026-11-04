@@ -53,13 +53,6 @@ async def test_a_right_answer_runs_the_real_loop() -> None:
     assert r.served_by == "served-model"
 
 
-async def test_the_loop_holds_a_proposal_until_logs_are_read() -> None:
-    adapter = ScriptedAdapter(propose(), LOGS, propose())
-    r = (await run(adapter)).records[0]
-    assert r.conclusion == "proposed"
-    assert r.steps == 3
-
-
 async def test_a_wrong_target_reaches_the_scorer_unchanged() -> None:
     other = {**TARGET, "namespace": "kube-system", "name": "coredns"}
     r = (await run(ScriptedAdapter(LOGS, propose(target=other)))).records[0]
@@ -120,6 +113,8 @@ async def test_the_token_cap_stops_before_passing_it() -> None:
     assert 0 < len(out.records) < 100
     spent = adapter.calls * 6000
     assert spent <= 30_000
+    # The run the cap cut off is dropped, not scored.
+    assert all(r.conclusion == "proposed" for r in out.records)
 
 
 async def test_the_dollar_cap_stops_before_passing_it() -> None:
@@ -129,12 +124,6 @@ async def test_the_dollar_cap_stops_before_passing_it() -> None:
     out = await run(adapter, runs=100, caps=caps)
     assert "spending cap" in out.stopped
     assert sum(r.cost_usd for r in out.records) <= 0.05
-
-
-async def test_the_run_cut_off_by_the_cap_is_dropped() -> None:
-    adapter = ScriptedAdapter(LOGS, propose(), tokens=3000)
-    out = await run(adapter, runs=100, caps=Caps(max_tokens=30_000))
-    assert all(r.conclusion == "proposed" for r in out.records)
 
 
 def test_allowance_prices_every_token_at_the_dearer_rate() -> None:

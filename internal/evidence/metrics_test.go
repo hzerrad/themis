@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +19,13 @@ func TestMetrics_EvidenceCollectedTruncatedRedacted(t *testing.T) {
 	redactions := metrictest.Delta(t, "themis_redactions_total", labels)
 
 	r := evidence.NewRegistry(fakeTemplate{item: evidence.Item{Data: []byte(`{"env":"password=a token=b"}`), Truncated: true}})
-	if _, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); err != nil {
+	item, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
+	if err != nil {
 		t.Fatal(err)
+	}
+	// Collect redacts what it returns, and counts each redaction on the item.
+	if strings.Contains(string(item.Data), "password=a") || item.Redactions != 2 {
+		t.Errorf("Collect = %s with %d redactions, want both secrets redacted", item.Data, item.Redactions)
 	}
 	failing := evidence.NewRegistry(fakeTemplate{err: evidence.ErrNoPods})
 	if _, err := failing.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrNoPods) {

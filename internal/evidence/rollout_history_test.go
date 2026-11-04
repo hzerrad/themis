@@ -26,6 +26,11 @@ func collectRolloutHistory(t *testing.T, target incident.TargetRef) evidence.Ite
 
 // One collection of scenario 1, where revision 2 lowered the memory limit.
 func TestRolloutHistory_Scenario1(t *testing.T) {
+	// The client decodes times in the local zone: evidence is written in UTC.
+	local := time.Local
+	time.Local = time.FixedZone("UTC+1", 60*60)
+	t.Cleanup(func() { time.Local = local })
+
 	before := time.Now().Add(-time.Minute)
 	item := collectRolloutHistory(t, loadScenario1(t))
 
@@ -60,6 +65,9 @@ func TestRolloutHistory_Scenario1(t *testing.T) {
 		if !strings.Contains(string(item.Data), "ProgressDeadlineExceeded") {
 			t.Errorf("Data lacks the Progressing condition: %s", item.Data)
 		}
+		if !strings.Contains(string(item.Data), `"2026-10-27T09:10:00Z"`) {
+			t.Errorf("the Progressing condition's time is not in UTC: %s", item.Data)
+		}
 		var view evidence.RolloutHistoryView
 		if err := json.Unmarshal(item.Data, &view); err != nil {
 			t.Fatal(err)
@@ -77,17 +85,6 @@ func TestRolloutHistory_Scenario1(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestRolloutHistory_TimesAreUTC(t *testing.T) {
-	local := time.Local
-	time.Local = time.FixedZone("UTC+1", 60*60)
-	t.Cleanup(func() { time.Local = local })
-
-	item := collectRolloutHistory(t, loadScenario1(t))
-	if !strings.Contains(string(item.Data), `"2026-10-27T09:10:00Z"`) {
-		t.Errorf("the Progressing condition's time is not in UTC: %s", item.Data)
-	}
 }
 
 // newReplicaSetAt creates a ReplicaSet of d at a revision, with extra

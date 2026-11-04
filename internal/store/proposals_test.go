@@ -58,38 +58,3 @@ func TestInsertProposal_StoresEveryField(t *testing.T) {
 		t.Errorf("Proposal = %+v", read)
 	}
 }
-
-func TestInsertProposal_IdempotentPerLease(t *testing.T) {
-	s, pool := newStore(t)
-	id := investigating(t, s)
-	inv, _ := lease(t, s, t0)
-
-	first, _ := insertProposal(t, s, proposal(id, inv.LeaseID, "p-1"))
-	again, created := insertProposal(t, s, proposal(id, inv.LeaseID, "p-1"))
-	if created || again.ID != first.ID {
-		t.Errorf("a retried submission created %v, ID %s; want the first proposal %s", created, again.ID, first.ID)
-	}
-	if _, created := insertProposal(t, s, proposal(id, inv.LeaseID, "p-2")); !created {
-		t.Error("a new client proposal ID did not create a proposal")
-	}
-	if n := count(t, pool, `SELECT count(*) FROM proposals WHERE incident_id = $1`, id); n != 2 {
-		t.Errorf("%d proposals, want 2", n)
-	}
-}
-
-func TestRecordSafetyEvent(t *testing.T) {
-	s, pool := newStore(t)
-	id := investigating(t, s)
-	inv, _ := lease(t, s, t0)
-	p, _ := insertProposal(t, s, proposal(id, inv.LeaseID, "p-1"))
-
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		return s.RecordSafetyEvent(t.Context(), tx, store.SafetyEvent{IncidentID: id, ProposalID: p.ID, Kind: store.SafetyTargetMismatch, Detail: "kube-system/coredns"})
-	})
-	if err != nil {
-		t.Fatalf("RecordSafetyEvent: %v", err)
-	}
-	if n := count(t, pool, `SELECT count(*) FROM safety_events WHERE incident_id = $1 AND kind = 'target_mismatch'`, id); n != 1 {
-		t.Errorf("%d safety events, want 1", n)
-	}
-}

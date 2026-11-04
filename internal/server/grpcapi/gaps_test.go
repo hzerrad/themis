@@ -28,13 +28,13 @@ func (e *env) gap(t *testing.T, incidentID string) store.EvidenceGap {
 }
 
 // The investigator asked for evidence the profile does not allow: the profile,
-// not the cluster, kept it from Themis.
+// not the cluster, kept it from Themis. The request is refused as denied.
 func TestEvidence_NotInProfileRecordsGap(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
 	req := &themisv1.CollectEvidenceRequest{LeaseId: inv.GetLeaseId(), Template: evidence.ContainerLogsTail, Params: map[string]string{"pod": "checkout-7d9f8b6c4-x2kqp"}}
-	if _, err := e.evidence.CollectEvidence(t.Context(), req); err == nil {
-		t.Fatal("a template outside the profile was collected")
+	if _, err := e.evidence.CollectEvidence(t.Context(), req); code(err) != codes.PermissionDenied {
+		t.Fatalf("err = %v, want PermissionDenied", err)
 	}
 	g := e.gap(t, inv.GetIncidentId())
 	if g.Cause != evidence.GapNotInProfile || g.Template != evidence.ContainerLogsTail || g.LeaseID != inv.GetLeaseId() || g.Params["pod"] != "checkout-7d9f8b6c4-x2kqp" {
@@ -140,20 +140,6 @@ func TestComplete_Inconclusive_StoresGapsAndKind(t *testing.T) {
 	}
 	if !rec.Blind {
 		t.Error("an investigation missing evidence Themis could have had is not blind")
-	}
-}
-
-// Seeing everything and finding no clear answer is not blind.
-func TestComplete_InconclusiveWithoutGapsIsAmbiguous(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	e.complete(t, inv)
-	rec, err := e.store.IncidentInvestigation(t.Context(), inv.GetIncidentId())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.Blind {
-		t.Error("an investigation with nothing missing is blind")
 	}
 }
 

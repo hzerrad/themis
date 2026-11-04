@@ -94,13 +94,20 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	e := newEnv(t)
 	id := e.newIncident(t, "rollout-regression", e.target)
 
-	if err := e.worker.Prepare(t.Context(), id); err != nil {
-		t.Fatalf("Prepare: %v", err)
+	// River delivers at least once: a second run must change nothing.
+	for range 2 {
+		if err := e.worker.Prepare(t.Context(), id); err != nil {
+			t.Fatalf("Prepare: %v", err)
+		}
 	}
 	if got := e.state(t, id); got != incident.Investigating {
 		t.Errorf("state = %s, want investigating", got)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1 AND lease_id IS NULL`, id); n != 3 {
+	// Evidence that could be read leaves no gap.
+	if gaps, err := e.store.EvidenceGaps(t.Context(), id); err != nil || len(gaps) != 0 {
+		t.Errorf("gaps = %+v, %v; want none", gaps, err)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 3 {
 		t.Errorf("%d initial items, want 3", n)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 6 {
@@ -144,20 +151,6 @@ func TestPrepare_WithoutAnInvestigatorWaitsForASuggestion(t *testing.T) {
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM transitions WHERE incident_id = $1 AND reason LIKE '%No investigator is installed%'`, id); n != 1 {
 		t.Error("the timeline doesn't say why the incident waits")
-	}
-}
-
-// River delivers at least once: a second run must change nothing.
-func TestPrepare_Idempotent(t *testing.T) {
-	e := newEnv(t)
-	id := e.newIncident(t, "rollout-regression", e.target)
-	for range 2 {
-		if err := e.worker.Prepare(t.Context(), id); err != nil {
-			t.Fatalf("Prepare: %v", err)
-		}
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 3 {
-		t.Errorf("%d items after two runs, want 3", n)
 	}
 }
 

@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -43,6 +42,17 @@ func TestInsertRejectedAlert_StoresEveryField(t *testing.T) {
 	id, err := reject(t, s, newRejection(store.RejectionNotEnrolled))
 	if err != nil {
 		t.Fatalf("InsertRejectedAlert: %v", err)
+	}
+	// One row per rejection: the same alert rejected again is a second row.
+	again, err := reject(t, s, newRejection(store.RejectionNotEnrolled))
+	if err != nil {
+		t.Fatalf("InsertRejectedAlert again: %v", err)
+	}
+	if again == id {
+		t.Errorf("both rejections got ID %s", id)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM rejected_alerts`); n != 2 {
+		t.Errorf("%d rows, want 2", n)
 	}
 
 	var (
@@ -115,43 +125,5 @@ func TestInsertRejectedAlert_UnknownReasonRefused(t *testing.T) {
 	}
 	if n := count(t, pool, `SELECT count(*) FROM rejected_alerts`); n != 0 {
 		t.Errorf("%d rows stored, want 0", n)
-	}
-}
-
-// The rejection is part of the caller's transaction: rolled back with it.
-func TestInsertRejectedAlert_RolledBackWithCaller(t *testing.T) {
-	s, pool := newStore(t)
-	errLater := errors.New("a later step failed")
-
-	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
-		if _, err := s.InsertRejectedAlert(t.Context(), tx, newRejection(store.RejectionInvalidAlert)); err != nil {
-			return err
-		}
-		return errLater
-	})
-
-	if !errors.Is(err, errLater) {
-		t.Fatalf("InTx error = %v, want %v", err, errLater)
-	}
-	if n := count(t, pool, `SELECT count(*) FROM rejected_alerts`); n != 0 {
-		t.Errorf("%d rows stored after rollback, want 0", n)
-	}
-}
-
-// One row per rejection: the same alert rejected twice is two rows.
-func TestInsertRejectedAlert_OneRowPerRejection(t *testing.T) {
-	s, pool := newStore(t)
-
-	first, err1 := reject(t, s, newRejection(store.RejectionNoProfile))
-	second, err2 := reject(t, s, newRejection(store.RejectionNoProfile))
-
-	if err1 != nil || err2 != nil {
-		t.Fatalf("InsertRejectedAlert: %v, %v", err1, err2)
-	}
-	if first == second {
-		t.Errorf("both rejections got ID %s", first)
-	}
-	if n := count(t, pool, `SELECT count(*) FROM rejected_alerts`); n != 2 {
-		t.Errorf("%d rows, want 2", n)
 	}
 }

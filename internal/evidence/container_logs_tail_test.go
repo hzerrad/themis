@@ -115,15 +115,6 @@ func TestLogsTail_TruncatesAndKeepsUTF8(t *testing.T) {
 	}
 }
 
-// Silence is not evidence: empty logs say so.
-func TestLogsTail_EmptyLogsAreExplained(t *testing.T) {
-	logs := fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": ""}
-	data := string(collectLogs(t, logs, loadScenario1(t), nil).Data)
-	if !strings.Contains(data, "proves nothing either way") {
-		t.Errorf("empty logs carry no note: %s", data)
-	}
-}
-
 // A container that never ran has no logs, and the API server refuses to read
 // them. That isn't a crash that wrote nothing, so the note says so.
 func TestLogsTail_ContainerThatNeverRanIsExplained(t *testing.T) {
@@ -223,8 +214,12 @@ func TestLogsTail_GoneLogsAreExplained(t *testing.T) {
 	}
 }
 
-// Falling back to a current run that wrote nothing keeps both notes.
-func TestLogsTail_EmptyCurrentRunAfterFallbackIsExplained(t *testing.T) {
+// Silence is not evidence: empty logs say so, and falling back to a current
+// run that wrote nothing keeps both notes.
+func TestLogsTail_EmptyLogsAreExplained(t *testing.T) {
+	if view := logsView(t, fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": ""}, nil); !strings.Contains(view.Note, "proves nothing either way") {
+		t.Errorf("empty logs carry no note: %q", view.Note)
+	}
 	view := logsView(t, fakeLogs{
 		"checkout-7d9f8b6c4-x2kqp/app/previous": previousGone,
 		"checkout-7d9f8b6c4-x2kqp/app":          "",

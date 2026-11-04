@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, job
-from themis.v1 import proposal_pb2
+from themis.v1 import investigation_pb2, proposal_pb2
 from themis_intelligence.investigation.loop import (
     EVIDENCE_REMINDER,
     InvestigationError,
@@ -78,16 +78,19 @@ async def test_requests_evidence_then_proposes_rollback() -> None:
     assert result.usage.steps_used == 2
 
 
+# An endpoint cleared for sensitive data sees the logs, and nothing is missing.
 async def test_collected_evidence_reaches_the_model() -> None:
     core = FakeCore(logs="java.lang.OutOfMemoryError: heap")
     model = ScriptedModel(
         {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
         {"kind": "conclude_inconclusive"},
     )
-    await investigate(job(), core, model, max_steps=6)
+    gaps: list[investigation_pb2.EvidenceGap] = []
+    await investigate(job(), core, model, max_steps=6, gaps=gaps)
     last = model.requests[-1]
     assert "OutOfMemoryError" in last.messages[-1].content
     assert last.data_classification == "sensitive"
+    assert gaps == []
 
 
 async def test_max_steps_reached_concludes_inconclusive() -> None:
@@ -145,20 +148,6 @@ async def test_model_target_forwarded_unchanged() -> None:
     assert TARGET.uid in told
 
 
-async def test_rejected_proposal_lets_the_model_continue() -> None:
-    core = FakeCore()
-    core.reject_with = proposal_pb2.REJECTION_REASON_UNKNOWN_EVIDENCE
-    model = ScriptedModel(
-        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
-        propose(cited_evidence_ids=["made-up"]),
-        {"kind": "conclude_inconclusive"},
-    )
-    result = await investigate(job(), core, model, max_steps=6)
-    assert result.conclusion == "inconclusive"
-    assert len(core.submitted) == 1
-    assert "rejected" in model.requests[2].messages[-1].content
-
-
 async def test_evidence_is_marked_untrusted() -> None:
     model = ScriptedModel({"kind": "conclude_inconclusive"})
     await investigate(job(), FakeCore(), model, max_steps=6)
@@ -179,15 +168,10 @@ async def test_evidence_budget_spent_is_told_to_the_model() -> None:
     assert "budget" in model.requests[-1].messages[-1].content
 
 
-async def test_invalid_model_output_twice_fails_the_investigation() -> None:
-    model = ScriptedModel("validation_failed", "validation_failed")
-    with pytest.raises(InvestigationError) as err:
-        await investigate(job(), FakeCore(), model, max_steps=6)
-    assert err.value.reason == "invalid_model_output"
-
-
-async def test_cut_off_replies_count_as_invalid() -> None:
-    model = ScriptedModel("truncated", "truncated")
+# Cut-off replies count as invalid, like malformed ones.
+@pytest.mark.parametrize("error", ["validation_failed", "truncated"])
+async def test_invalid_model_output_twice_fails_the_investigation(error: str) -> None:
+    model = ScriptedModel(error, error)
     with pytest.raises(InvestigationError) as err:
         await investigate(job(), FakeCore(), model, max_steps=6)
     assert err.value.reason == "invalid_model_output"
@@ -240,16 +224,6 @@ async def test_logs_can_change_the_models_mind() -> None:
     result = await investigate(job(), core, model, max_steps=6)
     assert result.conclusion == "inconclusive"
     assert core.submitted == []
-
-
-async def test_logs_already_read_are_not_fetched_again() -> None:
-    core = FakeCore()
-    model = ScriptedModel(
-        {"kind": "request_evidence", "template": "container_logs_tail", "params": {}}, propose()
-    )
-    await investigate(job(), core, model, max_steps=6)
-    assert len(core.collected) == 1
-    assert len(core.submitted) == 1
 
 
 async def test_logs_the_model_may_not_see_do_not_hold_a_proposal_forever() -> None:

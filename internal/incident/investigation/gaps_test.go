@@ -35,8 +35,11 @@ func TestPrepare_ForbiddenTemplateRecordsGap(t *testing.T) {
 	e.worker.Registry = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
 	id := e.newIncident(t, "rollout-regression", e.target)
 
-	if err := e.worker.Prepare(t.Context(), id); err != nil {
-		t.Fatalf("Prepare: %v", err)
+	// Prepare runs at least once: a second run records the gap once.
+	for range 2 {
+		if err := e.worker.Prepare(t.Context(), id); err != nil {
+			t.Fatalf("Prepare: %v", err)
+		}
 	}
 	if got := e.state(t, id); got != incident.Investigating {
 		t.Errorf("state = %s, want investigating", got)
@@ -54,33 +57,6 @@ func TestPrepare_ForbiddenTemplateRecordsGap(t *testing.T) {
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 2 {
 		t.Errorf("%d items, want the 2 that could be read", n)
-	}
-}
-
-// Prepare runs at least once: a second run records the gap once.
-func TestPrepare_GapRecordedOnce(t *testing.T) {
-	e := newEnv(t)
-	e.worker.Registry = evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), forbidden{evidence.TargetEvents})
-	id := e.newIncident(t, "rollout-regression", e.target)
-	for range 2 {
-		if err := e.worker.Prepare(t.Context(), id); err != nil {
-			t.Fatalf("Prepare: %v", err)
-		}
-	}
-	if gaps, _ := e.store.EvidenceGaps(t.Context(), id); len(gaps) != 1 {
-		t.Errorf("got %d gaps after two runs, want 1", len(gaps))
-	}
-}
-
-// Evidence that could be read leaves no gap.
-func TestPrepare_NoGapWhenEverythingIsRead(t *testing.T) {
-	e := newEnv(t)
-	id := e.newIncident(t, "rollout-regression", e.target)
-	if err := e.worker.Prepare(t.Context(), id); err != nil {
-		t.Fatalf("Prepare: %v", err)
-	}
-	if gaps, err := e.store.EvidenceGaps(t.Context(), id); err != nil || len(gaps) != 0 {
-		t.Errorf("gaps = %+v, %v; want none", gaps, err)
 	}
 }
 

@@ -100,8 +100,8 @@ func TestComplete_ProposedWithoutAcceptedProposal_ClosesWithoutAction(t *testing
 	}
 }
 
-// A proposal Themis can't act on is rejected and kept with its reason. One
-// that points at something it shouldn't is a safety event too.
+// A proposal Themis can't act on is rejected, counted and kept with its reason.
+// One that points at something it shouldn't is counted as a safety event too.
 func TestSubmit_Rejected(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -109,7 +109,7 @@ func TestSubmit_Rejected(t *testing.T) {
 		change  func(*themisv1.SubmitProposalRequest)
 		reason  themisv1.RejectionReason
 		stored  string // the safety event kept with the proposal
-		counted string // the safety event counted
+		counted string // the safety event counted; "" counts none
 	}{{
 		name: "capability outside the candidates", noCaps: true,
 		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, counted: "unknown_capability",
@@ -118,11 +118,11 @@ func TestSubmit_Rejected(t *testing.T) {
 		change: func(r *themisv1.SubmitProposalRequest) {
 			r.CitedEvidenceIds = []string{"0192f0c1-0000-7000-8000-0000000000ee"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, counted: "unknown_evidence",
 	}, {
 		name:   "no evidence cited",
 		change: func(r *themisv1.SubmitProposalRequest) { r.CitedEvidenceIds = nil },
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, counted: "unknown_evidence",
 	}, {
 		name:   "unknown predicate",
 		change: func(r *themisv1.SubmitProposalRequest) { r.CitedPredicates = []string{"cluster_is_fine"} },
@@ -132,12 +132,12 @@ func TestSubmit_Rejected(t *testing.T) {
 		change: func(r *themisv1.SubmitProposalRequest) {
 			r.Target = &themisv1.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "kube-system", Name: "coredns", Uid: "u-coredns"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, stored: "target_mismatch",
+		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, stored: "target_mismatch", counted: "wrong_target",
 	}, {
 		// Same name, another UID: the object was recreated.
 		name:   "recreated target",
 		change: func(r *themisv1.SubmitProposalRequest) { r.Target.Uid = "uid-of-the-recreated-deployment" },
-		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH,
+		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, counted: "wrong_target",
 	}, {
 		name: "revision not positive",
 		change: func(r *themisv1.SubmitProposalRequest) {
@@ -151,7 +151,11 @@ func TestSubmit_Rejected(t *testing.T) {
 				p.Capabilities = nil
 			}
 			e := newEnvWith(t, p)
-			counted := metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": tc.counted})
+			rejected := metrictest.Delta(t, "themis_proposals_total", map[string]string{"result": "rejected"})
+			counted := map[string]func() float64{}
+			for _, kind := range []string{"unknown_capability", "unknown_evidence", "wrong_target"} {
+				counted[kind] = metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": kind})
+			}
 			req := rollback(e.lease(t), "p-1")
 			if tc.change != nil {
 				tc.change(req)
@@ -163,9 +167,16 @@ func TestSubmit_Rejected(t *testing.T) {
 					t.Errorf("%d %s safety events, want 1", n, tc.stored)
 				}
 			}
-			if tc.counted != "" {
-				if got := counted(); got != 1 {
-					t.Errorf("counted %v %s events, want 1", got, tc.counted)
+			if got := rejected(); got != 1 {
+				t.Errorf("counted %v rejected proposals, want 1", got)
+			}
+			for kind, delta := range counted {
+				want := 0.0
+				if kind == tc.counted {
+					want = 1
+				}
+				if got := delta(); got != want {
+					t.Errorf("counted %v %s events, want %v", got, kind, want)
 				}
 			}
 		})
@@ -193,7 +204,7 @@ func TestSubmit_MissingTarget_InvalidArgument(t *testing.T) {
 }
 
 // A retry returns the stored proposal and never changes it, even when it says
-// something else.
+// something else; a new client proposal ID is a new proposal.
 func TestSubmit_IdempotentRetry(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
@@ -209,6 +220,12 @@ func TestSubmit_IdempotentRetry(t *testing.T) {
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM proposals WHERE rationale = 'revision 2 lowered the memory limit to 64Mi'`); n != 1 {
 		t.Error("a retry changed the stored proposal")
+	}
+	if other := e.submit(t, rollback(inv, "p-2")); other.GetProposalId() == first.GetProposalId() {
+		t.Error("a new client proposal ID did not create a proposal")
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM proposals`); n != 2 {
+		t.Errorf("%d proposals, want 2", n)
 	}
 }
 
