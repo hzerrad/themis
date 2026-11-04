@@ -36,7 +36,7 @@ func shipped(t *testing.T) *env {
 func facts(onset check.Truth) []check.Result {
 	return []check.Result{
 		{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
-		{Name: check.NameGitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
+		{Name: governance.ManagedCheck, Version: "1", Value: check.False, Reason: "x"},
 		{Name: "failure_onset_after_rollout", Version: "1", Value: onset, Reason: "x"},
 		{Name: "config_changed_before_failure", Version: "1", Value: check.False, Reason: "x"},
 		{Name: "rollout_recent", Version: "1", Value: check.True, Reason: "x"},

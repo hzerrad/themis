@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
@@ -19,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -48,7 +48,7 @@ func newEnv(t *testing.T) *env {
 	var target incident.TargetRef
 	for _, obj := range k8s.Load(t, ns, scenario1) {
 		if obj.GetKind() == "Deployment" {
-			target = targetOf(obj)
+			target = kubetest.TargetOf(obj)
 		}
 	}
 	cat, err := catalog.Themis(nil)
@@ -77,11 +77,6 @@ func rolloutChecks(t *testing.T, cat catalog.Catalog) check.List {
 		t.Fatal("no rollout-regression pack")
 	}
 	return cat.Checks.For(p.Checks)
-}
-
-func targetOf(obj *unstructured.Unstructured) incident.TargetRef {
-	gvk := obj.GroupVersionKind()
-	return incident.TargetRef{Group: gvk.Group, Kind: gvk.Kind, Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID())}
 }
 
 func (e *env) newIncident(t *testing.T, profile string, target incident.TargetRef) string {

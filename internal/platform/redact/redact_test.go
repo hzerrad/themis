@@ -1,14 +1,14 @@
-package evidence_test
+package redact_test
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/platform/redact"
 )
 
-func TestRedact_Secrets(t *testing.T) {
+func TestApply_Secrets(t *testing.T) {
 	tests := map[string]struct {
 		in, secret string
 	}{
@@ -33,43 +33,43 @@ func TestRedact_Secrets(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			data, _ := json.Marshal(map[string]string{"logs": tt.in})
-			got, n := evidence.Redact(data, evidence.DefaultRules)
+			got, n := redact.Apply(data, redact.DefaultRules)
 			if strings.Contains(string(got), tt.secret) {
-				t.Errorf("Redact kept %q: %s", tt.secret, got)
+				t.Errorf("Apply kept %q: %s", tt.secret, got)
 			}
 			if n == 0 {
-				t.Error("Redact counted no redactions")
+				t.Error("Apply counted no redactions")
 			}
 			if !json.Valid(got) {
-				t.Errorf("Redact broke the JSON: %s", got)
+				t.Errorf("Apply broke the JSON: %s", got)
 			}
 		})
 	}
 }
 
 // JSON escapes must not hide a secret from rules written for plain text.
-func TestRedact_SeesThroughJSONEscapes(t *testing.T) {
+func TestApply_SeesThroughJSONEscapes(t *testing.T) {
 	data := []byte(`{"logs":"password=\u0068unter2 and Bearer\tabcdef123456"}`)
-	got, _ := evidence.Redact(data, evidence.DefaultRules)
+	got, _ := redact.Apply(data, redact.DefaultRules)
 	for _, secret := range []string{"unter2", "abcdef123456"} {
 		if strings.Contains(string(got), secret) {
-			t.Errorf("Redact kept %q: %s", secret, got)
+			t.Errorf("Apply kept %q: %s", secret, got)
 		}
 	}
 }
 
-func TestRedact_KeepsNumbersAndOrder(t *testing.T) {
+func TestApply_KeepsNumbersAndOrder(t *testing.T) {
 	data := []byte(`{"z":"password=x","a":9007199254740993}`)
-	got, _ := evidence.Redact(data, evidence.DefaultRules)
+	got, _ := redact.Apply(data, redact.DefaultRules)
 	if want := `{"z":"password=[REDACTED]","a":9007199254740993}`; string(got) != want {
-		t.Errorf("Redact = %s, want %s", got, want)
+		t.Errorf("Apply = %s, want %s", got, want)
 	}
 }
 
-func TestRedact_LeavesOrdinaryTextAlone(t *testing.T) {
+func TestApply_LeavesOrdinaryTextAlone(t *testing.T) {
 	data := []byte(`{"logs":"OOMKilled: container app used 64Mi; password reset page served"}`)
-	got, n := evidence.Redact(data, evidence.DefaultRules)
+	got, n := redact.Apply(data, redact.DefaultRules)
 	if string(got) != string(data) || n != 0 {
-		t.Errorf("Redact = %s, %d; want the input unchanged", got, n)
+		t.Errorf("Apply = %s, %d; want the input unchanged", got, n)
 	}
 }

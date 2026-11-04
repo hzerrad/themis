@@ -220,17 +220,17 @@ func TestPriorRevisionWasHealthy_ScaledDown(t *testing.T) {
 
 func TestGitOpsManaged(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, run(check.NameGitOpsManaged, b), check.False)
+	assertTruth(t, run("gitops_managed", b), check.False)
 
 	argo := history()
 	argo.Deployment.Markers = map[string]string{"argocd.argoproj.io/tracking-id": "shop:apps/Deployment:shop/checkout"}
-	assertTruth(t, run(check.NameGitOpsManaged, replace(t, b, evidence.RolloutHistory, argo)), check.True)
+	assertTruth(t, run("gitops_managed", replace(t, b, evidence.RolloutHistory, argo)), check.True)
 
 	flux := history()
 	flux.Deployment.Managers = []string{"kube-controller-manager", "kustomize-controller"}
-	assertTruth(t, run(check.NameGitOpsManaged, replace(t, b, evidence.RolloutHistory, flux)), check.True)
+	assertTruth(t, run("gitops_managed", replace(t, b, evidence.RolloutHistory, flux)), check.True)
 
-	assertTruth(t, run(check.NameGitOpsManaged, without(b, evidence.RolloutHistory)), check.Unknown)
+	assertTruth(t, run("gitops_managed", without(b, evidence.RolloutHistory)), check.Unknown)
 }
 
 func TestRollout_EveryResultCitesEvidence(t *testing.T) {

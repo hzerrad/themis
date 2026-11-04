@@ -11,10 +11,9 @@ import (
 	"strings"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/platform/redact"
 
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/hzerrad/themis/internal/catalog/evidence"
 )
 
 // Change is one difference between the current and the restored template.
@@ -113,12 +112,12 @@ func envValue(e corev1.EnvVar) string {
 	return shown(e.Value)
 }
 
-// shown is s, unless the evidence redaction rules find a secret in it.
+// shown is s, unless the redaction rules find a secret in it.
 func shown(s string) string {
 	if s == "" {
 		return `""`
 	}
-	if _, n := evidence.Redact([]byte(strconv.Quote(s)), evidence.DefaultRules); n > 0 || random(s) {
+	if _, n := redact.Apply([]byte(strconv.Quote(s)), redact.DefaultRules); n > 0 || random(s) {
 		return "hidden (looks like a secret)"
 	}
 	return truncate(s)

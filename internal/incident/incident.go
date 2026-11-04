@@ -1,6 +1,9 @@
 package incident
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 type TargetRef struct {
 	Group     string
@@ -17,6 +20,17 @@ func (t TargetRef) KindGroup() string {
 		return t.Kind
 	}
 	return t.Kind + "." + t.Group
+}
+
+// KindGroupPattern matches Kind.group, with no group for the core group:
+// Deployment.apps, Rollout.argoproj.io, PersistentVolumeClaim.
+const KindGroupPattern = `^[A-Z][A-Za-z0-9]*(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
+
+var kindGroupRE = regexp.MustCompile(KindGroupPattern)
+
+// IsKindGroup reports whether s is a well-formed Kind.group.
+func IsKindGroup(s string) bool {
+	return kindGroupRE.MatchString(s)
 }
 
 // Fingerprint identifies an incident as profile/Kind.group/namespace/name/uid.

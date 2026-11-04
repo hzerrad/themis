@@ -153,16 +153,16 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 				return err
 			}
 			if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-				if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
+				if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
 					return err
 				}
 				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 			}
 			// Someone may yet suggest a fix: an expiry job closes it if not.
 			if s.Config.Current().ExternalProposals.EffectiveWindow() > 0 {
-				return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive)
+				return s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive)
 			}
-			return s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
+			return s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
 		store.CountInvestigation(tx, store.InvestigationProposed)
@@ -171,12 +171,12 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 			return err
 		}
 		if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-			if err := s.advance(ctx, tx, inv.IncidentID, req.GetSummary(), incident.Investigating, incident.Diagnosed); err != nil {
+			if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Diagnosed); err != nil {
 				return err
 			}
 			return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 		}
-		return s.advance(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
+		return s.Store.TransitionPath(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", actor, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
 	if err != nil {
 		return nil, s.internal(ctx, err)
@@ -349,7 +349,7 @@ func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 	if !ok {
 		return s.escalate(ctx, tx, incidentID, reason)
 	}
-	err = s.advance(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", incident.Investigating, incident.Diagnosed)
+	err = s.Store.TransitionPath(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", actor, incident.Investigating, incident.Diagnosed)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
@@ -360,22 +360,11 @@ func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
-	err := s.advance(ctx, tx, incidentID, reason, incident.Investigating, incident.Escalated)
+	err := s.Store.TransitionPath(ctx, tx, incidentID, reason, actor, incident.Investigating, incident.Escalated)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
 	return err
-}
-
-// advance moves an incident along path, from path[0].
-func (s *Server) advance(ctx context.Context, tx pgx.Tx, incidentID, reason string, path ...incident.State) error {
-	for i := 1; i < len(path); i++ {
-		err := s.Store.Transition(ctx, tx, store.TransitionArgs{ID: incidentID, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // GetModelSettings returns the model settings made in Themis's setup. The

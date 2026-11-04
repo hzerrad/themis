@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/testutil/kubetest"
@@ -27,19 +25,11 @@ func loadScenario1(t *testing.T) incident.TargetRef {
 	ns := k8s.NewNamespace(t)
 	for _, obj := range k8s.Load(t, ns, scenario1) {
 		if obj.GetKind() == "Deployment" && obj.GetName() == "checkout" {
-			return targetOf(obj)
+			return kubetest.TargetOf(obj)
 		}
 	}
 	t.Fatal("scenario 1 has no checkout Deployment")
 	return incident.TargetRef{}
-}
-
-func targetOf(obj *unstructured.Unstructured) incident.TargetRef {
-	gvk := obj.GroupVersionKind()
-	return incident.TargetRef{
-		Group: gvk.Group, Kind: gvk.Kind,
-		Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID()),
-	}
 }
 
 func collectPodStates(t *testing.T, target incident.TargetRef) evidence.Item {

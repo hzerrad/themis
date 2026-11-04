@@ -23,6 +23,8 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	"github.com/hzerrad/themis/internal/incident"
 )
 
 // Env is a client of the test API server, with object builders.
@@ -153,6 +155,25 @@ func (e *Env) Create(t *testing.T, obj client.Object) {
 	t.Helper()
 	if err := e.Client.Create(t.Context(), obj); err != nil {
 		t.Fatalf("create %T %s: %v", obj, obj.GetName(), err)
+	}
+}
+
+// Deployment reads the Deployment ns/name back from the API server.
+func (e *Env) Deployment(t *testing.T, ns, name string) *appsv1.Deployment {
+	t.Helper()
+	var d appsv1.Deployment
+	if err := e.Get(t.Context(), client.ObjectKey{Namespace: ns, Name: name}, &d); err != nil {
+		t.Fatal(err)
+	}
+	return &d
+}
+
+// TargetOf is obj as the target of an incident.
+func TargetOf(obj *unstructured.Unstructured) incident.TargetRef {
+	gvk := obj.GroupVersionKind()
+	return incident.TargetRef{
+		Group: gvk.Group, Kind: gvk.Kind,
+		Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: string(obj.GetUID()),
 	}
 }
 

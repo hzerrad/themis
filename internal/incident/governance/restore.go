@@ -111,7 +111,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		predicates[r.Name] = r.Value.String()
 	}
 	if plan.ManagedBy != "" {
-		predicates[check.NameGitOpsManaged] = check.True.String()
+		predicates[ManagedCheck] = check.True.String()
 	}
 	pol, err := w.policy(profile)
 	if err != nil {

@@ -233,10 +233,7 @@ func (s *Server) externalCaller(ctx context.Context, tokenFile, method string) (
 func callerOf(p config.ProposalSource) Caller {
 	c := Caller{
 		Source: "serviceaccount:" + p.ServiceAccount, Namespaces: p.Namespaces, Capabilities: p.Capabilities,
-		PerMinute: p.PerMinute, Ceiling: evidence.ClassificationInternal,
-	}
-	if c.PerMinute == 0 {
-		c.PerMinute = config.DefaultPerMinute
+		PerMinute: p.EffectivePerMinute(), Ceiling: evidence.ClassificationInternal,
 	}
 	if p.Ceiling == string(evidence.ClassificationSensitive) {
 		c.Ceiling = evidence.ClassificationSensitive
@@ -396,7 +393,7 @@ func (s *Server) submitExternal(ctx context.Context, caller Caller, req *themisv
 		if state != incident.Inconclusive && state != incident.AwaitingSuggestion {
 			return nil
 		}
-		if err := s.advance(ctx, tx, in.ID, "A fix was suggested by "+caller.Source+".", state, incident.Diagnosed); err != nil {
+		if err := s.Store.TransitionPath(ctx, tx, in.ID, "A fix was suggested by "+caller.Source+".", actor, state, incident.Diagnosed); err != nil {
 			return err
 		}
 		return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: stored.ID, IncidentID: in.ID})

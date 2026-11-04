@@ -66,10 +66,6 @@ type Result struct {
 	Blind bool  `json:",omitempty"`
 }
 
-// NameGitOpsManaged is the check governance overrides with what it reads
-// live: whether GitOps owns the target.
-const NameGitOpsManaged = "gitops_managed"
-
 // List is the checks an install runs, in the order it reports them.
 type List []*Check
 

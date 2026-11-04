@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -21,18 +20,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/token"
 )
-
-// TargetKindPattern matches Kind.group, with no group for the core group:
-// Deployment.apps, Rollout.argoproj.io, PersistentVolumeClaim.
-const TargetKindPattern = `^[A-Z][A-Za-z0-9]*(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)?$`
-
-var targetKindRE = regexp.MustCompile(TargetKindPattern)
-
-// IsTargetKind reports whether s is a well-formed Kind.group.
-func IsTargetKind(s string) bool {
-	return targetKindRE.MatchString(s)
-}
 
 // Provider gives the configuration in force now, which may change between
 // calls. Read it once per unit of work.
@@ -174,6 +163,15 @@ func (e ExternalProposals) EffectiveWindow() time.Duration {
 		return DefaultProposalWindow
 	}
 	return e.Window.Duration
+}
+
+// EffectivePerMinute returns how many requests to suggest a fix the source
+// may make each minute.
+func (p ProposalSource) EffectivePerMinute() int {
+	if p.PerMinute == 0 {
+		return DefaultPerMinute
+	}
+	return p.PerMinute
 }
 
 // SuggestionWindow returns how long an incident waits for a suggestion: after
@@ -371,6 +369,24 @@ type Webhook struct {
 	// BearerTokenFile holds a token sent as a bearer token, if the receiver
 	// needs one.
 	BearerTokenFile string `json:"bearerTokenFile,omitempty"`
+}
+
+// Target is the URL to post notices to: URL, or what URLFile holds, read
+// each time so a rotated Secret takes effect without a restart. It must be an
+// http or https URL.
+func (w Webhook) Target() (string, error) {
+	target := w.URL
+	if w.URLFile != "" {
+		b, err := token.Read(w.URLFile)
+		if err != nil {
+			return "", fmt.Errorf("webhook URL: %w", err)
+		}
+		target = string(b)
+	}
+	if !IsHTTPURL(target) {
+		return "", errors.New("the webhook URL is not an http or https URL")
+	}
+	return target, nil
 }
 
 // Profile is one incident class and the alerts that belong to it.
@@ -724,7 +740,7 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 		add("match.targetKinds", "at least one target kind is required")
 	}
 	for j, kind := range p.Match.TargetKinds {
-		if !IsTargetKind(kind) {
+		if !incident.IsKindGroup(kind) {
 			add(fmt.Sprintf("match.targetKinds[%d]", j),
 				"%q is not of the form Kind.group, for example Deployment.apps", kind)
 		}
@@ -794,9 +810,6 @@ func (c Config) IsEnrolled(ns string) bool {
 	return slices.Contains(c.EnrolledNamespaces, ns)
 }
 
-// TargetKind returns t as Kind.group.
-func TargetKind(t incident.TargetRef) string { return t.KindGroup() }
-
 // MatchProfile returns the highest-priority profile matching the alert.
 func (c Config) MatchProfile(alertName string, lbls map[string]string, target incident.TargetRef) (Profile, bool) {
 	candidates := make([]Profile, 0, len(c.Profiles))
@@ -804,7 +817,7 @@ func (c Config) MatchProfile(alertName string, lbls map[string]string, target in
 	for _, profile := range c.Profiles {
 		if (profile.Scope == "" || profile.Scope == target.Namespace) &&
 			slices.Contains(profile.Match.AlertNames, alertName) &&
-			slices.Contains(profile.Match.TargetKinds, TargetKind(target)) &&
+			slices.Contains(profile.Match.TargetKinds, target.KindGroup()) &&
 			labels.SelectorFromSet(profile.Match.Labels).Matches(labels.Set(lbls)) {
 			candidates = append(candidates, profile)
 		}

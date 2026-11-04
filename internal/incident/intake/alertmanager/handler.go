@@ -2,18 +2,16 @@ package alertmanager
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json/v2"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 )
 
@@ -66,13 +64,13 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	receivedAt := now()
 
 	// Authenticate before reading the body.
-	want, err := h.token()
+	want, err := token.Read(h.TokenFile)
 	if err != nil {
 		log.ErrorContext(ctx, "cannot read the intake token", "file", h.TokenFile, telemetry.FieldError, err)
 		http.Error(w, "intake temporarily unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	if !bearerMatches(r.Header.Get("Authorization"), want) {
+	if !token.Matches(r.Header.Get("Authorization"), want) {
 		h.Refused.Beat(ctx, "")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -127,28 +125,6 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_, _ = w.Write(resp)
-}
-
-// token reads the expected token; an empty one would let anyone in.
-func (h *Handler) token() ([]byte, error) {
-	data, err := os.ReadFile(h.TokenFile)
-	if err != nil {
-		return nil, err
-	}
-	token := strings.TrimSpace(string(data))
-	if token == "" {
-		return nil, errors.New("token file is empty")
-	}
-	return []byte(token), nil
-}
-
-// bearerMatches compares in constant time.
-func bearerMatches(header string, want []byte) bool {
-	scheme, got, ok := strings.Cut(header, " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(got)), want) == 1
 }
 
 // statusWriter remembers the status code, for the requests metric.

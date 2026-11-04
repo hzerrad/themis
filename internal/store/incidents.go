@@ -131,6 +131,18 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 	return nil
 }
 
+// TransitionPath walks an incident along path, one transition at a time,
+// each with the same reason and actor.
+func (s *Store) TransitionPath(ctx context.Context, tx pgx.Tx, id, reason, actor string, path ...incident.State) error {
+	for i := 1; i < len(path); i++ {
+		err := s.Transition(ctx, tx, TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // EscalationArgs notify that an incident was handed to humans. They are
 // queued by the transition itself, so no escalation goes unannounced.
 type EscalationArgs struct {

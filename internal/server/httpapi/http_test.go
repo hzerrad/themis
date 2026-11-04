@@ -74,11 +74,9 @@ func (e *env) awaiting(t *testing.T) store.Action {
 		if err != nil {
 			return err
 		}
-		path := []incident.State{incident.Received, incident.Investigating, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval}
-		for i := 1; i < len(path); i++ {
-			if err := e.store.Transition(ctx, tx, store.TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: "test", Actor: "test"}); err != nil {
-				return err
-			}
+		err = e.store.TransitionPath(ctx, tx, id, "test", "test", incident.Received, incident.Investigating, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
+		if err != nil {
+			return err
 		}
 		if _, err := e.store.CreateInvestigation(ctx, tx, id, nil, nil); err != nil {
 			return err
@@ -271,42 +269,6 @@ func TestListIncidents(t *testing.T) {
 	}
 	if len(list) != 1 || list[0].ID != a.IncidentID || list[0].State != "awaiting_approval" {
 		t.Errorf("list = %+v", list)
-	}
-}
-
-// Nobody answered: unlike a denial, the incident is still live. A second
-// sweep finds nothing left to expire, so the expiry is counted once.
-func TestExpire_Escalates(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	expired := approvals(t, "expired")
-	w := &httpapi.ExpireWorker{Store: e.store, Now: func() time.Time { return now.Add(time.Hour) }}
-	for range 2 {
-		if err := w.Expire(t.Context()); err != nil {
-			t.Fatalf("Expire: %v", err)
-		}
-	}
-	if got := e.state(t, a.IncidentID); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
-	}
-	if got := expired(); got != 1 {
-		t.Errorf("counted %v expiries, want 1", got)
-	}
-}
-
-// One incident that moved on must not stop the sweep for every other one.
-func TestExpire_ToleratesAnIncidentThatMovedOn(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = 'self_resolved' WHERE id = $1`, a.IncidentID); err != nil {
-		t.Fatal(err)
-	}
-	w := &httpapi.ExpireWorker{Store: e.store, Now: func() time.Time { return now.Add(time.Hour) }}
-	if err := w.Expire(t.Context()); err != nil {
-		t.Fatalf("Expire: %v", err)
-	}
-	if got, _ := e.store.Action(t.Context(), e.store.DB(), a.ID); got.State != store.ActionExpired {
-		t.Errorf("action = %s, want expired", got.State)
 	}
 }
 

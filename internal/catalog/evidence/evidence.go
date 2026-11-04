@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/redact"
 	"github.com/hzerrad/themis/internal/workload"
 )
 
@@ -93,7 +94,7 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, w *
 		return Item{}, err
 	}
 	var n int
-	item.Data, n = Redact(item.Data, DefaultRules)
+	item.Data, n = redact.Apply(item.Data, redact.DefaultRules)
 	item.Redactions += n
 	item.ID = id.String()
 	item.Template = name

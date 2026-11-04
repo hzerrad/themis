@@ -58,10 +58,11 @@ func transition(t *testing.T, s *store.Store, id string, from, to incident.State
 // advance walks an incident along path, failing the test on any error.
 func advance(t *testing.T, s *store.Store, id string, path ...incident.State) {
 	t.Helper()
-	for i := 1; i < len(path); i++ {
-		if err := transition(t, s, id, path[i-1], path[i]); err != nil {
-			t.Fatalf("Transition(%s, %s): %v", path[i-1], path[i], err)
-		}
+	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		return s.TransitionPath(t.Context(), tx, id, "test", "test", path...)
+	})
+	if err != nil {
+		t.Fatalf("TransitionPath(%v): %v", path, err)
 	}
 }
 

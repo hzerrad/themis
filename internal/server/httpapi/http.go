@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -341,27 +340,8 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 	if !a.decode(w, r, &req) {
 		return
 	}
-	ctx := r.Context()
-	approver := actor(r)
-	var act store.Action
-	err := a.Store.InTx(ctx, func(tx pgx.Tx) error {
-		var err error
-		act, err = a.Store.Approve(ctx, tx, r.PathValue("id"), req.Digest, approver, a.now())
-		if err != nil {
-			return err
-		}
-		err = a.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: act.IncidentID, From: incident.AwaitingApproval, To: incident.Authorized,
-			Reason: "Approved by " + approver + ".", Actor: approver,
-		})
-		if err != nil {
-			return err
-		}
-		store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultApproved).Inc)
-		return a.Store.EnqueueTx(ctx, tx, governance.ExecuteArgs{ActionID: act.ID, IncidentID: act.IncidentID})
-	})
+	act, err := governance.Approve(r.Context(), a.Store, r.PathValue("id"), req.Digest, actor(r), a.now())
 	if err != nil {
-		countRefusal(err)
 		a.fail(w, r, err)
 		return
 	}
@@ -377,30 +357,7 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 	if !a.decode(w, r, &req) {
 		return
 	}
-	ctx := r.Context()
-	approver := actor(r)
-	err := a.Store.InTx(ctx, func(tx pgx.Tx) error {
-		act, err := a.Store.Action(ctx, tx, r.PathValue("id"))
-		if err != nil {
-			return err
-		}
-		if err := a.Store.SetActionState(ctx, tx, act.ID, store.ActionAwaitingApproval, store.ActionDenied); err != nil {
-			return store.ErrAlreadyDecided
-		}
-		reason := "Denied by " + approver + "."
-		if req.Reason != "" {
-			reason = "Denied by " + approver + ": " + req.Reason
-		}
-		for _, step := range [][2]incident.State{{incident.AwaitingApproval, incident.Recommended}, {incident.Recommended, incident.ClosedNoAction}} {
-			if err := a.Store.Transition(ctx, tx, store.TransitionArgs{ID: act.IncidentID, From: step[0], To: step[1], Reason: reason, Actor: approver}); err != nil {
-				return err
-			}
-		}
-		store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultDenied).Inc)
-		return nil
-	})
-	if err != nil {
-		countRefusal(err)
+	if err := governance.Deny(r.Context(), a.Store, r.PathValue("id"), actor(r), req.Reason); err != nil {
 		a.fail(w, r, err)
 		return
 	}

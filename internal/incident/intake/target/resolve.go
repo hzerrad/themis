@@ -14,8 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/config"
-
 	"github.com/hzerrad/themis/internal/incident"
 )
 
@@ -129,7 +127,7 @@ func parseOverride(s string) (schema.GroupKind, string, error) {
 		return schema.GroupKind{}, "", fmt.Errorf("%w: %q has an invalid name", ErrInvalidOverride, s)
 	}
 
-	if !config.IsTargetKind(kindGroup) {
+	if !incident.IsKindGroup(kindGroup) {
 		return schema.GroupKind{}, "", fmt.Errorf("%w: %q is not a Kind.group", ErrInvalidOverride, kindGroup)
 	}
 

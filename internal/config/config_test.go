@@ -199,15 +199,6 @@ func TestIsEnrolled(t *testing.T) {
 	}
 }
 
-func TestTargetKind(t *testing.T) {
-	if got := config.TargetKind(incident.TargetRef{Group: "apps", Kind: "Deployment"}); got != "Deployment.apps" {
-		t.Errorf("TargetKind(apps/Deployment) = %q, want Deployment.apps", got)
-	}
-	if got := config.TargetKind(incident.TargetRef{Group: "", Kind: "Pod"}); got != "Pod" {
-		t.Errorf("TargetKind(core/Pod) = %q, want Pod", got)
-	}
-}
-
 var deployment = incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "u1"}
 
 func TestMatchProfile(t *testing.T) {

@@ -1,4 +1,7 @@
-package evidence
+// Package redact hides secrets, such as keys, tokens and passwords, in text
+// Themis shows: evidence handed to an investigator, and the change an approver
+// is shown.
+package redact
 
 import (
 	"bytes"
@@ -31,10 +34,10 @@ var DefaultRules = []Rule{
 	{"key-value", regexp.MustCompile(`(?i)((?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|token|cookie|session)(?:\\?["'])?\s*[:=]\s*(?:\\?["'])?)[^\s"'\\,;&]+`), "${1}" + redacted},
 }
 
-// Redact applies rules to every string of a JSON document, after decoding, so
+// Apply applies rules to every string of a JSON document, after decoding, so
 // escapes cannot hide a secret. Anything else is redacted as plain text. It
 // returns the result with the number of replacements.
-func Redact(data []byte, rules []Rule) ([]byte, int) {
+func Apply(data []byte, rules []Rule) ([]byte, int) {
 	dec := jsontext.NewDecoder(bytes.NewReader(data))
 	var out bytes.Buffer
 	enc := jsontext.NewEncoder(&out)
@@ -45,15 +48,15 @@ func Redact(data []byte, rules []Rule) ([]byte, int) {
 			break
 		}
 		if err != nil {
-			return redactText(data, rules)
+			return text(data, rules)
 		}
 		if tok.Kind() == '"' {
-			if s, k := redactText([]byte(tok.String()), rules); k > 0 {
+			if s, k := text([]byte(tok.String()), rules); k > 0 {
 				tok, n = jsontext.String(string(s)), n+k
 			}
 		}
 		if err := enc.WriteToken(tok); err != nil {
-			return redactText(data, rules)
+			return text(data, rules)
 		}
 	}
 	if n == 0 {
@@ -62,7 +65,7 @@ func Redact(data []byte, rules []Rule) ([]byte, int) {
 	return bytes.TrimSuffix(out.Bytes(), []byte("\n")), n
 }
 
-func redactText(data []byte, rules []Rule) ([]byte, int) {
+func text(data []byte, rules []Rule) ([]byte, int) {
 	n := 0
 	for _, r := range rules {
 		data = r.Pattern.ReplaceAllFunc(data, func(m []byte) []byte {

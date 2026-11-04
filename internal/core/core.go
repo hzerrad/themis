@@ -191,7 +191,7 @@ func Run(ctx context.Context, o Options) error {
 	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
-	telemetry.AddUnscopedWorker(workers, &httpapi.ExpireWorker{Store: s})
+	telemetry.AddUnscopedWorker(workers, &governance.ExpireWorker{Store: s})
 	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
@@ -211,7 +211,7 @@ func Run(ctx context.Context, o Options) error {
 		investigation.Queue: o.Workers,
 	}, []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
-			return httpapi.ExpireArgs{}, nil
+			return governance.ExpireArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}),
 		river.NewPeriodicJob(river.PeriodicInterval(30*time.Second), func() (river.JobArgs, *river.InsertOpts) {
 			return reconciliation.Args{}, nil

@@ -67,7 +67,7 @@ func newEnv(t *testing.T) *env {
 
 var predicates = []check.Result{
 	{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
-	{Name: check.NameGitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
+	{Name: governance.ManagedCheck, Version: "1", Value: check.False, Reason: "x"},
 }
 
 // diagnosed creates an incident diagnosed with an accepted proposal to roll
@@ -84,10 +84,8 @@ func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []
 		if err != nil {
 			return err
 		}
-		for _, step := range [][2]incident.State{{incident.Received, incident.Investigating}, {incident.Investigating, incident.Diagnosed}} {
-			if err := e.store.Transition(ctx, tx, store.TransitionArgs{ID: incidentID, From: step[0], To: step[1], Reason: "test", Actor: "test"}); err != nil {
-				return err
-			}
+		if err := e.store.TransitionPath(ctx, tx, incidentID, "test", "test", incident.Received, incident.Investigating, incident.Diagnosed); err != nil {
+			return err
 		}
 		_, err = e.store.CreateInvestigation(ctx, tx, incidentID, nil, results)
 		if err != nil {

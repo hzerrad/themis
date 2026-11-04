@@ -6,8 +6,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -18,6 +20,14 @@ const (
 	lockFor           = 15 * time.Minute
 	accountSessionTTL = 8 * time.Hour
 )
+
+// CheckRole says what's wrong with an account's role, if anything.
+func CheckRole(role string) error {
+	if !slices.Contains(config.Roles, role) {
+		return errors.New("the role must be viewer, responder, approver or admin")
+	}
+	return nil
+}
 
 // PasswordStore keeps accounts and counts their wrong passwords.
 type PasswordStore interface {
