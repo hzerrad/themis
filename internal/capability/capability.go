@@ -10,6 +10,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -49,6 +50,45 @@ type Capability interface {
 
 	// Changes lists what the change does, for the person approving it.
 	Changes(before, after json.RawMessage) ([]Change, error)
+
+	// Mark reads, from the live target, the same mark Plan records for the
+	// state the fix leaves: a different one means the target no longer has
+	// what the fix left.
+	Mark(ctx context.Context, r client.Reader, t incident.TargetRef) (string, error)
+
+	// Check reads how the target is doing since the fix was applied, at
+	// since, against start: the fix's own record of how things were when
+	// checking began, or nil when it begins now. A target deleted or
+	// replaced is a Reading with Changed set, not an error.
+	Check(ctx context.Context, r client.Reader, t incident.TargetRef, mark string, start json.RawMessage, since time.Time) (Reading, error)
+}
+
+// Health is how the target is doing next to when checking began, for the
+// symptom the fix is meant to cure.
+type Health string
+
+const (
+	Healthy   Health = "healthy"
+	Improved  Health = "improved"
+	Unchanged Health = "unchanged"
+	Worse     Health = "worse"
+)
+
+// Reading is one look at a target after a fix. The fix judges its symptom;
+// verification judges what that means over time.
+type Reading struct {
+	// Changed is set when the target no longer has what the fix left.
+	Changed bool
+	// Applied is set once the fix's change is in place everywhere.
+	Applied bool
+	Health  Health
+
+	// Facts says what was seen, as a sentence for the incident's timeline.
+	Facts string
+
+	// Start is the record to compare later readings with: the one passed
+	// in, or how things are now when none was.
+	Start json.RawMessage
 }
 
 // Plan is a fix worked out against the live cluster.
@@ -71,6 +111,9 @@ type Plan struct {
 
 	// Done says what was done, once applied.
 	Done string
+
+	// Mark identifies the state the fix leaves the target in.
+	Mark string
 
 	// State is the fix's own read of the target, for Apply.
 	State any

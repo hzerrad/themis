@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -68,6 +69,7 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 		Risk:        "medium",
 		BlastRadius: map[string]any{"replicas": int64(live.Replicas)},
 		Done:        fmt.Sprintf("Rolled back to revision %d.", revision),
+		Mark:        live.DesiredHash,
 		State:       live,
 	}, nil
 }
@@ -125,4 +127,82 @@ func RevisionParam(params map[string]any) (int64, bool) {
 		return int64(n), n > 0 && n == float64(int64(n))
 	}
 	return 0, false
+}
+
+// Mark is the hash of the target's live pod template: a rollback leaves the
+// template of the revision it restored.
+func (Capability) Mark(ctx context.Context, r client.Reader, t incident.TargetRef) (string, error) {
+	w, err := read(ctx, r, t)
+	if err != nil {
+		return "", err
+	}
+	return w.TemplateHash, nil
+}
+
+// start is how the workload was when checking began.
+type start struct {
+	Ready    int32 `json:"ready"`
+	Restarts int32 `json:"restarts"`
+}
+
+// Check reads the current revision's pods. A rollback cured its symptom when
+// the rollout is complete, every replica is ready, and no container has
+// restarted or run out of memory since.
+func (Capability) Check(ctx context.Context, r client.Reader, t incident.TargetRef, mark string, from json.RawMessage, since time.Time) (capability.Reading, error) {
+	w, err := workload.Read(ctx, r, t)
+	if errors.Is(err, workload.ErrGone) || errors.Is(err, workload.ErrReplaced) {
+		return capability.Reading{Changed: true, Health: capability.Unchanged, Facts: err.Error() + ".", Start: from}, nil
+	}
+	if err != nil {
+		return capability.Reading{}, err
+	}
+	s, err := w.State(ctx, since)
+	if err != nil {
+		return capability.Reading{}, err
+	}
+	base := start{Ready: s.Ready, Restarts: s.Restarts}
+	if from == nil {
+		if from, err = json.Marshal(base); err != nil {
+			return capability.Reading{}, err
+		}
+	} else if err := json.Unmarshal(from, &base); err != nil {
+		return capability.Reading{}, fmt.Errorf("start of the check: %w", err)
+	}
+	restarts := max(s.Restarts-base.Restarts, 0)
+	allReady := s.RolloutComplete && s.Ready >= s.Desired && s.OOMKills == 0
+	health := capability.Unchanged
+	switch {
+	case allReady && restarts == 0:
+		health = capability.Healthy
+	case s.Ready < base.Ready:
+		health = capability.Worse
+	case allReady:
+		health = capability.Improved
+	}
+	return capability.Reading{
+		Changed: w.TemplateHash != mark, Applied: s.Updated, Health: health,
+		Facts: facts(s, base, restarts), Start: from,
+	}, nil
+}
+
+// facts says what the pods are doing, in plain words.
+func facts(s workload.State, base start, restarts int32) string {
+	msg := fmt.Sprintf("%d of %d pods are ready", s.Ready, s.Desired)
+	if s.Ready < base.Ready {
+		msg += fmt.Sprintf(", down from %d", base.Ready)
+	}
+	if restarts > 0 {
+		msg += "; containers restarted " + times(int(restarts))
+	}
+	if s.OOMKills > 0 {
+		msg += "; containers ran out of memory " + times(s.OOMKills)
+	}
+	return msg + "."
+}
+
+func times(n int) string {
+	if n == 1 {
+		return "once"
+	}
+	return fmt.Sprintf("%d times", n)
 }

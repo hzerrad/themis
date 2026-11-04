@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -33,6 +34,12 @@ func (named) Undo(context.Context, client.Reader, incident.TargetRef, json.RawMe
 }
 
 func (named) Changes(json.RawMessage, json.RawMessage) ([]capability.Change, error) { return nil, nil }
+
+func (named) Mark(context.Context, client.Reader, incident.TargetRef) (string, error) { return "", nil }
+
+func (named) Check(context.Context, client.Reader, incident.TargetRef, string, json.RawMessage, time.Time) (capability.Reading, error) {
+	return capability.Reading{}, nil
+}
 
 func TestRegistry(t *testing.T) {
 	r := capability.NewRegistry(named("b.second"), named("a.first"))
