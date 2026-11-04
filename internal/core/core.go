@@ -46,6 +46,7 @@ import (
 	"github.com/hzerrad/themis/internal/settings"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/scenarios"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -114,12 +115,18 @@ func Run(ctx context.Context, o Options) error {
 	}
 	// Everything Themis can read, check and change. Each part goes to the
 	// code that uses it.
-	cat, err := catalog.Themis(evidence.ClientsetLogs{Clientset: clientset})
+	cat, err := catalog.Build(evidence.ClientsetLogs{Clientset: clientset}, scenarios.FS, cfg.Scenarios.Disabled)
 	if err != nil {
 		return err
 	}
 	if err := cat.CheckConfig(cfg); err != nil {
 		return err
+	}
+	// The scenario packs' profiles, unless the install has its own of the
+	// same name. With resources, those are applied as they are read.
+	cfg = cfg.WithProfiles(cat.Profiles)
+	if cfg.Resources == nil && len(cfg.Profiles) == 0 {
+		return errors.New("no profiles: every scenario pack is disabled and the configuration file has none")
 	}
 
 	wait := o.DatabaseWait

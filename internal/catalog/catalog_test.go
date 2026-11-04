@@ -1,10 +1,14 @@
 package catalog_test
 
 import (
+	"io/fs"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/scenarios"
 )
 
 // A configuration is checked against what this install can read, check and
@@ -53,6 +57,123 @@ func TestCheckConfig(t *testing.T) {
 				t.Errorf("error = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+const (
+	packYAML = `
+name: crashes
+description: Pods crash
+profile:
+  priority: 10
+  match: {alertNames: [KubePodCrashLooping], targetKinds: [Deployment.apps]}
+  evidence: {allowed: [pod_states]}
+  checks: [has_pods]
+  policy:
+    rules: [{name: r, when: 'predicates.has_pods == "true"', decision: require_approval}]
+`
+	checksYAML = `
+- name: has_pods
+  version: "1"
+  description: The workload runs pods
+  reads: [pod_states]
+  answers:
+    - when: size(pod_states.pods) > 0
+      answer: true
+      reason: pods
+    - answer: false
+      reason: no pods
+`
+)
+
+// packs is a folder of scenario packs: crashes, from the YAML above as edit
+// changes it, and the shipped rollout-regression.
+func packs(t *testing.T, edit func(fstest.MapFS)) fstest.MapFS {
+	t.Helper()
+	fsys := fstest.MapFS{
+		"crashes/scenario.yaml": {Data: []byte(packYAML)},
+		"crashes/checks.yaml":   {Data: []byte(checksYAML)},
+	}
+	for _, f := range []string{"scenario.yaml", "checks.yaml"} {
+		data, err := fs.ReadFile(scenarios.FS, "rollout-regression/"+f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fsys["rollout-regression/"+f] = &fstest.MapFile{Data: data}
+	}
+	edit(fsys)
+	return fsys
+}
+
+func replace(fsys fstest.MapFS, name, from, to string) {
+	fsys[name] = &fstest.MapFile{Data: []byte(strings.Replace(string(fsys[name].Data), from, to, 1))}
+}
+
+// A scenario pack's checks and profile join the catalog; a broken pack stops
+// it, named in every problem.
+func TestBuild_LoadsPacks(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(fstest.MapFS)
+		want string
+	}{
+		{"valid", func(fstest.MapFS) {}, ""},
+		{"no scenario.yaml", func(f fstest.MapFS) { delete(f, "crashes/scenario.yaml") }, "scenario pack crashes: no scenario.yaml"},
+		{
+			"name not the folder's", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "name: crashes", "name: crash") },
+			`scenario pack crashes: scenario.yaml: name "crash" must be the folder's, "crashes"`,
+		},
+		{
+			"check that doesn't compile", func(f fstest.MapFS) {
+				replace(f, "crashes/checks.yaml", "size(pod_states.pods) > 0", "size(pod_state.pods) > 0")
+			},
+			"scenario pack crashes: check has_pods: answer 1: when: ERROR: <input>:1:6: undeclared reference to 'pod_state'",
+		},
+		{
+			"check defined by two packs", func(f fstest.MapFS) { replace(f, "crashes/checks.yaml", "has_pods", "rollout_recent") },
+			"check rollout_recent: already defined by the pack",
+		},
+		{
+			"profile the catalog can't run", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "[pod_states]", "[pod_state]") },
+			`scenario pack crashes: profile: unknown evidence template "pod_state"`,
+		},
+		{
+			"priority another pack has", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "priority: 10", "priority: 100") },
+			"scenario pack rollout-regression: profile: priority 100 is already used by the pack crashes",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cat, err := catalog.Build(nil, packs(t, tt.edit), nil)
+			if tt.want != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.want) {
+					t.Fatalf("error = %v, want %q", err, tt.want)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := cat.Checks.Get("has_pods"); !ok || len(cat.Profiles) != 2 || cat.Profiles[0].Name != "crashes" {
+				t.Errorf("checks %d, profiles %+v: want the pack's check and profile", len(cat.Checks), cat.Profiles)
+			}
+		})
+	}
+}
+
+// A disabled pack brings neither its profile nor its checks, and disabling a
+// pack Themis doesn't have stops it.
+func TestBuild_DisablesPacks(t *testing.T) {
+	cat, err := catalog.Build(nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regression"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || len(cat.Checks) != 1 {
+		t.Errorf("profiles %+v, %d checks: want only the crashes pack's", cat.Profiles, len(cat.Checks))
+	}
+	_, err = catalog.Build(nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})
+	if want := `scenarios.disabled: no scenario pack is named "rollout-regresion"`; errText(err) != want {
+		t.Errorf("error = %v, want %q", err, want)
 	}
 }
 

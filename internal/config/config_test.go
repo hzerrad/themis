@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -115,7 +116,6 @@ func TestValidate_Errors(t *testing.T) {
 		{"executor without address", func(c *config.Config) { c.Executor = &config.Executor{BearerTokenFile: "/t"} }, "executor.address"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"no investigator token file", func(c *config.Config) { c.Investigators.BearerTokenFile = "" }, "investigators.bearerTokenFile"},
-		{"no profiles", func(c *config.Config) { c.Profiles = nil }, "profiles"},
 		{"invalid profile name", func(c *config.Config) { c.Profiles[0].Name = "Rollout Regression" }, "profiles[0].name"},
 		{"duplicate profile name", func(c *config.Config) { c.Profiles[1].Name = c.Profiles[0].Name }, "profiles[1].name"},
 		{"duplicate priority", func(c *config.Config) { c.Profiles[1].Priority = c.Profiles[0].Priority }, "profiles[1].priority"},
@@ -333,9 +333,39 @@ func TestValidate_ProfilesComeFromOnePlace(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Errorf("resources alone: %v", err)
 	}
+	// The scenario packs' profiles stand in for the file's.
 	c.Resources = nil
-	if err := c.Validate(); err == nil {
-		t.Error("no profiles and no resources passed")
+	if err := c.Validate(); err != nil {
+		t.Errorf("neither: %v", err)
+	}
+}
+
+// An install's own profile replaces a scenario pack's of the same name, and
+// wins a tie in priority with another.
+func TestWithProfiles_TheInstallsOwnWin(t *testing.T) {
+	c := mustParse(t, validYAML)
+	own := c.Profiles[0]
+	pack := func(name string, priority int) config.Profile {
+		p := own
+		p.Name, p.Priority, p.Capabilities = name, priority, []string{"from-the-pack"}
+		return p
+	}
+	c.Profiles = []config.Profile{own}
+
+	got := c.WithProfiles([]config.Profile{pack(own.Name, own.Priority+1), pack("other", own.Priority)})
+	var names []string
+	for _, p := range got.Profiles {
+		names = append(names, p.Name)
+	}
+	if want := []string{own.Name, "other"}; !slices.Equal(names, want) {
+		t.Fatalf("profiles = %v, want %v", names, want)
+	}
+	if !reflect.DeepEqual(got.Profiles[0], own) {
+		t.Errorf("the pack's profile replaced the install's: %+v", got.Profiles[0])
+	}
+	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop"}
+	if p, _ := got.MatchProfile(own.Match.AlertNames[0], own.Match.Labels, target); p.Name != own.Name {
+		t.Errorf("a tie went to %s, want the install's %s", p.Name, own.Name)
 	}
 }
 

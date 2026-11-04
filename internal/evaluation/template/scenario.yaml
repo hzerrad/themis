@@ -1,0 +1,40 @@
+# The {{name}} scenario pack. Fill in every TODO; `make scenario-check
+# NAME={{name}}` says what is still missing. docs/scenarios.md explains each
+# field, and scenarios/rollout-regression is a complete example.
+
+# The pack's name: its folder's, and its profile's.
+name: {{name}}
+
+# One sentence, in plain words: the incident, and what Themis does about it.
+description: "TODO: say which incident this pack handles and what Themis does about it"
+
+# The profile Themis uses for these incidents, in the format of the
+# configuration file's profiles (docs/configuration.md). An operator's profile
+# of the same name replaces it.
+profile:
+  # Orders profiles matching the same alert: higher wins. Unique among packs.
+  priority: 50
+  match:
+    # The Alertmanager alertname values this scenario answers. TODO
+    alertNames: [TODOAlertName]
+    targetKinds: [Deployment.apps]
+  evidence:
+    # Evidence templates read before the investigation starts, and those it
+    # may ask for. docs/architecture.md lists the templates Themis has.
+    initial: [rollout_history, pod_states, target_events]
+    allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+  # The checks the profile runs, from this pack's checks.yaml or another
+  # pack's. None runs every check Themis has. TODO
+  checks: []
+  # The fixes Themis may suggest. None means it diagnoses and escalates. TODO
+  capabilities: []
+  # Policy decides, for every fix, whether it is refused or needs a person's
+  # approval. A rule's `when` is CEL over action.*, target.* and the checks'
+  # answers as predicates.<check>. With no rule, a fix needs approval.
+  policy:
+    mode: guarded
+    rules: []
+  # How long Themis watches the workload after a fix.
+  verification:
+    window: 5m
+    stability: 2m

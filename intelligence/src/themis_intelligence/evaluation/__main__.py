@@ -15,7 +15,7 @@ from pathlib import Path
 import httpx
 
 from themis_intelligence.__main__ import read_secret
-from themis_intelligence.evaluation.bundle import Bundle, load_bundles
+from themis_intelligence.evaluation.bundle import Bundle, bundle_dirs
 from themis_intelligence.evaluation.recordings import (
     MissingRecordingError,
     RecordingAdapter,
@@ -41,8 +41,14 @@ def host_of(url: str) -> str:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="themis_intelligence.evaluation")
-    p.add_argument("--scenarios", type=Path, default=Path("../eval/scenarios"))
-    p.add_argument("--scenario", action="append", help="run only this scenario; repeatable")
+    p.add_argument(
+        "--scenarios",
+        type=Path,
+        default=Path("../scenarios"),
+        help="the scenario packs, whose cases are in each pack's eval folder",
+    )
+    p.add_argument("--pack", action="append", help="run only this pack's cases; repeatable")
+    p.add_argument("--scenario", action="append", help="run only this case; repeatable")
     p.add_argument("--out", type=Path, required=True, help="directory for the reports")
     p.add_argument("--base-url", default="http://127.0.0.1:11434/v1")
     p.add_argument("--model", default="qwen3:8b")
@@ -105,10 +111,10 @@ def read_price(args: argparse.Namespace) -> Price | None:
     return Price(args.price_input, args.price_output)
 
 
-def dataset_hash(root: Path, bundles: list[Bundle]) -> str:
+def dataset_hash(dirs: list[Path]) -> str:
     digest = hashlib.sha256()
-    for b in bundles:
-        digest.update((root / b.scenario / "bundle.json").read_bytes())
+    for d in dirs:
+        digest.update((d / "bundle.json").read_bytes())
     return digest.hexdigest()
 
 
@@ -140,7 +146,8 @@ async def main() -> None:
     if args.runs < 1:
         raise SystemExit("--runs must be at least 1.")
     price = None if args.replay else read_price(args)
-    bundles = load_bundles(args.scenarios, args.scenario)
+    dirs = bundle_dirs(args.scenarios, args.scenario, args.pack)
+    bundles = [Bundle.model_validate_json((d / "bundle.json").read_bytes()) for d in dirs]
     if not bundles:
         raise SystemExit(f"No scenarios under {args.scenarios}.")
 
@@ -183,7 +190,7 @@ async def main() -> None:
         ) from None
     commit, dirty = git_state()
     provenance = Provenance(
-        dataset=dataset_hash(args.scenarios, bundles),
+        dataset=dataset_hash(dirs),
         scenario_versions={b.scenario: b.version for b in bundles},
         prompt_version=loop.PROMPT_VERSION,
         prompt_sha256=prompt_hash(),

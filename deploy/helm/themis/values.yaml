@@ -168,41 +168,16 @@ crds:
 #   externalProposals: who outside Themis may suggest fixes; see the docs
 themisConfig: {}
 
-# Incident profiles, installed as IncidentProfile resources in this release's
-# namespace, where they apply to every enrolled namespace. Teams can add their
-# own in their namespace.
-profiles:
-  - name: rollout-regression
-    priority: 100
-    match:
-      alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
-      targetKinds: [Deployment.apps]
-    evidence:
-      initial: [rollout_history, pod_states, target_events, referenced_config]
-      allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
-    capabilities: [deployment.rollback-to-revision]
-    policy:
-      mode: guarded
-      approvalTimeout: 30m
-      rules:
-        - name: gitops-owns-the-target
-          when: predicates.gitops_managed != "false"
-          decision: deny
-        - name: rollback-needs-a-bad-rollout
-          when: >-
-            action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
-            (predicates.rollout_recent != "true" ||
-             predicates.failure_onset_after_rollout != "true" ||
-             predicates.config_changed_before_failure != "false" ||
-             (predicates.oom_killed_new_revision != "true" &&
-              predicates.prior_revision_was_healthy != "true"))
-          decision: deny
-        - name: rollback-needs-approval
-          when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
-          decision: require_approval
-    verification:
-      window: 5m
-      stability: 2m
+# Scenario packs Themis ships, each with its own profile: every one is on
+# unless named here, such as [rollout-regression]. See docs/scenarios.md.
+scenarios:
+  disabled: []
+
+# Incident profiles of your own, installed as IncidentProfile resources in this
+# release's namespace, where they apply to every enrolled namespace. One named
+# like a scenario pack's profile replaces it. Teams can add their own in their
+# namespace.
+profiles: []
 
 resources:
   core: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}

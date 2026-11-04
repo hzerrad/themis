@@ -1,0 +1,47 @@
+# A Deployment that started failing after a rollout, rolled back with a
+# person's approval. README.md says what it covers; docs/scenarios.md says
+# what each field means.
+
+name: rollout-regression
+description: A new version of a Deployment fails where the version before it worked; Themis suggests rolling back to it.
+
+# The profile Themis uses for these incidents, in the format of the
+# configuration file's profiles. Its name is the pack's.
+profile:
+  priority: 100
+  match:
+    alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
+    targetKinds: [Deployment.apps]
+  evidence:
+    initial: [rollout_history, pod_states, target_events, referenced_config]
+    allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+  checks:
+    - rollout_recent
+    - failure_onset_after_rollout
+    - prior_revision_was_healthy
+    - oom_killed_new_revision
+    - gitops_managed
+    - config_changed_before_failure
+  capabilities: [deployment.rollback-to-revision]
+  policy:
+    mode: guarded
+    approvalTimeout: 30m
+    rules:
+      - name: gitops-owns-the-target
+        when: predicates.gitops_managed != "false"
+        decision: deny
+      - name: rollback-needs-a-bad-rollout
+        when: >-
+          action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
+          (predicates.rollout_recent != "true" ||
+           predicates.failure_onset_after_rollout != "true" ||
+           predicates.config_changed_before_failure != "false" ||
+           (predicates.oom_killed_new_revision != "true" &&
+            predicates.prior_revision_was_healthy != "true"))
+        decision: deny
+      - name: rollback-needs-approval
+        when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
+        decision: require_approval
+  verification:
+    window: 5m
+    stability: 2m

@@ -1,0 +1,6 @@
+# TODO: the cluster as the controllers and the kubelet left it: the target
+# Deployment, its ReplicaSets, Pods and Events, as YAML documents separated by
+# ---. Owners are linked by kind and name, and creationTimestamp is set by
+# hand, since checks depend on it. Copy a cluster.yaml from
+# scenarios/rollout-regression/eval to start. A pod's logs go in
+# logs/<pod>.txt.

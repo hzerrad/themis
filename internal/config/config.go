@@ -78,9 +78,20 @@ type Config struct {
 	// instead of the profiles below.
 	Resources *Resources `json:"resources,omitempty"`
 
+	// Scenarios are the scenario packs Themis ships, each with its own
+	// profile.
+	Scenarios Scenarios `json:"scenarios,omitzero"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
-	// wins. Required unless resources is set.
+	// wins. One named like a scenario pack's profile replaces it.
 	Profiles []Profile `json:"profiles,omitempty"`
+}
+
+// Scenarios configures the scenario packs. Every pack is on unless disabled.
+type Scenarios struct {
+	// Disabled names the packs to turn off: their profiles and checks are
+	// left out.
+	Disabled []string `json:"disabled,omitempty" jsonschema:"uniqueItems=true"`
 }
 
 // Settings configures the settings made in Themis's setup.
@@ -656,8 +667,6 @@ func (c Config) Validate() error {
 		add("resources.namespace", "is required")
 	case c.Resources != nil && len(c.Profiles) > 0:
 		add("profiles", "set profiles as IncidentProfile resources, or remove resources")
-	case c.Resources == nil && len(c.Profiles) == 0:
-		add("profiles", "at least one profile is required")
 	}
 	seenName := map[string]bool{}
 	seenPriority := map[int]string{}
@@ -764,6 +773,20 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 	if v := p.EffectiveVerification(); v.Window.Duration < 0 || v.Stability.Duration < 0 || v.Stability.Duration > v.Window.Duration {
 		add("verification", "stability must be positive and within the window")
 	}
+}
+
+// WithProfiles returns c with each of defaults that none of c's profiles
+// names added after c's own, so c's win: by name, and on a tie in priority,
+// since the first of equal priority matches.
+func (c Config) WithProfiles(defaults []Profile) Config {
+	out := slices.Clone(c.Profiles)
+	for _, d := range defaults {
+		if !slices.ContainsFunc(c.Profiles, func(p Profile) bool { return p.Name == d.Name }) {
+			out = append(out, d)
+		}
+	}
+	c.Profiles = out
+	return c
 }
 
 // IsEnrolled reports whether alerts about namespace ns may create work.

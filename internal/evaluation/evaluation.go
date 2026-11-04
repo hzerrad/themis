@@ -1,6 +1,7 @@
-// Package evaluation builds what the evaluation replays: each scenario's
-// cluster, read by the real evidence templates and checks, written as a bundle
-// a model can be run against with no cluster.
+// Package evaluation builds what the evaluation replays: each scenario pack's
+// cases, a cluster each, read by the real evidence templates and the pack's
+// checks, written as a bundle a model can be run against with no cluster. It
+// also checks that a pack is complete.
 package evaluation
 
 import (
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -34,16 +36,16 @@ import (
 	"github.com/hzerrad/themis/internal/workload"
 )
 
-// Decisions a scenario can expect of an investigation.
+// Decisions a case can expect of an investigation.
 const (
 	DecisionPropose = "propose"
 	DecisionAbstain = "abstain"
 	DecisionEither  = "either"
 )
 
-// Scenario is what scenario.yaml declares. Changing Truth means a new Version,
-// so results are never compared across different answers.
-type Scenario struct {
+// Case is what an evaluation case's case.yaml declares. Changing Truth means
+// a new Version, so results are never compared across different answers.
+type Case struct {
 	Name          string   `json:"name"`
 	Version       int      `json:"version"`
 	Description   string   `json:"description"`
@@ -98,7 +100,7 @@ type Truth struct {
 }
 
 // Validate reports every problem in s, not only the first.
-func (s Scenario) Validate() error {
+func (s Case) Validate() error {
 	var errs []error
 	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
 	if s.Name == "" {
@@ -145,21 +147,21 @@ func (s Scenario) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Load reads and validates the scenario in dir. Unknown keys are errors.
-func Load(dir string) (Scenario, error) {
-	data, err := os.ReadFile(filepath.Join(dir, "scenario.yaml")) //nolint:gosec // a path in the repository
+// Load reads and validates the case in dir. Unknown keys are errors.
+func Load(dir string) (Case, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "case.yaml")) //nolint:gosec // a path in the repository
 	if err != nil {
-		return Scenario{}, err
+		return Case{}, err
 	}
-	var s Scenario
+	var s Case
 	if err := yaml.UnmarshalStrict(data, &s); err != nil {
-		return Scenario{}, fmt.Errorf("%s: %w", dir, err)
+		return Case{}, fmt.Errorf("case.yaml: %w", err)
 	}
 	if err := s.Validate(); err != nil {
-		return Scenario{}, fmt.Errorf("%s: %w", dir, err)
+		return Case{}, prefixed("case.yaml", err)
 	}
 	if s.Name != filepath.Base(dir) {
-		return Scenario{}, fmt.Errorf("%s: name %q must match the directory", dir, s.Name)
+		return Case{}, fmt.Errorf("case.yaml: name %q must be the folder's, %q", s.Name, filepath.Base(dir))
 	}
 	return s, nil
 }
@@ -192,9 +194,9 @@ type Bundle struct {
 
 	Predicates []Check `json:"predicates"`
 
-	// Policy is what Themis's shipped policy does with a rollback of the
-	// target, given these checks. A harmful proposal the policy denies never
-	// reaches anyone; one it lets through reaches a person to approve.
+	// Policy is what the pack's policy does with a rollback of the target,
+	// given these checks. A harmful proposal the policy denies never reaches
+	// anyone; one it lets through reaches a person to approve.
 	Policy PolicyCheck `json:"policy"`
 }
 
@@ -202,28 +204,6 @@ type Bundle struct {
 type PolicyCheck struct {
 	Outcome string `json:"outcome"`
 	Reason  string `json:"reason"`
-}
-
-// ShippedPolicy is the policy of Themis's example configuration, the one
-// people start from.
-func ShippedPolicy(path string) (*policy.Policy, error) {
-	c, err := config.Load(path)
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range c.Profiles {
-		if p.Name == "rollout-regression" {
-			cat, err := catalog.Themis(nil)
-			if err != nil {
-				return nil, err
-			}
-			if err := cat.CheckProfile(p); err != nil {
-				return nil, fmt.Errorf("%s: profile %s: %w", path, p.Name, err)
-			}
-			return policy.Compile(p.EffectivePolicy())
-		}
-	}
-	return nil, fmt.Errorf("%s has no rollout-regression profile", path)
 }
 
 // Template is an evidence template, described as the core describes it to an
@@ -254,14 +234,19 @@ type Check struct {
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
 }
 
-// Build reads the scenario in dir with the real templates and checks, and asks
-// pol what it would do with a rollback.
-func Build(ctx context.Context, dir string, s Scenario, pol *policy.Policy) (Bundle, error) {
+// Build reads the case in dir with the real templates and the checks of
+// profile, a scenario pack's from packs, and asks the profile's policy what it
+// would do with a rollback.
+func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.Profile) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat, err := catalog.Themis(fileLogs{dir: filepath.Join(dir, "logs")})
+	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, packs, nil)
+	if err != nil {
+		return Bundle{}, err
+	}
+	pol, err := policy.Compile(profile.EffectivePolicy())
 	if err != nil {
 		return Bundle{}, err
 	}
@@ -298,7 +283,7 @@ func Build(ctx context.Context, dir string, s Scenario, pol *policy.Policy) (Bun
 		}
 	}
 	values := map[string]string{}
-	for _, r := range cat.Checks.Evaluate(initial, s.Now) {
+	for _, r := range cat.Checks.For(profile.Checks).Evaluate(initial, s.Now) {
 		b.Predicates = append(b.Predicates, Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, EvidenceIDs: r.EvidenceIDs})
 		values[r.Name] = r.Value.String()
 	}
@@ -335,7 +320,7 @@ func loadCluster(path string, want Target) (client.Reader, incident.TargetRef, e
 		if err := dec.Decode(&u.Object); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
-			return nil, incident.TargetRef{}, fmt.Errorf("%s: %w", path, err)
+			return nil, incident.TargetRef{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 		}
 		if len(u.Object) == 0 {
 			continue
@@ -356,7 +341,7 @@ func loadCluster(path string, want Target) (client.Reader, incident.TargetRef, e
 		}
 		typed, err := scheme.New(u.GroupVersionKind())
 		if err != nil {
-			return nil, incident.TargetRef{}, fmt.Errorf("%s: %w", path, err)
+			return nil, incident.TargetRef{}, fmt.Errorf("%s: %w", filepath.Base(path), err)
 		}
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, typed); err != nil {
 			return nil, incident.TargetRef{}, fmt.Errorf("%s %s: %w", u.GetKind(), u.GetName(), err)
@@ -371,7 +356,7 @@ func loadCluster(path string, want Target) (client.Reader, incident.TargetRef, e
 		}
 	}
 	if target.UID == "" {
-		return nil, incident.TargetRef{}, fmt.Errorf("%s has no %s %s", path, want.Kind, want.Name)
+		return nil, incident.TargetRef{}, fmt.Errorf("%s has no %s %s, the case's target", filepath.Base(path), want.Kind, want.Name)
 	}
 	return builder.Build(), target, nil
 }

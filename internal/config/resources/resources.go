@@ -83,7 +83,8 @@ type Checker interface {
 	CheckSources(config.ExternalProposals) error
 }
 
-// New returns a Live with no resources read yet.
+// New returns a Live with no resources read yet. base's profiles, those of
+// the scenario packs, apply unless a resource replaces them.
 func New(base config.Config, r client.Reader, w client.Client, check Checker, log *slog.Logger) *Live {
 	l := &Live{base: base, Reader: r, Writer: w, Check: check, Logger: log, profiles: map[string]config.Profile{}}
 	l.current.Store(&base)
@@ -198,13 +199,17 @@ func (l *Live) read(ctx context.Context) (config.Config, []report, error) {
 	}
 	l.profiles = applied
 
+	// The file's profiles are the scenario packs': a resource in Themis's
+	// namespace with the same name replaces one.
 	cfg.Profiles = nil
 	for _, k := range sortedKeys(applied) {
-		p := applied[k]
-		if settings.AutonomyCeiling == config.ModeObserve {
-			p.Policy.Mode = config.ModeObserve
+		cfg.Profiles = append(cfg.Profiles, applied[k])
+	}
+	cfg = cfg.WithProfiles(l.base.Profiles)
+	if settings.AutonomyCeiling == config.ModeObserve {
+		for i := range cfg.Profiles {
+			cfg.Profiles[i].Policy.Mode = config.ModeObserve
 		}
-		cfg.Profiles = append(cfg.Profiles, p)
 	}
 	return cfg, reports, nil
 }

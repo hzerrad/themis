@@ -1,11 +1,13 @@
 // Package catalog is everything this install of Themis can read, check and
-// change: its evidence templates, checks and fixes. It is built once, and each
-// part goes to the code that uses it.
+// change: its evidence templates, checks and fixes, and the scenario packs
+// that bring checks and profiles. It is built once, and each part goes to the
+// code that uses it.
 package catalog
 
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/policy"
+	"github.com/hzerrad/themis/scenarios"
 )
 
 // Catalog is what an install can read, check and change.
@@ -22,14 +25,25 @@ type Catalog struct {
 	Fixes    capability.Registry
 	Evidence evidence.Registry
 	Checks   check.List
+
+	// Profiles are the scenario packs' profiles, in the packs' name order.
+	// A profile of the install's own with the same name replaces one.
+	Profiles []config.Profile
 }
 
-// Themis is what Themis ships with. logs reads containers' logs for the
-// container-logs template.
-//
-// Its checks are compiled here, so one that doesn't compile stops Themis from
-// starting.
+// Themis is what Themis ships with, every scenario pack on. logs reads
+// containers' logs for the container-logs template.
 func Themis(logs evidence.LogReader) (Catalog, error) {
+	return Build(logs, scenarios.FS, nil)
+}
+
+// Build is Themis's evidence templates and fixes, with the scenario packs in
+// packs, one folder each, except those disabled names.
+//
+// Every pack's checks are compiled and its profile checked here, so a broken
+// pack stops Themis from starting, with a message naming it. So does a
+// disabled name no pack has.
+func Build(logs evidence.LogReader, packs fs.FS, disabled []string) (Catalog, error) {
 	templates := evidence.NewRegistry(
 		evidence.NewRolloutHistory(),
 		evidence.NewPodStates(),
@@ -37,11 +51,59 @@ func Themis(logs evidence.LogReader) (Catalog, error) {
 		evidence.NewReferencedConfig(),
 		evidence.NewContainerLogsTail(logs),
 	)
-	checks, err := check.Themis(slices.Sorted(maps.Keys(templates)))
+	found, err := readPacks(packs)
 	if err != nil {
 		return Catalog{}, err
 	}
-	return Catalog{Fixes: Fixes(), Evidence: templates, Checks: checks}, nil
+	enabled, err := enable(found, disabled)
+	if err != nil {
+		return Catalog{}, err
+	}
+	c := Catalog{Fixes: Fixes(), Evidence: templates}
+	if err := c.add(enabled); err != nil {
+		return Catalog{}, err
+	}
+	return c, nil
+}
+
+// add compiles each pack's checks into c, then checks its profile against
+// everything c has, and adds it.
+func (c *Catalog) add(packs []pack) error {
+	var errs []error
+	names := slices.Sorted(maps.Keys(c.Evidence))
+	definedBy := map[string]string{}
+	for _, p := range packs {
+		list, err := check.Compile(p.checks, names)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("scenario pack %s: %w", p.name, err))
+			continue
+		}
+		for _, ch := range list {
+			if other, ok := definedBy[ch.Name]; ok {
+				errs = append(errs, fmt.Errorf("scenario pack %s: check %s: already defined by the pack %s", p.name, ch.Name, other))
+				continue
+			}
+			definedBy[ch.Name] = p.name
+			c.Checks = append(c.Checks, ch)
+		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	priorityOf := map[int]string{}
+	for _, p := range packs {
+		if err := c.CheckProfile(p.profile); err != nil {
+			errs = append(errs, fmt.Errorf("scenario pack %s: profile: %w", p.name, err))
+			continue
+		}
+		if other, ok := priorityOf[p.profile.Priority]; ok {
+			errs = append(errs, fmt.Errorf("scenario pack %s: profile: priority %d is already used by the pack %s", p.name, p.profile.Priority, other))
+			continue
+		}
+		priorityOf[p.profile.Priority] = p.name
+		c.Profiles = append(c.Profiles, p.profile)
+	}
+	return errors.Join(errs...)
 }
 
 // Fixes is the fixes Themis ships with, for the executor, which needs no

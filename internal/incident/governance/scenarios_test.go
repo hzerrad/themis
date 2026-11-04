@@ -12,17 +12,17 @@ import (
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
 
-// shipped governs with the policy of the example configuration, so these
-// scenarios check the rules Themis ships, not ones written for a test.
+// shipped governs with the policy of the rollout-regression scenario pack, so
+// these scenarios check the rules Themis ships, not ones written for a test.
 func shipped(t *testing.T) *env {
 	t.Helper()
-	example, err := config.Load("../../../deploy/config/themis.example.yaml")
+	cat, err := catalog.Themis(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	e := newEnv(t)
 	p := profile("rollout-regression")
-	p.Policy = example.Profiles[0].Policy
+	p.Policy = cat.Profiles[0].Policy
 	w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = e.worker.Now
 	e.worker = w

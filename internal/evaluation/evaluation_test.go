@@ -1,111 +1,97 @@
 package evaluation_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/evaluation"
 	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/policy"
 )
 
-var update = flag.Bool("update", false, "rewrite each scenario's bundle.json")
+var update = flag.Bool("update", false, "rewrite each case's bundle.json")
 
-const scenarios = "../../eval/scenarios"
+const (
+	packs = "../../scenarios"
+	oom   = packs + "/rollout-regression/eval/rollout-oom"
+)
 
-func dirs(t *testing.T) []string {
-	t.Helper()
-	found, err := filepath.Glob(filepath.Join(scenarios, "*"))
-	if err != nil || len(found) == 0 {
-		t.Fatalf("no scenarios in %s: %v", scenarios, err)
-	}
-	return found
-}
-
-// shipped is the policy people start from.
-func shipped(t *testing.T) *policy.Policy {
-	t.Helper()
-	p, err := evaluation.ShippedPolicy("../../deploy/config/themis.example.yaml")
+// Every scenario pack passes the conformance suite: each case's checks give
+// its right answers, with no model involved, and its committed bundle is what
+// the code produces today.
+func TestPacks(t *testing.T) {
+	entries, err := os.ReadDir(packs)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return p
-}
-
-func encode(t *testing.T, b evaluation.Bundle) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(b); err != nil {
-		t.Fatal(err)
-	}
-	return buf.Bytes()
-}
-
-// Each scenario's checks must give its right answers, with no model involved,
-// and its committed bundle must be what the code produces today.
-func TestScenarios(t *testing.T) {
-	for _, dir := range dirs(t) {
-		t.Run(filepath.Base(dir), func(t *testing.T) {
-			s, err := evaluation.Load(dir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		t.Run(e.Name(), func(t *testing.T) {
+			r, err := evaluation.CheckPack(t.Context(), packs, e.Name(), *update)
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := evaluation.Build(t.Context(), dir, s, shipped(t))
-			if err != nil {
-				t.Fatal(err)
-			}
-			got := map[string]evaluation.Check{}
-			for _, c := range b.Predicates {
-				got[c.Name] = c
-			}
-			for name, want := range s.Truth.Predicates {
-				c, ok := got[name]
-				if !ok {
-					t.Errorf("%s: no such check", name)
-				} else if c.Value != want {
-					t.Errorf("%s = %s (%s), want %s", name, c.Value, c.Reason, want)
-				}
-			}
-
-			path := filepath.Join(dir, "bundle.json")
-			data := encode(t, b)
-			if *update {
-				if err := os.WriteFile(path, data, 0o644); err != nil { //nolint:gosec // a public fixture
-					t.Fatal(err)
-				}
-				return
-			}
-			committed, err := os.ReadFile(path) //nolint:gosec // a path in the repository
-			if err != nil {
-				t.Fatalf("%v: run `make eval-bundles`", err)
-			}
-			if !bytes.Equal(committed, data) {
-				t.Errorf("%s is stale: run `make eval-bundles` and review the change", path)
+			if r.Cases == 0 {
+				t.Error("no cases")
 			}
 		})
+	}
+}
+
+// A new pack, as the scaffold makes it, fails the conformance suite with what
+// is left to fill in.
+func TestScaffold_FailsUntilFilledIn(t *testing.T) {
+	root := t.TempDir()
+	if err := evaluation.Scaffold(root, "my-pack"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := evaluation.CheckPack(t.Context(), root, "my-pack", false)
+	if err == nil {
+		t.Fatal("a fresh scaffold passed")
+	}
+	for _, want := range []string{
+		"scenario.yaml: replace the parts marked TODO",
+		"README.md: replace the parts marked TODO",
+		"eval/my-pack-act: case.yaml: truth.root_causes needs a class",
+		"eval/my-pack-look-alike: case.yaml: replace the parts marked TODO",
+		"eval: no case where acting is right",
+		"eval: no look-alike",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error doesn't say %q:\n%v", want, err)
+		}
+	}
+	for _, name := range []string{"my-pack", "My_Pack"} {
+		if err := evaluation.Scaffold(root, name); err == nil {
+			t.Errorf("Scaffold(%q) made a pack", name)
+		}
 	}
 }
 
 // A public corpus goes through the same redaction as production evidence, and
 // never holds what a template wouldn't return.
 func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
-	const dir = scenarios + "/rollout-oom"
-	s, err := evaluation.Load(dir)
+	s, err := evaluation.Load(oom)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := evaluation.Build(t.Context(), dir, s, shipped(t))
+	cat, err := catalog.Themis(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encode(t, b)), "fixture-s3cr3t-do-not-leak") {
+	b, err := evaluation.Build(t.Context(), oom, s, os.DirFS(packs), cat.Profiles[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := evaluation.Encode(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "fixture-s3cr3t-do-not-leak") {
 		t.Error("the bundle holds a secret planted in the fixture")
 	}
 	logs, ok := b.Requestable[evidence.ContainerLogsTail]
@@ -117,9 +103,9 @@ func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
 	}
 }
 
-func TestScenario_Validate(t *testing.T) {
-	good := func() evaluation.Scenario {
-		s, err := evaluation.Load(scenarios + "/rollout-oom")
+func TestCase_Validate(t *testing.T) {
+	good := func() evaluation.Case {
+		s, err := evaluation.Load(oom)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,16 +113,16 @@ func TestScenario_Validate(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		edit func(*evaluation.Scenario)
+		edit func(*evaluation.Case)
 		want string
 	}{
-		{"no version", func(s *evaluation.Scenario) { s.Version = 0 }, "version"},
-		{"unknown difficulty", func(s *evaluation.Scenario) { s.Difficulty = "brutal" }, "difficulty"},
-		{"unknown decision", func(s *evaluation.Scenario) { s.Truth.Decision = "guess" }, "truth.decision"},
-		{"no right cause", func(s *evaluation.Scenario) { s.Truth.RootCauses = nil }, "root_causes"},
-		{"propose with no revision", func(s *evaluation.Scenario) { s.Truth.AcceptableRevisions = nil }, "acceptable_revisions"},
-		{"right and harmful", func(s *evaluation.Scenario) { s.Truth.RollbackIsHarmful = true }, "right and harmful"},
-		{"initial not allowed", func(s *evaluation.Scenario) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
+		{"no version", func(s *evaluation.Case) { s.Version = 0 }, "version"},
+		{"unknown difficulty", func(s *evaluation.Case) { s.Difficulty = "brutal" }, "difficulty"},
+		{"unknown decision", func(s *evaluation.Case) { s.Truth.Decision = "guess" }, "truth.decision"},
+		{"no right cause", func(s *evaluation.Case) { s.Truth.RootCauses = nil }, "root_causes"},
+		{"propose with no revision", func(s *evaluation.Case) { s.Truth.AcceptableRevisions = nil }, "acceptable_revisions"},
+		{"right and harmful", func(s *evaluation.Case) { s.Truth.RollbackIsHarmful = true }, "right and harmful"},
+		{"initial not allowed", func(s *evaluation.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

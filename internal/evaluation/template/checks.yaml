@@ -1,0 +1,23 @@
+# The checks the {{name}} pack adds, if it needs any. A check decides one
+# fact from the evidence: true, false or unknown. docs/checks.md says what each
+# field means and what the expressions see. Remove the # in front of the
+# example below to start from it, or leave this file as it is if the pack
+# adds no checks.
+
+# - name: {{name_}}_example
+#   version: "1"
+#   description: A pod of the current revision restarted
+#   reads: [pod_states]
+#   let:
+#     pods: pod_states.pods.filter(p, p.revision == current_revision)
+#   answers:
+#     - when: size(pods) == 0
+#       answer: unknown
+#       reason: no pods of revision ${current_revision}
+#     - when: pods.exists(p, p.containers.exists(c, c.restartCount > 0))
+#       answer: true
+#       reason: a pod of revision ${current_revision} restarted
+#       cite: [ids.pod_states]
+#     - answer: false
+#       reason: no pod of revision ${current_revision} restarted
+#       cite: [ids.pod_states]
