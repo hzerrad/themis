@@ -201,6 +201,8 @@ type Bundle struct {
 	Initial     []Item          `json:"initial"`
 	Requestable map[string]Item `json:"requestable"`
 	Templates   []Template      `json:"templates"`
+	// Gaps are the initial evidence the core couldn't read.
+	Gaps []Gap `json:"gaps,omitempty"`
 
 	Predicates []Check `json:"predicates"`
 
@@ -235,13 +237,30 @@ type Item struct {
 	Classification string `json:"classification"`
 }
 
-// Check is one check's answer.
+// Check is one check's answer. An unknown one carries the gaps in the
+// evidence it reads, and is blind when Themis couldn't see.
 type Check struct {
 	Name        string   `json:"name"`
 	Version     string   `json:"version"`
 	Value       string   `json:"value"`
 	Reason      string   `json:"reason"`
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
+	Gaps        []Gap    `json:"gaps,omitempty"`
+	Blind       bool     `json:"blind,omitempty"`
+}
+
+// Gap is initial evidence the core couldn't read, and why.
+type Gap struct {
+	Template string `json:"template"`
+	Cause    string `json:"cause"`
+	Detail   string `json:"detail,omitempty"`
+}
+
+func bundleItem(item evidence.Item) Item {
+	return Item{
+		ID: item.ID, Template: item.Template, Data: string(item.Data), Truncated: item.Truncated,
+		OriginalBytes: item.OriginalBytes, Redactions: item.Redactions, Classification: string(item.Classification),
+	}
 }
 
 // Build reads the case in dir with the real templates and the checks of
@@ -267,43 +286,59 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 		RootCauses: cat.RootCauses.For(profile.Name), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
-	var initial evidence.Bundle
-	initial.Target = target
 	w, err := workload.Read(ctx, c, target)
 	if err != nil {
 		return Bundle{}, err
 	}
+	// Diagnosed as the core diagnoses an incident, under the profile with the
+	// case's evidence. A case has no alert, so no events have expired.
+	p := profile
+	p.Evidence = config.Evidence{Initial: s.Evidence.Initial, Allowed: s.Evidence.Allowed}
+	d := cat.Diagnose(ctx, c, w, p, catalog.Moment{Now: s.Now})
+	// Items are named after their template, so a rebuilt bundle is the same.
+	ids := map[string]string{}
+	for _, item := range d.Items {
+		ids[item.ID] = "ev-" + item.Template
+		item.ID = ids[item.ID]
+		b.Initial = append(b.Initial, bundleItem(item))
+	}
+	for _, g := range d.Gaps {
+		b.Gaps = append(b.Gaps, Gap{Template: g.Template, Cause: string(g.Cause), Detail: g.Detail})
+	}
 	for _, name := range s.Evidence.Allowed {
+		about := cat.Evidence[name]
+		b.Templates = append(b.Templates, Template{Name: name, Description: about.Description(), Params: about.Params()})
+		if slices.Contains(s.Evidence.Initial, name) {
+			continue
+		}
+		// A replay can only hand over an item, so a template that can't be
+		// read stops the build.
 		item, err := cat.Evidence.Collect(ctx, c, name, w, nil, s.Now)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("%s: %w", name, err)
 		}
 		item.ID = "ev-" + name
-		about := cat.Evidence[name]
-		b.Templates = append(b.Templates, Template{Name: name, Description: about.Description(), Params: about.Params()})
-		out := Item{
-			ID: item.ID, Template: name, Data: string(item.Data), Truncated: item.Truncated,
-			OriginalBytes: item.OriginalBytes, Redactions: item.Redactions, Classification: string(item.Classification),
-		}
-		if slices.Contains(s.Evidence.Initial, name) {
-			b.Initial = append(b.Initial, out)
-			initial.Items = append(initial.Items, item)
-		} else {
-			b.Requestable[name] = out
-		}
+		b.Requestable[name] = bundleItem(item)
 	}
 	values := map[string]string{}
-	for _, r := range cat.Checks.For(profile.Checks).Evaluate(initial, s.Now) {
-		b.Predicates = append(b.Predicates, Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, EvidenceIDs: r.EvidenceIDs})
+	for _, r := range d.Results {
+		out := Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, Blind: r.Blind}
+		for _, id := range r.EvidenceIDs {
+			out.EvidenceIDs = append(out.EvidenceIDs, ids[id])
+		}
+		for _, g := range r.Gaps {
+			out.Gaps = append(out.Gaps, Gap{Template: g.Template, Cause: string(g.Cause)})
+		}
+		b.Predicates = append(b.Predicates, out)
 		values[r.Name] = r.Value.String()
 	}
 	// As the worker asks for the investigator's proposal. Rules reading
 	// target.managed_by see it empty: no shipped rule does.
-	d := pol.Evaluate(policy.Input{
+	verdict := pol.Evaluate(policy.Input{
 		Capability: rollback.Name, Risk: "medium", Namespace: target.Namespace,
 		Predicates: values, Source: "themis-intelligence", Authenticated: true,
 	})
-	b.Policy = PolicyCheck{Outcome: string(d.Outcome), Reason: d.Reason}
+	b.Policy = PolicyCheck{Outcome: string(verdict.Outcome), Reason: verdict.Reason}
 	return b, nil
 }
 

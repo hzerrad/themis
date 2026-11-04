@@ -147,7 +147,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		proposals:      themisv1.NewProposalServiceClient(conn),
 		server:         gs,
 	}
-	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Evidence: cat.Evidence, Checks: rolloutChecks(t, cat), Now: clk.Now}
+	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Catalog: catalog.Catalog{Evidence: cat.Evidence, Checks: rolloutChecks(t, cat)}, Now: clk.Now}
 	if err := prepare.Prepare(t.Context(), e.newIncident(t)); err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
