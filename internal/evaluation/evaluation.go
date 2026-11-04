@@ -213,7 +213,11 @@ func ShippedPolicy(path string) (*policy.Policy, error) {
 	}
 	for _, p := range c.Profiles {
 		if p.Name == "rollout-regression" {
-			if err := catalog.Themis(nil).CheckProfile(p); err != nil {
+			cat, err := catalog.Themis(nil)
+			if err != nil {
+				return nil, err
+			}
+			if err := cat.CheckProfile(p); err != nil {
 				return nil, fmt.Errorf("%s: profile %s: %w", path, p.Name, err)
 			}
 			return policy.Compile(p.EffectivePolicy())
@@ -257,7 +261,10 @@ func Build(ctx context.Context, dir string, s Scenario, pol *policy.Policy) (Bun
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat := catalog.Themis(fileLogs{dir: filepath.Join(dir, "logs")})
+	cat, err := catalog.Themis(fileLogs{dir: filepath.Join(dir, "logs")})
+	if err != nil {
+		return Bundle{}, err
+	}
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,

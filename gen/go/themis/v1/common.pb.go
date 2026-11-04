@@ -264,8 +264,10 @@ type PredicateResult struct {
 	Reason           string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	EvidenceIds      []string               `protobuf:"bytes,4,rep,name=evidence_ids,json=evidenceIds,proto3" json:"evidence_ids,omitempty"`
 	PredicateVersion string                 `protobuf:"bytes,5,opt,name=predicate_version,json=predicateVersion,proto3" json:"predicate_version,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// What the check finds when it is true, in plain words.
+	Description   string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PredicateResult) Reset() {
@@ -329,6 +331,13 @@ func (x *PredicateResult) GetEvidenceIds() []string {
 func (x *PredicateResult) GetPredicateVersion() string {
 	if x != nil {
 		return x.PredicateVersion
+	}
+	return ""
+}
+
+func (x *PredicateResult) GetDescription() string {
+	if x != nil {
+		return x.Description
 	}
 	return ""
 }
@@ -759,13 +768,14 @@ const file_themis_v1_common_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x10\n" +
 	"\x03uid\x18\x04 \x01(\tR\x03uid\x12\x14\n" +
-	"\x05group\x18\x05 \x01(\tR\x05group\"\xb5\x01\n" +
+	"\x05group\x18\x05 \x01(\tR\x05group\"\xd7\x01\n" +
 	"\x0fPredicateResult\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05value\x18\x02 \x01(\x0e2\x10.themis.v1.TruthR\x05value\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12!\n" +
 	"\fevidence_ids\x18\x04 \x03(\tR\vevidenceIds\x12+\n" +
-	"\x11predicate_version\x18\x05 \x01(\tR\x10predicateVersion\"\xde\x05\n" +
+	"\x11predicate_version\x18\x05 \x01(\tR\x10predicateVersion\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xde\x05\n" +
 	"\fEvidenceItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\btemplate\x18\x02 \x01(\tR\btemplate\x12,\n" +

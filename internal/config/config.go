@@ -381,6 +381,10 @@ type Profile struct {
 	// Evidence lists the templates investigations of this profile may use.
 	Evidence Evidence `json:"evidence"`
 
+	// Checks are the checks this profile runs, by name; none means every
+	// check Themis has.
+	Checks []string `json:"checks,omitempty" jsonschema:"uniqueItems=true"`
+
 	// Capabilities are the remediations proposals may name; none means
 	// diagnosis only.
 	Capabilities []string `json:"capabilities,omitempty" jsonschema:"uniqueItems=true"`

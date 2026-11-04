@@ -6,6 +6,7 @@ package catalog
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/hzerrad/themis/internal/capability"
@@ -25,18 +26,22 @@ type Catalog struct {
 
 // Themis is what Themis ships with. logs reads containers' logs for the
 // container-logs template.
-func Themis(logs evidence.LogReader) Catalog {
-	return Catalog{
-		Fixes: Fixes(),
-		Evidence: evidence.NewRegistry(
-			evidence.NewRolloutHistory(),
-			evidence.NewPodStates(),
-			evidence.NewTargetEvents(),
-			evidence.NewReferencedConfig(),
-			evidence.NewContainerLogsTail(logs),
-		),
-		Checks: check.Rollout(),
+//
+// Its checks are compiled here, so one that doesn't compile stops Themis from
+// starting.
+func Themis(logs evidence.LogReader) (Catalog, error) {
+	templates := evidence.NewRegistry(
+		evidence.NewRolloutHistory(),
+		evidence.NewPodStates(),
+		evidence.NewTargetEvents(),
+		evidence.NewReferencedConfig(),
+		evidence.NewContainerLogsTail(logs),
+	)
+	checks, err := check.Themis(slices.Sorted(maps.Keys(templates)))
+	if err != nil {
+		return Catalog{}, err
 	}
+	return Catalog{Fixes: Fixes(), Evidence: templates, Checks: checks}, nil
 }
 
 // Fixes is the fixes Themis ships with, for the executor, which needs no
@@ -46,8 +51,8 @@ func Fixes() capability.Registry {
 }
 
 // CheckProfile says what in p this catalog can't do, one error per problem:
-// evidence templates and fixes it doesn't have, and a policy that doesn't
-// compile.
+// evidence templates, checks and fixes it doesn't have, and a policy that
+// doesn't compile.
 func (c Catalog) CheckProfile(p config.Profile) error {
 	var errs []error
 	var named []string
@@ -57,13 +62,28 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 		}
 		named = append(named, name)
 	}
+	for _, name := range p.Checks {
+		if _, ok := c.Checks.Get(name); !ok {
+			errs = append(errs, fmt.Errorf("unknown check %q", name))
+		}
+	}
 	for _, name := range p.Capabilities {
 		if _, ok := c.Fixes[name]; !ok {
 			errs = append(errs, fmt.Errorf("unknown capability %q", name))
 		}
 	}
-	if _, err := policy.Compile(p.EffectivePolicy()); err != nil {
-		errs = append(errs, err)
+	compiled, err := policy.Compile(p.EffectivePolicy())
+	if err != nil {
+		return errors.Join(append(errs, err)...)
+	}
+	// A rule reading a check that doesn't run can't be evaluated, and a rule
+	// that can't be evaluated denies: every fix would be refused.
+	for _, r := range compiled.Reads() {
+		if _, ok := c.Checks.Get(r.Check); !ok {
+			errs = append(errs, fmt.Errorf("rule %s reads the check %q, which doesn't exist", r.Rule, r.Check))
+		} else if len(p.Checks) > 0 && !slices.Contains(p.Checks, r.Check) {
+			errs = append(errs, fmt.Errorf("rule %s reads the check %q, which the profile doesn't run", r.Rule, r.Check))
+		}
 	}
 	return errors.Join(errs...)
 }

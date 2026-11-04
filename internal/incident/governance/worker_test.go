@@ -66,7 +66,7 @@ func newEnv(t *testing.T) *env {
 }
 
 var predicates = []check.Result{
-	{Name: check.NameOOMKilledNewRevision, Version: "1", Value: check.True, Reason: "x"},
+	{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
 	{Name: check.NameGitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
 }
 

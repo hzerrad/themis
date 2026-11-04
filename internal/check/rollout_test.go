@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/evidence"
 )
@@ -92,6 +93,26 @@ func replace(t *testing.T, b evidence.Bundle, template string, view any) evidenc
 	return out
 }
 
+// rollout is the checks Themis ships with, as the catalog compiles them.
+var rollout = func() check.List {
+	c, err := catalog.Themis(nil)
+	if err != nil {
+		panic(err)
+	}
+	return c.Checks
+}()
+
+// run evaluates the check named name on b, as of now.
+func run(name string, b evidence.Bundle) check.Result { return runAt(name, b, now) }
+
+func runAt(name string, b evidence.Bundle, at time.Time) check.Result {
+	c, ok := rollout.Get(name)
+	if !ok {
+		panic("no check " + name)
+	}
+	return check.List{c}.Evaluate(b, at)[0]
+}
+
 func assertTruth(t *testing.T, r check.Result, want check.Truth) {
 	t.Helper()
 	if r.Value != want {
@@ -104,7 +125,7 @@ func assertTruth(t *testing.T, r check.Result, want check.Truth) {
 
 func TestOOMKilledNewRevision(t *testing.T) {
 	b := scenario1(t)
-	r := check.OOMKilledNewRevision(b)
+	r := run("oom_killed_new_revision", b)
 	assertTruth(t, r, check.True)
 	if len(r.EvidenceIDs) == 0 || r.EvidenceIDs[0] != "ps" {
 		t.Errorf("EvidenceIDs = %v, want ps", r.EvidenceIDs)
@@ -112,29 +133,36 @@ func TestOOMKilledNewRevision(t *testing.T) {
 
 	crashed := oomPod()
 	crashed.Containers[0].LastTermination.Reason = "Error"
-	assertTruth(t, check.OOMKilledNewRevision(replace(t, b, evidence.PodStates, pods(crashed))), check.False)
+	assertTruth(t, run("oom_killed_new_revision", replace(t, b, evidence.PodStates, pods(crashed))), check.False)
 
 	// Only the old revision was OOMKilled: not the new revision's doing.
 	old := oomPod()
 	old.Revision = "1"
-	assertTruth(t, check.OOMKilledNewRevision(replace(t, b, evidence.PodStates, pods(old, healthyPod("checkout-7d9f8b6c4-ab12c", "2")))), check.False)
+	assertTruth(t, run("oom_killed_new_revision", replace(t, b, evidence.PodStates, pods(old, healthyPod("checkout-7d9f8b6c4-ab12c", "2")))), check.False)
 
-	assertTruth(t, check.OOMKilledNewRevision(without(b, evidence.PodStates)), check.Unknown)
-	assertTruth(t, check.OOMKilledNewRevision(replace(t, b, evidence.PodStates, pods())), check.Unknown)
+	assertTruth(t, run("oom_killed_new_revision", without(b, evidence.PodStates)), check.Unknown)
+	assertTruth(t, run("oom_killed_new_revision", replace(t, b, evidence.PodStates, pods())), check.Unknown)
 }
 
 func TestFailureOnsetAfterRollout(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, check.FailureOnsetAfterRollout(b), check.True)
+	assertTruth(t, run("failure_onset_after_rollout", b), check.True)
 
 	// The crash loop predates the rollout (scenario 3).
 	early := evidence.EventView{
 		Object: "Pod/checkout-5c6a1e2f3-a1b2c", Type: "Warning", Reason: "BackOff",
 		FirstSeen: rolloutAt.Add(-3 * time.Hour), LastSeen: rolloutAt,
 	}
-	assertTruth(t, check.FailureOnsetAfterRollout(replace(t, b, evidence.TargetEvents, events(backOff, early))), check.False)
+	assertTruth(t, run("failure_onset_after_rollout", replace(t, b, evidence.TargetEvents, events(backOff, early))), check.False)
 
-	assertTruth(t, check.FailureOnsetAfterRollout(without(b, evidence.RolloutHistory)), check.Unknown)
+	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.RolloutHistory)), check.Unknown)
+
+	// Without the events an earlier failure could be hiding there: the pods
+	// alone can't make it true, though they can still show it false.
+	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.TargetEvents)), check.Unknown)
+	crashedBefore := oomPod()
+	crashedBefore.Containers[0].LastTermination.FinishedAt = rolloutAt.Add(-time.Hour)
+	assertTruth(t, run("failure_onset_after_rollout", replace(t, without(b, evidence.TargetEvents), evidence.PodStates, pods(crashedBefore))), check.False)
 }
 
 // A failure without a time could predate the rollout (Review Focus 5).
@@ -144,37 +172,37 @@ func TestTimelinePredicates_UnknownOnMissingTimestamps(t *testing.T) {
 	crashed.Containers[0].LastTermination.FinishedAt = time.Time{}
 	b := replace(t, replace(t, scenario1(t), evidence.TargetEvents, events(undated)), evidence.PodStates, pods(crashed))
 
-	assertTruth(t, check.FailureOnsetAfterRollout(b), check.Unknown)
+	assertTruth(t, run("failure_onset_after_rollout", b), check.Unknown)
 
 	h := history()
 	h.Revisions[0].CreatedAt = time.Time{}
-	assertTruth(t, check.RolloutRecent(replace(t, scenario1(t), evidence.RolloutHistory, h), time.Hour, now), check.Unknown)
+	assertTruth(t, runAt("rollout_recent", replace(t, scenario1(t), evidence.RolloutHistory, h), now), check.Unknown)
 }
 
 func TestFailureOnsetAfterRollout_NoFailureSeen(t *testing.T) {
 	b := replace(t, replace(t, scenario1(t), evidence.TargetEvents, events()), evidence.PodStates, pods(healthyPod("checkout-7d9f8b6c4-x2kqp", "2")))
-	assertTruth(t, check.FailureOnsetAfterRollout(b), check.Unknown)
+	assertTruth(t, run("failure_onset_after_rollout", b), check.Unknown)
 }
 
 func TestRolloutRecent(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, check.RolloutRecent(b, time.Hour, now), check.True)
-	assertTruth(t, check.RolloutRecent(b, time.Hour, now.Add(24*time.Hour)), check.False)
-	assertTruth(t, check.RolloutRecent(without(b, evidence.RolloutHistory), time.Hour, now), check.Unknown)
+	assertTruth(t, runAt("rollout_recent", b, now), check.True)
+	assertTruth(t, runAt("rollout_recent", b, now.Add(24*time.Hour)), check.False)
+	assertTruth(t, runAt("rollout_recent", without(b, evidence.RolloutHistory), now), check.Unknown)
 }
 
 func TestPriorRevisionWasHealthy(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, check.PriorRevisionWasHealthy(b), check.True)
+	assertTruth(t, run("prior_revision_was_healthy", b), check.True)
 
 	// Both revisions fail (scenario 2).
 	old := oomPod()
 	old.Name, old.Revision = "checkout-5c6a1e2f3-a1b2c", "1"
-	assertTruth(t, check.PriorRevisionWasHealthy(replace(t, b, evidence.PodStates, pods(oomPod(), old))), check.False)
+	assertTruth(t, run("prior_revision_was_healthy", replace(t, b, evidence.PodStates, pods(oomPod(), old))), check.False)
 
 	h := history()
 	h.Revisions = h.Revisions[:1]
-	assertTruth(t, check.PriorRevisionWasHealthy(replace(t, b, evidence.RolloutHistory, h)), check.Unknown)
+	assertTruth(t, run("prior_revision_was_healthy", replace(t, b, evidence.RolloutHistory, h)), check.Unknown)
 }
 
 // The prior revision was scaled down, so only its ReplicaSet is left to judge.
@@ -182,26 +210,26 @@ func TestPriorRevisionWasHealthy_ScaledDown(t *testing.T) {
 	h := history()
 	h.Revisions[1].Replicas, h.Revisions[1].ReadyReplicas = 0, 0
 	b := replace(t, replace(t, scenario1(t), evidence.RolloutHistory, h), evidence.PodStates, pods(oomPod()))
-	assertTruth(t, check.PriorRevisionWasHealthy(b), check.Unknown)
+	assertTruth(t, run("prior_revision_was_healthy", b), check.Unknown)
 }
 
 func TestGitOpsManaged(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, check.GitOpsManaged(b), check.False)
+	assertTruth(t, run(check.NameGitOpsManaged, b), check.False)
 
 	argo := history()
 	argo.Deployment.Markers = map[string]string{"argocd.argoproj.io/tracking-id": "shop:apps/Deployment:shop/checkout"}
-	assertTruth(t, check.GitOpsManaged(replace(t, b, evidence.RolloutHistory, argo)), check.True)
+	assertTruth(t, run(check.NameGitOpsManaged, replace(t, b, evidence.RolloutHistory, argo)), check.True)
 
 	flux := history()
 	flux.Deployment.Managers = []string{"kube-controller-manager", "kustomize-controller"}
-	assertTruth(t, check.GitOpsManaged(replace(t, b, evidence.RolloutHistory, flux)), check.True)
+	assertTruth(t, run(check.NameGitOpsManaged, replace(t, b, evidence.RolloutHistory, flux)), check.True)
 
-	assertTruth(t, check.GitOpsManaged(without(b, evidence.RolloutHistory)), check.Unknown)
+	assertTruth(t, run(check.NameGitOpsManaged, without(b, evidence.RolloutHistory)), check.Unknown)
 }
 
 func TestRollout_EveryResultCitesEvidence(t *testing.T) {
-	results := check.Rollout().Evaluate(scenario1(t), now)
+	results := rollout.Evaluate(scenario1(t), now)
 	names := map[string]bool{}
 	for _, r := range results {
 		if r.Name == "" || r.Version == "" {
@@ -247,8 +275,8 @@ func TestRolloutTime_ReusedReplicaSet(t *testing.T) {
 	h.Deployment.TemplateChangedAt = rolloutAt
 	b := replace(t, scenario1(t), evidence.RolloutHistory, h)
 
-	assertTruth(t, check.RolloutRecent(b, time.Hour, now), check.True)
-	assertTruth(t, check.FailureOnsetAfterRollout(b), check.True)
+	assertTruth(t, runAt("rollout_recent", b, now), check.True)
+	assertTruth(t, run("failure_onset_after_rollout", b), check.True)
 }
 
 func TestConfigChangedBeforeFailure(t *testing.T) {
@@ -282,7 +310,7 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 				item(t, "h", evidence.RolloutHistory, history()),
 				item(t, "p", evidence.PodStates, crashed),
 			}}
-			got := check.ConfigChangedBeforeFailure(b)
+			got := run("config_changed_before_failure", b)
 			if got.Value != tt.want {
 				t.Errorf("value = %s (%s), want %s", got.Value, got.Reason, tt.want)
 			}
@@ -292,7 +320,7 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 		})
 	}
 	// Without the list of referenced config, nothing can be said.
-	if got := check.ConfigChangedBeforeFailure(evidence.Bundle{}); got.Value != check.Unknown {
+	if got := run("config_changed_before_failure", evidence.Bundle{}); got.Value != check.Unknown {
 		t.Errorf("without the list: value = %s, want unknown", got.Value)
 	}
 }

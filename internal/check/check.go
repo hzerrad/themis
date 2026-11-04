@@ -1,9 +1,12 @@
 // Package check decides facts about an incident from its evidence. Each
 // result is true, false or unknown, and unknown is never coerced.
+//
+// A check is a definition, written in YAML with CEL expressions (see
+// Parse), compiled once when Themis starts.
 package check
 
 import (
-	"encoding/json/v2"
+	"slices"
 	"time"
 
 	"github.com/hzerrad/themis/internal/evidence"
@@ -30,66 +33,6 @@ func (t Truth) String() string {
 	return "unknown"
 }
 
-// Result is one predicate's answer and the evidence it rests on.
-type Result struct {
-	Name        string
-	Version     string
-	Value       Truth
-	Reason      string
-	EvidenceIDs []string
-
-	// Gaps are the missing evidence behind an unknown result; Blind is set
-	// when one of them means Themis could not see, rather than that the
-	// evidence did not settle the question.
-	Gaps  []Gap `json:",omitempty"`
-	Blind bool  `json:",omitempty"`
-}
-
-// RolloutWindow is how recent a rollout must be to be suspected.
-const RolloutWindow = 6 * time.Hour
-
-// Check decides one fact from b, as of now.
-type Check func(b evidence.Bundle, now time.Time) Result
-
-// List is the checks an install runs, in the order it reports them.
-type List []Check
-
-// Evaluate runs every check in l on b.
-func (l List) Evaluate(b evidence.Bundle, now time.Time) []Result {
-	out := make([]Result, 0, len(l))
-	for _, c := range l {
-		out = append(out, c(b, now))
-	}
-	return out
-}
-
-// Rollout is the checks about rollouts that Themis ships with.
-func Rollout() List {
-	return List{
-		func(b evidence.Bundle, now time.Time) Result { return RolloutRecent(b, RolloutWindow, now) },
-		func(b evidence.Bundle, _ time.Time) Result { return FailureOnsetAfterRollout(b) },
-		func(b evidence.Bundle, _ time.Time) Result { return PriorRevisionWasHealthy(b) },
-		func(b evidence.Bundle, _ time.Time) Result { return OOMKilledNewRevision(b) },
-		func(b evidence.Bundle, _ time.Time) Result { return GitOpsManaged(b) },
-		func(b evidence.Bundle, _ time.Time) Result { return ConfigChangedBeforeFailure(b) },
-	}
-}
-
-// latest decodes the last item of template in b into v, returning its ID.
-func latest(b evidence.Bundle, template string, v any) (string, bool) {
-	items := b.ByTemplate(template)
-	for i := len(items) - 1; i >= 0; i-- {
-		if json.Unmarshal(items[i].Data, v) == nil {
-			return items[i].ID, true
-		}
-	}
-	return "", false
-}
-
-func result(name string, value Truth, reason string, ids ...string) Result {
-	return Result{Name: name, Version: "1", Value: value, Reason: reason, EvidenceIDs: ids}
-}
-
 // ParseTruth is the inverse of Truth.String; anything else is Unknown.
 func ParseTruth(s string) Truth {
 	switch s {
@@ -106,4 +49,54 @@ func (t Truth) MarshalText() ([]byte, error) { return []byte(t.String()), nil }
 func (t *Truth) UnmarshalText(b []byte) error {
 	*t = ParseTruth(string(b))
 	return nil
+}
+
+// Result is one check's answer and the evidence it rests on.
+type Result struct {
+	Name        string
+	Version     string
+	Value       Truth
+	Reason      string
+	EvidenceIDs []string
+
+	// Gaps are the missing evidence behind an unknown result; Blind is set
+	// when one of them means Themis could not see, rather than that the
+	// evidence did not settle the question.
+	Gaps  []Gap `json:",omitempty"`
+	Blind bool  `json:",omitempty"`
+}
+
+// NameGitOpsManaged is the check governance overrides with what it reads
+// live: whether GitOps owns the target.
+const NameGitOpsManaged = "gitops_managed"
+
+// List is the checks an install runs, in the order it reports them.
+type List []*Check
+
+// Evaluate runs every check in l on b, as of now.
+func (l List) Evaluate(b evidence.Bundle, now time.Time) []Result {
+	in := newInputs(b, now)
+	out := make([]Result, 0, len(l))
+	for _, c := range l {
+		out = append(out, c.evaluate(in))
+	}
+	return out
+}
+
+// Get returns the check named name.
+func (l List) Get(name string) (*Check, bool) {
+	i := slices.IndexFunc(l, func(c *Check) bool { return c.Name == name })
+	if i < 0 {
+		return nil, false
+	}
+	return l[i], true
+}
+
+// For is the checks a profile runs: those it names, in l's order, or all of
+// l when it names none. Names l doesn't have are left out.
+func (l List) For(names []string) List {
+	if len(names) == 0 {
+		return l
+	}
+	return slices.DeleteFunc(slices.Clone(l), func(c *Check) bool { return !slices.Contains(names, c.Name) })
 }

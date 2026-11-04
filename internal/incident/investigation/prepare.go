@@ -33,7 +33,7 @@ type PrepareWorker struct {
 	Store  *store.Store
 	Reader client.Reader
 	// Evidence is the templates it reads with; Checks decide from what they
-	// read.
+	// read, those a profile names or all of them.
 	Evidence evidence.Registry
 	Checks   check.List
 	Logger   *slog.Logger
@@ -99,7 +99,8 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		return err
 	}
 	gaps = append(gaps, expired...)
-	results := check.Attribute(w.Checks.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
+	checks := w.Checks.For(profile.Checks)
+	results := checks.Attribute(checks.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
 	// Without an investigator, the incident waits for a person or a tool
 	// outside Themis to suggest a fix; the checks still run for the policy.
 	noInvestigator := w.Config.Current().Investigators.Disabled

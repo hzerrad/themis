@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/hint"
 	"github.com/hzerrad/themis/internal/identity"
@@ -55,6 +56,8 @@ type API struct {
 	// Fixes are the fixes Themis can carry out, which show what an action
 	// changes.
 	Fixes capability.Registry
+	// CheckList is the checks Themis runs, which say what each answer means.
+	CheckList check.List
 	// Config is Themis's live configuration, for the alerts its profiles
 	// handle.
 	Config config.Provider
@@ -264,7 +267,10 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	d := detailView{Incident: viewIncident(in)}
+	d := detailView{Incident: viewIncident(in), Checks: map[string]string{}}
+	for _, c := range a.CheckList {
+		d.Checks[c.Name] = c.Description
+	}
 	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
 		a.fail(w, r, err)
 		return

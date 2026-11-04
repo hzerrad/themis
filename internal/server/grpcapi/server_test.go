@@ -105,12 +105,15 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		}
 	}
 	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{p}}
-	cat := catalog.Themis(nil)
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	clk := &clock{now: time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC)}
 
 	logs := &syncBuffer{}
 	gs := &grpcapi.Server{
-		Store: s, Config: cfg, Evidence: cat.Evidence, Fixes: cat.Fixes, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
+		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
 	tokenFile := filepath.Join(t.TempDir(), "token")
@@ -199,8 +202,8 @@ func TestLease_ReturnsJobWithInitialEvidenceAndPredicates(t *testing.T) {
 	if inv.GetTarget().GetUid() != e.target.UID {
 		t.Errorf("target = %v, want %v", inv.GetTarget(), e.target)
 	}
-	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 6 {
-		t.Errorf("%d items and %d predicates, want 2 and 6", len(inv.GetInitialEvidence()), len(inv.GetPredicates()))
+	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 6 || inv.GetPredicates()[0].GetDescription() == "" {
+		t.Errorf("%d items and predicates %v, want 2 items and 6 described predicates", len(inv.GetInitialEvidence()), inv.GetPredicates())
 	}
 	if len(inv.GetAllowedTemplates()) != 3 || inv.GetAllowedTemplates()[0].GetDescription() == "" {
 		t.Errorf("allowed templates = %v", inv.GetAllowedTemplates())

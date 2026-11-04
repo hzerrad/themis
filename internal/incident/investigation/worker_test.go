@@ -2,6 +2,7 @@ package investigation_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -49,13 +50,17 @@ func newEnv(t *testing.T) *env {
 			target = targetOf(obj)
 		}
 	}
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	return &env{
 		worker: &investigation.PrepareWorker{
 			Config:   config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile()}},
 			Store:    s,
 			Reader:   k8s,
 			Evidence: evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents()),
-			Checks:   check.Rollout(),
+			Checks:   cat.Checks,
 			Now:      func() time.Time { return time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC) },
 		},
 		store: s, pool: pool, target: target,
@@ -123,6 +128,29 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	}
 	if in, _ := e.store.Incident(t.Context(), id); in.ObservedSpecHash == "" {
 		t.Error("the investigated template is not recorded")
+	}
+}
+
+// A profile that names checks runs only those.
+func TestPrepare_RunsTheChecksItsProfileNames(t *testing.T) {
+	e := newEnv(t)
+	p := profile()
+	p.Checks = []string{"gitops_managed", "rollout_recent"}
+	e.worker.Config = config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}
+	id := e.newIncident(t, p.Name, e.target)
+	if err := e.worker.Prepare(t.Context(), id); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	results, err := e.store.Predicates(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, r := range results {
+		names = append(names, r.Name)
+	}
+	if !slices.Equal(names, []string{"rollout_recent", "gitops_managed"}) {
+		t.Errorf("checks run = %v, want rollout_recent and gitops_managed", names)
 	}
 }
 

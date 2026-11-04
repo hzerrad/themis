@@ -49,7 +49,10 @@ var themisMetrics = []string{
 func TestMetrics_LabelsAreAllowlisted(t *testing.T) {
 	// As the core sets them up: its catalog, and the database gauges. The
 	// executor's metrics are served by another binary but share the rules.
-	cat := catalog.Themis(nil)
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	executor.New(nil, nil, cat.Fixes, nil)
 	s, _ := pgtest.NewStore(t)
 	states := store.NewStateCollector(t.Context(), s)

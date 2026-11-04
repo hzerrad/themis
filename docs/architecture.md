@@ -79,7 +79,7 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/incident/notification` | Tells people when an incident is handed to them |
 | `internal/capability` | **What Themis can change.** The interface every fix implements, and the registry |
 | `internal/capability/rollback` | `deployment.rollback-to-revision` |
-| `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout" |
+| `internal/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. Themis's own are in `rollout.yaml`; see [checks.md](checks.md) |
 | `internal/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
 | `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts; and whether a profile asks for anything it doesn't have |
 | `internal/policy` | Policy rules: compiling them, and deciding an action with them |
@@ -94,4 +94,4 @@ The repository follows the usual Go layout: binaries in `cmd/`, everything else 
 | `internal/evaluation`, `eval/` | Replaying recorded model replies against the scenarios |
 | `internal/testutil` | Test helpers: a real API server, PostgreSQL, metrics |
 
-`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in the catalog's constructor in `internal/catalog`; nothing else in the core changes.
+`capability`, `check` and `evidence` are where Themis grows. A new fix is a package under `internal/capability/` that implements `capability.Capability`, plus one line in the catalog's constructor in `internal/catalog`; nothing else in the core changes. A new check is a YAML definition, no Go; see [checks.md](checks.md).

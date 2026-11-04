@@ -79,7 +79,7 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 		out.InitialEvidence = append(out.InitialEvidence, itemToProto(it))
 	}
 	for _, r := range results {
-		out.Predicates = append(out.Predicates, predicateToProto(r))
+		out.Predicates = append(out.Predicates, s.predicateToProto(r))
 	}
 	for _, name := range profile.Evidence.Allowed {
 		t := &themisv1.EvidenceTemplate{Name: name}

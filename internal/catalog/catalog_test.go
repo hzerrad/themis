@@ -7,8 +7,8 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 )
 
-// A configuration is checked against what this install can read and change:
-// one error per problem, naming the profile it is in.
+// A configuration is checked against what this install can read, check and
+// change: one error per problem, naming the profile it is in.
 func TestCheckConfig(t *testing.T) {
 	tests := []struct {
 		name string
@@ -19,10 +19,18 @@ func TestCheckConfig(t *testing.T) {
 		{"unknown template", func(c *config.Config) {
 			c.Profiles[0].Evidence = config.Evidence{Initial: []string{"pod_state"}, Allowed: []string{"pod_state", "target_events"}}
 		}, `profile p: unknown evidence template "pod_state"`},
+		{"unknown check", func(c *config.Config) { c.Profiles[0].Checks = []string{"rollout_recent", "oom_killed"} }, `profile p: unknown check "oom_killed"`},
 		{"unknown fix", func(c *config.Config) { c.Profiles[0].Capabilities = []string{"deployment.delete"} }, `profile p: unknown capability "deployment.delete"`},
 		{"policy that doesn't compile", func(c *config.Config) {
 			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: "action.capability", Decision: config.DecisionDeny}}
 		}, "profile p: rule r: must be a boolean, not string"},
+		{"policy reads a check the profile doesn't run", func(c *config.Config) {
+			c.Profiles[0].Checks = []string{"rollout_recent"}
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates.gitops_managed != "false"`, Decision: config.DecisionDeny}}
+		}, `profile p: rule r reads the check "gitops_managed", which the profile doesn't run`},
+		{"policy reads a check that doesn't exist", func(c *config.Config) {
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates["gitops_manged"] == "true"`, Decision: config.DecisionDeny}}
+		}, `profile p: rule r reads the check "gitops_manged", which doesn't exist`},
 		{"unknown fix for an outside agent", func(c *config.Config) {
 			c.ExternalProposals.Sources = []config.ProposalSource{{ServiceAccount: "agents/triage", Capabilities: []string{"delete.everything"}}}
 		}, `externalProposals: sources[0].capabilities[0]: unknown capability "delete.everything"`},
@@ -36,7 +44,11 @@ func TestCheckConfig(t *testing.T) {
 				Policy:       config.Policy{Rules: []config.PolicyRule{{Name: "r", When: "true", Decision: config.DecisionDeny}}},
 			}}}
 			tt.edit(&c)
-			err := catalog.Themis(nil).CheckConfig(c)
+			cat, err := catalog.Themis(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = cat.CheckConfig(c)
 			if got := errText(err); got != tt.want {
 				t.Errorf("error = %q, want %q", got, tt.want)
 			}

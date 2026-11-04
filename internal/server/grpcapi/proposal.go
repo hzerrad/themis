@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/store"
 
@@ -24,11 +23,6 @@ const (
 	CapabilityRollback        = "deployment.rollback-to-revision"
 	CapabilityRollbackVersion = "1"
 )
-
-var predicateNames = []string{
-	check.NameRolloutRecent, check.NameFailureOnsetAfterRollout, check.NamePriorRevisionWasHealthy,
-	check.NameOOMKilledNewRevision, check.NameGitOpsManaged, check.NameConfigChangedBeforeFailure,
-}
 
 // rejection is why a proposal is stored as rejected.
 type rejection struct {
@@ -215,7 +209,7 @@ func (s *Server) judge(ctx context.Context, tx pgx.Tx, inv store.Investigation, 
 		}, nil
 	}
 	for _, name := range p.CitedPredicates {
-		if !slices.Contains(predicateNames, name) {
+		if _, ok := s.Checks.Get(name); !ok {
 			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "It cites a check that doesn't exist: " + name + "."}, nil
 		}
 	}

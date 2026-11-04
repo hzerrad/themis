@@ -114,7 +114,10 @@ func Run(ctx context.Context, o Options) error {
 	}
 	// Everything Themis can read, check and change. Each part goes to the
 	// code that uses it.
-	cat := catalog.Themis(evidence.ClientsetLogs{Clientset: clientset})
+	cat, err := catalog.Themis(evidence.ClientsetLogs{Clientset: clientset})
+	if err != nil {
+		return err
+	}
 	if err := cat.CheckConfig(cfg); err != nil {
 		return err
 	}
@@ -221,14 +224,14 @@ func Run(ctx context.Context, o Options) error {
 		return &selfcheck.Heartbeat{Store: s, Component: component, Logger: log}
 	}
 	investigators := &grpcapi.Server{
-		Store: s, Config: current, Evidence: cat.Evidence, Fixes: cat.Fixes, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
+		Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
 		Heartbeat: beat(store.HeartbeatInvestigator),
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Fixes: cat.Fixes, Setup: s}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
 	api.Sessions, api.Accounts = s, s
 	checker := &selfcheck.Checker{Config: current, Store: s, Access: selfcheck.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {

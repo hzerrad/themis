@@ -69,10 +69,12 @@ type verificationView struct {
 
 // detailView puts the proposal next to the action derived from it.
 type detailView struct {
-	Incident      incidentView
-	Transitions   []store.Transition
-	Evidence      []evidenceView
-	Predicates    []check.Result
+	Incident    incidentView
+	Transitions []store.Transition
+	Evidence    []evidenceView
+	Predicates  []check.Result
+	// Checks describe each check by name, in plain words.
+	Checks        map[string]string
 	Investigation *store.InvestigationRecord `json:",omitempty"`
 	Proposals     []store.Proposal
 	Actions       []actionView
