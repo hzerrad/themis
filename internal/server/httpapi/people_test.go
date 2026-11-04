@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/server/httpapi"
@@ -40,7 +41,7 @@ func signedIn(t *testing.T) *env {
 	}
 	mux := http.NewServeMux()
 	(&httpapi.API{
-		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: s, Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},

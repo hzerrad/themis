@@ -132,7 +132,6 @@ func TestValidate_Errors(t *testing.T) {
 		{"no allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = nil }, "profiles[1].evidence.allowed"},
 		{"duplicate allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = []string{"pod_states", "pod_states"} }, "profiles[1].evidence.allowed[1]"},
 		{"initial not allowed", func(c *config.Config) { c.Profiles[0].Evidence.Initial = []string{"target_events"} }, "profiles[0].evidence.initial[0]"},
-		{"unknown capability", func(c *config.Config) { c.Profiles[0].Capabilities = []string{"deployment.delete"} }, "profiles[0].capabilities[0]"},
 		{"negative max steps", func(c *config.Config) { c.Profiles[0].Investigation.MaxSteps = -1 }, "profiles[0].investigation.maxSteps"},
 		{"unknown mode", func(c *config.Config) { c.Profiles[0].Policy.Mode = "autonomous" }, "profiles[0].policy.mode"},
 		{"rule without condition", func(c *config.Config) {
@@ -356,7 +355,7 @@ func TestMatchProfile_ScopeLimitsAProfileToItsNamespace(t *testing.T) {
 }
 
 func TestExternalProposals_Validate(t *testing.T) {
-	good := config.ProposalSource{ServiceAccount: "agents/triage", Namespaces: []string{"shop"}, Capabilities: config.KnownCapabilities}
+	good := config.ProposalSource{ServiceAccount: "agents/triage", Namespaces: []string{"shop"}, Capabilities: []string{"deployment.rollback-to-revision"}}
 	tests := []struct {
 		name string
 		edit func(*config.ProposalSource)
@@ -366,7 +365,6 @@ func TestExternalProposals_Validate(t *testing.T) {
 		{"no namespace in the account", func(s *config.ProposalSource) { s.ServiceAccount = "triage" }, "namespace/name"},
 		{"no namespaces", func(s *config.ProposalSource) { s.Namespaces = nil }, "at least one namespace"},
 		{"no capabilities", func(s *config.ProposalSource) { s.Capabilities = nil }, "at least one capability"},
-		{"unknown capability", func(s *config.ProposalSource) { s.Capabilities = []string{"delete.everything"} }, "unknown capability"},
 		{"negative rate", func(s *config.ProposalSource) { s.PerMinute = -1 }, "positive"},
 		{"unknown ceiling", func(s *config.ProposalSource) { s.Ceiling = "top-secret" }, "internal or sensitive"},
 	}

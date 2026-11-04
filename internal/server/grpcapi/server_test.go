@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -104,12 +105,12 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		}
 	}
 	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{p}}
-	registry := evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents(), evidence.NewContainerLogsTail(nil))
+	cat := catalog.Themis(nil)
 	clk := &clock{now: time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC)}
 
 	logs := &syncBuffer{}
 	gs := &grpcapi.Server{
-		Store: s, Config: cfg, Registry: registry, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
+		Store: s, Config: cfg, Evidence: cat.Evidence, Fixes: cat.Fixes, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
 	tokenFile := filepath.Join(t.TempDir(), "token")
@@ -130,7 +131,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		proposals:      themisv1.NewProposalServiceClient(conn),
 		server:         gs,
 	}
-	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Registry: registry, Now: clk.Now}
+	prepare := &investigation.PrepareWorker{Config: cfg, Store: s, Reader: k8s, Evidence: cat.Evidence, Checks: cat.Checks, Now: clk.Now}
 	if err := prepare.Prepare(t.Context(), e.newIncident(t)); err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}

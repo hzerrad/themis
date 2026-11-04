@@ -7,9 +7,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	"github.com/hzerrad/themis/internal/evidence"
-	// The executor's metrics are served by another binary but share the rules.
-	_ "github.com/hzerrad/themis/internal/executor"
+	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/executor"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
@@ -48,8 +47,10 @@ var themisMetrics = []string{
 // Every Themis metric uses allowlisted label names, so a namespace or
 // incident ID label cannot slip in, and each label stays within the ceiling.
 func TestMetrics_LabelsAreAllowlisted(t *testing.T) {
-	// As the core sets them up: its templates, and the database gauges.
-	evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents(), evidence.NewContainerLogsTail(nil))
+	// As the core sets them up: its catalog, and the database gauges. The
+	// executor's metrics are served by another binary but share the rules.
+	cat := catalog.Themis(nil)
+	executor.New(nil, nil, cat.Fixes, nil)
 	s, _ := pgtest.NewStore(t)
 	states := store.NewStateCollector(t.Context(), s)
 	metrics.Registry.MustRegister(states)

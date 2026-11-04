@@ -99,6 +99,12 @@ func NewRolloutHistory() Template { return rolloutHistory{} }
 
 func (rolloutHistory) Name() string { return RolloutHistory }
 
+func (rolloutHistory) Description() string {
+	return "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+}
+
+func (rolloutHistory) Params() []string { return nil }
+
 func (rolloutHistory) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
 	revisions, err := w.Revisions(ctx)
 	if err != nil {

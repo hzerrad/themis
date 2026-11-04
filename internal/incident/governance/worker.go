@@ -13,11 +13,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -32,7 +32,7 @@ type Worker struct {
 	Store  *store.Store
 	Reader client.Reader
 	Now    func() time.Time
-	// Fixes are the fixes Themis can carry out; nil means those it ships with.
+	// Fixes are the fixes Themis can carry out.
 	Fixes capability.Registry
 
 	// policies holds compiled policies by digest of their source: profiles
@@ -40,30 +40,17 @@ type Worker struct {
 	policies sync.Map
 }
 
-// NewWorker compiles the policy of every profile configured now, so an
-// invalid rule stops the core from starting.
-func NewWorker(cfg config.Provider, s *store.Store, r client.Reader) (*Worker, error) {
-	w := &Worker{Config: cfg, Store: s, Reader: r}
-	var errs []error
-	for _, p := range cfg.Current().Profiles {
-		if _, err := w.policy(p); err != nil {
-			errs = append(errs, fmt.Errorf("profile %s: %w", p.Name, err))
-		}
-	}
-	return w, errors.Join(errs...)
-}
-
 // policy returns p's compiled policy.
-func (w *Worker) policy(p config.Profile) (*Policy, error) {
+func (w *Worker) policy(p config.Profile) (*policy.Policy, error) {
 	pol := p.EffectivePolicy()
 	key, err := json.Marshal(pol)
 	if err != nil {
 		return nil, err
 	}
 	if c, ok := w.policies.Load(string(key)); ok {
-		return c.(*Policy), nil //nolint:forcetypeassert // only *Policy is stored
+		return c.(*policy.Policy), nil //nolint:forcetypeassert // only *policy.Policy is stored
 	}
-	compiled, err := CompilePolicy(pol)
+	compiled, err := policy.Compile(pol)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +79,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if !ok {
 		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
 	}
-	f, ok := w.registry()[p.Capability]
+	f, ok := w.Fixes[p.Capability]
 	if !ok {
 		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
@@ -119,11 +106,11 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if plan.ManagedBy != "" {
 		predicates[check.NameGitOpsManaged] = check.True.String()
 	}
-	policy, err := w.policy(profile)
+	pol, err := w.policy(profile)
 	if err != nil {
 		return err
 	}
-	decision := policy.Evaluate(PolicyInput{
+	decision := pol.Evaluate(policy.Input{
 		Capability: f.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates,
 		Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == "",
@@ -144,18 +131,18 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		if err != nil {
 			return err
 		}
-		store.AfterCommit(tx, policyDecisions.WithLabelValues(decision.label()).Inc)
-		if decision.Outcome == Deny && plan.ManagedBy != "" {
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(decision)).Inc)
+		if decision.Outcome == policy.Deny && plan.ManagedBy != "" {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
-		if decision.Outcome == Deny {
+		if decision.Outcome == policy.Deny {
 			return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
 		return w.advance(ctx, tx, in.ID, decision.Reason, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
 }
 
-func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capability, plan capability.Plan, d Decision, pol config.Policy) (store.Action, error) {
+func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capability, plan capability.Plan, d policy.Decision, pol config.Policy) (store.Action, error) {
 	fields := capability.Fields(in.ID, f, plan, "", d.PolicyID, d.PolicyDigest)
 	dg, err := digest.Compute(fields)
 	if err != nil {
@@ -171,9 +158,9 @@ func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capabi
 		Decision:    string(d.Outcome), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
 		Digest: dg, Mark: plan.Mark, State: store.ActionDenied,
 	}
-	if d.Outcome != Deny {
+	if d.Outcome != policy.Deny {
 		expires := w.now().Add(pol.ApprovalTimeout.Duration)
-		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(RequireApproval), &expires
+		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
 	}
 	return a, nil
 }
@@ -199,12 +186,4 @@ func (w *Worker) now() time.Time {
 		return w.Now()
 	}
 	return time.Now()
-}
-
-// fixes are the fixes this worker can carry out.
-func (w *Worker) registry() capability.Registry {
-	if w.Fixes != nil {
-		return w.Fixes
-	}
-	return builtin.Default()
 }

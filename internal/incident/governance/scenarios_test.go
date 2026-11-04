@@ -3,6 +3,7 @@ package governance_test
 import (
 	"testing"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -22,10 +23,7 @@ func shipped(t *testing.T) *env {
 	e := newEnv(t)
 	p := profile("rollout-regression")
 	p.Policy = example.Profiles[0].Policy
-	w, err := governance.NewWorker(config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, e.store, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = e.worker.Now
 	e.worker = w
 	return e

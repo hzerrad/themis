@@ -19,7 +19,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/hint"
 	"github.com/hzerrad/themis/internal/identity"
@@ -53,6 +52,9 @@ type API struct {
 	Remedy hint.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Fixes are the fixes Themis can carry out, which show what an action
+	// changes.
+	Fixes capability.Registry
 	// Config is Themis's live configuration, for the alerts its profiles
 	// handle.
 	Config config.Provider
@@ -311,7 +313,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, act := range actions {
-		v := viewAction(act)
+		v := viewAction(act, a.Fixes)
 		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
 			v.Execution = &e
 		}
@@ -357,7 +359,7 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	a.reply(w, r, viewAction(act))
+	a.reply(w, r, viewAction(act, a.Fixes))
 }
 
 type denyRequest struct {
@@ -495,9 +497,9 @@ func (a *API) logger() *slog.Logger {
 
 // changes lists what an action changes, as its fix describes it, and says so
 // when it cannot.
-func changes(a store.Action) []capability.Change {
+func changes(a store.Action, fixes capability.Registry) []capability.Change {
 	unknown := []capability.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
-	f, ok := builtin.Default()[a.Capability]
+	f, ok := fixes[a.Capability]
 	if !ok {
 		return unknown
 	}

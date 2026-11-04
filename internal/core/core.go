@@ -24,6 +24,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/hzerrad/themis/internal/auth"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -111,14 +112,10 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return fmt.Errorf("create clientset: %w", err)
 	}
-	registry := evidence.NewRegistry(
-		evidence.NewRolloutHistory(),
-		evidence.NewPodStates(),
-		evidence.NewTargetEvents(),
-		evidence.NewReferencedConfig(),
-		evidence.NewContainerLogsTail(evidence.ClientsetLogs{Clientset: clientset}),
-	)
-	if err := checkTemplates(cfg, registry); err != nil {
+	// Everything Themis can read, check and change. Each part goes to the
+	// code that uses it.
+	cat := catalog.Themis(evidence.ClientsetLogs{Clientset: clientset})
+	if err := cat.CheckConfig(cfg); err != nil {
 		return err
 	}
 
@@ -158,13 +155,7 @@ func Run(ctx context.Context, o Options) error {
 	// Later code reads this, not cfg, for anything a resource can change.
 	var current config.Provider = cfg
 	if cfg.Resources != nil {
-		live := resources.New(cfg, mgr.GetAPIReader(), mgr.GetClient(), func(p config.Profile) error {
-			if err := checkProfileTemplates(p, registry); err != nil {
-				return err
-			}
-			_, err := governance.CompilePolicy(p.EffectivePolicy())
-			return err
-		}, log)
+		live := resources.New(cfg, mgr.GetAPIReader(), mgr.GetClient(), cat, log)
 		if err := live.Refresh(ctx); err != nil {
 			return fmt.Errorf("read configuration resources: %w", err)
 		}
@@ -186,13 +177,11 @@ func Run(ctx context.Context, o Options) error {
 		Config:   current,
 		Store:    s,
 		Reader:   mgr.GetAPIReader(),
-		Registry: registry,
+		Evidence: cat.Evidence,
+		Checks:   cat.Checks,
 		Logger:   log,
 	})
-	govern, err := governance.NewWorker(current, s, mgr.GetAPIReader())
-	if err != nil {
-		return err
-	}
+	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &httpapi.ExpireWorker{Store: s})
@@ -203,7 +192,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	defer closeExecutor()
 	telemetry.AddIncidentWorker(workers, &execution.Worker{Store: s, Executor: executor})
-	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader()})
+	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes})
 	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
 	telemetry.AddIncidentWorker(workers, &notification.Worker{Store: s, Config: cfg.Notifications, Remedy: hint.Writer{Config: current}})
 	if executor == nil {
@@ -232,14 +221,14 @@ func Run(ctx context.Context, o Options) error {
 		return &selfcheck.Heartbeat{Store: s, Component: component, Logger: log}
 	}
 	investigators := &grpcapi.Server{
-		Store: s, Config: current, Registry: registry, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
+		Store: s, Config: current, Evidence: cat.Evidence, Fixes: cat.Fixes, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
 		Heartbeat: beat(store.HeartbeatInvestigator),
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Setup: s}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Fixes: cat.Fixes, Setup: s}
 	api.Sessions, api.Accounts = s, s
 	checker := &selfcheck.Checker{Config: current, Store: s, Access: selfcheck.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {
@@ -407,27 +396,6 @@ func dialExecutor(cfg *config.Executor) (execution.Executor, func(), error) {
 		return nil, nil, fmt.Errorf("dial executor: %w", err)
 	}
 	return themisv1.NewExecutorServiceClient(conn), func() { _ = conn.Close() }, nil
-}
-
-// checkTemplates refuses profiles naming templates Themis does not have.
-func checkTemplates(cfg config.Config, r evidence.Registry) error {
-	var errs []error
-	for _, p := range cfg.Profiles {
-		if err := checkProfileTemplates(p, r); err != nil {
-			errs = append(errs, fmt.Errorf("profile %s: %w", p.Name, err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func checkProfileTemplates(p config.Profile, r evidence.Registry) error {
-	var errs []error
-	for _, name := range p.Evidence.Allowed {
-		if _, ok := r[name]; !ok {
-			errs = append(errs, fmt.Errorf("unknown evidence template %q", name))
-		}
-	}
-	return errors.Join(errs...)
 }
 
 // grpcRunnable serves gRPC until ctx is done, then stops gracefully.

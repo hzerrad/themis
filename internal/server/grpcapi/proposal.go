@@ -12,7 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/builtin"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/store"
@@ -115,7 +114,7 @@ func (s *Server) parseProposal(req *themisv1.SubmitProposalRequest) (capability 
 			return "", nil, "", status.Error(codes.InvalidArgument, "set capability_name or rollback_to_revision, not both")
 		}
 		params = req.GetParams().AsMap()
-		f, ok := s.registry()[name]
+		f, ok := s.Fixes[name]
 		if !ok {
 			// Not a fix Themis knows: judging rejects it as not allowed.
 			return name, params, "", nil
@@ -146,20 +145,12 @@ func sentence(err error) string {
 	return strings.ToUpper(msg[:1]) + msg[1:] + "."
 }
 
-// fixes are the fixes Themis can carry out.
-func (s *Server) registry() capability.Registry {
-	if s.Fixes != nil {
-		return s.Fixes
-	}
-	return builtin.Default()
-}
-
 // capabilities describes the fixes named that Themis can carry out, for a
 // suggester.
 func (s *Server) capabilities(names []string) []*themisv1.Capability {
 	var out []*themisv1.Capability
 	for _, name := range names {
-		f, ok := s.registry()[name]
+		f, ok := s.Fixes[name]
 		if !ok {
 			continue
 		}

@@ -54,6 +54,12 @@ func NewReferencedConfig() Template { return referencedConfig{} }
 
 func (referencedConfig) Name() string { return ReferencedConfig }
 
+func (referencedConfig) Description() string {
+	return "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+}
+
+func (referencedConfig) Params() []string { return nil }
+
 func (referencedConfig) Collect(ctx context.Context, c client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
 	view := ReferencedConfigView{Refs: configRefs(w.Template.Spec)}
 	for i, r := range view.Refs {

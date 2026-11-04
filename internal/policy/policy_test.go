@@ -1,26 +1,26 @@
-package governance_test
+package policy_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/policy"
 )
 
-func input() governance.PolicyInput {
-	return governance.PolicyInput{
+func input() policy.Input {
+	return policy.Input{
 		Capability: "deployment.rollback-to-revision", Risk: "medium",
 		Namespace: "shop", ManagedBy: "",
 		Predicates: map[string]string{"oom_killed_new_revision": "true", "gitops_managed": "false"},
 	}
 }
 
-func compile(t *testing.T, mode string, rules ...config.PolicyRule) *governance.Policy {
+func compile(t *testing.T, mode string, rules ...config.PolicyRule) *policy.Policy {
 	t.Helper()
-	p, err := governance.CompilePolicy(config.Policy{Mode: mode, Rules: rules})
+	p, err := policy.Compile(config.Policy{Mode: mode, Rules: rules})
 	if err != nil {
-		t.Fatalf("CompilePolicy: %v", err)
+		t.Fatalf("Compile: %v", err)
 	}
 	return p
 }
@@ -35,13 +35,13 @@ func TestPolicy_FirstMatchingRuleDecides(t *testing.T) {
 		rule("approve-rollbacks", `action.capability == "deployment.rollback-to-revision"`, config.DecisionRequireApproval),
 	)
 	d := p.Evaluate(input())
-	if d.Outcome != governance.RequireApproval || d.PolicyID != "approve-rollbacks" || d.PolicyDigest == "" {
+	if d.Outcome != policy.RequireApproval || d.PolicyID != "approve-rollbacks" || d.PolicyDigest == "" {
 		t.Errorf("decision = %+v", d)
 	}
 
 	in := input()
 	in.Predicates["gitops_managed"] = "true"
-	if d := p.Evaluate(in); d.Outcome != governance.Deny || d.PolicyID != "no-gitops" {
+	if d := p.Evaluate(in); d.Outcome != policy.Deny || d.PolicyID != "no-gitops" {
 		t.Errorf("gitops-managed decision = %+v", d)
 	}
 }
@@ -52,23 +52,23 @@ func TestPolicy_EvaluationErrorDenies(t *testing.T) {
 	p := compile(t, config.ModeGuarded,
 		rule("missing-key", `predicates.not_computed == "true"`, config.DecisionAllow),
 	)
-	if d := p.Evaluate(input()); d.Outcome != governance.Deny || !d.Failed || !strings.Contains(d.Reason, "missing-key") {
+	if d := p.Evaluate(input()); d.Outcome != policy.Deny || !d.Failed || !strings.Contains(d.Reason, "missing-key") {
 		t.Errorf("decision = %+v, want a failed deny", d)
 	}
 	p = compile(t, config.ModeGuarded, rule("deny-all", `true`, config.DecisionDeny))
-	if d := p.Evaluate(input()); d.Outcome != governance.Deny || d.Failed {
+	if d := p.Evaluate(input()); d.Outcome != policy.Deny || d.Failed {
 		t.Errorf("decision = %+v, want a deny that did not fail", d)
 	}
 }
 
-func TestCompilePolicy_RejectsInvalidRules(t *testing.T) {
+func TestCompile_RejectsInvalidRules(t *testing.T) {
 	for name, r := range map[string]config.PolicyRule{
 		"syntax":      rule("r", "action.capability ==", config.DecisionDeny),
 		"not boolean": rule("r", "action.capability", config.DecisionDeny),
 		"unknown var": rule("r", `cluster.admin == true`, config.DecisionDeny),
 	} {
-		if _, err := governance.CompilePolicy(config.Policy{Rules: []config.PolicyRule{r}}); err == nil {
-			t.Errorf("%s: CompilePolicy accepted %q", name, r.When)
+		if _, err := policy.Compile(config.Policy{Rules: []config.PolicyRule{r}}); err == nil {
+			t.Errorf("%s: Compile accepted %q", name, r.When)
 		}
 	}
 }
@@ -88,13 +88,13 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 	for _, c := range []struct {
 		mode     string
 		decision string
-		outcome  governance.Outcome
+		outcome  policy.Outcome
 		want     string
 	}{
-		{config.ModeGuarded, config.DecisionDeny, governance.Deny, "Policy rule r forbids this fix."},
-		{config.ModeGuarded, config.DecisionRequireApproval, governance.RequireApproval, "Policy rule r requires a person's approval."},
-		{config.ModeGuarded, config.DecisionAllow, governance.RequireApproval, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
-		{config.ModeObserve, config.DecisionAllow, governance.Deny, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
+		{config.ModeGuarded, config.DecisionDeny, policy.Deny, "Policy rule r forbids this fix."},
+		{config.ModeGuarded, config.DecisionRequireApproval, policy.RequireApproval, "Policy rule r requires a person's approval."},
+		{config.ModeGuarded, config.DecisionAllow, policy.RequireApproval, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
+		{config.ModeObserve, config.DecisionAllow, policy.Deny, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
 	} {
 		if d := compile(t, c.mode, rule("r", `true`, c.decision)).Evaluate(input()); d.Outcome != c.outcome || d.Reason != c.want {
 			t.Errorf("%s, %s: %s, %q; want %s, %q", c.mode, c.decision, d.Outcome, d.Reason, c.outcome, c.want)
@@ -105,7 +105,7 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 	}
 }
 
-func restore() governance.PolicyInput {
+func restore() policy.Input {
 	in := input()
 	in.Restore = true
 	return in
@@ -115,10 +115,10 @@ func restore() governance.PolicyInput {
 // guarded mode: it returns the workload to how a person left it.
 func TestPolicy_RestoreAllowedByDefault(t *testing.T) {
 	d := compile(t, config.ModeGuarded).Evaluate(restore())
-	if d.Outcome != governance.Allow || d.Reason != "No policy rule matched, so Themis may put the workload back as it was." {
+	if d.Outcome != policy.Allow || d.Reason != "No policy rule matched, so Themis may put the workload back as it was." {
 		t.Errorf("decision = %+v, want allowed", d)
 	}
-	if d := compile(t, config.ModeGuarded).Evaluate(input()); d.Outcome != governance.RequireApproval {
+	if d := compile(t, config.ModeGuarded).Evaluate(input()); d.Outcome != policy.RequireApproval {
 		t.Errorf("a fix with no rule = %s, want require_approval", d.Outcome)
 	}
 }
@@ -126,17 +126,17 @@ func TestPolicy_RestoreAllowedByDefault(t *testing.T) {
 // A rule can still ask a person, or forbid it.
 func TestPolicy_RulesSeeRestores(t *testing.T) {
 	p := compile(t, config.ModeGuarded, rule("ask-first", `action.restore == "true"`, config.DecisionRequireApproval))
-	if d := p.Evaluate(restore()); d.Outcome != governance.RequireApproval {
+	if d := p.Evaluate(restore()); d.Outcome != policy.RequireApproval {
 		t.Errorf("restore = %s, want require_approval", d.Outcome)
 	}
-	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval || d.PolicyID == "ask-first" {
+	if d := p.Evaluate(input()); d.Outcome != policy.RequireApproval || d.PolicyID == "ask-first" {
 		t.Errorf("a fix matched the restore rule: %+v", d)
 	}
 }
 
 // Observe mode never acts, not even to put things back.
 func TestPolicy_ObserveModeNeverRestores(t *testing.T) {
-	if d := compile(t, config.ModeObserve).Evaluate(restore()); d.Outcome != governance.Deny {
+	if d := compile(t, config.ModeObserve).Evaluate(restore()); d.Outcome != policy.Deny {
 		t.Errorf("observe mode restore = %s, want deny", d.Outcome)
 	}
 }
@@ -148,13 +148,13 @@ func TestPolicy_SeesWhoSuggestedTheFix(t *testing.T) {
 		rule("this-agent-only", `proposal.external == "true" && proposal.source != "serviceaccount:agents/triage"`, config.DecisionDeny))
 	tests := []struct {
 		name string
-		in   governance.PolicyInput
-		want governance.Outcome
+		in   policy.Input
+		want policy.Outcome
 	}{
-		{"the investigator", governance.PolicyInput{Source: "themis-intelligence", Authenticated: true}, governance.RequireApproval},
-		{"the named agent", governance.PolicyInput{Source: "serviceaccount:agents/triage", Authenticated: true, External: true}, governance.RequireApproval},
-		{"another agent", governance.PolicyInput{Source: "serviceaccount:agents/other", Authenticated: true, External: true}, governance.Deny},
-		{"not proven", governance.PolicyInput{Source: "serviceaccount:agents/triage", External: true}, governance.Deny},
+		{"the investigator", policy.Input{Source: "themis-intelligence", Authenticated: true}, policy.RequireApproval},
+		{"the named agent", policy.Input{Source: "serviceaccount:agents/triage", Authenticated: true, External: true}, policy.RequireApproval},
+		{"another agent", policy.Input{Source: "serviceaccount:agents/other", Authenticated: true, External: true}, policy.Deny},
+		{"not proven", policy.Input{Source: "serviceaccount:agents/triage", External: true}, policy.Deny},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

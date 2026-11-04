@@ -1,4 +1,4 @@
-package governance
+package policy
 
 import (
 	"crypto/sha256"
@@ -39,8 +39,8 @@ type Decision struct {
 	Failed bool
 }
 
-// PolicyInput is what rules see.
-type PolicyInput struct {
+// Input is what rules see.
+type Input struct {
 	Capability string
 	Risk       string
 	Namespace  string
@@ -72,9 +72,9 @@ type Policy struct {
 	digest string
 }
 
-// CompilePolicy compiles every rule once; a rule that does not compile to a
+// Compile compiles every rule once; a rule that does not compile to a
 // boolean is an error.
-func CompilePolicy(p config.Policy) (*Policy, error) {
+func Compile(p config.Policy) (*Policy, error) {
 	if p.Mode == "" {
 		p.Mode = config.ModeGuarded
 	}
@@ -120,7 +120,7 @@ func CompilePolicy(p config.Policy) (*Policy, error) {
 
 // Evaluate decides in rule order. Errors deny; observe mode denies; guarded
 // mode never allows without approval.
-func (p *Policy) Evaluate(in PolicyInput) Decision {
+func (p *Policy) Evaluate(in Input) Decision {
 	vars := map[string]any{
 		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
 		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},

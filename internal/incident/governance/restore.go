@@ -12,6 +12,7 @@ import (
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -53,7 +54,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if !ok {
 		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))
 	}
-	done, ok := w.registry()[applied.Capability]
+	done, ok := w.Fixes[applied.Capability]
 	if !ok {
 		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
@@ -64,7 +65,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if err != nil {
 		return err
 	}
-	undo, ok := w.registry()[name]
+	undo, ok := w.Fixes[name]
 	if !ok {
 		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
@@ -100,20 +101,20 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if plan.ManagedBy != "" {
 		predicates[check.NameGitOpsManaged] = check.True.String()
 	}
-	policy, err := w.policy(profile)
+	pol, err := w.policy(profile)
 	if err != nil {
 		return err
 	}
-	decision := policy.Evaluate(PolicyInput{
+	decision := pol.Evaluate(policy.Input{
 		Capability: undo.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates, Restore: true,
 	})
 	switch decision.Outcome {
-	case Deny:
+	case policy.Deny:
 		return w.escalateDecided(ctx, in.ID, decision, decision.Reason+" Themis left its change in place.")
-	case RequireApproval:
+	case policy.RequireApproval:
 		return w.escalateDecided(ctx, in.ID, decision, decision.Reason+" Putting the workload back needs a person, so Themis left its change in place.")
-	case Allow:
+	case policy.Allow:
 	}
 
 	a, err := w.restoreAction(in, applied, undo, plan, decision)
@@ -128,13 +129,13 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		if err != nil {
 			return err
 		}
-		store.AfterCommit(tx, policyDecisions.WithLabelValues(decision.label()).Inc)
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(decision)).Inc)
 		return w.Store.EnqueueTx(ctx, tx, ExecuteArgs{ActionID: a.ID, IncidentID: in.ID})
 	})
 }
 
 // restoreAction is authorized by policy alone: it needs no approval.
-func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo capability.Capability, plan capability.Plan, d Decision) (store.Action, error) {
+func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo capability.Capability, plan capability.Plan, d policy.Decision) (store.Action, error) {
 	fields := capability.Fields(in.ID, undo, plan, applied.ID, d.PolicyID, d.PolicyDigest)
 	dg, err := digest.Compute(fields)
 	if err != nil {
@@ -147,7 +148,7 @@ func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo cap
 		PreState: plan.Before, Desired: plan.After,
 		BlastRadius: plan.BlastRadius,
 		Risk:        plan.Risk,
-		Decision:    string(Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
+		Decision:    string(policy.Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
 		Digest: dg, Mark: plan.Mark, State: store.ActionAuthorized,
 	}, nil
 }
@@ -160,9 +161,9 @@ func (w *Worker) escalateAction(ctx context.Context, actionID, reason string) er
 	return w.escalate(ctx, applied.IncidentID, reason)
 }
 
-func (w *Worker) escalateDecided(ctx context.Context, incidentID string, d Decision, reason string) error {
+func (w *Worker) escalateDecided(ctx context.Context, incidentID string, d policy.Decision, reason string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		store.AfterCommit(tx, policyDecisions.WithLabelValues(d.label()).Inc)
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(d)).Inc)
 		return w.escalateTx(ctx, tx, incidentID, reason)
 	})
 }

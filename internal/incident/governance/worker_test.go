@@ -6,11 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/riverqueue/river"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -55,10 +58,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile("rollout-regression"), profile("other")}}
-	w, err := governance.NewWorker(cfg, s, k8s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = func() time.Time { return now }
 	return &env{worker: w, store: s, pool: pool, target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)}}
 }
@@ -105,10 +105,12 @@ func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []
 	return incidentID, proposalID
 }
 
+// govern runs the govern job once, as River would.
 func (e *env) govern(t *testing.T, proposalID string) {
 	t.Helper()
-	if err := e.worker.Govern(t.Context(), proposalID); err != nil {
-		t.Fatalf("Govern: %v", err)
+	job := &river.Job[governance.GovernArgs]{Args: governance.GovernArgs{ProposalID: proposalID}}
+	if err := e.worker.Work(t.Context(), job); err != nil {
+		t.Fatalf("Work: %v", err)
 	}
 }
 

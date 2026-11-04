@@ -10,6 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
+	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/config"
 )
 
 // generic is req in the generic form: the fix by name, with its parameters.
@@ -81,13 +83,24 @@ func TestGenericFix_NotBothForms(t *testing.T) {
 	wantCode(t, err, codes.InvalidArgument)
 }
 
-// A suggester learns each fix it may suggest: what it does and its schema.
+// restart is a fix Themis doesn't ship with; suggesters only read its description.
+type restart struct{ capability.Capability }
+
+func (restart) Name() string            { return "test.restart" }
+func (restart) Description() string     { return "Restarts the workload's pods." }
+func (restart) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+
+// A suggester learns each fix it may suggest from the fixes the server was
+// given: what it does and its schema.
 func TestGenericFix_SuggestersLearnTheFixes(t *testing.T) {
-	e := newEnv(t)
+	p := profile()
+	p.Capabilities = []string{"test.restart"}
+	e := newEnvWith(t, p)
+	e.server.Fixes = capability.NewRegistry(restart{})
 	inv := e.lease(t)
 	check := func(who string, caps []*themisv1.Capability) {
 		t.Helper()
-		if len(caps) != 1 || caps[0].GetName() != "deployment.rollback-to-revision" || caps[0].GetDescription() == "" {
+		if len(caps) != 1 || caps[0].GetName() != "test.restart" || caps[0].GetDescription() != "Restarts the workload's pods." {
 			t.Fatalf("%s learns %v", who, caps)
 		}
 		var schema map[string]any
@@ -96,7 +109,7 @@ func TestGenericFix_SuggestersLearnTheFixes(t *testing.T) {
 		}
 	}
 	check("the investigator", inv.GetCapabilities())
-	agent := e.external(t, withWindow)
+	agent := e.external(t, withWindow, func(x *config.ExternalProposals) { x.Sources[0].Capabilities = p.Capabilities })
 	got, err := agent.GetIncident(t.Context(), &themisv1.GetIncidentRequest{IncidentId: inv.GetIncidentId()})
 	if err != nil {
 		t.Fatal(err)

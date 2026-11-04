@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -86,7 +87,7 @@ func executed(t *testing.T) *env {
 		Name: "rollout-regression", Evidence: config.Evidence{Allowed: []string{evidence.PodStates}},
 		Verification: config.Verification{Window: config.Duration{Duration: 5 * time.Minute}, Stability: config.Duration{Duration: 2 * time.Minute}},
 	}
-	e.worker = &verification.Worker{Config: config.Config{Profiles: []config.Profile{profile}}, Store: s, Reader: k8s, Now: func() time.Time { return e.clock }}
+	e.worker = &verification.Worker{Config: config.Config{Profiles: []config.Profile{profile}}, Store: s, Reader: k8s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock }}
 	return e
 }
 
@@ -234,7 +235,7 @@ func TestJob_ResumesAfterRestart_UsesPersistedWindowStart(t *testing.T) {
 	e := executed(t)
 	e.applied(t)
 	e.verify(t)
-	restarted := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: k8s, Now: func() time.Time { return windowStart.Add(5*time.Minute + time.Second) }}
+	restarted := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: k8s, Fixes: catalog.Fixes(), Now: func() time.Time { return windowStart.Add(5*time.Minute + time.Second) }}
 	final, err := restarted.Verify(t.Context(), e.args)
 	if err != nil || !final || e.outcome(t) != string(verification.Unchanged) {
 		t.Fatalf("Verify after restart = %v, %v, %s; want unchanged at the original window end", final, err, e.outcome(t))
@@ -257,7 +258,7 @@ func (failingReader) List(context.Context, client.ObjectList, ...client.ListOpti
 func TestJob_UnobservableOnTheLastAttempt_Escalates(t *testing.T) {
 	e := executed(t)
 	inconclusive := outcomes(t, verification.Inconclusive)
-	w := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Now: func() time.Time { return windowStart }}
+	w := &verification.Worker{Config: e.worker.Config, Store: e.store, Reader: failingReader{}, Fixes: catalog.Fixes(), Now: func() time.Time { return windowStart }}
 	job := &river.Job[verification.VerifyArgs]{JobRow: &rivertype.JobRow{Attempt: 10, MaxAttempts: 10}, Args: e.args}
 	if err := w.Work(t.Context(), job); err != nil {
 		t.Fatalf("Work: %v", err)

@@ -24,13 +24,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
-	"github.com/hzerrad/themis/internal/capability/builtin"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
-	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/workload"
 )
 
@@ -206,14 +206,17 @@ type PolicyCheck struct {
 
 // ShippedPolicy is the policy of Themis's example configuration, the one
 // people start from.
-func ShippedPolicy(path string) (*governance.Policy, error) {
+func ShippedPolicy(path string) (*policy.Policy, error) {
 	c, err := config.Load(path)
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range c.Profiles {
 		if p.Name == "rollout-regression" {
-			return governance.CompilePolicy(p.EffectivePolicy())
+			if err := catalog.Themis(nil).CheckProfile(p); err != nil {
+				return nil, fmt.Errorf("%s: profile %s: %w", path, p.Name, err)
+			}
+			return policy.Compile(p.EffectivePolicy())
 		}
 	}
 	return nil, fmt.Errorf("%s has no rollout-regression profile", path)
@@ -248,20 +251,17 @@ type Check struct {
 }
 
 // Build reads the scenario in dir with the real templates and checks, and asks
-// policy what it would do with a rollback.
-func Build(ctx context.Context, dir string, s Scenario, policy *governance.Policy) (Bundle, error) {
+// pol what it would do with a rollback.
+func Build(ctx context.Context, dir string, s Scenario, pol *policy.Policy) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
 	}
-	registry := evidence.NewRegistry(
-		evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents(),
-		evidence.NewReferencedConfig(), evidence.NewContainerLogsTail(fileLogs{dir: filepath.Join(dir, "logs")}),
-	)
+	cat := catalog.Themis(fileLogs{dir: filepath.Join(dir, "logs")})
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
-		Truth: s.Truth, Target: target, Capabilities: config.KnownCapabilities, Fixes: bundleFixes(config.KnownCapabilities),
+		Truth: s.Truth, Target: target, Capabilities: cat.Fixes.Names(), Fixes: bundleFixes(cat.Fixes),
 		MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
@@ -272,13 +272,13 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 		return Bundle{}, err
 	}
 	for _, name := range s.Evidence.Allowed {
-		item, err := registry.Collect(ctx, c, name, w, nil, s.Now)
+		item, err := cat.Evidence.Collect(ctx, c, name, w, nil, s.Now)
 		if err != nil {
 			return Bundle{}, fmt.Errorf("%s: %w", name, err)
 		}
 		item.ID = "ev-" + name
-		about := grpcapi.Templates[name]
-		b.Templates = append(b.Templates, Template{Name: name, Description: about.GetDescription(), Params: about.GetParams()})
+		about := cat.Evidence[name]
+		b.Templates = append(b.Templates, Template{Name: name, Description: about.Description(), Params: about.Params()})
 		out := Item{
 			ID: item.ID, Template: name, Data: string(item.Data), Truncated: item.Truncated,
 			OriginalBytes: item.OriginalBytes, Redactions: item.Redactions, Classification: string(item.Classification),
@@ -291,14 +291,14 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 		}
 	}
 	values := map[string]string{}
-	for _, r := range check.Evaluate(initial, s.Now) {
+	for _, r := range cat.Checks.Evaluate(initial, s.Now) {
 		b.Predicates = append(b.Predicates, Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, EvidenceIDs: r.EvidenceIDs})
 		values[r.Name] = r.Value.String()
 	}
 	// As the worker asks for the investigator's proposal. Rules reading
 	// target.managed_by see it empty: no shipped rule does.
-	d := policy.Evaluate(governance.PolicyInput{
-		Capability: config.KnownCapabilities[0], Risk: "medium", Namespace: target.Namespace,
+	d := pol.Evaluate(policy.Input{
+		Capability: rollback.Name, Risk: "medium", Namespace: target.Namespace,
 		Predicates: values, Source: "themis-intelligence", Authenticated: true,
 	})
 	b.Policy = PolicyCheck{Outcome: string(d.Outcome), Reason: d.Reason}
@@ -396,13 +396,11 @@ type BundleFix struct {
 	ParamsSchema string `json:"params_schema"`
 }
 
-func bundleFixes(names []string) []BundleFix {
-	registry := builtin.Default()
+func bundleFixes(fixes capability.Registry) []BundleFix {
 	var out []BundleFix
-	for _, name := range names {
-		if f, ok := registry[name]; ok {
-			out = append(out, BundleFix{Name: f.Name(), Description: f.Description(), ParamsSchema: string(f.Schema())})
-		}
+	for _, name := range fixes.Names() {
+		f := fixes[name]
+		out = append(out, BundleFix{Name: f.Name(), Description: f.Description(), ParamsSchema: string(f.Schema())})
 	}
 	return out
 }

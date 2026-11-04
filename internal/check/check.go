@@ -48,15 +48,30 @@ type Result struct {
 // RolloutWindow is how recent a rollout must be to be suspected.
 const RolloutWindow = 6 * time.Hour
 
-// Evaluate runs every predicate on b.
-func Evaluate(b evidence.Bundle, now time.Time) []Result {
-	return []Result{
-		RolloutRecent(b, RolloutWindow, now),
-		FailureOnsetAfterRollout(b),
-		PriorRevisionWasHealthy(b),
-		OOMKilledNewRevision(b),
-		GitOpsManaged(b),
-		ConfigChangedBeforeFailure(b),
+// Check decides one fact from b, as of now.
+type Check func(b evidence.Bundle, now time.Time) Result
+
+// List is the checks an install runs, in the order it reports them.
+type List []Check
+
+// Evaluate runs every check in l on b.
+func (l List) Evaluate(b evidence.Bundle, now time.Time) []Result {
+	out := make([]Result, 0, len(l))
+	for _, c := range l {
+		out = append(out, c(b, now))
+	}
+	return out
+}
+
+// Rollout is the checks about rollouts that Themis ships with.
+func Rollout() List {
+	return List{
+		func(b evidence.Bundle, now time.Time) Result { return RolloutRecent(b, RolloutWindow, now) },
+		func(b evidence.Bundle, _ time.Time) Result { return FailureOnsetAfterRollout(b) },
+		func(b evidence.Bundle, _ time.Time) Result { return PriorRevisionWasHealthy(b) },
+		func(b evidence.Bundle, _ time.Time) Result { return OOMKilledNewRevision(b) },
+		func(b evidence.Bundle, _ time.Time) Result { return GitOpsManaged(b) },
+		func(b evidence.Bundle, _ time.Time) Result { return ConfigChangedBeforeFailure(b) },
 	}
 }
 
