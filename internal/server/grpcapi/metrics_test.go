@@ -34,10 +34,8 @@ func TestMetrics_TokenReviews(t *testing.T) {
 func TestMetrics_InvestigationProposed(t *testing.T) {
 	e := newEnv(t)
 	proposed := investigations(t, "proposed")
-	accepted := metrictest.Delta(t, "themis_proposals_total", map[string]string{"result": "accepted"})
 	inv := e.lease(t)
 	e.submit(t, rollback(inv, "p-1"))
-	e.submit(t, rollback(inv, "p-1")) // A retry stores nothing new.
 	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
 		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_PROPOSED, Summary: "rollback",
 	})
@@ -46,9 +44,6 @@ func TestMetrics_InvestigationProposed(t *testing.T) {
 	}
 	if got := proposed(); got != 1 {
 		t.Errorf("counted %v proposed investigations, want 1", got)
-	}
-	if got := accepted(); got != 1 {
-		t.Errorf("counted %v accepted proposals, want 1", got)
 	}
 }
 

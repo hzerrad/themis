@@ -24,6 +24,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
+	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/statuspage"
@@ -50,7 +51,7 @@ type Server struct {
 	Config config.Provider
 	// Evidence is the templates investigators may ask for.
 	Evidence evidence.Registry
-	// Checks are the checks Themis runs, which suggestions cite.
+	// Checks are the checks Themis runs, described to suggesters.
 	Checks   check.List
 	Reader   client.Reader
 	Logger   *slog.Logger
@@ -67,8 +68,10 @@ type Server struct {
 		Model(ctx context.Context) (settings.Model, error)
 	}
 
-	// Fixes are the fixes Themis can carry out, which suggestions name.
+	// Fixes are the fixes Themis can carry out, described to suggesters.
 	Fixes capability.Registry
+	// Suggestions takes the fixes suggested, and hands the next to governance.
+	Suggestions *suggestion.Inbox
 	// RootCauses are what an investigation's hypotheses may name, by profile.
 	RootCauses catalog.RootCauses
 
