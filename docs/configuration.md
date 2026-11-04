@@ -228,7 +228,7 @@ No template returns pod specs, where environment variables often hold literal se
 
 Deterministic facts, decided from the evidence by checks Themis ships with ([how a check is written](checks.md)). Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
 
-A profile runs every check unless its `checks` lists the ones to run. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs: a rule that reads another can't be evaluated, so it denies, as the shipped rules would for every fix if `gitops_managed` or a check they read is left out.
+A profile runs every check unless its `checks` lists the ones to run. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused.
 
 | Predicate | True when |
 |---|---|

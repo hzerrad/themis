@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/google/cel-go/cel"
+	celast "github.com/google/cel-go/common/ast"
+	"github.com/google/cel-go/common/operators"
 
 	"github.com/hzerrad/themis/internal/config"
 )
@@ -63,6 +66,7 @@ const costLimit = 10_000
 type compiledRule struct {
 	config.PolicyRule
 	program cel.Program
+	reads   []string
 }
 
 // Policy is a compiled profile policy.
@@ -110,12 +114,61 @@ func Compile(p config.Policy) (*Policy, error) {
 			errs = append(errs, fmt.Errorf("rule %s: %w", r.Name, err))
 			continue
 		}
-		out.rules = append(out.rules, compiledRule{PolicyRule: r, program: program})
+		out.rules = append(out.rules, compiledRule{PolicyRule: r, program: program, reads: checksRead(ast)})
 	}
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// Read is a check a rule reads.
+type Read struct{ Rule, Check string }
+
+// Reads lists, in rule order, the checks each rule reads by name. A rule
+// reading a check that isn't run can't be evaluated, and so denies.
+func (p *Policy) Reads() []Read {
+	var out []Read
+	for _, r := range p.rules {
+		for _, c := range r.reads {
+			out = append(out, Read{Rule: r.Name, Check: c})
+		}
+	}
+	return out
+}
+
+// checksRead finds predicates.name and predicates["name"] in a rule.
+func checksRead(a *cel.Ast) []string {
+	var names []string
+	add := func(n string) {
+		if !slices.Contains(names, n) {
+			names = append(names, n)
+		}
+	}
+	isPredicates := func(e celast.Expr) bool {
+		return e.Kind() == celast.IdentKind && e.AsIdent() == "predicates"
+	}
+	celast.PreOrderVisit(a.NativeRep().Expr(), celast.NewExprVisitor(func(e celast.Expr) {
+		if e.Kind() == celast.SelectKind {
+			if sel := e.AsSelect(); isPredicates(sel.Operand()) {
+				add(sel.FieldName())
+			}
+			return
+		}
+		if e.Kind() != celast.CallKind {
+			return
+		}
+		call := e.AsCall()
+		if call.FunctionName() != operators.Index || len(call.Args()) != 2 || !isPredicates(call.Args()[0]) {
+			return
+		}
+		if key := call.Args()[1]; key.Kind() == celast.LiteralKind {
+			if name, ok := key.AsLiteral().Value().(string); ok {
+				add(name)
+			}
+		}
+	}))
+	return names
 }
 
 // Evaluate decides in rule order. Errors deny; observe mode denies; guarded

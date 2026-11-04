@@ -24,6 +24,13 @@ func TestCheckConfig(t *testing.T) {
 		{"policy that doesn't compile", func(c *config.Config) {
 			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: "action.capability", Decision: config.DecisionDeny}}
 		}, "profile p: rule r: must be a boolean, not string"},
+		{"policy reads a check the profile doesn't run", func(c *config.Config) {
+			c.Profiles[0].Checks = []string{"rollout_recent"}
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates.gitops_managed != "false"`, Decision: config.DecisionDeny}}
+		}, `profile p: rule r reads the check "gitops_managed", which the profile doesn't run`},
+		{"policy reads a check that doesn't exist", func(c *config.Config) {
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates["gitops_manged"] == "true"`, Decision: config.DecisionDeny}}
+		}, `profile p: rule r reads the check "gitops_manged", which doesn't exist`},
 		{"unknown fix for an outside agent", func(c *config.Config) {
 			c.ExternalProposals.Sources = []config.ProposalSource{{ServiceAccount: "agents/triage", Capabilities: []string{"delete.everything"}}}
 		}, `externalProposals: sources[0].capabilities[0]: unknown capability "delete.everything"`},
