@@ -40,6 +40,56 @@
       "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
     }
   ],
+  "root_causes": [
+    {
+      "name": "memory_limit_regression",
+      "description": "the new revision's memory limit is too low"
+    },
+    {
+      "name": "bad_configuration",
+      "description": "the new revision's settings are wrong"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled"
+    },
+    {
+      "name": "application_bug",
+      "description": "its code fails, whichever revision runs"
+    },
+    {
+      "name": "configuration_change",
+      "description": "a ConfigMap or Secret changed outside the rollout"
+    },
+    {
+      "name": "dependency_failure",
+      "description": "something it calls is failing"
+    },
+    {
+      "name": "insufficient_capacity",
+      "description": "no room in the cluster for its pods"
+    },
+    {
+      "name": "node_problem",
+      "description": "a node is unhealthy or evicting pods"
+    },
+    {
+      "name": "storage_full",
+      "description": "a disk or volume is full"
+    },
+    {
+      "name": "traffic_spike",
+      "description": "more load than it can take"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [

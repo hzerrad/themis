@@ -7,7 +7,6 @@ from themis.v1 import common_pb2, evidence_pb2
 from themis_intelligence.evaluation.bundle import Bundle, job_of, load_bundles
 from themis_intelligence.evaluation.replay import BudgetSpentError, ReplayCore
 from themis_intelligence.investigation.loop import incident_prompt, system_prompt
-from themis_intelligence.investigation.schemas import ROOT_CAUSES
 
 
 def test_job_matches_the_bundle() -> None:
@@ -68,8 +67,3 @@ async def test_replay_serves_and_counts_evidence() -> None:
         await core.collect_evidence(req)
     with pytest.raises(BudgetSpentError):
         await core.collect_evidence(req)
-
-
-@pytest.mark.parametrize("b", ALL, ids=lambda b: b.scenario)
-def test_every_answer_is_on_the_list(b: Bundle) -> None:
-    assert set(b.truth.root_causes) <= set(ROOT_CAUSES)

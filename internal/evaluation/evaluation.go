@@ -99,8 +99,9 @@ type Truth struct {
 	Predicates map[string]string `json:"predicates"`
 }
 
-// Validate reports every problem in s, not only the first.
-func (s Case) Validate() error {
+// Validate reports every problem in s, not only the first. rootCauses are the
+// root causes its pack declares.
+func (s Case) Validate(rootCauses []string) error {
 	var errs []error
 	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
 	if s.Name == "" {
@@ -132,6 +133,11 @@ func (s Case) Validate() error {
 	if len(s.Truth.RootCauses) == 0 {
 		add("truth.root_causes needs a class")
 	}
+	for _, c := range s.Truth.RootCauses {
+		if !slices.Contains(rootCauses, c) {
+			add("truth.root_causes: %s isn't one of the root causes in the pack's scenario.yaml", c)
+		}
+	}
 	switch s.Truth.Decision {
 	case DecisionPropose:
 		if len(s.Truth.AcceptableRevisions) == 0 {
@@ -147,8 +153,9 @@ func (s Case) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Load reads and validates the case in dir. Unknown keys are errors.
-func Load(dir string) (Case, error) {
+// Load reads and validates the case in dir, of a pack declaring rootCauses.
+// Unknown keys are errors.
+func Load(dir string, rootCauses []string) (Case, error) {
 	data, err := os.ReadFile(filepath.Join(dir, "case.yaml")) //nolint:gosec // a path in the repository
 	if err != nil {
 		return Case{}, err
@@ -157,7 +164,7 @@ func Load(dir string) (Case, error) {
 	if err := yaml.UnmarshalStrict(data, &s); err != nil {
 		return Case{}, fmt.Errorf("case.yaml: %w", err)
 	}
-	if err := s.Validate(); err != nil {
+	if err := s.Validate(rootCauses); err != nil {
 		return Case{}, prefixed("case.yaml", err)
 	}
 	if s.Name != filepath.Base(dir) {
@@ -182,9 +189,12 @@ type Bundle struct {
 	Capabilities []string `json:"capabilities"`
 	// Fixes describe the capabilities as the core sends them to the
 	// investigator, so the replay sees the same prompt.
-	Fixes               []BundleFix `json:"fixes"`
-	MaxSteps            int         `json:"max_steps"`
-	MaxEvidenceRequests int         `json:"max_evidence_requests"`
+	Fixes []BundleFix `json:"fixes"`
+	// RootCauses are the root causes the core sends the investigator for
+	// the pack's profile, for the same reason.
+	RootCauses          []catalog.RootCause `json:"root_causes"`
+	MaxSteps            int                 `json:"max_steps"`
+	MaxEvidenceRequests int                 `json:"max_evidence_requests"`
 
 	// Initial is what the investigation starts with; Requestable is what it
 	// may ask for, by template.
@@ -254,7 +264,7 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
 		Truth: s.Truth, Target: target, Capabilities: cat.Fixes.Names(), Fixes: bundleFixes(cat.Fixes),
-		MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
+		RootCauses: cat.RootCauses.For(profile.Name), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
 	var initial evidence.Bundle

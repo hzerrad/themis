@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -69,6 +70,8 @@ type Server struct {
 
 	// Fixes are the fixes Themis can carry out, which suggestions name.
 	Fixes capability.Registry
+	// RootCauses are what an investigation's hypotheses may name, by profile.
+	RootCauses catalog.RootCauses
 
 	// Heartbeat records that the investigator asked for work. Nil records
 	// nothing.

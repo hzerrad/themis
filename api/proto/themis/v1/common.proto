@@ -79,6 +79,14 @@ message Capability {
   string params_schema = 3;
 }
 
+// RootCause is a kind of root cause an investigator may name.
+message RootCause {
+  // The name a hypothesis uses, such as memory_limit_regression.
+  string name = 1;
+  // What it means, in plain words.
+  string description = 2;
+}
+
 message Provenance {
   string source = 1;
   string model = 2;

@@ -1,55 +1,13 @@
 """What the model may answer at each step of an investigation."""
 
 import json
-from collections.abc import Sequence
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from themis.v1 import common_pb2
+from themis.v1 import investigation_pb2
 
 SCHEMA_VERSION = "5"
-
-PredicateName = Literal[
-    "rollout_recent",
-    "failure_onset_after_rollout",
-    "prior_revision_was_healthy",
-    "oom_killed_new_revision",
-    "gitops_managed",
-    "config_changed_before_failure",
-]
-
-# The root causes a hypothesis may name, and what each means. A closed list
-# makes answers comparable; other keeps it honest when none fits.
-ROOT_CAUSES: dict[str, str] = {
-    "memory_limit_regression": "the new revision's memory limit is too low",
-    "bad_configuration": "the new revision's settings are wrong",
-    "image_pull_failure": "its image can't be pulled",
-    "application_bug": "its code fails, whichever revision runs",
-    "configuration_change": "a ConfigMap or Secret changed outside the rollout",
-    "dependency_failure": "something it calls is failing",
-    "insufficient_capacity": "no room in the cluster for its pods",
-    "node_problem": "a node is unhealthy or evicting pods",
-    "storage_full": "a disk or volume is full",
-    "traffic_spike": "more load than it can take",
-    "insufficient_evidence": "the evidence can't tell",
-    "other": "none of these: say what in the summary",
-}
-
-RootCause = Literal[
-    "memory_limit_regression",
-    "bad_configuration",
-    "image_pull_failure",
-    "application_bug",
-    "configuration_change",
-    "dependency_failure",
-    "insufficient_capacity",
-    "node_problem",
-    "storage_full",
-    "traffic_spike",
-    "insufficient_evidence",
-    "other",
-]
 
 
 class TargetOut(BaseModel):
@@ -63,7 +21,8 @@ class TargetOut(BaseModel):
 
 
 class HypothesisOut(BaseModel):
-    root_cause_class: RootCause
+    # One of the root causes the core sent: reply_schema lists them.
+    root_cause_class: str
     summary: str
     supporting: list[str] = Field(description="IDs of evidence supporting the hypothesis.")
     contradicting: list[str] = Field(description="IDs of evidence against it.")
@@ -78,7 +37,8 @@ class ProposalOut(BaseModel):
     expected_effect: str
     rationale: str
     cited_evidence_ids: list[str]
-    cited_predicates: list[PredicateName]
+    # Checks the core sent, by name: reply_schema lists them.
+    cited_predicates: list[str]
 
 
 class StepDecision(BaseModel):
@@ -90,20 +50,36 @@ class StepDecision(BaseModel):
     proposal: ProposalOut | None = Field(default=None, description="For propose.")
 
 
-def reply_schema(capabilities: Sequence[common_pb2.Capability]) -> dict[str, Any]:
-    """The step decision's JSON Schema, with the proposal narrowed to the fixes
-    on offer and their parameters, so the model is guided to valid ones. The
-    core still checks every suggestion against the fix's own schema."""
+def checks(job: investigation_pb2.Investigation) -> list[str]:
+    """The checks a proposal may cite: those the core ran for the incident."""
+    return list(dict.fromkeys(p.name for p in job.predicates))
+
+
+def root_causes(job: investigation_pb2.Investigation) -> list[str]:
+    """The root causes a hypothesis may name: those of the incident's profile."""
+    return [c.name for c in job.root_causes]
+
+
+def reply_schema(job: investigation_pb2.Investigation) -> dict[str, Any]:
+    """The step decision's JSON Schema, narrowed to what the core sent: the
+    fixes on offer and their parameters, the checks it ran and the root causes
+    of the incident's profile, so the model is guided to valid ones. The loop
+    still refuses any other, and the core checks every suggestion again."""
     schema = StepDecision.model_json_schema()
+    hypothesis = schema["$defs"]["HypothesisOut"]["properties"]
     proposal = schema["$defs"]["ProposalOut"]["properties"]
-    names = [c.name for c in capabilities]
+    if causes := root_causes(job):
+        hypothesis["root_cause_class"]["enum"] = causes
+    if cited := checks(job):
+        proposal["cited_predicates"]["items"]["enum"] = cited
+    names = [c.name for c in job.capabilities]
     if names:
         proposal["capability"] = {
             "type": "string",
             "enum": names,
             "description": "One of the allowed fixes, by name.",
         }
-    params = [json.loads(c.params_schema) for c in capabilities if c.params_schema]
+    params = [json.loads(c.params_schema) for c in job.capabilities if c.params_schema]
     if len(params) == 1:
         proposal["params"] = params[0]
     elif params:

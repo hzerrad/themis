@@ -75,11 +75,11 @@ func TestScaffold_FailsUntilFilledIn(t *testing.T) {
 // A public corpus goes through the same redaction as production evidence, and
 // never holds what a template wouldn't return.
 func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
-	s, err := evaluation.Load(oom)
+	cat, err := catalog.Themis(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cat, err := catalog.Themis(nil)
+	s, err := evaluation.Load(oom, rootCauses(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,9 +103,24 @@ func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
 	}
 }
 
+// rootCauses are the rollout-regression pack's.
+func rootCauses(t *testing.T) []string {
+	t.Helper()
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range cat.RootCauses.For("rollout-regression") {
+		names = append(names, c.Name)
+	}
+	return names
+}
+
 func TestCase_Validate(t *testing.T) {
+	causes := rootCauses(t)
 	good := func() evaluation.Case {
-		s, err := evaluation.Load(oom)
+		s, err := evaluation.Load(oom, causes)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,6 +135,10 @@ func TestCase_Validate(t *testing.T) {
 		{"unknown difficulty", func(s *evaluation.Case) { s.Difficulty = "brutal" }, "difficulty"},
 		{"unknown decision", func(s *evaluation.Case) { s.Truth.Decision = "guess" }, "truth.decision"},
 		{"no right cause", func(s *evaluation.Case) { s.Truth.RootCauses = nil }, "root_causes"},
+		{
+			"cause the pack doesn't declare", func(s *evaluation.Case) { s.Truth.RootCauses = []string{"cosmic_rays"} },
+			"truth.root_causes: cosmic_rays isn't one of the root causes in the pack's scenario.yaml",
+		},
 		{"propose with no revision", func(s *evaluation.Case) { s.Truth.AcceptableRevisions = nil }, "acceptable_revisions"},
 		{"right and harmful", func(s *evaluation.Case) { s.Truth.RollbackIsHarmful = true }, "right and harmful"},
 		{"initial not allowed", func(s *evaluation.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
@@ -128,7 +147,7 @@ func TestCase_Validate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := good()
 			tt.edit(&s)
-			if err := s.Validate(); err == nil || !strings.Contains(err.Error(), tt.want) {
+			if err := s.Validate(causes); err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Errorf("err = %v, want %q", err, tt.want)
 			}
 		})

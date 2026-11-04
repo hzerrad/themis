@@ -8,6 +8,19 @@ name: {{name}}
 # One sentence, in plain words: the incident, and what Themis does about it.
 description: "TODO: say which incident this pack handles and what Themis does about it"
 
+# The root causes this pack can tell apart: the investigator names one of
+# these for each hypothesis, and each case's truth.root_causes picks from
+# them. A name is lowercase letters, digits and _; the description is what
+# the investigator reads, in a few plain words. Keep insufficient_evidence
+# and other, so an honest answer is always on the list. TODO
+root_causes:
+  - name: {{name_}}_cause
+    description: "TODO: what went wrong, in a few plain words"
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
 # The profile Themis uses for these incidents, in the format of the
 # configuration file's profiles (docs/configuration.md). An operator's profile
 # of the same name replaces it.

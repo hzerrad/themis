@@ -21,7 +21,7 @@ A named set of rules for a group of workloads: which evidence Themis may read, w
 _Avoid_: config, ruleset
 
 **Scenario pack**:
-One kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the fix it may suggest, its policy, and the cases that prove it.
+One kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the root causes it tells apart, the fix it may suggest, its policy, and the cases that prove it.
 _Avoid_: plugin, playbook, runbook
 
 **Supersede**:
@@ -53,6 +53,10 @@ _Avoid_: remedy, fix
 **Check**:
 A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout". It is unknown when the evidence it reads is missing or doesn't settle it, never guessed.
 _Avoid_: predicate, rule, signal
+
+**Root cause**:
+Why an incident happened, named from a short list its scenario pack gives, such as "the new version's memory limit is too low" or "the evidence can't tell". Lists make answers comparable.
+_Avoid_: diagnosis, reason, category
 
 **Catalog**:
 Everything this install of Themis can read, check and change: its fixes, evidence templates and checks.

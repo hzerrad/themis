@@ -14,12 +14,13 @@ from pydantic import BaseModel
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
 from themis_intelligence import telemetry
 from themis_intelligence.investigation.schemas import (
-    ROOT_CAUSES,
     SCHEMA_VERSION,
     HypothesisOut,
     ProposalOut,
     StepDecision,
+    checks,
     reply_schema,
+    root_causes,
 )
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
@@ -129,7 +130,7 @@ def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
         f"  - {t.name}: {t.description}" + (f" Params: {', '.join(t.params)}." if t.params else "")
         for t in job.allowed_templates
     )
-    causes = "\n".join(f"  - {name}: {meaning}" for name, meaning in ROOT_CAUSES.items())
+    causes = "\n".join(f"  - {c.name}: {c.description}" for c in job.root_causes)
     return (
         text.replace("{root_causes}", causes)
         .replace("{templates}", templates)
@@ -186,6 +187,24 @@ def incident_prompt(
         f"Predicates:\n{predicates or '- none'}\n\n"
         f"Evidence:\n\n{evidence}\n\n{EVIDENCE_REMINDER}"
     )
+
+
+def off_the_list(decision: StepDecision, causes: list[str], cited: list[str]) -> str:
+    """What the decision names that the core didn't send, told to the model,
+    or nothing. An empty list from the core leaves names unchecked here."""
+    for h in decision.hypotheses:
+        if causes and h.root_cause_class not in causes:
+            return (
+                f"{fence(repr(h.root_cause_class))} is not a root cause on the list. "
+                f"Root causes: {', '.join(causes)}."
+            )
+    for name in decision.proposal.cited_predicates if decision.proposal else []:
+        if cited and name not in cited:
+            return (
+                f"{fence(repr(name))} is not a predicate Themis computed. "
+                f"Predicates: {', '.join(cited)}."
+            )
+    return ""
 
 
 def hypothesis_to_proto(h: HypothesisOut) -> investigation_pb2.Hypothesis:
@@ -275,7 +294,8 @@ async def investigate(
     allowed = {t.name for t in job.allowed_templates}
     # The fixes on offer, and a reply schema that only allows them.
     offered = [c.name for c in job.capabilities] or list(job.candidate_capabilities)
-    schema = reply_schema(job.capabilities)
+    schema = reply_schema(job)
+    causes, cited = root_causes(job), checks(job)
     seen = {i.template for i in job.initial_evidence}
     nudged = False
     # A proposal waits for the logs when the profile allows reading them.
@@ -383,6 +403,10 @@ async def investigate(
         if decision is None:
             raise InvestigationError("invalid_model_output", "the model returned no decision")
         messages.append(Message(role="assistant", content=decision.model_dump_json()))
+        if refusal := off_the_list(decision, causes, cited):
+            invalid += 1
+            tell(refusal)
+            continue
         if decision.hypotheses:
             hypotheses = decision.hypotheses
         summary = decision.summary or summary

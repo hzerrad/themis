@@ -113,7 +113,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 
 	logs := &syncBuffer{}
 	gs := &grpcapi.Server{
-		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
+		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
 	tokenFile := filepath.Join(t.TempDir(), "token")
@@ -210,6 +210,10 @@ func TestLease_ReturnsJobWithInitialEvidenceAndPredicates(t *testing.T) {
 	}
 	if len(inv.GetCandidateCapabilities()) != 1 || inv.GetBudget().GetMaxSteps() == 0 {
 		t.Errorf("capabilities = %v, budget = %v", inv.GetCandidateCapabilities(), inv.GetBudget())
+	}
+	// The root causes of the profile's pack, described.
+	if causes := inv.GetRootCauses(); len(causes) != 12 || causes[0].GetName() != "memory_limit_regression" || causes[0].GetDescription() == "" {
+		t.Errorf("root causes = %v, want the rollout-regression pack's 12", causes)
 	}
 
 	again, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w-2"})

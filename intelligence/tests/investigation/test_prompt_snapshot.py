@@ -18,7 +18,7 @@ def first_request() -> str:
     b = load_bundles(ROOT / "scenarios", ["rollout-oom"])[0]
     job = job_of(b)
     # The schema the loop sends: narrowed to the fixes on offer.
-    schema = json.dumps(reply_schema(job.capabilities), indent=2, sort_keys=True)
+    schema = json.dumps(reply_schema(job), indent=2, sort_keys=True)
     return (
         f"# prompt {PROMPT_VERSION}, schema {SCHEMA_VERSION}\n\n"
         f"## system\n\n{system_prompt(job, b.max_steps)}\n\n"
