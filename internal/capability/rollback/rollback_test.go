@@ -67,25 +67,29 @@ func TestRead_DesiredIsThePriorTemplateWithoutItsHash(t *testing.T) {
 	}
 }
 
-func TestRead_UnknownRevision(t *testing.T) {
-	target, _ := load(t)
-	if _, err := rollback.Read(t.Context(), k8s, target, 7); !errors.Is(err, rollback.ErrNoSuchRevision) {
-		t.Errorf("err = %v, want ErrNoSuchRevision", err)
+// Read refuses a rollback that has nothing to roll back to.
+func TestRead_Refused(t *testing.T) {
+	loaded, _ := load(t)
+	tests := []struct {
+		name     string
+		uid      string
+		revision int64
+		want     error
+	}{
+		{"unknown revision", "", 7, rollback.ErrNoSuchRevision},
+		{"current revision", "", 2, rollback.ErrAlreadyCurrent},
+		{"recreated target", "uid-of-a-deleted-deployment", 1, rollback.ErrStale},
 	}
-}
-
-func TestRead_CurrentRevisionRefused(t *testing.T) {
-	target, _ := load(t)
-	if _, err := rollback.Read(t.Context(), k8s, target, 2); !errors.Is(err, rollback.ErrAlreadyCurrent) {
-		t.Errorf("err = %v, want ErrAlreadyCurrent", err)
-	}
-}
-
-func TestRead_RecreatedTarget(t *testing.T) {
-	target, _ := load(t)
-	target.UID = "uid-of-a-deleted-deployment"
-	if _, err := rollback.Read(t.Context(), k8s, target, 1); !errors.Is(err, rollback.ErrStale) {
-		t.Errorf("err = %v, want ErrStale", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := loaded
+			if tt.uid != "" {
+				target.UID = tt.uid
+			}
+			if _, err := rollback.Read(t.Context(), k8s, target, tt.revision); !errors.Is(err, tt.want) {
+				t.Errorf("err = %v, want %v", err, tt.want)
+			}
+		})
 	}
 }
 

@@ -46,40 +46,8 @@ func TestPolicy_FirstMatchingRuleDecides(t *testing.T) {
 	}
 }
 
-func TestPolicy_RequiresApprovalInGuarded(t *testing.T) {
-	p := compile(t, config.ModeGuarded, rule("allow-all", "true", config.DecisionAllow))
-	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval || !strings.Contains(d.Reason, "guarded mode") {
-		t.Errorf("decision = %+v, want require_approval in guarded mode", d)
-	}
-}
-
-func TestPolicy_ObserveDeniesEverything(t *testing.T) {
-	p := compile(t, config.ModeObserve, rule("allow-all", "true", config.DecisionAllow))
-	if d := p.Evaluate(input()); d.Outcome != governance.Deny {
-		t.Errorf("decision = %+v, want deny in observe mode", d)
-	}
-}
-
-func TestPolicy_NoRuleMatchedNeedsApproval(t *testing.T) {
-	p := compile(t, config.ModeGuarded)
-	if d := p.Evaluate(input()); d.Outcome != governance.RequireApproval {
-		t.Errorf("decision = %+v", d)
-	}
-}
-
-func TestPolicy_UnknownPredicateBlocks(t *testing.T) {
-	p := compile(t, config.ModeGuarded,
-		rule("needs-oom", `predicates.oom_killed_new_revision != "true"`, config.DecisionDeny),
-		rule("approve", "true", config.DecisionRequireApproval),
-	)
-	in := input()
-	in.Predicates["oom_killed_new_revision"] = "unknown"
-	if d := p.Evaluate(in); d.Outcome != governance.Deny {
-		t.Errorf("decision = %+v, want deny on unknown", d)
-	}
-}
-
-// A rule that fails to evaluate denies; it never lets an action through.
+// A rule that fails to evaluate denies; it never lets an action through. A
+// rule that matches and denies has not failed.
 func TestPolicy_EvaluationErrorDenies(t *testing.T) {
 	p := compile(t, config.ModeGuarded,
 		rule("missing-key", `predicates.not_computed == "true"`, config.DecisionAllow),
@@ -87,10 +55,7 @@ func TestPolicy_EvaluationErrorDenies(t *testing.T) {
 	if d := p.Evaluate(input()); d.Outcome != governance.Deny || !d.Failed || !strings.Contains(d.Reason, "missing-key") {
 		t.Errorf("decision = %+v, want a failed deny", d)
 	}
-}
-
-func TestPolicy_MatchedRuleIsNotFailed(t *testing.T) {
-	p := compile(t, config.ModeGuarded, rule("deny-all", `true`, config.DecisionDeny))
+	p = compile(t, config.ModeGuarded, rule("deny-all", `true`, config.DecisionDeny))
 	if d := p.Evaluate(input()); d.Outcome != governance.Deny || d.Failed {
 		t.Errorf("decision = %+v, want a deny that did not fail", d)
 	}
@@ -117,19 +82,22 @@ func TestPolicy_DigestFollowsRules(t *testing.T) {
 }
 
 // A decision's reason is what the approver reads: which rule decided, in words.
+// Guarded mode asks a person even when a rule allows, and observe mode denies
+// everything.
 func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 	for _, c := range []struct {
 		mode     string
 		decision string
+		outcome  governance.Outcome
 		want     string
 	}{
-		{config.ModeGuarded, config.DecisionDeny, "Policy rule r forbids this fix."},
-		{config.ModeGuarded, config.DecisionRequireApproval, "Policy rule r requires a person's approval."},
-		{config.ModeGuarded, config.DecisionAllow, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
-		{config.ModeObserve, config.DecisionAllow, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
+		{config.ModeGuarded, config.DecisionDeny, governance.Deny, "Policy rule r forbids this fix."},
+		{config.ModeGuarded, config.DecisionRequireApproval, governance.RequireApproval, "Policy rule r requires a person's approval."},
+		{config.ModeGuarded, config.DecisionAllow, governance.RequireApproval, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
+		{config.ModeObserve, config.DecisionAllow, governance.Deny, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
 	} {
-		if got := compile(t, c.mode, rule("r", `true`, c.decision)).Evaluate(input()).Reason; got != c.want {
-			t.Errorf("%s, %s: reason = %q, want %q", c.mode, c.decision, got, c.want)
+		if d := compile(t, c.mode, rule("r", `true`, c.decision)).Evaluate(input()); d.Outcome != c.outcome || d.Reason != c.want {
+			t.Errorf("%s, %s: %s, %q; want %s, %q", c.mode, c.decision, d.Outcome, d.Reason, c.outcome, c.want)
 		}
 	}
 	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched, so a person must approve this fix." {

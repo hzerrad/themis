@@ -7,6 +7,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -50,15 +51,6 @@ func assertRejected(t *testing.T, resp *themisv1.SubmitProposalResponse, reason 
 	}
 }
 
-func TestSubmit_Valid_Accepted(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	resp := e.submit(t, rollback(inv, "p-1"))
-	if resp.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED || resp.GetProposalId() == "" {
-		t.Errorf("response = %v, want accepted", resp)
-	}
-}
-
 // Governance starts once the investigation is complete, never while it can
 // still submit.
 func TestComplete_Proposed_EnqueuesGovernInSameTx(t *testing.T) {
@@ -68,6 +60,9 @@ func TestComplete_Proposed_EnqueuesGovernInSameTx(t *testing.T) {
 		t.Fatal("a govern job before submitting")
 	}
 	accepted := e.submit(t, rollback(inv, "p-1"))
+	if accepted.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED || accepted.GetProposalId() == "" {
+		t.Fatalf("response = %v, want accepted", accepted)
+	}
 	if pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1`, governance.GovernArgs{}.Kind()) != 0 {
 		t.Error("a govern job before the investigation completed")
 	}
@@ -105,13 +100,76 @@ func TestComplete_ProposedWithoutAcceptedProposal_ClosesWithoutAction(t *testing
 	}
 }
 
-// A profile without capabilities is diagnosis only.
-func TestSubmit_CapabilityOutsideCandidates_StoredRejected(t *testing.T) {
-	p := profile()
-	p.Capabilities = nil
-	e := newEnvWith(t, p)
-	inv := e.lease(t)
-	assertRejected(t, e.submit(t, rollback(inv, "p-1")), themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED)
+// A proposal Themis can't act on is rejected and kept with its reason. One
+// that points at something it shouldn't is a safety event too.
+func TestSubmit_Rejected(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		noCaps  bool // a profile without capabilities is diagnosis only
+		change  func(*themisv1.SubmitProposalRequest)
+		reason  themisv1.RejectionReason
+		stored  string // the safety event kept with the proposal
+		counted string // the safety event counted
+	}{{
+		name: "capability outside the candidates", noCaps: true,
+		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, counted: "unknown_capability",
+	}, {
+		name: "unknown evidence",
+		change: func(r *themisv1.SubmitProposalRequest) {
+			r.CitedEvidenceIds = []string{"0192f0c1-0000-7000-8000-0000000000ee"}
+		},
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
+	}, {
+		name:   "no evidence cited",
+		change: func(r *themisv1.SubmitProposalRequest) { r.CitedEvidenceIds = nil },
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
+	}, {
+		name:   "unknown predicate",
+		change: func(r *themisv1.SubmitProposalRequest) { r.CitedPredicates = []string{"cluster_is_fine"} },
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE,
+	}, {
+		name: "another target",
+		change: func(r *themisv1.SubmitProposalRequest) {
+			r.Target = &themisv1.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "kube-system", Name: "coredns", Uid: "u-coredns"}
+		},
+		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, stored: "target_mismatch",
+	}, {
+		// Same name, another UID: the object was recreated.
+		name:   "recreated target",
+		change: func(r *themisv1.SubmitProposalRequest) { r.Target.Uid = "uid-of-the-recreated-deployment" },
+		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH,
+	}, {
+		name: "revision not positive",
+		change: func(r *themisv1.SubmitProposalRequest) {
+			r.Capability = &themisv1.SubmitProposalRequest_RollbackToRevision{RollbackToRevision: &themisv1.RollbackToRevisionParams{Revision: 0}}
+		},
+		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS,
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := profile()
+			if tc.noCaps {
+				p.Capabilities = nil
+			}
+			e := newEnvWith(t, p)
+			counted := metrictest.Delta(t, "themis_safety_events_total", map[string]string{"kind": tc.counted})
+			req := rollback(e.lease(t), "p-1")
+			if tc.change != nil {
+				tc.change(req)
+			}
+			resp := e.submit(t, req)
+			assertRejected(t, resp, tc.reason)
+			if tc.stored != "" {
+				if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM safety_events WHERE proposal_id = $1 AND kind = $2`, resp.GetProposalId(), tc.stored); n != 1 {
+					t.Errorf("%d %s safety events, want 1", n, tc.stored)
+				}
+			}
+			if tc.counted != "" {
+				if got := counted(); got != 1 {
+					t.Errorf("counted %v %s events, want 1", got, tc.counted)
+				}
+			}
+		})
+	}
 }
 
 func TestSubmit_NoCapability_InvalidArgument(t *testing.T) {
@@ -124,52 +182,6 @@ func TestSubmit_NoCapability_InvalidArgument(t *testing.T) {
 	}
 }
 
-func TestSubmit_UnknownEvidenceID_StoredRejected(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.CitedEvidenceIds = []string{"0192f0c1-0000-7000-8000-0000000000ee"}
-	assertRejected(t, e.submit(t, req), themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE)
-}
-
-func TestSubmit_NoEvidenceCited_Rejected(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.CitedEvidenceIds = nil
-	assertRejected(t, e.submit(t, req), themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE)
-}
-
-func TestSubmit_UnknownPredicate_Rejected(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.CitedPredicates = []string{"cluster_is_fine"}
-	assertRejected(t, e.submit(t, req), themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE)
-}
-
-func TestSubmit_TargetMismatch_StoredRejectedWithSafetyEvent(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.Target = &themisv1.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "kube-system", Name: "coredns", Uid: "u-coredns"}
-
-	resp := e.submit(t, req)
-	assertRejected(t, resp, themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH)
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM safety_events WHERE proposal_id = $1 AND kind = 'target_mismatch'`, resp.GetProposalId()); n != 1 {
-		t.Errorf("%d safety events, want 1", n)
-	}
-}
-
-// Same name, another UID: the object was recreated.
-func TestSubmit_TargetUIDMismatch_Rejected(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.Target.Uid = "uid-of-the-recreated-deployment"
-	assertRejected(t, e.submit(t, req), themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH)
-}
-
 func TestSubmit_MissingTarget_InvalidArgument(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
@@ -180,36 +192,23 @@ func TestSubmit_MissingTarget_InvalidArgument(t *testing.T) {
 	}
 }
 
-func TestSubmit_RevisionNotPositive_RejectedInvalidParams(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.Capability = &themisv1.SubmitProposalRequest_RollbackToRevision{RollbackToRevision: &themisv1.RollbackToRevisionParams{Revision: 0}}
-	assertRejected(t, e.submit(t, req), themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS)
-}
-
+// A retry returns the stored proposal and never changes it, even when it says
+// something else.
 func TestSubmit_IdempotentRetry(t *testing.T) {
 	e := newEnv(t)
 	inv := e.lease(t)
 	first := e.submit(t, rollback(inv, "p-1"))
-	again := e.submit(t, rollback(inv, "p-1"))
+	changed := rollback(inv, "p-1")
+	changed.Rationale = "a changed mind"
+	again := e.submit(t, changed)
 	if again.GetProposalId() != first.GetProposalId() {
 		t.Errorf("a retry created proposal %s, want %s", again.GetProposalId(), first.GetProposalId())
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM proposals`); n != 1 {
 		t.Errorf("%d proposals, want 1", n)
 	}
-}
-
-func TestSubmit_ProposalImmutable(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	e.submit(t, rollback(inv, "p-1"))
-	changed := rollback(inv, "p-2")
-	changed.Rationale = "a changed mind"
-	e.submit(t, changed)
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM proposals WHERE rationale = 'revision 2 lowered the memory limit to 64Mi'`); n != 1 {
-		t.Error("the first proposal was changed")
+		t.Error("a retry changed the stored proposal")
 	}
 }
 

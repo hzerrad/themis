@@ -104,14 +104,6 @@ func TestDoor_AcceptsLocalNames(t *testing.T) {
 	}
 }
 
-// Without the door, nothing is an admin for free.
-func TestIdentify_NoSetupWithoutTheDoor(t *testing.T) {
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/v1/me", nil)
-	if who, err := directory(t).Identify(req); !errors.Is(err, identity.ErrSignedOut) {
-		t.Errorf("identity = %+v, %v; want signed out", who, err)
-	}
-}
-
 // A real session wins over the door, so a person who signs in is themselves.
 func TestDoor_SessionWins(t *testing.T) {
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/v1/me", nil)

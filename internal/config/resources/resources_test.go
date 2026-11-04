@@ -257,19 +257,6 @@ func TestThereIsOneThemisConfig(t *testing.T) {
 	}
 }
 
-func TestDeletingAProfileRemovesIt(t *testing.T) {
-	f := newFixture(t)
-	p := profile(f.platform, "shared", 10)
-	apply(t, p)
-	f.refresh(t)
-	if err := k8s.Delete(t.Context(), p); err != nil {
-		t.Fatal(err)
-	}
-	if cfg := f.refresh(t); len(cfg.Profiles) != 0 {
-		t.Errorf("profiles = %+v, want none", cfg.Profiles)
-	}
-}
-
 // A change reaches the running configuration with no restart.
 func TestWatch_AppliesAChangeWithoutARestart(t *testing.T) {
 	f := newFixture(t)

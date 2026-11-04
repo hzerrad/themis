@@ -8,6 +8,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
 
 // shipped governs with the policy of the example configuration, so these
@@ -41,80 +42,61 @@ func facts(onset check.Truth) []check.Result {
 	}
 }
 
-// Scenario 3: the crash loop began before the rollout. Rolling back would not
-// help, so Themis does not blame the rollout: nothing is changed.
-func TestScenario_CrashLoopOlderThanTheRolloutIsNotRolledBack(t *testing.T) {
-	e := shipped(t)
-	id, p := e.diagnosed(t, "rollout-regression", 1, facts(check.False))
-	e.govern(t, p)
-	assertNotActed(t, e, id)
+// set returns facts with the result at i changed to v.
+func set(results []check.Result, i int, v check.Truth) []check.Result {
+	results[i].Value = v
+	return results
 }
 
-// Scenario 6: the evidence that would say when the failures started is
-// missing. Without it, no rollback is allowed.
-func TestScenario_MissingEvidenceAllowsNoAction(t *testing.T) {
-	e := shipped(t)
-	id, p := e.diagnosed(t, "rollout-regression", 1, facts(check.Unknown))
-	e.govern(t, p)
-	assertNotActed(t, e, id)
-}
-
-// A referenced ConfigMap changed between the rollout and the failures, so the
-// rollout may not be to blame, and rolling back wouldn't undo the change.
-func TestScenario_ConfigChangeBeforeTheFailureIsNotRolledBack(t *testing.T) {
-	for _, config := range []check.Truth{check.True, check.Unknown} {
-		e := shipped(t)
-		results := facts(check.True)
-		results[3].Value = config
-		id, p := e.diagnosed(t, "rollout-regression", 1, results)
-		e.govern(t, p)
-		assertNotActed(t, e, id)
-	}
-}
-
-// A failure long after the rollout isn't blamed on it, however it looks.
-func TestScenario_OldRolloutIsNotRolledBack(t *testing.T) {
-	e := shipped(t)
-	results := facts(check.True)
-	results[4].Value = check.False
-	id, p := e.diagnosed(t, "rollout-regression", 1, results)
-	e.govern(t, p)
-	assertNotActed(t, e, id)
-}
-
-// A new version that crashes, or never starts, while the one before it was
-// healthy is a bad rollout too, though nothing ran out of memory.
-func TestScenario_BadRolloutWithoutOOMWaitsForApproval(t *testing.T) {
-	e := shipped(t)
-	results := facts(check.True)
-	results[0].Value = check.False
-	id, p := e.diagnosed(t, "rollout-regression", 1, results)
-	e.govern(t, p)
-	if got := e.state(t, id); got != incident.AwaitingApproval {
-		t.Errorf("state = %s, want awaiting_approval", got)
-	}
-}
-
-// With no memory kill and no healthy version to go back to, nothing says the
-// rollout is to blame, so it isn't rolled back.
-func TestScenario_NoSignOfABadRevisionIsNotRolledBack(t *testing.T) {
-	for _, prior := range []check.Truth{check.False, check.Unknown} {
-		e := shipped(t)
-		results := facts(check.True)
-		results[0].Value, results[5].Value = check.False, prior
-		id, p := e.diagnosed(t, "rollout-regression", 1, results)
-		e.govern(t, p)
-		assertNotActed(t, e, id)
-	}
-}
-
-// The control: a bad rollout, with every fact known, waits for approval.
-func TestScenario_BadRolloutWaitsForApproval(t *testing.T) {
-	e := shipped(t)
-	id, p := e.diagnosed(t, "rollout-regression", 1, facts(check.True))
-	e.govern(t, p)
-	if got := e.state(t, id); got != incident.AwaitingApproval {
-		t.Errorf("state = %s, want awaiting_approval", got)
+// The policy Themis ships rolls back only a rollout that is to blame, and even
+// then only with a person's approval.
+func TestScenario_ShippedPolicy(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		results []check.Result
+		acted   bool
+	}{
+		// The control: a bad rollout, with every fact known, waits for approval.
+		{"bad rollout", facts(check.True), true},
+		// A new version that crashes, or never starts, while the one before it
+		// was healthy is a bad rollout too, though nothing ran out of memory.
+		{"bad rollout without OOM", set(facts(check.True), 0, check.False), true},
+		// Scenario 3: the crash loop began before the rollout. Rolling back
+		// would not help, so Themis does not blame the rollout.
+		{"crash loop older than the rollout", facts(check.False), false},
+		// Scenario 6: the evidence that would say when the failures started is
+		// missing. Without it, no rollback is allowed.
+		{"missing evidence", facts(check.Unknown), false},
+		// A referenced ConfigMap changed between the rollout and the failures,
+		// so the rollout may not be to blame, and rolling back wouldn't undo
+		// the change.
+		{"config changed before the failure", set(facts(check.True), 3, check.True), false},
+		{"config change unknown", set(facts(check.True), 3, check.Unknown), false},
+		// A failure long after the rollout isn't blamed on it, however it looks.
+		{"old rollout", set(facts(check.True), 4, check.False), false},
+		// With no memory kill and no healthy version to go back to, nothing
+		// says the rollout is to blame.
+		{"no sign of a bad revision", set(set(facts(check.True), 0, check.False), 5, check.False), false},
+		{"prior revision's health unknown", set(set(facts(check.True), 0, check.False), 5, check.Unknown), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := shipped(t)
+			refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
+			id, p := e.diagnosed(t, "rollout-regression", 1, tt.results)
+			e.govern(t, p)
+			if tt.acted {
+				if got := e.state(t, id); got != incident.AwaitingApproval {
+					t.Errorf("state = %s, want awaiting_approval", got)
+				}
+				return
+			}
+			assertNotActed(t, e, id)
+			// A denial of a target no GitOps controller manages is not a
+			// GitOps refusal.
+			if got := refusals(); got != 0 {
+				t.Errorf("counted %v GitOps refusals, want 0", got)
+			}
+		})
 	}
 }
 

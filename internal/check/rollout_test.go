@@ -260,19 +260,20 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 		{Name: "app", LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: failedAt}},
 	}}}}
 	tests := []struct {
-		name string
-		refs []evidence.ConfigRefView
-		want check.Truth
+		name   string
+		refs   []evidence.ConfigRefView
+		want   check.Truth
+		reason string
 	}{
-		{"nothing referenced", nil, check.False},
-		{"changed before the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(-time.Hour))}, check.False},
-		{"written with the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(30 * time.Second))}, check.False},
-		{"changed between the rollout and the failure", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.True},
-		{"changed after the failure", []evidence.ConfigRefView{cm(failedAt.Add(time.Minute))}, check.False},
-		{"doesn't say when", []evidence.ConfigRefView{cm(time.Time{})}, check.Unknown},
-		{"required and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true}}, check.Unknown},
-		{"optional and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true, Optional: true}}, check.False},
-		{"a Secret can't be checked", []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}, check.False},
+		{"nothing referenced", nil, check.False, ""},
+		{"changed before the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(-time.Hour))}, check.False, ""},
+		{"written with the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(30 * time.Second))}, check.False, ""},
+		{"changed between the rollout and the failure", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.True, ""},
+		{"changed after the failure", []evidence.ConfigRefView{cm(failedAt.Add(time.Minute))}, check.False, ""},
+		{"doesn't say when", []evidence.ConfigRefView{cm(time.Time{})}, check.Unknown, ""},
+		{"required and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true}}, check.Unknown, ""},
+		{"optional and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true, Optional: true}}, check.False, ""},
+		{"a Secret can't be checked", []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}, check.False, "1 referenced Secret(s) can't be checked"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -281,23 +282,14 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 				item(t, "h", evidence.RolloutHistory, history()),
 				item(t, "p", evidence.PodStates, crashed),
 			}}
-			if got := check.ConfigChangedBeforeFailure(b); got.Value != tt.want {
+			got := check.ConfigChangedBeforeFailure(b)
+			if got.Value != tt.want {
 				t.Errorf("value = %s (%s), want %s", got.Value, got.Reason, tt.want)
 			}
+			if !strings.Contains(got.Reason, tt.reason) {
+				t.Errorf("reason = %q, want it to say %q", got.Reason, tt.reason)
+			}
 		})
-	}
-}
-
-func TestConfigChangedBeforeFailure_SaysSecretsCannotBeChecked(t *testing.T) {
-	b := evidence.Bundle{Items: []evidence.Item{
-		item(t, "cfg", evidence.ReferencedConfig, evidence.ReferencedConfigView{Refs: []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}}),
-		item(t, "h", evidence.RolloutHistory, history()),
-		item(t, "p", evidence.PodStates, evidence.PodStatesView{Pods: []evidence.PodView{{Name: "p", Revision: "2", Containers: []evidence.ContainerView{
-			{Name: "app", LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: now}},
-		}}}}),
-	}}
-	if got := check.ConfigChangedBeforeFailure(b); !strings.Contains(got.Reason, "1 referenced Secret(s) can't be checked") {
-		t.Errorf("reason = %q", got.Reason)
 	}
 }
 

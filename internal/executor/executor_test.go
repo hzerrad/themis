@@ -168,9 +168,11 @@ func TestExecute_RestoresPriorTemplate(t *testing.T) {
 	}
 }
 
-// A second delivery of the same execution writes nothing more.
+// A second delivery of the same execution writes nothing more, and reports
+// the recorded outcome uncounted.
 func TestExecute_Twice_WritesOnce(t *testing.T) {
 	e, a := approved(t)
+	succeeded := actions(t, "succeeded")
 	x := e.executor(k8s.Client)
 	first, err := x.Execute(t.Context(), a.ID)
 	if err != nil {
@@ -183,6 +185,9 @@ func TestExecute_Twice_WritesOnce(t *testing.T) {
 	}
 	if second != first || deployment(t, e.target.Namespace).Generation != gen {
 		t.Errorf("second execution = %+v, generation moved from %d", second, gen)
+	}
+	if got := succeeded(); got != 1 {
+		t.Errorf("counted %v successes, want 1", got)
 	}
 }
 
@@ -263,12 +268,19 @@ func failing(t *testing.T, dryRun bool, err error) client.Client {
 
 func TestExecute_DryRunFailure_NoWrite(t *testing.T) {
 	e, a := approved(t)
+	dryRun, failed := actions(t, "dry_run_failed"), actions(t, "failed")
 	res, err := e.executor(failing(t, true, errors.New("admission webhook denied the request"))).Execute(t.Context(), a.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.Status != executor.Failed || e.image(t) != "example/checkout:2.4.0" {
 		t.Errorf("result = %+v, image = %s", res, e.image(t))
+	}
+	if got := dryRun(); got != 1 {
+		t.Errorf("counted %v dry-run failures, want 1", got)
+	}
+	if got := failed(); got != 0 {
+		t.Errorf("counted %v other failures, want 0", got)
 	}
 }
 
@@ -342,35 +354,6 @@ func TestExecutor_LogsCarryTheRecordsIncidentID(t *testing.T) {
 func actions(t *testing.T, result string) func() float64 {
 	t.Helper()
 	return metrictest.Delta(t, "themis_actions_total", map[string]string{"capability": "deployment.rollback-to-revision", "result": result})
-}
-
-// An action runs once: a repeated call reports the recorded outcome, uncounted.
-func TestMetrics_ActionCountedOnce(t *testing.T) {
-	e, a := approved(t)
-	succeeded := actions(t, "succeeded")
-	x := e.executor(k8s.Client)
-	for range 2 {
-		if _, err := x.Execute(t.Context(), a.ID); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got := succeeded(); got != 1 {
-		t.Errorf("counted %v successes, want 1", got)
-	}
-}
-
-func TestMetrics_DryRunFailureCounted(t *testing.T) {
-	e, a := approved(t)
-	dryRun, failed := actions(t, "dry_run_failed"), actions(t, "failed")
-	if _, err := e.executor(failing(t, true, errors.New("admission webhook denied the request"))).Execute(t.Context(), a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if got := dryRun(); got != 1 {
-		t.Errorf("counted %v dry-run failures, want 1", got)
-	}
-	if got := failed(); got != 0 {
-		t.Errorf("counted %v other failures, want 0", got)
-	}
 }
 
 // restorePlanned applies a, which doesn't help, and has governance plan

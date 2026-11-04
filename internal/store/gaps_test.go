@@ -89,6 +89,7 @@ func TestEvidenceGaps_OncePerLeaseTemplateAndCause(t *testing.T) {
 	s, _ := newStore(t)
 	id := investigating(t, s)
 	inv, _ := lease(t, s, t0)
+	counted := metrictest.Delta(t, "themis_missing_evidence_total", map[string]string{"template": evidence.TargetEvents, "cause": string(evidence.GapBudgetSpent)})
 	for range 3 {
 		insertGap(t, s, store.EvidenceGap{IncidentID: id, LeaseID: inv.LeaseID, Template: evidence.TargetEvents, Cause: evidence.GapBudgetSpent, At: t0})
 	}
@@ -98,16 +99,6 @@ func TestEvidenceGaps_OncePerLeaseTemplateAndCause(t *testing.T) {
 	}
 	if gaps, err := s.EvidenceGaps(t.Context(), id); err != nil || len(gaps) != 3 {
 		t.Errorf("got %d gaps, %v; want one per lease, template and cause: 3", len(gaps), err)
-	}
-}
-
-// Each thing missed is counted once, when it is first recorded.
-func TestMetrics_MissingEvidenceCountedOnce(t *testing.T) {
-	s, _ := newStore(t)
-	id := investigating(t, s)
-	counted := metrictest.Delta(t, "themis_missing_evidence_total", map[string]string{"template": evidence.TargetEvents, "cause": string(evidence.GapExpired)})
-	for range 2 {
-		insertGap(t, s, store.EvidenceGap{IncidentID: id, Template: evidence.TargetEvents, Cause: evidence.GapExpired, At: t0})
 	}
 	if got := counted(); got != 1 {
 		t.Errorf("counted %v, want 1", got)

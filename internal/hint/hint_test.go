@@ -70,27 +70,29 @@ func TestMessages_AgreeInNumber(t *testing.T) {
 	}
 }
 
-func TestRemedy_ForbiddenNamesTheNamespace(t *testing.T) {
+// Each message tells the operator what to change, in their own settings.
+func TestRemedy(t *testing.T) {
 	away := checkout
 	away.Target.Namespace = "billing"
-	if m := writer.Message(away, store.EvidenceGap{Template: evidence.RolloutHistory, Cause: evidence.GapForbidden}); !strings.Contains(m, "add billing to enrolledNamespaces") {
-		t.Errorf("not enrolled: %q", m)
+	tests := []struct {
+		name     string
+		incident store.Incident
+		cause    evidence.GapCause
+		template string
+		want     string
+	}{
+		{"forbidden, not enrolled", away, evidence.GapForbidden, evidence.RolloutHistory, "add billing to enrolledNamespaces"},
+		{"forbidden, enrolled", checkout, evidence.GapForbidden, evidence.RolloutHistory, "Check the Role Themis has in shop"},
+		{"not in the profile names the profile", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "rollout-regression profile"},
+		{"not in the profile names the template", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "add container_logs_tail to that profile's evidence.allowed"},
+		{"budget uses the profile's limit", checkout, evidence.GapBudgetSpent, evidence.ContainerLogsTail, "all 2 of its evidence requests"},
 	}
-	if m := message(evidence.GapForbidden, evidence.RolloutHistory); !strings.Contains(m, "Check the Role Themis has in shop") {
-		t.Errorf("enrolled but forbidden: %q", m)
-	}
-}
-
-func TestRemedy_NotInProfileNamesTheTemplateAndProfile(t *testing.T) {
-	m := message(evidence.GapNotInProfile, evidence.ContainerLogsTail)
-	if !strings.Contains(m, "rollout-regression profile") || !strings.Contains(m, "add container_logs_tail to that profile's evidence.allowed") {
-		t.Errorf("%q", m)
-	}
-}
-
-func TestRemedy_BudgetUsesTheProfilesLimit(t *testing.T) {
-	if m := message(evidence.GapBudgetSpent, evidence.ContainerLogsTail); !strings.Contains(m, "all 2 of its evidence requests") {
-		t.Errorf("%q", m)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if m := writer.Message(tt.incident, store.EvidenceGap{Template: tt.template, Cause: tt.cause}); !strings.Contains(m, tt.want) {
+				t.Errorf("%q, want it to say %q", m, tt.want)
+			}
+		})
 	}
 }
 

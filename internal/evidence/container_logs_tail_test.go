@@ -47,13 +47,17 @@ func collectLogs(t *testing.T, logs fakeLogs, target incident.TargetRef, params 
 }
 
 // Without parameters, the logs are those of the pod needing attention, from
-// the run that crashed.
+// the run that crashed. Logs are sensitive, whatever they hold.
 func TestLogsTail_DefaultsToTheCrashedRunOfTheWorstPod(t *testing.T) {
 	logs := fakeLogs{
 		"checkout-7d9f8b6c4-x2kqp/app/previous": "loading catalog into memory\n",
 		"checkout-5c6a1e2f3-a1b2c/app":          "serving\n",
 	}
-	data := string(collectLogs(t, logs, loadScenario1(t), nil).Data)
+	item := collectLogs(t, logs, loadScenario1(t), nil)
+	if item.Classification != evidence.ClassificationSensitive {
+		t.Errorf("Classification = %q, want sensitive", item.Classification)
+	}
+	data := string(item.Data)
 	if !strings.Contains(data, "loading catalog into memory") {
 		t.Errorf("Data lacks the crashed run's logs: %s", data)
 	}
@@ -108,13 +112,6 @@ func TestLogsTail_TruncatesAndKeepsUTF8(t *testing.T) {
 	}
 	if !strings.Contains(string(item.Data), "the last line") {
 		t.Error("the tail was not kept")
-	}
-}
-
-func TestLogsTail_IsSensitive(t *testing.T) {
-	logs := fakeLogs{"checkout-7d9f8b6c4-x2kqp/app/previous": "x\n"}
-	if c := collectLogs(t, logs, loadScenario1(t), nil).Classification; c != evidence.ClassificationSensitive {
-		t.Errorf("Classification = %q, want sensitive", c)
 	}
 }
 

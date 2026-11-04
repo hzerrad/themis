@@ -16,20 +16,14 @@ func TestMetrics_Notifications(t *testing.T) {
 			s, _ := pgtest.NewStore(t)
 			srv, _ := receiver(t, code)
 			counted := metrictest.Delta(t, "themis_notifications_total", map[string]string{"result": result})
-			_ = (&notification.Worker{Store: s, Config: config.Notifications{Webhook: &config.Webhook{URL: srv.URL}}}).Notify(t.Context(), escalated(t, s))
+			err := (&notification.Worker{Store: s, Config: config.Notifications{Webhook: &config.Webhook{URL: srv.URL}}}).Notify(t.Context(), escalated(t, s))
+			// A failing receiver is retried; River backs off between attempts.
+			if (err == nil) != (result == "delivered") {
+				t.Errorf("Notify = %v, want an error only when delivery failed", err)
+			}
 			if got := counted(); got != 1 {
 				t.Errorf("counted %v, want 1", got)
 			}
 		})
-	}
-}
-
-// Without a webhook there is nothing to count.
-func TestMetrics_NoWebhookCountsNothing(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
-	delivered := metrictest.Delta(t, "themis_notifications_total", map[string]string{"result": "delivered"})
-	_ = (&notification.Worker{Store: s}).Notify(t.Context(), escalated(t, s))
-	if got := delivered(); got != 0 {
-		t.Errorf("counted %v, want 0", got)
 	}
 }

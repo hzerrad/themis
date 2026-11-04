@@ -56,55 +56,34 @@ func TestTerminalStates(t *testing.T) {
 	if got := len(incident.TerminalStates()); got != len(want) {
 		t.Errorf("len(TerminalStates()) = %d, want %d", got, len(want))
 	}
-}
-
-func TestTerminalStatesReturnsCopy(t *testing.T) {
 	incident.TerminalStates()[0] = incident.Received
 	if incident.Received.Terminal() {
-		t.Fatal("mutating the result of TerminalStates() changed Terminal()")
+		t.Error("mutating the result of TerminalStates() changed Terminal()")
 	}
 }
 
-func TestCanTransition_RejectsSkippingGovernance(t *testing.T) {
-	skips := [][2]incident.State{
-		{incident.Proposed, incident.Executing},
-		{incident.Diagnosed, incident.Authorized},
-		{incident.Diagnosed, incident.Executing},
-		{incident.AwaitingApproval, incident.Executing},
-		{incident.Investigating, incident.Proposed},
-		{incident.Received, incident.Executing},
-	}
-	for _, p := range skips {
-		if incident.CanTransition(p[0], p[1]) {
-			t.Errorf("CanTransition(%s, %s) = true, want false", p[0], p[1])
-		}
-	}
-}
-
-func TestCanTransition_HappyPath(t *testing.T) {
-	path := []incident.State{
-		incident.Received,
-		incident.Investigating,
-		incident.Diagnosed,
-		incident.Proposed,
-		incident.AwaitingApproval,
-		incident.Authorized,
-		incident.Executing,
-		incident.Verifying,
-		incident.Resolved,
-	}
-	for i := 1; i < len(path); i++ {
-		if !incident.CanTransition(path[i-1], path[i]) {
-			t.Errorf("CanTransition(%s, %s) = false, want true", path[i-1], path[i])
-		}
-	}
-}
-
-func TestCanTransition_SideExits(t *testing.T) {
+func TestCanTransition(t *testing.T) {
 	tests := []struct {
 		from, to incident.State
 		want     bool
 	}{
+		// The happy path.
+		{incident.Received, incident.Investigating, true},
+		{incident.Investigating, incident.Diagnosed, true},
+		{incident.Diagnosed, incident.Proposed, true},
+		{incident.Proposed, incident.AwaitingApproval, true},
+		{incident.AwaitingApproval, incident.Authorized, true},
+		{incident.Authorized, incident.Executing, true},
+		{incident.Executing, incident.Verifying, true},
+		{incident.Verifying, incident.Resolved, true},
+		// Nothing skips governance.
+		{incident.Proposed, incident.Executing, false},
+		{incident.Diagnosed, incident.Authorized, false},
+		{incident.Diagnosed, incident.Executing, false},
+		{incident.AwaitingApproval, incident.Executing, false},
+		{incident.Investigating, incident.Proposed, false},
+		{incident.Received, incident.Executing, false},
+		// Side exits.
 		{incident.AwaitingApproval, incident.Recommended, true}, // denied
 		{incident.AwaitingApproval, incident.Escalated, true},   // approval expired
 		{incident.Proposed, incident.Authorized, true},          // policy allows without approval
@@ -124,6 +103,18 @@ func TestCanTransition_SideExits(t *testing.T) {
 		{incident.AwaitingSuggestion, incident.Authorized, false},
 		{incident.AwaitingSuggestion, incident.Investigating, false},
 		{incident.Investigating, incident.AwaitingSuggestion, false},
+		// A fix that didn't help is put back, and the incident then goes to a
+		// person. While Themis is putting it back, a write is in flight:
+		// nothing cancels it.
+		{incident.Verifying, incident.Restoring, true},
+		{incident.Restoring, incident.Escalated, true},
+		{incident.Restoring, incident.Canceled, false},
+		{incident.Restoring, incident.SelfResolved, false},
+		{incident.Restoring, incident.Resolved, false},
+		{incident.Restoring, incident.Verifying, false},
+		// Unknown states.
+		{"bogus", incident.Investigating, false},
+		{incident.Received, "bogus", false},
 	}
 	for _, tt := range tests {
 		if got := incident.CanTransition(tt.from, tt.to); got != tt.want {
@@ -132,26 +123,14 @@ func TestCanTransition_SideExits(t *testing.T) {
 	}
 }
 
-func TestCanTransition_UnknownStates(t *testing.T) {
-	if incident.CanTransition("bogus", incident.Investigating) {
-		t.Error("transition from an unknown state was allowed")
-	}
-	if incident.CanTransition(incident.Received, "bogus") {
-		t.Error("transition to an unknown state was allowed")
-	}
-}
-
+// Terminal states have no way out, every other state has one, and no
+// transition leaves a state as it was.
 func TestGraph_TerminalIffNoOutgoingEdges(t *testing.T) {
 	for _, s := range allStates {
 		hasOut := len(successors(s)) > 0
 		if s.Terminal() == hasOut {
 			t.Errorf("%s: Terminal() = %v but has outgoing edges = %v", s, s.Terminal(), hasOut)
 		}
-	}
-}
-
-func TestGraph_NoSelfLoops(t *testing.T) {
-	for _, s := range allStates {
 		if incident.CanTransition(s, s) {
 			t.Errorf("%s -> %s is allowed; a transition must change state", s, s)
 		}
@@ -226,21 +205,5 @@ func TestStates_ListsEveryState(t *testing.T) {
 	}
 	if n := len(incident.States()); n != 19 {
 		t.Errorf("%d states, want 19: update States when adding one", n)
-	}
-}
-
-// A fix that didn't help is put back, and the incident then goes to a person.
-// While Themis is putting it back, a write is in flight: nothing cancels it.
-func TestRestoring(t *testing.T) {
-	if !incident.CanTransition(incident.Verifying, incident.Restoring) || !incident.CanTransition(incident.Restoring, incident.Escalated) {
-		t.Error("verifying → restoring → escalated is not allowed")
-	}
-	for _, to := range []incident.State{incident.Canceled, incident.SelfResolved, incident.Resolved, incident.Verifying} {
-		if incident.CanTransition(incident.Restoring, to) {
-			t.Errorf("restoring → %s is allowed", to)
-		}
-	}
-	if incident.Restoring.Terminal() {
-		t.Error("restoring is terminal")
 	}
 }

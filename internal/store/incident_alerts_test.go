@@ -56,78 +56,82 @@ func alertStatus(t *testing.T, pool *pgxpool.Pool, incidentID, sourceID string) 
 	return status
 }
 
-func TestResolveAlert_LastAlertLeavesNoneFiring(t *testing.T) {
-	s, pool := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-1"))
-	fire(t, s, id, "a", episode1)
-
-	got := resolveAlert(t, s, "a", episode1)
-
-	if len(got) != 1 || got[0].IncidentID != id || got[0].State != incident.Received || got[0].Firing != 0 {
-		t.Fatalf("ResolveAlert = %+v, want incident %s in received with 0 firing", got, id)
-	}
-	if st := alertStatus(t, pool, id, "a"); st != "resolved" {
-		t.Errorf("alert status = %s, want resolved", st)
-	}
+// alertStep fires or resolves an alert of one episode.
+type alertStep struct {
+	resolve bool
+	alert   string
+	episode time.Time
 }
 
-// One pod recovering does not leave the incident without firing alerts while
-// another pod still fails.
-func TestResolveAlert_OtherAlertsStillFiring(t *testing.T) {
-	s, _ := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-1"))
-	fire(t, s, id, "a", episode1)
-	fire(t, s, id, "b", episode1)
-
-	got := resolveAlert(t, s, "a", episode1)
-
-	if len(got) != 1 || got[0].Firing != 1 {
-		t.Fatalf("ResolveAlert = %+v, want 1 alert still firing", got)
-	}
+func firing(alert string, episode time.Time) alertStep {
+	return alertStep{alert: alert, episode: episode}
 }
 
-// The resolution of a past episode does not end the current one.
-func TestResolveAlert_StaleResolutionIgnored(t *testing.T) {
-	s, pool := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-1"))
-	fire(t, s, id, "a", episode2)
-
-	got := resolveAlert(t, s, "a", episode1)
-
-	if len(got) != 1 || got[0].Firing != 1 {
-		t.Fatalf("ResolveAlert = %+v, want the alert still firing", got)
-	}
-	if st := alertStatus(t, pool, id, "a"); st != "firing" {
-		t.Errorf("alert status = %s, want firing", st)
-	}
+func resolving(alert string, episode time.Time) alertStep {
+	return alertStep{resolve: true, alert: alert, episode: episode}
 }
 
-// A firing notification that arrives after the resolution of the same episode
-// does not revive it.
-func TestRecordFiringAlert_LateFiringIgnored(t *testing.T) {
-	s, pool := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-1"))
-	fire(t, s, id, "a", episode1)
-	resolveAlert(t, s, "a", episode1)
-
-	fire(t, s, id, "a", episode1)
-
-	if st := alertStatus(t, pool, id, "a"); st != "resolved" {
-		t.Errorf("alert status = %s, want resolved", st)
-	}
-}
-
-// A new episode of the same alert fires again.
-func TestRecordFiringAlert_NewEpisodeFires(t *testing.T) {
-	s, pool := newStore(t)
-	id, _ := createOrJoin(t, s, newIncident("fp-1"))
-	fire(t, s, id, "a", episode1)
-	resolveAlert(t, s, "a", episode1)
-
-	fire(t, s, id, "a", episode2)
-
-	if st := alertStatus(t, pool, id, "a"); st != "firing" {
-		t.Errorf("alert status = %s, want firing", st)
+// An alert's status follows its episodes, and a resolution reports what is
+// still firing on its incident.
+func TestAlert_Lifecycle(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		steps     []alertStep
+		incidents int    // incidents the last resolution returns
+		firing    int    // alerts still firing on it
+		status    string // alert a's status at the end, if it has one
+	}{{
+		name:      "the last alert resolved leaves none firing",
+		steps:     []alertStep{firing("a", episode1), resolving("a", episode1)},
+		incidents: 1, firing: 0, status: "resolved",
+	}, {
+		// One pod recovering does not leave the incident without firing alerts
+		// while another pod still fails.
+		name:      "other alerts still firing",
+		steps:     []alertStep{firing("a", episode1), firing("b", episode1), resolving("a", episode1)},
+		incidents: 1, firing: 1, status: "resolved",
+	}, {
+		// The resolution of a past episode does not end the current one.
+		name:      "a stale resolution is ignored",
+		steps:     []alertStep{firing("a", episode2), resolving("a", episode1)},
+		incidents: 1, firing: 1, status: "firing",
+	}, {
+		// A firing notification that arrives after the resolution of the same
+		// episode does not revive it.
+		name:      "a late firing is ignored",
+		steps:     []alertStep{firing("a", episode1), resolving("a", episode1), firing("a", episode1)},
+		incidents: 1, firing: 0, status: "resolved",
+	}, {
+		name:      "a new episode fires again",
+		steps:     []alertStep{firing("a", episode1), resolving("a", episode1), firing("a", episode2)},
+		incidents: 1, firing: 0, status: "firing",
+	}, {
+		name:  "an unknown alert resolves nothing",
+		steps: []alertStep{resolving("never-seen", episode1)},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, pool := newStore(t)
+			id, _ := createOrJoin(t, s, newIncident("fp-1"))
+			var got []store.AlertIncident
+			for _, st := range tc.steps {
+				if st.resolve {
+					got = resolveAlert(t, s, st.alert, st.episode)
+				} else {
+					fire(t, s, id, st.alert, st.episode)
+				}
+			}
+			if len(got) != tc.incidents {
+				t.Fatalf("ResolveAlert = %+v, want %d incidents", got, tc.incidents)
+			}
+			if tc.incidents == 1 && (got[0].IncidentID != id || got[0].State != incident.Received || got[0].Firing != tc.firing) {
+				t.Errorf("ResolveAlert = %+v, want incident %s in received with %d firing", got, id, tc.firing)
+			}
+			if tc.status != "" {
+				if st := alertStatus(t, pool, id, "a"); st != tc.status {
+					t.Errorf("alert status = %s, want %s", st, tc.status)
+				}
+			}
+		})
 	}
 }
 
@@ -139,14 +143,6 @@ func TestResolveAlert_IgnoresTerminalIncidents(t *testing.T) {
 	advance(t, s, id, incident.Received, incident.Canceled)
 
 	if got := resolveAlert(t, s, "a", episode1); len(got) != 0 {
-		t.Errorf("ResolveAlert = %+v, want no incidents", got)
-	}
-}
-
-func TestResolveAlert_UnknownAlert(t *testing.T) {
-	s, _ := newStore(t)
-
-	if got := resolveAlert(t, s, "never-seen", episode1); len(got) != 0 {
 		t.Errorf("ResolveAlert = %+v, want no incidents", got)
 	}
 }

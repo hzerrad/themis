@@ -30,46 +30,33 @@ func lines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	return out
 }
 
+// A context's fields reach its children, never its parent or its siblings.
 func TestLogger_AddsContextFields(t *testing.T) {
 	var buf bytes.Buffer
 	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo)
 
 	ctx := telemetry.WithAttrs(context.Background(), slog.String(telemetry.FieldIncidentID, "inc-1"))
 	nested := telemetry.WithAttrs(ctx, slog.String(telemetry.FieldActionID, "act-1"))
+	sibling := telemetry.WithAttrs(ctx, slog.String(telemetry.FieldActionID, "act-2"))
 	log.InfoContext(ctx, "first")
 	log.InfoContext(nested, "second")
 	log.InfoContext(ctx, "third")
+	log.InfoContext(sibling, "fourth")
 
 	got := lines(t, &buf)
-	if len(got) != 3 {
-		t.Fatalf("got %d lines, want 3", len(got))
+	if len(got) != 4 {
+		t.Fatalf("got %d lines, want 4", len(got))
 	}
 	for i, l := range got {
 		if l[telemetry.FieldIncidentID] != "inc-1" {
 			t.Errorf("line %d: incident_id = %v, want inc-1", i, l[telemetry.FieldIncidentID])
 		}
 	}
-	if got[1][telemetry.FieldActionID] != "act-1" {
-		t.Errorf("nested line: action_id = %v, want act-1", got[1][telemetry.FieldActionID])
+	if got[1][telemetry.FieldActionID] != "act-1" || got[3][telemetry.FieldActionID] != "act-2" {
+		t.Errorf("action_id = %v, %v; want act-1, act-2", got[1][telemetry.FieldActionID], got[3][telemetry.FieldActionID])
 	}
 	if _, ok := got[2][telemetry.FieldActionID]; ok {
 		t.Error("the nested context's field leaked to its parent")
-	}
-}
-
-func TestLogger_SiblingContextsDoNotShareFields(t *testing.T) {
-	var buf bytes.Buffer
-	log := telemetry.NewLogger(&buf, "core", slog.LevelInfo)
-
-	parent := telemetry.WithAttrs(context.Background(), slog.String(telemetry.FieldIncidentID, "inc-1"))
-	a := telemetry.WithAttrs(parent, slog.String(telemetry.FieldActionID, "a"))
-	b := telemetry.WithAttrs(parent, slog.String(telemetry.FieldActionID, "b"))
-	log.InfoContext(a, "a")
-	log.InfoContext(b, "b")
-
-	got := lines(t, &buf)
-	if got[0][telemetry.FieldActionID] != "a" || got[1][telemetry.FieldActionID] != "b" {
-		t.Errorf("action_id = %v, %v; want a, b", got[0][telemetry.FieldActionID], got[1][telemetry.FieldActionID])
 	}
 }
 
@@ -112,15 +99,21 @@ func TestLogger_AddsTraceIDs_OnlyWithActiveSpan(t *testing.T) {
 	}
 }
 
+// Every line names its component, and lines below the level are dropped.
 func TestLogger_Component_OnEveryLine(t *testing.T) {
 	var buf bytes.Buffer
 	log := telemetry.NewLogger(&buf, "executor", slog.LevelInfo)
 
+	log.Debug("hidden")
 	log.Info("plain")
 	log.InfoContext(context.Background(), "with context")
 	log.With("key", "value").Warn("derived")
 
-	for i, l := range lines(t, &buf) {
+	got := lines(t, &buf)
+	if len(got) != 3 {
+		t.Fatalf("got %d lines, want 3 without the debug line", len(got))
+	}
+	for i, l := range got {
 		if l[telemetry.FieldComponent] != "executor" {
 			t.Errorf("line %d: component = %v, want executor", i, l[telemetry.FieldComponent])
 		}
@@ -136,22 +129,5 @@ func TestLogger_With_KeepsContextFields(t *testing.T) {
 	got := lines(t, &buf)[0]
 	if got[telemetry.FieldIncidentID] != "inc-1" || got["key"] != "value" {
 		t.Errorf("got %v, want incident_id and key", got)
-	}
-}
-
-func TestLogger_DropsLinesBelowLevel(t *testing.T) {
-	var level slog.Level
-	if err := level.UnmarshalText([]byte("info")); err != nil {
-		t.Fatal(err)
-	}
-	var buf bytes.Buffer
-	log := telemetry.NewLogger(&buf, "core", level)
-
-	log.Debug("hidden")
-	log.Info("shown")
-
-	got := lines(t, &buf)
-	if len(got) != 1 || got[0][slog.MessageKey] != "shown" {
-		t.Errorf("got %v, want only the info line", got)
 	}
 }

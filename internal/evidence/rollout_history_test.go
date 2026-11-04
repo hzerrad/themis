@@ -24,57 +24,59 @@ func collectRolloutHistory(t *testing.T, target incident.TargetRef) evidence.Ite
 	return item
 }
 
-func TestRolloutHistory_DescribesEveryRevisionOfTheTarget(t *testing.T) {
+// One collection of scenario 1, where revision 2 lowered the memory limit.
+func TestRolloutHistory_Scenario1(t *testing.T) {
+	before := time.Now().Add(-time.Minute)
 	item := collectRolloutHistory(t, loadScenario1(t))
-	tests := map[string]string{
-		"checkout-5c6a1e2f3": "1",
-		"checkout-7d9f8b6c4": "2",
-	}
-	for rs, want := range tests {
-		if got := revisionOf(t, objectNamed(t, item.Data, rs)); got != want {
-			t.Errorf("revision of %s = %s, want %s", rs, got, want)
-		}
-	}
-	if strings.Contains(string(item.Data), "cart-") {
-		t.Error("Data describes another workload")
-	}
-	if item.Truncated {
-		t.Error("Truncated = true for 2 revisions")
-	}
-}
 
-// The memory limit is what changed between the revisions: it is the clue.
-func TestRolloutHistory_RecordsEachRevisionsTemplate(t *testing.T) {
-	item := collectRolloutHistory(t, loadScenario1(t))
-	tests := map[string][]string{
-		"checkout-5c6a1e2f3": {"example/checkout:2.3.1", "256Mi"},
-		"checkout-7d9f8b6c4": {"example/checkout:2.4.0", "64Mi"},
-	}
-	for rs, wants := range tests {
-		obj := objectNamed(t, item.Data, rs)
-		for _, want := range wants {
-			if !contains(obj, want) {
-				t.Errorf("%s lacks %s: %v", rs, want, obj)
+	// The memory limit is what changed between the revisions: it is the clue.
+	t.Run("describes every revision of the target and its template", func(t *testing.T) {
+		for rs, want := range map[string]struct {
+			revision string
+			template []string
+		}{
+			"checkout-5c6a1e2f3": {"1", []string{"example/checkout:2.3.1", "256Mi"}},
+			"checkout-7d9f8b6c4": {"2", []string{"example/checkout:2.4.0", "64Mi"}},
+		} {
+			obj := objectNamed(t, item.Data, rs)
+			if got := revisionOf(t, obj); got != want.revision {
+				t.Errorf("revision of %s = %s, want %s", rs, got, want.revision)
+			}
+			for _, s := range want.template {
+				if !contains(obj, s) {
+					t.Errorf("%s lacks %s: %v", rs, s, obj)
+				}
 			}
 		}
-	}
-}
-
-func TestRolloutHistory_RecordsTheRolloutsProgress(t *testing.T) {
-	item := collectRolloutHistory(t, loadScenario1(t))
-	if !strings.Contains(string(item.Data), "ProgressDeadlineExceeded") {
-		t.Errorf("Data lacks the Progressing condition: %s", item.Data)
-	}
-}
-
-// ReplicaSet templates carry the same environment as pods.
-func TestRolloutHistory_LeaksNoEnvironment(t *testing.T) {
-	item := collectRolloutHistory(t, loadScenario1(t))
-	for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "DB_PASSWORD"} {
-		if strings.Contains(string(item.Data), leak) {
-			t.Errorf("Data contains %s", leak)
+		if strings.Contains(string(item.Data), "cart-") {
+			t.Error("Data describes another workload")
 		}
-	}
+		if item.Truncated {
+			t.Error("Truncated = true for 2 revisions")
+		}
+	})
+
+	t.Run("records the rollout's progress and when the template changed", func(t *testing.T) {
+		if !strings.Contains(string(item.Data), "ProgressDeadlineExceeded") {
+			t.Errorf("Data lacks the Progressing condition: %s", item.Data)
+		}
+		var view evidence.RolloutHistoryView
+		if err := json.Unmarshal(item.Data, &view); err != nil {
+			t.Fatal(err)
+		}
+		if view.Deployment.TemplateChangedAt.Before(before) {
+			t.Errorf("TemplateChangedAt = %v, want the time the fixture was written", view.Deployment.TemplateChangedAt)
+		}
+	})
+
+	// ReplicaSet templates carry the same environment as pods.
+	t.Run("leaks no environment", func(t *testing.T) {
+		for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "DB_PASSWORD"} {
+			if strings.Contains(string(item.Data), leak) {
+				t.Errorf("Data contains %s", leak)
+			}
+		}
+	})
 }
 
 func TestRolloutHistory_TimesAreUTC(t *testing.T) {
@@ -132,24 +134,17 @@ func TestRolloutHistory_BoundsRevisionsKeepingTheNewest(t *testing.T) {
 	}
 }
 
-// A rollback renumbers the old ReplicaSet and records its former revisions.
-func TestRolloutHistory_RecordsRevisionHistory(t *testing.T) {
+// A ReplicaSet without a revision is still listed. A rollback renumbers the
+// old ReplicaSet and records its former revisions.
+func TestRolloutHistory_ReplicaSetWithoutRevision(t *testing.T) {
 	d := k8s.NewDeployment(t, k8s.NewNamespace(t), "checkout")
 	newReplicaSetAt(t, d, "checkout-rolled-back", "5", map[string]string{"deployment.kubernetes.io/revision-history": "1,3"})
+	k8s.NewReplicaSet(t, d.Namespace, "checkout-unnumbered", kubetest.RefTo(d, "apps/v1", "Deployment"))
 
 	item := collectRolloutHistory(t, deploymentTarget(d))
 	if obj := objectNamed(t, item.Data, "checkout-rolled-back"); !contains(obj, "1,3") {
 		t.Errorf("the revision history is missing: %v", obj)
 	}
-}
-
-func TestRolloutHistory_ReplicaSetWithoutRevision(t *testing.T) {
-	d := k8s.NewDeployment(t, k8s.NewNamespace(t), "checkout")
-	newReplicaSetAt(t, d, "checkout-2", "2", nil)
-	k8s.NewReplicaSet(t, d.Namespace, "checkout-unnumbered", kubetest.RefTo(d, "apps/v1", "Deployment"))
-
-	item := collectRolloutHistory(t, deploymentTarget(d))
-	objectNamed(t, item.Data, "checkout-2")
 	objectNamed(t, item.Data, "checkout-unnumbered")
 }
 
@@ -175,17 +170,5 @@ func TestRolloutHistory_RecordsOwnershipMarkers(t *testing.T) {
 	}
 	if strings.Contains(data, "fixture-s3cr3t-do-not-leak") {
 		t.Error("Data contains the last applied configuration")
-	}
-}
-
-func TestRolloutHistory_RecordsWhenTheTemplateChanged(t *testing.T) {
-	before := time.Now().Add(-time.Minute)
-	item := collectRolloutHistory(t, loadScenario1(t))
-	var view evidence.RolloutHistoryView
-	if err := json.Unmarshal(item.Data, &view); err != nil {
-		t.Fatal(err)
-	}
-	if view.Deployment.TemplateChangedAt.Before(before) {
-		t.Errorf("TemplateChangedAt = %v, want the time the fixture was written", view.Deployment.TemplateChangedAt)
 	}
 }

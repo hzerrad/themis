@@ -98,38 +98,7 @@ func TestCreateOrJoin_CreatesReceivedIncident(t *testing.T) {
 	if n := count(t, pool, "SELECT count(*) FROM occurrences WHERE incident_id = $1", id); n != 1 {
 		t.Errorf("occurrence rows = %d, want 1", n)
 	}
-}
-
-func TestCreateOrJoin_DedupesNonTerminal(t *testing.T) {
-	s, pool := newStore(t)
-
-	id1, created1 := createOrJoin(t, s, newIncident("fp-1"))
-	id2, created2 := createOrJoin(t, s, newIncident("fp-1"))
-
-	if id1 != id2 {
-		t.Errorf("ids differ: %s and %s", id1, id2)
-	}
-	if !created1 || created2 {
-		t.Errorf("created = %v then %v, want true then false", created1, created2)
-	}
-	if n := count(t, pool, "SELECT occurrence_count FROM incidents WHERE id = $1", id1); n != 2 {
-		t.Errorf("occurrence_count = %d, want 2", n)
-	}
-	if n := count(t, pool, "SELECT count(*) FROM occurrences WHERE incident_id = $1", id1); n != 2 {
-		t.Errorf("occurrence rows = %d, want 2", n)
-	}
-	if n := count(t, pool, "SELECT count(*) FROM incidents"); n != 1 {
-		t.Errorf("incidents = %d, want 1", n)
-	}
-}
-
-func TestCreateOrJoin_DifferentFingerprintsAreSeparate(t *testing.T) {
-	s, _ := newStore(t)
-
-	id1, _ := createOrJoin(t, s, newIncident("fp-1"))
-	id2, created := createOrJoin(t, s, newIncident("fp-2"))
-
-	if id1 == id2 || !created {
+	if other, created := createOrJoin(t, s, newIncident("fp-2")); other == id || !created {
 		t.Errorf("fp-2 joined fp-1's incident")
 	}
 }
@@ -192,12 +161,19 @@ func TestCreateOrJoin_ConcurrentSameFingerprint(t *testing.T) {
 	if n := count(t, pool, "SELECT occurrence_count FROM incidents WHERE id = $1", ids[0]); n != workers {
 		t.Errorf("occurrence_count = %d, want %d", n, workers)
 	}
+	if n := count(t, pool, "SELECT count(*) FROM occurrences WHERE incident_id = $1", ids[0]); n != workers {
+		t.Errorf("occurrence rows = %d, want %d", n, workers)
+	}
+	if n := count(t, pool, "SELECT count(*) FROM incidents"); n != 1 {
+		t.Errorf("incidents = %d, want 1", n)
+	}
 }
 
 func TestTransition_WritesAuditRow(t *testing.T) {
 	s, pool := newStore(t)
 	id, _ := createOrJoin(t, s, newIncident("fp-1"))
 	before := time.Now()
+	counted := transitions(t, incident.Received, incident.Investigating)
 
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		return s.Transition(t.Context(), tx, store.TransitionArgs{
@@ -230,6 +206,9 @@ func TestTransition_WritesAuditRow(t *testing.T) {
 	}
 	if at.Before(before.Add(-time.Minute)) || at.After(time.Now().Add(time.Minute)) {
 		t.Errorf("at = %v, want close to now", at)
+	}
+	if got := counted(); got != 1 {
+		t.Errorf("counted %v transitions, want 1", got)
 	}
 }
 

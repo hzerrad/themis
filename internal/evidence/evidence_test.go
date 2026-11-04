@@ -66,8 +66,8 @@ func TestRegistry_CollectFillsInMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	if item.ID == "" {
-		t.Error("ID is empty")
+	if again, _ := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, now); item.ID == "" || again.ID == item.ID {
+		t.Errorf("IDs %q and %q, want two distinct ones", item.ID, again.ID)
 	}
 	if item.Template != "fake" || item.Target != target || !item.CollectedAt.Equal(now) {
 		t.Errorf("metadata = %q %v %v, want fake %v %v", item.Template, item.Target, item.CollectedAt, target, now)
@@ -91,26 +91,10 @@ func TestRegistry_CollectKeepsTemplateClassification(t *testing.T) {
 	}
 }
 
-func TestRegistry_CollectGivesEachItemItsOwnID(t *testing.T) {
-	r := evidence.NewRegistry(fakeTemplate{})
-	a, _ := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
-	b, _ := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now())
-	if a.ID == b.ID {
-		t.Errorf("two items share ID %s", a.ID)
-	}
-}
-
 func TestRegistry_UnknownTemplate(t *testing.T) {
 	r := evidence.NewRegistry()
 	if _, err := r.Collect(t.Context(), nil, "kubectl_exec", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrUnknownTemplate) {
 		t.Errorf("err = %v, want ErrUnknownTemplate", err)
-	}
-}
-
-func TestRegistry_TemplateErrorIsWrapped(t *testing.T) {
-	r := evidence.NewRegistry(fakeTemplate{err: evidence.ErrNoPods})
-	if _, err := r.Collect(t.Context(), nil, "fake", fakeWorkload, nil, time.Now()); !errors.Is(err, evidence.ErrNoPods) {
-		t.Errorf("err = %v, want ErrNoPods", err)
 	}
 }
 

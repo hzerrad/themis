@@ -1,6 +1,7 @@
 package check_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/hzerrad/themis/internal/check"
@@ -15,50 +16,40 @@ func TestNeeds_CoversEveryCheck(t *testing.T) {
 	}
 }
 
-// A check that couldn't answer because Themis wasn't allowed to read its
-// evidence is blind: the operator can fix that.
-func TestAttribute_UnknownFromForbiddenIsBlind(t *testing.T) {
-	results := check.Attribute(check.Evaluate(evidence.Bundle{}, rolloutAt), []check.Gap{
-		{Template: evidence.RolloutHistory, Cause: evidence.GapForbidden},
-	})
-	for _, r := range results {
-		reads := false
-		for _, n := range check.Needs[r.Name] {
-			reads = reads || n == evidence.RolloutHistory
-		}
-		if r.Blind != reads || (len(r.Gaps) > 0) != reads {
-			t.Errorf("%s: blind = %v, gaps = %v; it reads rollout history: %v", r.Name, r.Blind, r.Gaps, reads)
-		}
+// A check that couldn't answer gets the gaps in the evidence it reads. It is
+// blind when Themis couldn't see that evidence, which the operator can fix,
+// and ambiguous when it was there but did not settle the check.
+func TestAttribute(t *testing.T) {
+	unknown := check.Evaluate(evidence.Bundle{}, rolloutAt)
+	tests := []struct {
+		name    string
+		results []check.Result
+		gap     *check.Gap
+	}{
+		{"forbidden makes its readers blind", unknown, &check.Gap{Template: evidence.RolloutHistory, Cause: evidence.GapForbidden}},
+		{"absent is attached but not blind", unknown, &check.Gap{Template: evidence.PodStates, Cause: evidence.GapAbsent}},
+		{"no gap is ambiguous", unknown, nil},
+		{"an answered check needed nothing it lacked", []check.Result{{Name: check.NameOOMKilledNewRevision, Value: check.True}}, &check.Gap{Template: evidence.PodStates, Cause: evidence.GapTimeout}},
 	}
-}
-
-// A check whose evidence was there but did not settle it is not blind.
-func TestAttribute_UnknownWithoutGapIsAmbiguous(t *testing.T) {
-	for _, r := range check.Attribute(check.Evaluate(evidence.Bundle{}, rolloutAt), nil) {
-		if r.Blind || len(r.Gaps) > 0 {
-			t.Errorf("%s: blind = %v, gaps = %v; want neither", r.Name, r.Blind, r.Gaps)
-		}
-	}
-}
-
-// "Looked, and there was nothing" is attached, but does not make the check
-// blind.
-func TestAttribute_AbsentIsNotBlind(t *testing.T) {
-	results := check.Attribute(check.Evaluate(evidence.Bundle{}, rolloutAt), []check.Gap{
-		{Template: evidence.PodStates, Cause: evidence.GapAbsent},
-	})
-	for _, r := range results {
-		if r.Name == check.NameOOMKilledNewRevision && (r.Blind || len(r.Gaps) != 1) {
-			t.Errorf("%s: blind = %v, gaps = %v; want the absent gap, not blind", r.Name, r.Blind, r.Gaps)
-		}
-	}
-}
-
-// An answered check needed nothing it lacked.
-func TestAttribute_AnsweredChecksGetNoGaps(t *testing.T) {
-	answered := []check.Result{{Name: check.NameOOMKilledNewRevision, Value: check.True}}
-	got := check.Attribute(answered, []check.Gap{{Template: evidence.PodStates, Cause: evidence.GapTimeout}})
-	if got[0].Blind || len(got[0].Gaps) != 0 {
-		t.Errorf("an answered check got gaps: %+v", got[0])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gaps []check.Gap
+			if tt.gap != nil {
+				gaps = []check.Gap{*tt.gap}
+			}
+			for _, r := range check.Attribute(tt.results, gaps) {
+				lacks := tt.gap != nil && r.Value == check.Unknown && slices.Contains(check.Needs[r.Name], tt.gap.Template)
+				want := 0
+				if lacks {
+					want = 1
+				}
+				if len(r.Gaps) != want {
+					t.Errorf("%s: gaps = %v, want %d", r.Name, r.Gaps, want)
+				}
+				if blind := lacks && tt.gap.Cause.Blind(); r.Blind != blind {
+					t.Errorf("%s: blind = %v, want %v", r.Name, r.Blind, blind)
+				}
+			}
+		})
 	}
 }

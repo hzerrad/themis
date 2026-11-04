@@ -26,6 +26,7 @@ import (
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -144,6 +145,12 @@ func (e *env) state(t *testing.T, id string) incident.State {
 	return in.State
 }
 
+// approvals counts the answers to fixes awaiting approval with result.
+func approvals(t *testing.T, result string) func() float64 {
+	t.Helper()
+	return metrictest.Delta(t, "themis_approvals_total", map[string]string{"result": result})
+}
+
 func TestApprove_NoToken_401(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
@@ -160,11 +167,18 @@ func TestApprove_NoToken_401(t *testing.T) {
 func TestApprove_BindsDigest(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
+	mismatch, approved := approvals(t, "digest_mismatch"), approvals(t, "approved")
 	if rec := e.approve(t, a, "sha256:what-the-page-did-not-show"); rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", rec.Code)
 	}
 	if got := e.state(t, a.IncidentID); got != incident.AwaitingApproval {
 		t.Errorf("state = %s, want awaiting_approval", got)
+	}
+	if got := mismatch(); got != 1 {
+		t.Errorf("counted %v digest mismatches, want 1", got)
+	}
+	if got := approved(); got != 0 {
+		t.Errorf("counted %v approvals of a mismatched digest, want 0", got)
 	}
 }
 
@@ -180,11 +194,18 @@ func TestApprove_Expired(t *testing.T) {
 func TestApprove_Twice_SecondFails(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
+	approved, replayed := approvals(t, "approved"), approvals(t, "replayed")
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusOK {
 		t.Fatalf("first approval: status = %d: %s", rec.Code, rec.Body)
 	}
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
 		t.Errorf("second approval: status = %d, want 409", rec.Code)
+	}
+	if got := approved(); got != 1 {
+		t.Errorf("counted %v approvals, want 1", got)
+	}
+	if got := replayed(); got != 1 {
+		t.Errorf("counted %v replays, want 1", got)
 	}
 }
 
@@ -202,16 +223,10 @@ func TestApprove_TransitionsToAuthorizedAndEnqueuesExecute(t *testing.T) {
 	}
 }
 
-func TestApprove_UnknownAction_404(t *testing.T) {
-	e := newEnv(t)
-	if rec := e.do(t, http.MethodPost, "/v1/actions/0192f0c1-0000-7000-8000-0000000000ff/approve", token, map[string]string{"digest": "x"}); rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want 404", rec.Code)
-	}
-}
-
 func TestDeny_ClosesWithoutAction(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
+	denied := approvals(t, "denied")
 	if rec := e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/deny", token, map[string]string{"reason": "not during the sale"}); rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
@@ -220,6 +235,9 @@ func TestDeny_ClosesWithoutAction(t *testing.T) {
 	}
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
 		t.Errorf("approval after denial: status = %d, want 409", rec.Code)
+	}
+	if got := denied(); got != 1 {
+		t.Errorf("counted %v denials, want 1", got)
 	}
 }
 
@@ -247,6 +265,14 @@ func TestIncidentDetail_SeparatesProposalAndDerivedAction(t *testing.T) {
 	}
 	if len(detail.Proposals) != 1 || len(detail.Actions) != 1 || detail.Actions[0].Digest != a.Digest || detail.Actions[0].ProposalID != detail.Proposals[0].ID {
 		t.Errorf("proposals = %+v, actions = %+v", detail.Proposals, detail.Actions)
+	}
+	// The detail shows what MODE changes to, never a secret.
+	body := rec.Body.String()
+	if strings.Contains(body, "s3cret") {
+		t.Error("the detail contains a secret")
+	}
+	if !strings.Contains(body, `"field":"env MODE","before":"leak","after":"healthy"`) {
+		t.Errorf("the detail does not show how MODE changes: %s", body)
 	}
 }
 
@@ -284,30 +310,23 @@ func TestListIncidents(t *testing.T) {
 	}
 }
 
-// Nobody answered: unlike a denial, the incident is still live.
+// Nobody answered: unlike a denial, the incident is still live. A second
+// sweep finds nothing left to expire, so the expiry is counted once.
 func TestExpire_Escalates(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
+	expired := approvals(t, "expired")
 	w := &httpapi.ExpireWorker{Store: e.store, Now: func() time.Time { return now.Add(time.Hour) }}
-	if err := w.Expire(t.Context()); err != nil {
-		t.Fatalf("Expire: %v", err)
+	for range 2 {
+		if err := w.Expire(t.Context()); err != nil {
+			t.Fatalf("Expire: %v", err)
+		}
 	}
 	if got := e.state(t, a.IncidentID); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
 	}
-}
-
-// The detail shows what MODE changes to, never a secret.
-func TestIncidentDetail_ShowsChangesNotTemplates(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	rec := e.do(t, http.MethodGet, "/v1/incidents/"+a.IncidentID, token, nil)
-	body := rec.Body.String()
-	if strings.Contains(body, "s3cret") {
-		t.Error("the detail contains a secret")
-	}
-	if !strings.Contains(body, `"field":"env MODE","before":"leak","after":"healthy"`) {
-		t.Errorf("the detail does not show how MODE changes: %s", body)
+	if got := expired(); got != 1 {
+		t.Errorf("counted %v expiries, want 1", got)
 	}
 }
 
@@ -375,13 +394,14 @@ func TestErrors_ArePlainSentences(t *testing.T) {
 	a := e.awaiting(t)
 	for name, c := range map[string]struct {
 		rec  *httptest.ResponseRecorder
+		code int
 		want string
 	}{
-		"stale digest": {e.approve(t, a, "sha256:stale"), "This fix changed since you opened it. Reload the page and review it again."},
-		"unknown":      {e.do(t, http.MethodPost, "/v1/actions/0192f0c1-0000-7000-8000-0000000000ff/approve", token, map[string]string{"digest": "x"}), "No such incident or fix."},
+		"stale digest": {e.approve(t, a, "sha256:stale"), http.StatusConflict, "This fix changed since you opened it. Reload the page and review it again."},
+		"unknown":      {e.do(t, http.MethodPost, "/v1/actions/0192f0c1-0000-7000-8000-0000000000ff/approve", token, map[string]string{"digest": "x"}), http.StatusNotFound, "No such incident or fix."},
 	} {
-		if got := strings.TrimSpace(c.rec.Body.String()); got != c.want {
-			t.Errorf("%s: body = %q, want %q", name, got, c.want)
+		if got := strings.TrimSpace(c.rec.Body.String()); c.rec.Code != c.code || got != c.want {
+			t.Errorf("%s: %d %q, want %d %q", name, c.rec.Code, got, c.code, c.want)
 		}
 	}
 	e.approve(t, a, a.Digest)

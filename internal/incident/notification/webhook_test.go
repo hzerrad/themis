@@ -18,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -96,20 +97,15 @@ func TestWebhook_PostsTheEscalation(t *testing.T) {
 	}
 }
 
-// A failing receiver is retried; River backs off between attempts.
-func TestWebhook_ReceiverErrorIsRetried(t *testing.T) {
-	s, _ := pgtest.NewStore(t)
-	srv, _ := receiver(t, http.StatusBadGateway)
-	n := &notification.Worker{Store: s, Config: config.Notifications{Webhook: &config.Webhook{URL: srv.URL}}}
-	if err := n.Notify(t.Context(), escalated(t, s)); err == nil {
-		t.Error("a 502 was taken as delivered")
-	}
-}
-
+// Without a webhook there is nothing to send, retry or count.
 func TestWebhook_NoneConfigured(t *testing.T) {
 	s, _ := pgtest.NewStore(t)
+	delivered := metrictest.Delta(t, "themis_notifications_total", map[string]string{"result": "delivered"})
 	if err := (&notification.Worker{Store: s}).Notify(t.Context(), escalated(t, s)); err != nil {
 		t.Errorf("Notify without a webhook = %v, want nil", err)
+	}
+	if got := delivered(); got != 0 {
+		t.Errorf("counted %v, want 0", got)
 	}
 }
 

@@ -46,25 +46,22 @@ func work[T river.JobArgs](t *testing.T, wrap func(river.Worker[T]) river.Worker
 	return line
 }
 
-func TestIncidentWorker_LogsJobAndIncident(t *testing.T) {
-	line := work(t, func(w river.Worker[incidentArgs]) river.Worker[incidentArgs] { return incidentWorker[incidentArgs]{w} }, incidentArgs{IncidentID: "inc-1"})
-	if line[FieldJob] != "about_incident" || line[FieldIncidentID] != "inc-1" {
-		t.Errorf("got %v, want job and incident_id", line)
-	}
-}
-
-// A job queued before its args carried the incident logs no empty field.
-func TestIncidentWorker_OmitsAnUnknownIncident(t *testing.T) {
-	line := work(t, func(w river.Worker[incidentArgs]) river.Worker[incidentArgs] { return incidentWorker[incidentArgs]{w} }, incidentArgs{})
-	if _, ok := line[FieldIncidentID]; ok {
-		t.Errorf("got %v, want no incident_id", line)
-	}
-}
-
-func TestUnscopedWorker_LogsJob(t *testing.T) {
-	line := work(t, func(w river.Worker[sweepArgs]) river.Worker[sweepArgs] { return unscopedWorker[sweepArgs]{w} }, sweepArgs{})
-	if line[FieldJob] != "sweep" {
-		t.Errorf("got %v, want job", line)
+// Every job's lines name the job, and the incident when its args carry one.
+func TestWorkers_LogTheJob(t *testing.T) {
+	incident := func(w river.Worker[incidentArgs]) river.Worker[incidentArgs] { return incidentWorker[incidentArgs]{w} }
+	for name, tc := range map[string]struct {
+		line     map[string]any
+		job      string
+		incident any
+	}{
+		"about an incident": {work(t, incident, incidentArgs{IncidentID: "inc-1"}), "about_incident", "inc-1"},
+		// A job queued before its args carried the incident logs no empty field.
+		"about an unknown incident": {work(t, incident, incidentArgs{}), "about_incident", nil},
+		"unscoped":                  {work(t, func(w river.Worker[sweepArgs]) river.Worker[sweepArgs] { return unscopedWorker[sweepArgs]{w} }, sweepArgs{}), "sweep", nil},
+	} {
+		if tc.line[FieldJob] != tc.job || tc.line[FieldIncidentID] != tc.incident {
+			t.Errorf("%s: got %v, want job %s and incident_id %v", name, tc.line, tc.job, tc.incident)
+		}
 	}
 }
 

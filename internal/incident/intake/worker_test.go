@@ -24,6 +24,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -121,15 +122,21 @@ func (e *workerEnv) process(t *testing.T, a intake.Alert, opts *river.InsertOpts
 	if err != nil {
 		t.Fatalf("insert job: %v", err)
 	}
+	return e.next(t, res.Job.ID)
+}
+
+// next waits for the job's next outcome.
+func (e *workerEnv) next(t *testing.T, id int64) *river.Event {
+	t.Helper()
 	timeout := time.After(15 * time.Second)
 	for {
 		select {
 		case ev := <-e.events:
-			if ev.Job.ID == res.Job.ID {
+			if ev.Job.ID == id {
 				return ev
 			}
 		case <-timeout:
-			t.Fatalf("job %d did not finish", res.Job.ID)
+			t.Fatalf("job %d did not finish", id)
 		}
 	}
 }
@@ -200,27 +207,6 @@ func TestWorker_FiringAlertOpensIncident(t *testing.T) {
 	}
 }
 
-// Two pods of one Deployment are one problem: one incident, one
-// investigation, two alerts.
-func TestWorker_SecondAlertJoins(t *testing.T) {
-	e := newWorkerEnv(t, nil)
-	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
-	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
-
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertFiring), nil))
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertFiring), nil))
-
-	if _, _, occurrences := e.onlyIncident(t); occurrences != 2 {
-		t.Errorf("occurrence_count = %d, want 2", occurrences)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incident_alerts`); n != 2 {
-		t.Errorf("incident alerts = %d, want 2", n)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'investigate'`); n != 1 {
-		t.Errorf("investigate jobs = %d, want 1", n)
-	}
-}
-
 func TestWorker_Rejections(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -273,8 +259,12 @@ func TestWorker_Rejections(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newWorkerEnv(t, tt.reader)
+			counted := metrictest.Delta(t, processed, outcome("rejected", tt.want))
 
 			wantCompleted(t, e.process(t, tt.alert(t, e), nil))
+
+			// Rejections are counted by reason: the raw signal of the coverage report.
+			wantDelta(t, "rejected{"+tt.want+"}", counted, 1)
 
 			if got := e.rejectionReason(t); got != tt.want {
 				t.Errorf("reason = %s, want %s", got, tt.want)
@@ -286,9 +276,12 @@ func TestWorker_Rejections(t *testing.T) {
 	}
 }
 
-// A transient error is retried, not rejected, while attempts remain.
-func TestWorker_TransientErrorRetried(t *testing.T) {
+// A transient error is retried, not rejected, while attempts remain; its last
+// attempt becomes a recorded rejection.
+func TestWorker_TransientErrorRetriedThenRecorded(t *testing.T) {
 	e := newWorkerEnv(t, failingReader{errors.New("connection refused")})
+	retried := metrictest.Delta(t, processed, outcome("retried", ""))
+	failed := metrictest.Delta(t, processed, outcome("rejected", "processing_failed"))
 
 	ev := e.process(t, alertFor(e.ns, "x", "fp", intake.AlertFiring), &river.InsertOpts{MaxAttempts: 2})
 
@@ -296,22 +289,18 @@ func TestWorker_TransientErrorRetried(t *testing.T) {
 	// again; either way it is due to run, not given up.
 	if ev.Kind != river.EventKindJobFailed ||
 		(ev.Job.State != rivertype.JobStateRetryable && ev.Job.State != rivertype.JobStateAvailable) {
-		t.Errorf("job event = %s (state %s), want failed and due to retry", ev.Kind, ev.Job.State)
+		t.Fatalf("job event = %s (state %s), want failed and due to retry", ev.Kind, ev.Job.State)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM rejected_alerts`); n != 0 {
 		t.Errorf("rejections = %d, want 0", n)
 	}
-}
+	wantDelta(t, "retried", retried, 1)
 
-// On the last attempt, a transient error becomes a recorded rejection.
-func TestWorker_LastAttemptRecordsProcessingFailed(t *testing.T) {
-	e := newWorkerEnv(t, failingReader{errors.New("connection refused")})
-
-	wantCompleted(t, e.process(t, alertFor(e.ns, "x", "fp", intake.AlertFiring), &river.InsertOpts{MaxAttempts: 1}))
-
+	wantCompleted(t, e.next(t, ev.Job.ID))
 	if got := e.rejectionReason(t); got != "processing_failed" {
 		t.Errorf("reason = %s, want processing_failed", got)
 	}
+	wantDelta(t, "rejected{processing_failed}", failed, 1)
 }
 
 // The incident closes only when its last alert resolves.
@@ -319,8 +308,25 @@ func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
 	e := newWorkerEnv(t, nil)
 	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
 	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
+	created := metrictest.Delta(t, processed, outcome("created", ""))
+	joined := metrictest.Delta(t, processed, outcome("joined", ""))
+	resolved := metrictest.Delta(t, processed, outcome("resolved", ""))
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertFiring), nil))
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertFiring), nil))
+
+	// Two pods of one Deployment are one problem: one incident, one
+	// investigation, two alerts.
+	if _, _, occurrences := e.onlyIncident(t); occurrences != 2 {
+		t.Errorf("occurrence_count = %d, want 2", occurrences)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incident_alerts`); n != 2 {
+		t.Errorf("incident alerts = %d, want 2", n)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'investigate'`); n != 1 {
+		t.Errorf("investigate jobs = %d, want 1", n)
+	}
+	wantDelta(t, "created", created, 1)
+	wantDelta(t, "joined", joined, 1)
 
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod1.Name, "fp-a", intake.AlertResolved), nil))
 	if _, state, _ := e.onlyIncident(t); state != incident.Received {
@@ -331,6 +337,7 @@ func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
 	if _, state, _ := e.onlyIncident(t); state != incident.SelfResolved {
 		t.Errorf("state after both alerts resolved = %s, want self_resolved", state)
 	}
+	wantDelta(t, "resolved", resolved, 2)
 }
 
 // Verification, not the alert, decides the outcome of a fix in flight.

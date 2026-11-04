@@ -71,6 +71,10 @@ func TestReferencedConfig_ListsEveryKindOfReferenceOnce(t *testing.T) {
 	if !v.Refs[3].Optional || v.Refs[1].Optional {
 		t.Errorf("optional flags are wrong: %+v", v.Refs)
 	}
+	// None of the ConfigMaps exist.
+	if !v.Refs[0].Missing {
+		t.Errorf("refs = %+v, want from-env missing", v.Refs)
+	}
 }
 
 func envFrom(name string) func(*corev1.PodSpec) {
@@ -147,13 +151,6 @@ func TestReferencedConfig_OnlyADataWriteIsAChange(t *testing.T) {
 				t.Errorf("refs = %+v, want settings changed at %v (created %v, written %v)", v.Refs, want, created, written)
 			}
 		})
-	}
-}
-
-func TestReferencedConfig_MissingConfigMap(t *testing.T) {
-	v := withConfig(t, loadScenario1(t), envFrom("never-created"))
-	if len(v.Refs) != 1 || !v.Refs[0].Missing {
-		t.Errorf("refs = %+v, want one missing", v.Refs)
 	}
 }
 
