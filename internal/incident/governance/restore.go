@@ -50,6 +50,18 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if in.State != incident.Restoring {
 		return nil
 	}
+	// A job runs at least once: if this fix's restore already exists, it is
+	// under way, and the one-active-action guard must not read it as another
+	// fix.
+	actions, err := w.Store.IncidentActions(ctx, w.Store.DB(), in.ID)
+	if err != nil {
+		return err
+	}
+	for _, a := range actions {
+		if undone, ok := a.Restores(); ok && undone == applied.ID {
+			return nil
+		}
+	}
 	profile, ok := w.Config.Current().Profile(in.Profile)
 	if !ok {
 		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))

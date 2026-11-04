@@ -120,6 +120,10 @@ func TestRestore_Idempotent(t *testing.T) {
 	if n := len(e.actions(t, id)); n != 2 {
 		t.Errorf("%d actions after two runs, want 2", n)
 	}
+	// The second run mustn't mistake the restore under way for another fix.
+	if got := e.state(t, id); got != incident.Restoring {
+		t.Errorf("state = %s after a repeated run (%q), want still restoring", got, e.lastReason(t, id))
+	}
 }
 
 // When policy forbids putting things back, or asks a person to approve it,
