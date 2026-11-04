@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 )
 
 const (

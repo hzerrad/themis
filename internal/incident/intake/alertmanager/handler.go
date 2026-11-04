@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/incident/intake"
-	"github.com/hzerrad/themis/internal/selfcheck"
-	"github.com/hzerrad/themis/internal/telemetry"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/server/statuspage"
 )
 
 const Route = "POST /v1/intake/alertmanager"
@@ -39,7 +39,7 @@ type Handler struct {
 
 	// Heartbeat records alerts arriving, and Refused webhooks sent with a
 	// wrong token, for the status page. Nil records nothing.
-	Heartbeat, Refused *selfcheck.Heartbeat
+	Heartbeat, Refused *statuspage.Heartbeat
 
 	Logger *slog.Logger
 	Now    func() time.Time

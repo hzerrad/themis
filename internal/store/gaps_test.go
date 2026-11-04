@@ -6,7 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )

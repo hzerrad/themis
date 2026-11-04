@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hzerrad/themis/internal/evaluation"
+	"github.com/hzerrad/themis/eval"
 )
 
 const root = "scenarios"
@@ -27,7 +27,7 @@ func main() {
 			usage()
 		}
 		name := os.Args[2]
-		if err := evaluation.Scaffold(root, name); err != nil {
+		if err := eval.Scaffold(root, name); err != nil {
 			fmt.Fprintln(os.Stderr, "scenario:", err)
 			os.Exit(1)
 		}
@@ -67,7 +67,7 @@ func check(names []string) bool {
 			ok = false
 			continue
 		}
-		r, err := evaluation.CheckPack(context.Background(), root, name, false)
+		r, err := eval.CheckPack(context.Background(), root, name, false)
 		if err != nil {
 			ok = false
 			fmt.Printf("%s: not ready\n", name)

@@ -11,12 +11,12 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/capability/rollback"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/policy"
+	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/scenarios"
 )
 

@@ -18,6 +18,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
@@ -56,7 +57,7 @@ func (e *env) external(t *testing.T, edit ...func(*config.ExternalProposals)) th
 
 func (e *env) clientWith(t *testing.T, tok string) themisv1.ProposalServiceClient {
 	t.Helper()
-	return themisv1.NewProposalServiceClient(dial(t, e.lis, grpc.WithPerRPCCredentials(grpcapi.BearerToken(tok))))
+	return themisv1.NewProposalServiceClient(dial(t, e.lis, grpc.WithPerRPCCredentials(token.GRPCCredentials(tok))))
 }
 
 // suggestion is a valid suggestion for the leased investigation's incident.
@@ -101,7 +102,7 @@ func TestExternal_OnlyAnAgentNamedInTheConfigurationMayCall(t *testing.T) {
 func TestExternal_AgentCannotCallTheInvestigatorsMethods(t *testing.T) {
 	e := newEnv(t)
 	e.external(t)
-	conn := dial(t, e.lis, grpc.WithPerRPCCredentials(grpcapi.BearerToken("agent-token")))
+	conn := dial(t, e.lis, grpc.WithPerRPCCredentials(token.GRPCCredentials("agent-token")))
 	_, err := themisv1.NewInvestigationServiceClient(conn).LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "x"})
 	wantCode(t, err, codes.Unauthenticated)
 	_, err = themisv1.NewEvidenceServiceClient(conn).CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{Template: "pod_states"})

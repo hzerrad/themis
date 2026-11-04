@@ -12,7 +12,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/riverqueue/river"
 
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 )

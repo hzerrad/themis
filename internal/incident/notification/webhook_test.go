@@ -13,8 +13,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/store"

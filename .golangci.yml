@@ -28,7 +28,7 @@ linters:
   exclusions:
     generated: strict
     rules:
-      - path: internal/telemetry/river\.go|_test\.go
+      - path: internal/platform/telemetry/river\.go|_test\.go
         linters: [forbidigo]
     paths:
       - gen/

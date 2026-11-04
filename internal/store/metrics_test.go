@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 )
 

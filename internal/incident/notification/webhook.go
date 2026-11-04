@@ -14,9 +14,9 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"github.com/hzerrad/themis/internal/auth"
+	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/hint"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -103,7 +103,7 @@ func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.Escalat
 
 	target := hook.URL
 	if hook.URLFile != "" {
-		b, err := auth.ReadToken(hook.URLFile)
+		b, err := token.Read(hook.URLFile)
 		if err != nil {
 			return fmt.Errorf("webhook URL: %w", err)
 		}
@@ -121,7 +121,7 @@ func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.Escalat
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if hook.BearerTokenFile != "" {
-		token, err := auth.ReadToken(hook.BearerTokenFile)
+		token, err := token.Read(hook.BearerTokenFile)
 		if err != nil {
 			return fmt.Errorf("webhook token: %w", err)
 		}

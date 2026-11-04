@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hzerrad/themis/internal/settings"
+	"github.com/hzerrad/themis/internal/config/settings"
 )
 
 // ModelSettings are the model settings made in Themis's setup.

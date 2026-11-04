@@ -19,14 +19,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/digest"
-	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/hint"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 

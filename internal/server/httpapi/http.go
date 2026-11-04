@@ -18,16 +18,16 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/hzerrad/themis/internal/capability"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/hint"
-	"github.com/hzerrad/themis/internal/identity"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
-	"github.com/hzerrad/themis/internal/selfcheck"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -71,7 +71,7 @@ type API struct {
 	// Checks say whether each part of the install works. Nil means the
 	// status page isn't served.
 	Checks interface {
-		Checks(ctx context.Context) []selfcheck.Check
+		Checks(ctx context.Context) []statuspage.Check
 	}
 	// Setup records when the first admin signs in for real, which closes the
 	// setup door. Nil means there is no door.
@@ -113,7 +113,7 @@ func (a *API) Register(mux *http.ServeMux) {
 
 // status says whether each part of the install works.
 func (a *API) status(w http.ResponseWriter, r *http.Request) {
-	a.reply(w, r, map[string][]selfcheck.Check{"checks": a.Checks.Checks(r.Context())})
+	a.reply(w, r, map[string][]statuspage.Check{"checks": a.Checks.Checks(r.Context())})
 }
 
 // authed serves h to whoever has role, or to anyone signed in when role is

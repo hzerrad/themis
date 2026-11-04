@@ -19,16 +19,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/capability"
 	"github.com/hzerrad/themis/internal/catalog"
-	"github.com/hzerrad/themis/internal/check"
+	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
+	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/selfcheck"
-	"github.com/hzerrad/themis/internal/settings"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
+	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -75,7 +76,7 @@ type Server struct {
 
 	// Heartbeat records that the investigator asked for work. Nil records
 	// nothing.
-	Heartbeat *selfcheck.Heartbeat
+	Heartbeat *statuspage.Heartbeat
 
 	limiters sync.Map
 	reviews  lru[[sha256.Size]byte, review]
@@ -93,7 +94,7 @@ func (s *Server) Register(g *grpc.Server) {
 // request's lease and the incident it was granted for to the context, and
 // logs every request at debug level.
 func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
-	authenticate := RequireToken(tokenFile)
+	authenticate := token.RequireGRPC(tokenFile)
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if caller, external, err := s.externalCaller(ctx, tokenFile, info.FullMethod); err != nil {
 			return nil, err

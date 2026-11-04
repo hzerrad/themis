@@ -26,10 +26,9 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/executor"
-	"github.com/hzerrad/themis/internal/kubewarn"
-	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 )
 
 func main() {
@@ -74,13 +73,13 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	if err != nil {
 		return fmt.Errorf("kubernetes config: %w", err)
 	}
-	kubewarn.Install(kube, log)
+	telemetry.ReportKubeWarnings(kube, log)
 	c, err := client.New(kube, client.Options{})
 	if err != nil {
 		return fmt.Errorf("kubernetes client: %w", err)
 	}
 
-	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(grpcapi.RequireToken(tokenFile), telemetry.UnaryServerFields()))
+	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(token.RequireGRPC(tokenFile), telemetry.UnaryServerFields()))
 	(&executor.Server{Executor: newExecutor(s, c, log)}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {

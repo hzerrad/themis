@@ -22,13 +22,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/hzerrad/themis/internal/auth"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/telemetry"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -205,14 +205,14 @@ func (s *Server) externalCaller(ctx context.Context, tokenFile, method string) (
 	if s.Reviewer == nil || !slices.Contains(externalMethods, method) {
 		return Caller{}, false, nil
 	}
-	token := bearer(ctx)
-	if token == "" {
+	presented := bearer(ctx)
+	if presented == "" {
 		return Caller{}, false, nil
 	}
-	if want, err := auth.ReadToken(tokenFile); err == nil && auth.BearerMatches("Bearer "+token, want) {
+	if want, err := token.Read(tokenFile); err == nil && token.Matches("Bearer "+presented, want) {
 		return Caller{}, false, nil
 	}
-	account, err := s.review(ctx, token)
+	account, err := s.review(ctx, presented)
 	if err != nil {
 		if errors.Is(err, errTooMany) {
 			return Caller{}, false, err

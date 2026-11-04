@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/identity"
 	"github.com/hzerrad/themis/internal/server/httpapi"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 

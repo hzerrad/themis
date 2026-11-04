@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
-	"github.com/hzerrad/themis/internal/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/config"
 )
 
