@@ -1,12 +1,15 @@
 package investigation_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
@@ -200,6 +203,28 @@ func TestPrepare_TargetLost(t *testing.T) {
 		if next.Target != e.target || next.State != incident.Received {
 			t.Errorf("replaced: successor targets %+v in %s, want the new object, received", next.Target, next.State)
 		}
+	}
+}
+
+// unavailable answers like an API server that is briefly down.
+type unavailable struct{ client.Reader }
+
+func (unavailable) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+	return apierrors.NewServiceUnavailable("the server is shutting down")
+}
+
+// A target that can't be read right now is not a lost one: the job fails, to
+// be retried, and the incident stays as it was.
+func TestPrepare_UnreadableTargetRetries(t *testing.T) {
+	e := newEnv(t)
+	e.worker.Reader = unavailable{k8s}
+	id := e.newIncident(t, "rollout-regression", e.target)
+
+	if err := e.worker.Prepare(t.Context(), id); err == nil {
+		t.Error("Prepare = nil, want an error so the job is retried")
+	}
+	if got := e.state(t, id); got != incident.Received {
+		t.Errorf("state = %s, want received", got)
 	}
 }
 
