@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -63,7 +64,8 @@ func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
 			}
 
 			late := &investigation.CloseUndecidedWorker{Config: window, Store: e.store, Now: func() time.Time { return time.Now().Add(2 * time.Hour) }}
-			if err := late.Close(t.Context()); err != nil {
+			// As River runs it.
+			if err := late.Work(t.Context(), &river.Job[investigation.CloseUndecidedArgs]{}); err != nil {
 				t.Fatal(err)
 			}
 			if got := e.state(t, id); got != incident.ClosedNoAction {

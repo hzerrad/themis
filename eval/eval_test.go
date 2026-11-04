@@ -3,8 +3,10 @@ package eval_test
 import (
 	"flag"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hzerrad/themis/eval"
 	"github.com/hzerrad/themis/internal/catalog"
@@ -101,6 +103,45 @@ func TestBuild_RedactsAndLeaksNothing(t *testing.T) {
 	}
 	if logs.Classification != string(evidence.ClassificationSensitive) {
 		t.Errorf("logs are classified %s", logs.Classification)
+	}
+}
+
+// Initial evidence the core can't read is a gap in the bundle, as it is in
+// production, not a failed build.
+func TestBuild_RecordsInitialGaps(t *testing.T) {
+	dir := t.TempDir()
+	cluster := `apiVersion: apps/v1
+kind: Deployment
+metadata: {name: checkout}
+spec:
+  selector: {matchLabels: {app: checkout}}
+  template:
+    metadata: {labels: {app: checkout}}
+    spec: {containers: [{name: app, image: "checkout:2"}]}
+`
+	if err := os.WriteFile(filepath.Join(dir, "cluster.yaml"), []byte(cluster), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollout, _ := cat.Profile("rollout-regression")
+	read := []string{evidence.PodStates, evidence.ContainerLogsTail}
+	s := eval.Case{
+		Now:      time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC),
+		Target:   eval.Target{Kind: "Deployment", Namespace: "shop", Name: "checkout"},
+		Evidence: eval.Evidence{Initial: read, Allowed: read},
+	}
+	b, err := eval.Build(t.Context(), dir, s, os.DirFS(packs), rollout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Initial) != 1 || b.Initial[0].ID != "ev-"+evidence.PodStates {
+		t.Errorf("initial = %+v, want pod_states alone", b.Initial)
+	}
+	if len(b.Gaps) != 1 || b.Gaps[0].Template != evidence.ContainerLogsTail || b.Gaps[0].Cause != string(evidence.GapAbsent) {
+		t.Errorf("gaps = %+v, want container_logs_tail absent: there are no pods", b.Gaps)
 	}
 }
 

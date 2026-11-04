@@ -5,15 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/hzerrad/themis/internal/catalog/check"
-	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
@@ -32,20 +30,15 @@ type PrepareWorker struct {
 	Config config.Provider
 	Store  *store.Store
 	Reader client.Reader
-	// Evidence is the templates it reads with; Checks decide from what they
-	// read, those a profile names or all of them.
-	Evidence evidence.Registry
-	Checks   check.List
-	Logger   *slog.Logger
-	Now      func() time.Time
+	// Catalog diagnoses the target: its evidence templates and checks.
+	Catalog catalog.Catalog
+	Logger  *slog.Logger
+	Now     func() time.Time
 
 	// EventRetention is how long the API server keeps events: older ones
-	// are gone. DefaultEventRetention when zero.
+	// are gone. catalog.DefaultEventRetention when zero.
 	EventRetention time.Duration
 }
-
-// DefaultEventRetention is the API server's default --event-ttl.
-const DefaultEventRetention = time.Hour
 
 func (w *PrepareWorker) Work(ctx context.Context, job *river.Job[InvestigateArgs]) error {
 	return w.Prepare(ctx, job.Args.IncidentID)
@@ -76,37 +69,25 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	if err != nil {
 		return err
 	}
-	now := w.now()
-	var (
-		items []evidence.Item
-		gaps  []store.EvidenceGap
-	)
-	for _, name := range profile.Evidence.Initial {
-		item, err := w.Evidence.Collect(ctx, w.Reader, name, target, nil, now)
-		if err != nil {
-			// Missing evidence makes predicates unknown; it does not stop the
-			// investigation, and the incident says why it is missing.
-			w.logger().WarnContext(ctx, "cannot collect initial evidence", "template", name, telemetry.FieldError, err)
-			gaps = append(gaps, store.EvidenceGap{
-				IncidentID: in.ID, Template: name, Cause: evidence.CauseOf(err), Detail: err.Error(), At: now,
-			})
-			continue
-		}
-		items = append(items, item)
-	}
-	expired, err := w.expiredEvents(ctx, in.ID, profile.Evidence.Initial, now)
+	started, _, err := w.Store.AlertsStarted(ctx, in.ID)
 	if err != nil {
 		return err
 	}
-	gaps = append(gaps, expired...)
-	checks := w.Checks.For(profile.Checks)
-	results := checks.Attribute(checks.Evaluate(evidence.Bundle{Target: in.Target, Items: items}, now), checkGaps(gaps))
+	now := w.now()
+	d := w.Catalog.Diagnose(ctx, w.Reader, target, profile, catalog.Moment{Now: now, AlertStarted: started, EventRetention: w.EventRetention})
+	gaps := make([]store.EvidenceGap, 0, len(d.Gaps))
+	for _, g := range d.Gaps {
+		// Missing evidence makes checks unknown; it does not stop the
+		// investigation, and the incident says why it is missing.
+		w.logger().WarnContext(ctx, "initial evidence is missing", "template", g.Template, "cause", g.Cause, telemetry.FieldError, g.Detail)
+		gaps = append(gaps, store.EvidenceGap{IncidentID: in.ID, Template: g.Template, Cause: g.Cause, Detail: g.Detail, At: now})
+	}
 	// Without an investigator, the incident waits for a person or a tool
 	// outside Themis to suggest a fix; the checks still run for the policy.
 	noInvestigator := w.Config.Current().Investigators.Disabled
-	to, reason := incident.Investigating, evidenceCollected(len(items))
+	to, reason := incident.Investigating, evidenceCollected(len(d.Items))
 	if noInvestigator {
-		to, reason = incident.AwaitingSuggestion, awaitingSuggestion(len(items))
+		to, reason = incident.AwaitingSuggestion, awaitingSuggestion(len(d.Items))
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		err := w.Store.Transition(ctx, tx, store.TransitionArgs{
@@ -119,9 +100,9 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 			return err
 		}
 		if noInvestigator {
-			err = w.Store.RecordInitialEvidence(ctx, tx, in.ID, items, results)
+			err = w.Store.RecordInitialEvidence(ctx, tx, in.ID, d.Items, d.Results)
 		} else {
-			_, err = w.Store.CreateInvestigation(ctx, tx, in.ID, items, results)
+			_, err = w.Store.CreateInvestigation(ctx, tx, in.ID, d.Items, d.Results)
 		}
 		if err != nil {
 			return err
@@ -176,36 +157,4 @@ func awaitingSuggestion(n int) string {
 		pieces = "1 piece"
 	}
 	return "Themis collected " + pieces + " of evidence and ran its checks. No investigator is installed, so it waits for a fix suggested by a person or a tool outside Themis."
-}
-
-// expiredEvents records that the target's first events are gone when its
-// alerts started longer ago than Kubernetes keeps events.
-func (w *PrepareWorker) expiredEvents(ctx context.Context, incidentID string, initial []string, now time.Time) ([]store.EvidenceGap, error) {
-	if !slices.Contains(initial, evidence.TargetEvents) {
-		return nil, nil
-	}
-	started, ok, err := w.Store.AlertsStarted(ctx, incidentID)
-	if err != nil || !ok {
-		return nil, err
-	}
-	retention := w.EventRetention
-	if retention == 0 {
-		retention = DefaultEventRetention
-	}
-	if now.Sub(started) <= retention {
-		return nil, nil
-	}
-	return []store.EvidenceGap{{
-		IncidentID: incidentID, Template: evidence.TargetEvents, Cause: evidence.GapExpired, At: now,
-		Detail: fmt.Sprintf("the alert started %s before, and Kubernetes keeps events for about %s", now.Sub(started).Round(time.Minute), retention),
-	}}, nil
-}
-
-// checkGaps are the gaps the checks read.
-func checkGaps(gaps []store.EvidenceGap) []check.Gap {
-	out := make([]check.Gap, 0, len(gaps))
-	for _, g := range gaps {
-		out = append(out, check.Gap{Template: g.Template, Cause: g.Cause})
-	}
-	return out
 }

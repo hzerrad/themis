@@ -182,12 +182,11 @@ func Run(ctx context.Context, o Options) error {
 		Mapper: mgr.GetRESTMapper(),
 	})
 	telemetry.AddIncidentWorker(workers, &investigation.PrepareWorker{
-		Config:   current,
-		Store:    s,
-		Reader:   mgr.GetAPIReader(),
-		Evidence: cat.Evidence,
-		Checks:   cat.Checks,
-		Logger:   log,
+		Config:  current,
+		Store:   s,
+		Reader:  mgr.GetAPIReader(),
+		Catalog: cat,
+		Logger:  log,
 	})
 	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes}
 	telemetry.AddIncidentWorker(workers, govern)
