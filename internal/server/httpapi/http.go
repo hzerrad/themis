@@ -6,29 +6,21 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
-
-	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
 const maxBodyBytes = 64 << 10
@@ -77,14 +69,6 @@ type API struct {
 	Setup identity.SetupStore
 
 	setupFinished atomic.Bool
-}
-
-// Suggestions takes a fix suggested by a person. The core checks it exactly
-// as it checks the investigator's.
-type Suggestions interface {
-	// SubmitFromPerson takes a suggestion from person, or from the holder of
-	// the admin token when person is empty.
-	SubmitFromPerson(ctx context.Context, person string, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error)
 }
 
 func (a *API) Register(mux *http.ServeMux) {
@@ -246,173 +230,6 @@ func (w *statusWriter) WriteHeader(code int) {
 // Unwrap lets http.ResponseController reach the underlying writer.
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func (a *API) list(w http.ResponseWriter, r *http.Request) {
-	incidents, err := a.Store.ListIncidents(r.Context(), 100)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	out := make([]incidentView, 0, len(incidents))
-	for _, in := range incidents {
-		out = append(out, viewIncident(in))
-	}
-	a.reply(w, r, out)
-}
-
-func (a *API) detail(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	in, err := a.Store.Incident(ctx, r.PathValue("id"))
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	d := detailView{Incident: viewIncident(in), Checks: map[string]string{}}
-	for _, c := range a.CheckList {
-		d.Checks[c.Name] = c.Description
-	}
-	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	items, err := a.Store.Evidence(ctx, in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	// Raw evidence, such as logs, is for responders.
-	who, _ := identity.From(ctx)
-	for _, it := range items {
-		v := evidenceView{Item: it}
-		if who.Can(config.RoleResponder) {
-			v.Data = it.Data
-		}
-		d.Evidence = append(d.Evidence, v)
-	}
-	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
-		d.Investigation = &inv
-		// Once someone's suggestion moves it on, what's next matters more.
-		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction) {
-			d.Headline = hint.Headline(inv.Blind)
-		}
-	} else if !errors.Is(err, store.ErrNotFound) {
-		a.fail(w, r, err)
-		return
-	}
-	gaps, err := a.Store.EvidenceGaps(ctx, in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	d.Missing = a.Remedy.Messages(in, gaps)
-	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	actions, err := a.Store.IncidentActions(ctx, a.Store.DB(), in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	for _, act := range actions {
-		v := viewAction(act, a.Fixes)
-		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
-			v.Execution = &e
-		}
-		if ver, err := a.Store.Verification(ctx, a.Store.DB(), act.ID); err == nil {
-			v.Verification = &verificationView{Verification: ver, Observation: ver.Observation}
-		}
-		d.Actions = append(d.Actions, v)
-	}
-	a.reply(w, r, d)
-}
-
-type approveRequest struct {
-	// Digest is the one the approver was shown.
-	Digest string `json:"digest"`
-}
-
-func (a *API) approve(w http.ResponseWriter, r *http.Request) {
-	var req approveRequest
-	if !a.decode(w, r, &req) {
-		return
-	}
-	act, err := governance.Approve(r.Context(), a.Store, r.PathValue("id"), req.Digest, actor(r), a.now())
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	a.reply(w, r, viewAction(act, a.Fixes))
-}
-
-type denyRequest struct {
-	Reason string `json:"reason"`
-}
-
-func (a *API) deny(w http.ResponseWriter, r *http.Request) {
-	var req denyRequest
-	if !a.decode(w, r, &req) {
-		return
-	}
-	if err := governance.Deny(r.Context(), a.Store, r.PathValue("id"), actor(r), req.Reason); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	a.reply(w, r, map[string]string{"state": string(store.ActionDenied)})
-}
-
-// suggest takes the same request as the gRPC API, in its JSON form.
-func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
-	if a.Suggestions == nil {
-		http.NotFound(w, r)
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
-	if err != nil {
-		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	var req themisv1.SubmitProposalRequest
-	if err := protojson.Unmarshal(body, &req); err != nil {
-		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	req.IncidentId = r.PathValue("id")
-	person := ""
-	if who, _ := identity.From(r.Context()); !who.Token {
-		person = who.Username
-	}
-	resp, err := a.Suggestions.SubmitFromPerson(r.Context(), person, &req)
-	if err != nil {
-		st := status.Convert(err)
-		http.Error(w, st.Message(), suggestionStatuses[st.Code()])
-		return
-	}
-	data, err := protojson.Marshal(resp)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(data)
-}
-
-// suggestionStatuses map what the core says about a suggestion to HTTP.
-var suggestionStatuses = map[codes.Code]int{
-	codes.InvalidArgument:    http.StatusBadRequest,
-	codes.PermissionDenied:   http.StatusForbidden,
-	codes.NotFound:           http.StatusNotFound,
-	codes.ResourceExhausted:  http.StatusTooManyRequests,
-	codes.FailedPrecondition: http.StatusConflict,
-	codes.Internal:           http.StatusInternalServerError,
-	codes.Unavailable:        http.StatusServiceUnavailable,
-	codes.Canceled:           http.StatusServiceUnavailable,
-	codes.DeadlineExceeded:   http.StatusServiceUnavailable,
-}
-
 func (a *API) decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, maxBodyBytes), v); err != nil {
 		http.Error(w, "The request isn't valid: "+err.Error(), http.StatusBadRequest)
@@ -456,19 +273,4 @@ func (a *API) logger() *slog.Logger {
 		return a.Logger
 	}
 	return slog.Default()
-}
-
-// changes lists what an action changes, as its fix describes it, and says so
-// when it cannot.
-func changes(a store.Action, fixes capability.Registry) []capability.Change {
-	unknown := []capability.Change{{Field: "template", Before: "cannot be compared", After: "cannot be compared"}}
-	f, ok := fixes[a.Capability]
-	if !ok {
-		return unknown
-	}
-	list, err := f.Changes(a.PreState, a.Desired)
-	if err != nil {
-		return unknown
-	}
-	return list
 }
