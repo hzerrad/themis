@@ -120,28 +120,86 @@ func TestRestore_Idempotent(t *testing.T) {
 	if n := len(e.actions(t, id)); n != 2 {
 		t.Errorf("%d actions after two runs, want 2", n)
 	}
+	// The second run mustn't mistake the restore under way for another fix.
+	if got := e.state(t, id); got != incident.Restoring {
+		t.Errorf("state = %s after a repeated run (%q), want still restoring", got, e.lastReason(t, id))
+	}
 }
 
-// When policy asks a person to approve putting things back, Themis leaves
-// its change in place and hands the incident over.
-func TestRestore_PolicyAskingAPersonEscalates(t *testing.T) {
-	e := newEnv(t)
-	p := profile("rollout-regression")
-	p.Policy.Rules = append([]config.PolicyRule{{Name: "ask-first", When: `action.restore == "true"`, Decision: config.DecisionRequireApproval}}, p.Policy.Rules...)
-	w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
-	w.Now = e.worker.Now
-	id, fix := e.restoring(t)
-	e.worker = w
-	e.restore(t, fix)
+// When policy forbids putting things back, or asks a person to approve it,
+// Themis leaves its change in place, hands the incident over, and counts the
+// decision.
+func TestRestore_PolicyEscalates(t *testing.T) {
+	for _, tt := range []struct {
+		decision string
+		want     string
+	}{
+		{config.DecisionRequireApproval, "Policy rule restore-rule requires a person's approval. Putting the workload back needs a person, so Themis left its change in place."},
+		{config.DecisionDeny, "Policy rule restore-rule forbids this fix. Themis left its change in place."},
+	} {
+		t.Run(tt.decision, func(t *testing.T) {
+			e := newEnv(t)
+			p := profile("rollout-regression")
+			p.Policy.Rules = append([]config.PolicyRule{{Name: "restore-rule", When: `action.restore == "true"`, Decision: tt.decision}}, p.Policy.Rules...)
+			w := &governance.Worker{Config: config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}, Store: e.store, Reader: k8s, Fixes: catalog.Fixes()}
+			w.Now = e.worker.Now
+			id, fix := e.restoring(t)
+			e.worker = w
+			counted := decisions(t, tt.decision)
+			e.restore(t, fix)
 
-	if got := e.state(t, id); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
+			if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != tt.want {
+				t.Errorf("%s: %q; want escalated, saying %q", got, e.lastReason(t, id), tt.want)
+			}
+			if n := len(e.actions(t, id)); n != 1 {
+				t.Errorf("%d actions, want only the fix", n)
+			}
+			if got := counted(); got != 1 {
+				t.Errorf("counted %v %s decisions, want 1", got, tt.decision)
+			}
+		})
 	}
-	if got := e.lastReason(t, id); !strings.Contains(got, "Policy rule ask-first requires a person's approval.") || !strings.Contains(got, "left its change in place") {
-		t.Errorf("reason = %q", got)
+}
+
+// A restore job for an incident that has left restoring, say because a person
+// took it over, changes nothing.
+func TestRestore_OnlyWhileRestoring(t *testing.T) {
+	e := shipped(t)
+	id, fix := e.restoring(t)
+	if err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		return e.store.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Restoring, To: incident.Escalated, Reason: "taken over", Actor: "test"})
+	}); err != nil {
+		t.Fatal(err)
 	}
+	e.restore(t, fix)
 	if n := len(e.actions(t, id)); n != 1 {
 		t.Errorf("%d actions, want only the fix", n)
+	}
+	if got := e.lastReason(t, id); got != "taken over" {
+		t.Errorf("last reason = %q, want the person's", got)
+	}
+}
+
+// A fix another incident has in flight on the same workload comes first:
+// Themis never runs two at once, so it leaves its change and hands over.
+func TestRestore_YieldsToAnotherFix(t *testing.T) {
+	e := shipped(t)
+	id, fix := e.restoring(t)
+	cfg := e.worker.Config.Current()
+	cfg.Profiles = append(cfg.Profiles, profile("other"))
+	e.worker.Config = cfg
+	other, p := e.diagnosed(t, "other", 2, predicates)
+	e.govern(t, p)
+	if got := e.state(t, other); got != incident.AwaitingApproval {
+		t.Fatalf("other incident = %s, want its fix awaiting approval", got)
+	}
+
+	e.restore(t, fix)
+	if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != "Another fix is already in progress on this workload, so Themis left its change in place." {
+		t.Errorf("state = %s: %q", got, e.lastReason(t, id))
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1`, governance.ExecuteArgs{}.Kind()); n != 0 {
+		t.Errorf("%d execute jobs, want none", n)
 	}
 }
 
@@ -251,15 +309,24 @@ func TestRestoreWorker_EscalatesOnTheLastAttempt(t *testing.T) {
 // place and tells the person it hands the incident to why.
 func TestRestore_CannotPutItBack(t *testing.T) {
 	for name, tc := range map[string]struct {
-		forget func(w *governance.Worker)
+		forget func(t *testing.T, e *env)
 		want   string
 	}{
-		"profile removed": {func(w *governance.Worker) { w.Config = config.Config{} }, "The rollout-regression profile was removed from the configuration, so Themis left its change in place."},
-		"fix unknown":     {func(w *governance.Worker) { w.Fixes = nil }, "Themis doesn't know how to put this fix back, so it left its change in place."},
+		"profile removed": {func(_ *testing.T, e *env) { e.worker.Config = config.Config{} }, "The rollout-regression profile was removed from the configuration, so Themis left its change in place."},
+		"fix unknown":     {func(_ *testing.T, e *env) { e.worker.Fixes = nil }, "Themis doesn't know how to put this fix back, so it left its change in place."},
+		"version before gone": {func(t *testing.T, e *env) {
+			rs := &appsv1.ReplicaSet{}
+			if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout-7d9f8b6c4"}, rs); err != nil {
+				t.Fatal(err)
+			}
+			if err := k8s.Delete(t.Context(), rs); err != nil {
+				t.Fatal(err)
+			}
+		}, "Themis couldn't put the workload back: Kubernetes no longer keeps the version from before it acted."},
 	} {
 		e := shipped(t)
 		id, fix := e.restoring(t)
-		tc.forget(e.worker)
+		tc.forget(t, e)
 		e.restore(t, fix)
 		if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != tc.want {
 			t.Errorf("%s: %s, %q; want escalated, saying %q", name, got, e.lastReason(t, id), tc.want)
