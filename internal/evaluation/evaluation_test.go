@@ -11,7 +11,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/evaluation"
 	"github.com/hzerrad/themis/internal/evidence"
-	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/policy"
 )
 
 var update = flag.Bool("update", false, "rewrite each scenario's bundle.json")
@@ -28,7 +28,7 @@ func dirs(t *testing.T) []string {
 }
 
 // shipped is the policy people start from.
-func shipped(t *testing.T) *governance.Policy {
+func shipped(t *testing.T) *policy.Policy {
 	t.Helper()
 	p, err := evaluation.ShippedPolicy("../../deploy/config/themis.example.yaml")
 	if err != nil {

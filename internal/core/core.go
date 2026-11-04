@@ -38,6 +38,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/incident/reconciliation"
 	"github.com/hzerrad/themis/internal/incident/verification"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/selfcheck"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/server/httpapi"
@@ -162,7 +163,7 @@ func Run(ctx context.Context, o Options) error {
 			if err := checkProfileTemplates(p, registry); err != nil {
 				return err
 			}
-			_, err := governance.CompilePolicy(p.EffectivePolicy())
+			_, err := policy.Compile(p.EffectivePolicy())
 			return err
 		}, log)
 		if err := live.Refresh(ctx); err != nil {

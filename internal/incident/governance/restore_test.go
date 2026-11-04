@@ -17,6 +17,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -98,7 +99,7 @@ func TestRestore_PutsBackWhatTheFixReplaced(t *testing.T) {
 	if r.Params["restores"] != fix.ID || fmt.Sprint(r.Params["revision"]) != "2" {
 		t.Errorf("restore params = %v, want revision 2, undoing %s", r.Params, fix.ID)
 	}
-	if r.State != store.ActionAuthorized || r.Decision != string(governance.Allow) || r.ExpiresAt != nil {
+	if r.State != store.ActionAuthorized || r.Decision != string(policy.Allow) || r.ExpiresAt != nil {
 		t.Errorf("restore = %s, %s; want authorized by policy, with nothing to approve", r.State, r.Decision)
 	}
 	if got := e.state(t, id); got != incident.Restoring {

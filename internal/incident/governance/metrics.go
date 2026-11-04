@@ -3,6 +3,8 @@ package governance
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/hzerrad/themis/internal/policy"
 )
 
 var (
@@ -19,7 +21,7 @@ var (
 
 func init() {
 	metrics.Registry.MustRegister(policyDecisions, gitOpsRefusals)
-	for _, d := range []string{string(Allow), string(RequireApproval), string(Deny), decisionError} {
+	for _, d := range []string{string(policy.Allow), string(policy.RequireApproval), string(policy.Deny), decisionError} {
 		policyDecisions.WithLabelValues(d)
 	}
 }
@@ -27,7 +29,7 @@ func init() {
 // decisionError is the label of a decision whose rule failed to evaluate.
 const decisionError = "error"
 
-func (d Decision) label() string {
+func decisionLabel(d policy.Decision) string {
 	if d.Failed {
 		return decisionError
 	}

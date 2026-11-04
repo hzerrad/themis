@@ -29,7 +29,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/evidence"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/policy"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/workload"
 )
@@ -206,14 +206,14 @@ type PolicyCheck struct {
 
 // ShippedPolicy is the policy of Themis's example configuration, the one
 // people start from.
-func ShippedPolicy(path string) (*governance.Policy, error) {
+func ShippedPolicy(path string) (*policy.Policy, error) {
 	c, err := config.Load(path)
 	if err != nil {
 		return nil, err
 	}
 	for _, p := range c.Profiles {
 		if p.Name == "rollout-regression" {
-			return governance.CompilePolicy(p.EffectivePolicy())
+			return policy.Compile(p.EffectivePolicy())
 		}
 	}
 	return nil, fmt.Errorf("%s has no rollout-regression profile", path)
@@ -248,8 +248,8 @@ type Check struct {
 }
 
 // Build reads the scenario in dir with the real templates and checks, and asks
-// policy what it would do with a rollback.
-func Build(ctx context.Context, dir string, s Scenario, policy *governance.Policy) (Bundle, error) {
+// pol what it would do with a rollback.
+func Build(ctx context.Context, dir string, s Scenario, pol *policy.Policy) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
@@ -297,7 +297,7 @@ func Build(ctx context.Context, dir string, s Scenario, policy *governance.Polic
 	}
 	// As the worker asks for the investigator's proposal. Rules reading
 	// target.managed_by see it empty: no shipped rule does.
-	d := policy.Evaluate(governance.PolicyInput{
+	d := pol.Evaluate(policy.Input{
 		Capability: config.KnownCapabilities[0], Risk: "medium", Namespace: target.Namespace,
 		Predicates: values, Source: "themis-intelligence", Authenticated: true,
 	})
