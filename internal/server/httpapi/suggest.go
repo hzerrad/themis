@@ -2,24 +2,24 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/hzerrad/themis/internal/incident/suggestion"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/store"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
-// Suggestions takes a fix suggested by a person. The core checks it exactly
-// as it checks the investigator's.
+// Suggestions takes a fix suggested by a person, and judges it exactly as it
+// judges the investigator's.
 type Suggestions interface {
-	// SubmitFromPerson takes a suggestion from person, or from the holder of
-	// the admin token when person is empty.
-	SubmitFromPerson(ctx context.Context, person string, req *themisv1.SubmitProposalRequest) (*themisv1.SubmitProposalResponse, error)
+	Submit(ctx context.Context, from suggestion.Suggester, s suggestion.Suggestion) (store.Proposal, error)
 }
 
 // suggest takes the same request as the gRPC API, in its JSON form.
@@ -43,13 +43,21 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 	if who, _ := identity.From(r.Context()); !who.Token {
 		person = who.Username
 	}
-	resp, err := a.Suggestions.SubmitFromPerson(r.Context(), person, &req)
-	if err != nil {
-		st := status.Convert(err)
-		http.Error(w, st.Message(), suggestionStatuses[st.Code()])
+	stored, err := a.Suggestions.Submit(r.Context(), suggestion.Person(person), suggestion.Request(&req))
+	var refused *suggestion.Error
+	switch {
+	case errors.As(err, &refused):
+		http.Error(w, refused.Message, suggestionStatuses[refused.Kind])
+		return
+	case err != nil && r.Context().Err() != nil:
+		http.Error(w, r.Context().Err().Error(), http.StatusServiceUnavailable)
+		return
+	case err != nil:
+		a.logger().ErrorContext(r.Context(), "a suggestion failed", telemetry.FieldError, err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	data, err := protojson.Marshal(resp)
+	data, err := protojson.Marshal(suggestion.Response(stored))
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -58,15 +66,12 @@ func (a *API) suggest(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-// suggestionStatuses map what the core says about a suggestion to HTTP.
-var suggestionStatuses = map[codes.Code]int{
-	codes.InvalidArgument:    http.StatusBadRequest,
-	codes.PermissionDenied:   http.StatusForbidden,
-	codes.NotFound:           http.StatusNotFound,
-	codes.ResourceExhausted:  http.StatusTooManyRequests,
-	codes.FailedPrecondition: http.StatusConflict,
-	codes.Internal:           http.StatusInternalServerError,
-	codes.Unavailable:        http.StatusServiceUnavailable,
-	codes.Canceled:           http.StatusServiceUnavailable,
-	codes.DeadlineExceeded:   http.StatusServiceUnavailable,
+// suggestionStatuses say in HTTP why a suggestion wasn't kept.
+var suggestionStatuses = map[suggestion.Kind]int{
+	suggestion.Invalid:         http.StatusBadRequest,
+	suggestion.Unauthenticated: http.StatusUnauthorized,
+	suggestion.Forbidden:       http.StatusForbidden,
+	suggestion.NotFound:        http.StatusNotFound,
+	suggestion.TooMany:         http.StatusTooManyRequests,
+	suggestion.Gone:            http.StatusConflict,
 }

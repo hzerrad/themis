@@ -25,21 +25,17 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/platform/token"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
-// Caller is someone outside Themis, as proven by their credential.
+// Caller is someone outside Themis, as proven by their credential: what it
+// may suggest, and the evidence it may read.
 type Caller struct {
-	Source       string
-	Namespaces   []string
-	Capabilities []string
-	PerMinute    int
-	Ceiling      evidence.Classification
-
-	// All means any namespace and capability the profile allows, for a person.
-	All bool
+	suggestion.Suggester
+	Ceiling evidence.Classification
 }
 
 type callerKey struct{}
@@ -116,7 +112,7 @@ func (s *Server) review(ctx context.Context, token string) (string, error) {
 		return r.account, nil
 	}
 	if !s.allowPeer(ctx, now) {
-		requestsLimitedTotal.WithLabelValues("address").Inc()
+		suggestion.CountLimited("address")
 		return "", errTooMany
 	}
 	if cached {
@@ -201,8 +197,10 @@ func (s *Server) externalCaller(ctx context.Context, tokenFile, method string) (
 
 func callerOf(p config.ProposalSource) Caller {
 	c := Caller{
-		Source: "serviceaccount:" + p.ServiceAccount, Namespaces: p.Namespaces, Capabilities: p.Capabilities,
-		PerMinute: p.EffectivePerMinute(), Ceiling: evidence.ClassificationInternal,
+		Suggester: suggestion.Suggester{
+			Source: "serviceaccount:" + p.ServiceAccount, Namespaces: p.Namespaces, Fixes: p.Capabilities, PerMinute: p.EffectivePerMinute(),
+		},
+		Ceiling: evidence.ClassificationInternal,
 	}
 	if p.Ceiling == string(evidence.ClassificationSensitive) {
 		c.Ceiling = evidence.ClassificationSensitive
@@ -218,12 +216,6 @@ func bearer(ctx context.Context) string {
 		}
 	}
 	return ""
-}
-
-func (s *Server) allow(c Caller) bool {
-	key := fmt.Sprintf("%s/%d", c.Source, c.PerMinute)
-	l, _ := s.limiters.LoadOrStore(key, perMinute(c.PerMinute))
-	return l.(*rate.Limiter).Allow() //nolint:forcetypeassert // only limiters are stored
 }
 
 func perMinute(n int) *rate.Limiter {
@@ -254,14 +246,10 @@ func (s *Server) reader(ctx context.Context) (Caller, error) {
 		return Caller{}, status.Error(codes.PermissionDenied, "this is for callers outside Themis")
 	}
 	if !s.allowRead(c) {
-		requestsLimitedTotal.WithLabelValues("reads").Inc()
+		suggestion.CountLimited("reads")
 		return Caller{}, errTooMany
 	}
 	return c, nil
-}
-
-func (c Caller) inScope(namespace string) bool {
-	return c.All || slices.Contains(c.Namespaces, namespace)
 }
 
 // lruSize bounds each lru, so callers can't grow it without limit.

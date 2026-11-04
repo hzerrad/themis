@@ -14,7 +14,6 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -61,15 +60,8 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		}
 		if conclusion == "inconclusive" {
 			store.CountInvestigation(tx, store.InvestigationAbstained)
-			proposals, err := s.Store.Proposals(ctx, tx, inv.IncidentID)
-			if err != nil {
+			if handed, err := s.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, req.GetSummary(), incident.Investigating, incident.Inconclusive); handed || err != nil {
 				return err
-			}
-			if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-				if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Inconclusive, incident.Diagnosed); err != nil {
-					return err
-				}
-				return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 			}
 			// Someone may yet suggest a fix: an expiry job closes it if not.
 			if s.Config.Current().ExternalProposals.EffectiveWindow() > 0 {
@@ -79,15 +71,8 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		}
 
 		store.CountInvestigation(tx, store.InvestigationProposed)
-		proposals, err := s.Store.Proposals(ctx, tx, inv.IncidentID)
-		if err != nil {
+		if handed, err := s.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, req.GetSummary(), incident.Investigating); handed || err != nil {
 			return err
-		}
-		if p, ok := nextProposal(proposals, inv.LeaseID); ok {
-			if err := s.Store.TransitionPath(ctx, tx, inv.IncidentID, req.GetSummary(), actor, incident.Investigating, incident.Diagnosed); err != nil {
-				return err
-			}
-			return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: inv.IncidentID})
 		}
 		return s.Store.TransitionPath(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", actor, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
@@ -95,22 +80,6 @@ func (s *Server) CompleteInvestigation(ctx context.Context, req *themisv1.Comple
 		return nil, s.internal(ctx, err)
 	}
 	return &themisv1.CompleteInvestigationResponse{}, nil
-}
-
-// nextProposal picks the accepted proposal to govern: the investigation's own
-// first, then the first suggested from outside.
-func nextProposal(proposals []store.Proposal, leaseID string) (store.Proposal, bool) {
-	for _, own := range []bool{true, false} {
-		for _, p := range proposals {
-			if p.Status != store.ProposalAccepted {
-				continue
-			}
-			if (own && p.LeaseID == leaseID) || (!own && p.LeaseID == "") {
-				return p, true
-			}
-		}
-	}
-	return store.Proposal{}, false
 }
 
 func investigationResult(conclusion string, req *themisv1.CompleteInvestigationRequest) (store.InvestigationResult, error) {
@@ -254,22 +223,14 @@ func (s *Server) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 	if _, err := s.Store.LockIncident(ctx, tx, incidentID); err != nil {
 		return err
 	}
-	proposals, err := s.Store.Proposals(ctx, tx, incidentID)
-	if err != nil {
-		return err
-	}
-	p, ok := nextProposal(proposals, "")
-	if !ok {
-		return s.escalate(ctx, tx, incidentID, reason)
-	}
-	err = s.Store.TransitionPath(ctx, tx, incidentID, reason+" A fix was suggested from outside, so Themis is checking that.", actor, incident.Investigating, incident.Diagnosed)
+	handed, err := s.Suggestions.HandOver(ctx, tx, incidentID, "", reason+" A fix was suggested from outside, so Themis is checking that.", incident.Investigating)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
-	if err != nil {
+	if handed || err != nil {
 		return err
 	}
-	return s.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: p.ID, IncidentID: incidentID})
+	return s.escalate(ctx, tx, incidentID, reason)
 }
 
 func (s *Server) escalate(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {

@@ -97,6 +97,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/incident` | An incident and its states |
 | `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |
 | `internal/incident/investigation` | Hands incidents to an investigator, and waits for a suggested fix when there is none |
+| `internal/incident/suggestion` | Takes a fix suggested for an incident, from the investigator, a tool outside Themis or a person: judges it once, keeps it with why it was refused, and hands the one that goes next to governance |
 | `internal/incident/governance` | Deciding each action by policy, approvals, handing approved actions to the executor, and putting a failed fix back |
 | `internal/incident/governance/policy` | Policy rules: compiling them, and deciding an action with them |
 | `internal/incident/verification` | Decides whether the fix worked |

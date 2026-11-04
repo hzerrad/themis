@@ -35,6 +35,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/incident/reconciliation"
+	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
@@ -226,15 +227,16 @@ func Run(ctx context.Context, o Options) error {
 	beat := func(component string) *statuspage.Heartbeat {
 		return &statuspage.Heartbeat{Store: s, Component: component, Logger: log}
 	}
+	suggestions := &suggestion.Inbox{Store: s, Config: current, Fixes: cat.Fixes, Checks: cat.Checks, Logger: log}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
-		Heartbeat: beat(store.HeartbeatInvestigator),
+		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions,
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: investigators, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
 	api.Sessions, api.Accounts = s, s
 	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
 	if cfg.Executor != nil {

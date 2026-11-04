@@ -19,10 +19,6 @@ func targetToProto(t incident.TargetRef) *themisv1.TargetRef {
 	return &themisv1.TargetRef{Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, Uid: t.UID}
 }
 
-func targetFromProto(t *themisv1.TargetRef) incident.TargetRef {
-	return incident.TargetRef{Group: t.GetGroup(), Kind: t.GetKind(), Namespace: t.GetNamespace(), Name: t.GetName(), UID: t.GetUid()}
-}
-
 var classifications = map[evidence.Classification]themisv1.DataClassification{
 	evidence.ClassificationInternal:  themisv1.DataClassification_DATA_CLASSIFICATION_INTERNAL,
 	evidence.ClassificationSensitive: themisv1.DataClassification_DATA_CLASSIFICATION_SENSITIVE,

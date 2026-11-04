@@ -27,6 +27,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
+	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
@@ -129,6 +130,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: k8s, Now: clk.Now, LeaseFor: time.Minute,
 		Logger: telemetry.NewLogger(logs, "core", slog.LevelDebug),
 	}
+	gs.Suggestions = &suggestion.Inbox{Store: s, Config: cfg, Fixes: cat.Fixes, Checks: cat.Checks, Logger: gs.Logger, Now: clk.Now}
 	tokenFile := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(tokenFile, []byte(investigatorToken), 0o600); err != nil {
 		t.Fatal(err)
