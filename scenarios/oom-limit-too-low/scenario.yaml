@@ -1,0 +1,113 @@
+# A Deployment's containers OOMKilled on a version that has run for a while:
+# Themis may suggest raising their memory limit, with a person's approval.
+# README.md says what it covers; docs/scenarios.md says what each field means.
+
+name: oom-limit-too-low
+description: A Deployment's containers run out of memory on a version that has run for a while; Themis may suggest raising their memory limit, which a person approves.
+
+# What the investigator may name as the root cause, most likely first, and
+# what each means.
+rootCauses:
+  - name: memory_limit_too_low
+    description: it needs more memory than its limit, from more load or data
+  - name: memory_leak
+    description: its memory grows while it runs until it is killed, whatever the limit
+  - name: memory_limit_regression
+    description: the new revision's memory limit is too low
+  - name: node_memory_pressure
+    description: its node ran short of memory and evicted or killed its pods
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
+# The profile Themis uses for these incidents. It answers the OOM alerts the
+# rollout-regression pack answers too, so an incident from them gets both
+# packs: a rollback when a new version brought the kills, a higher limit when
+# the version had run. Its priority is below that pack's.
+profile:
+  priority: 90
+  match:
+    alertNames: [KubePodOOMKilled, KubePodCrashLooping]
+    targetKinds: [Deployment.apps]
+  # Without a metrics source container_memory is a gap: the pod states still
+  # show the OOM kills, which are enough to act on.
+  evidence:
+    initial: [pod_states, container_memory, rollout_history, target_events, referenced_config]
+    allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail]
+  checks:
+    - oom_killed_current_revision
+    - oom_without_recent_rollout
+    - memory_data_available
+    - memory_at_limit_before_kill
+    - oom_after_long_run
+    - evicted_for_node_memory
+  capabilities: [deployment.set-resources]
+  # What the investigator is told about these incidents: when raising the
+  # memory limit is right and when it is wrong. It names checks, never root
+  # causes, and gives a starting size as guidance only: the checks and the
+  # policy below decide, and a person approves the size.
+  guidance: |
+    Raising a container's memory limit is right when containers of a version
+    that has run are killed for memory and now need more than their limit:
+    oom_killed_current_revision and oom_without_recent_rollout are true,
+    memory_at_limit_before_kill is true, or unknown without peak figures, and
+    nothing below applies. Raise the memory limit of the killed containers
+    only, citing pod_states, and container_memory when it has figures. Size
+    it from the evidence: the peak plus 25% when container_memory shows it,
+    otherwise 1.5 times the current limit. Never lower a value, never change
+    CPU, never set a limit where there was none, and never remove one.
+
+    Missing memory figures are no reason to decline: OOM kills in the pod
+    states are enough to act on. They only mean the size can't come from the
+    peak.
+
+    Don't raise it, and say what you found instead, when:
+    - oom_without_recent_rollout is false because the version rolled out
+      recently: the new version may have brought the kills. Whether to roll
+      it back is a rollback's question, under its own guidance, never a
+      reason to raise the limit here.
+    - oom_after_long_run is true, the containers are killed again and again
+      after hours of running, and the limit held for days before: memory
+      that grows until the container is killed, at any limit. A higher limit
+      only delays the next kill; say so and leave it to a person.
+    - memory_at_limit_before_kill is false: the containers never came near
+      their limit, so the limit isn't what killed them.
+    - evicted_for_node_memory is true: the node ran short of memory. A
+      higher limit doesn't give it more, and can make it worse.
+    - oom_killed_current_revision is not true: a container killed with exit
+      code 137 and no OOMKilled reason may have been stopped for another
+      reason. Don't infer a memory kill from restarts, exit codes or the
+      alert alone; say what is missing.
+  policy:
+    mode: guarded
+    approvalTimeout: 30m
+    rules:
+      # OOM kills on a version that has run are the only reason this pack
+      # raises memory. A raise without them, right after a rollout, when the
+      # containers never reached their limit, or when the node ran short of
+      # memory, is refused. A restore puts back what Themis changed.
+      - name: raise-needs-oom-kills-on-a-version-that-has-run
+        when: >-
+          action.restore != "true" &&
+          (predicates.oom_killed_current_revision != "true" ||
+           predicates.oom_without_recent_rollout != "true" ||
+           predicates.memory_at_limit_before_kill == "false" ||
+           predicates.evicted_for_node_memory == "true")
+        decision: deny
+      # The fix here raises a memory limit that exists, and may raise a
+      # memory request with it: no CPU, no lower value, no new limit where
+      # there was none, which could kill a container that wasn't.
+      - name: raise-a-memory-limit-only
+        when: >-
+          action.capability == "deployment.set-resources" && action.restore != "true" &&
+          ("cpu" in change || !("memory" in change) || change.memory != "increase" ||
+           change.exists(k, k.endsWith(".memory.limit") && change[k] == "set") ||
+           !change.exists(k, k.endsWith(".memory.limit") && change[k] == "increase"))
+        decision: deny
+      - name: raise-needs-approval
+        when: action.restore != "true"
+        decision: require_approval
+  verification:
+    window: 10m
+    stability: 5m

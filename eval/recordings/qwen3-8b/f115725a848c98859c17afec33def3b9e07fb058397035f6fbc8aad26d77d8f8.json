@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"OOMKilled pods in revision 4 suggest memory limit is too low. Increasing memory limit from 1Gi to 1.5Gi.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"OOMKilled pods in revision 4 with no recent rollout indicate memory limit is too low.\",\n        \"supporting\": [\"oom_killed_current_revision\", \"oom_without_recent_rollout\"],\n        \"contradicting\": [],\n        \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"Missing memory usage data prevents definitive analysis.\",\n        \"supporting\": [\"memory_data_available\"],\n        \"contradicting\": [\"oom_killed_current_revision\"],\n        \"missing\": [\"memory_at_limit_before_kill\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"reports\",\n        \"uid\": \"uid-deployment-reports\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"1536Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise memory limit for app container to 1536Mi to prevent OOMKilled errors.\",\n    \"rationale\": \"OOMKilled pods in revision 4 with no recent rollout indicate memory limit is too low. Increasing limit by 50% addresses this without requiring additional data.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"oom_without_recent_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3118,
+        "output_tokens": 1086
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

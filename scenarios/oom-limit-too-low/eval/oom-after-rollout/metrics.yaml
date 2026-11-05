@@ -1,0 +1,7 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  checkout-7d9f8b6c4-x2kqp:
+    app:
+      memory: 120Mi
+      peakMemory: 256Mi

@@ -1,0 +1,340 @@
+# Revision 2 has run for ten days. The product import doubled the catalog
+# this morning, and the app loads it into memory at start: since 11:40 every
+# container is OOMKilled a few minutes after it starts, at its 512Mi limit.
+# Raising the memory limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  creationTimestamp: '2026-09-01T09:00:00Z'
+  labels:
+    app: catalog
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: catalog
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:3.8.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-09-01T09:00:00Z'
+    lastTransitionTime: '2026-09-01T09:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-25T10:00:00Z'
+    lastTransitionTime: '2026-10-25T10:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: catalog-5d8e1a3c6
+  creationTimestamp: '2026-09-01T09:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 5d8e1a3c6
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: catalog
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: catalog
+      pod-template-hash: 5d8e1a3c6
+  template:
+    metadata:
+      labels:
+        app: catalog
+        pod-template-hash: 5d8e1a3c6
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:3.7.2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: catalog-7f4c9d2b8
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 7f4c9d2b8
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: catalog
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: catalog
+      pod-template-hash: 7f4c9d2b8
+  template:
+    metadata:
+      labels:
+        app: catalog
+        pod-template-hash: 7f4c9d2b8
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:3.8.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-7f4c9d2b8-a1b2c
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 7f4c9d2b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-7f4c9d2b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:3.8.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-10-25T10:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-25T10:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/catalog:3.8.0
+    imageID: example/catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+    ready: false
+    started: false
+    restartCount: 6
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=catalog-7f4c9d2b8-a1b2c
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:48:10Z'
+        finishedAt: '2026-11-04T13:52:40Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-7f4c9d2b8-d3e4f
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 7f4c9d2b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-7f4c9d2b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:3.8.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-10-25T10:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-25T10:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/catalog:3.8.0
+    imageID: example/catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+    ready: false
+    started: false
+    restartCount: 5
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=catalog-7f4c9d2b8-d3e4f
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:50:05Z'
+        finishedAt: '2026-11-04T13:54:20Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-7f4c9d2b8-g5h6i
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 7f4c9d2b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-7f4c9d2b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:3.8.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-10-25T10:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-25T10:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:3.8.0
+    imageID: example/catalog@sha256:2222222222222222222222222222222222222222222222222222222222222222
+    ready: true
+    started: true
+    restartCount: 5
+    state:
+      running:
+        startedAt: '2026-11-04T13:56:30Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:46:00Z'
+        finishedAt: '2026-11-04T13:50:15Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-7f4c9d2b8-a1b2c.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-7f4c9d2b8-a1b2c
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod catalog-7f4c9d2b8-a1b2c'
+source:
+  component: kubelet
+count: 21
+firstTimestamp: '2026-11-04T11:44:00Z'
+lastTimestamp: '2026-11-04T13:58:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-7f4c9d2b8-d3e4f.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-7f4c9d2b8-d3e4f
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod catalog-7f4c9d2b8-d3e4f'
+source:
+  component: kubelet
+count: 17
+firstTimestamp: '2026-11-04T11:47:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-7f4c9d2b8-g5h6i.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-7f4c9d2b8-g5h6i
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod catalog-7f4c9d2b8-g5h6i'
+source:
+  component: kubelet
+count: 15
+firstTimestamp: '2026-11-04T11:41:00Z'
+lastTimestamp: '2026-11-04T13:51:00Z'

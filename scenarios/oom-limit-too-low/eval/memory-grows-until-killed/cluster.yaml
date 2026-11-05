@@ -1,0 +1,285 @@
+# Revision 3 has run for twelve days. For two days each container's memory
+# has climbed while it runs, and it is OOMKilled at its 1Gi limit after
+# five to six hours, again and again; its logs show the heap growing after
+# every collection. A higher limit only delays the next kill.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sessions
+  creationTimestamp: '2026-07-01T09:00:00Z'
+  labels:
+    app: sessions
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sessions
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: sessions
+    spec:
+      containers:
+      - name: app
+        image: example/sessions:5.2.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  observedGeneration: 3
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 0
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-07-01T09:00:00Z'
+    lastTransitionTime: '2026-07-01T09:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-23T09:00:00Z'
+    lastTransitionTime: '2026-10-23T09:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: sessions-8a3d5f1b7
+  creationTimestamp: '2026-09-10T09:00:00Z'
+  labels:
+    app: sessions
+    pod-template-hash: 8a3d5f1b7
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: sessions
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: sessions
+      pod-template-hash: 8a3d5f1b7
+  template:
+    metadata:
+      labels:
+        app: sessions
+        pod-template-hash: 8a3d5f1b7
+    spec:
+      containers:
+      - name: app
+        image: example/sessions:5.1.4
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: sessions-4e8b2c6f0
+  creationTimestamp: '2026-10-23T09:00:00Z'
+  labels:
+    app: sessions
+    pod-template-hash: 4e8b2c6f0
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: sessions
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sessions
+      pod-template-hash: 4e8b2c6f0
+  template:
+    metadata:
+      labels:
+        app: sessions
+        pod-template-hash: 4e8b2c6f0
+    spec:
+      containers:
+      - name: app
+        image: example/sessions:5.2.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sessions-4e8b2c6f0-r1s2t
+  creationTimestamp: '2026-10-23T09:00:00Z'
+  labels:
+    app: sessions
+    pod-template-hash: 4e8b2c6f0
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: sessions-4e8b2c6f0
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/sessions:5.2.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-23T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-23T09:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/sessions:5.2.0
+    imageID: example/sessions@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    ready: true
+    started: true
+    restartCount: 8
+    state:
+      running:
+        startedAt: '2026-11-04T08:02:00Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T02:14:00Z'
+        finishedAt: '2026-11-04T08:01:40Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sessions-4e8b2c6f0-u3v4w
+  creationTimestamp: '2026-10-23T09:00:00Z'
+  labels:
+    app: sessions
+    pod-template-hash: 4e8b2c6f0
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: sessions-4e8b2c6f0
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/sessions:5.2.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-23T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-23T09:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/sessions:5.2.0
+    imageID: example/sessions@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    ready: true
+    started: true
+    restartCount: 7
+    state:
+      running:
+        startedAt: '2026-11-04T11:37:00Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T05:50:00Z'
+        finishedAt: '2026-11-04T11:36:30Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sessions-4e8b2c6f0-x5y6z
+  creationTimestamp: '2026-10-23T09:00:00Z'
+  labels:
+    app: sessions
+    pod-template-hash: 4e8b2c6f0
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: sessions-4e8b2c6f0
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/sessions:5.2.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-23T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-23T09:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/sessions:5.2.0
+    imageID: example/sessions@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    ready: true
+    started: true
+    restartCount: 8
+    state:
+      running:
+        startedAt: '2026-11-04T13:21:00Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T07:44:00Z'
+        finishedAt: '2026-11-04T13:20:20Z'

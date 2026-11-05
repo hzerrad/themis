@@ -1,0 +1,33 @@
+name: peak-at-limit-after-growth
+version: 1
+description: Revision 2 has run for ten days; since a larger catalog loaded this morning, its containers are OOMKilled
+  minutes after starting, at the 512Mi limit Prometheus shows them peak at.
+tags: [memory, oom]
+source: synthetic
+difficulty: easy
+incident_class: oom_limit_too_low
+alert: KubePodOOMKilled
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: catalog}
+evidence:
+  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config]
+  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          memory: 640Mi
+truth:
+  root_causes: [memory_limit_too_low]
+  decision: propose
+  required_citations: [pod_states, container_memory]
+  predicates:
+    oom_killed_current_revision: 'true'
+    oom_without_recent_rollout: 'true'
+    memory_data_available: 'true'
+    memory_at_limit_before_kill: 'true'
+    oom_after_long_run: 'false'
+    evicted_for_node_memory: 'false'
+  policy: require_approval

@@ -1,0 +1,315 @@
+{
+  "scenario": "peak-at-limit-after-growth",
+  "version": 1,
+  "difficulty": "easy",
+  "incident_class": "oom_limit_too_low",
+  "truth": {
+    "root_causes": [
+      "memory_limit_too_low"
+    ],
+    "decision": "propose",
+    "required_citations": [
+      "pod_states",
+      "container_memory"
+    ],
+    "predicates": {
+      "evicted_for_node_memory": "false",
+      "memory_at_limit_before_kill": "true",
+      "memory_data_available": "true",
+      "oom_after_long_run": "false",
+      "oom_killed_current_revision": "true",
+      "oom_without_recent_rollout": "true"
+    },
+    "policy": "require_approval"
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "catalog",
+    "UID": "uid-deployment-catalog"
+  },
+  "capabilities": [
+    "deployment.rollback-to-revision",
+    "deployment.set-resources"
+  ],
+  "fixes": [
+    {
+      "name": "deployment.rollback-to-revision",
+      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
+    },
+    {
+      "name": "deployment.set-resources",
+      "description": "Set the memory and CPU requests and limits of containers in the Deployment's pod template, which rolls out new pods. containers maps each container's name to the requests and limits to set, as Kubernetes quantities such as 512Mi or 250m; values not named stay as they are. Choose the values from the evidence: Themis checks that they are valid and that the cluster can run them, never how big they are. A limit can't be removed, and a request can't end above its limit.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"containers\"],\"properties\":{\"containers\":{\"type\":\"object\",\"minProperties\":1,\"description\":\"The values to set, by container name.\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"requests\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 512Mi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 250m.\"}}},\"limits\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 1Gi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 500m.\"}}}}}}}}"
+    }
+  ],
+  "root_causes": [
+    {
+      "name": "memory_limit_regression",
+      "description": "the new revision's memory limit is too low"
+    },
+    {
+      "name": "bad_configuration",
+      "description": "the new revision's settings are wrong"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled"
+    },
+    {
+      "name": "application_bug",
+      "description": "its code fails, whichever revision runs"
+    },
+    {
+      "name": "configuration_change",
+      "description": "a ConfigMap or Secret changed outside the rollout"
+    },
+    {
+      "name": "dependency_failure",
+      "description": "something it calls is failing"
+    },
+    {
+      "name": "insufficient_capacity",
+      "description": "no room in the cluster for its pods"
+    },
+    {
+      "name": "node_problem",
+      "description": "a node is unhealthy or evicting pods"
+    },
+    {
+      "name": "storage_full",
+      "description": "a disk or volume is full"
+    },
+    {
+      "name": "traffic_spike",
+      "description": "more load than it can take"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    },
+    {
+      "name": "memory_limit_too_low",
+      "description": "it needs more memory than its limit, from more load or data"
+    },
+    {
+      "name": "memory_leak",
+      "description": "its memory grows while it runs until it is killed, whatever the limit"
+    },
+    {
+      "name": "node_memory_pressure",
+      "description": "its node ran short of memory and evicted or killed its pods"
+    }
+  ],
+  "guidance": "From the rollout-regression profile, which offers deployment.rollback-to-revision:\nA rollback is right when the current revision introduced the failure and\na prior revision was healthy. If the failure started before the rollout,\nif the target is managed by GitOps, if its config changed before the\nfailure, or if the evidence is missing, do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nprior_revision_was_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the prior\nrevision is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n\nFrom the oom-limit-too-low profile, which offers deployment.set-resources:\nRaising a container's memory limit is right when containers of a version\nthat has run are killed for memory and now need more than their limit:\noom_killed_current_revision and oom_without_recent_rollout are true,\nmemory_at_limit_before_kill is true, or unknown without peak figures, and\nnothing below applies. Raise the memory limit of the killed containers\nonly, citing pod_states, and container_memory when it has figures. Size\nit from the evidence: the peak plus 25% when container_memory shows it,\notherwise 1.5 times the current limit. Never lower a value, never change\nCPU, never set a limit where there was none, and never remove one.\n\nMissing memory figures are no reason to decline: OOM kills in the pod\nstates are enough to act on. They only mean the size can't come from the\npeak.\n\nDon't raise it, and say what you found instead, when:\n- oom_without_recent_rollout is false because the version rolled out\n  recently: the new version may have brought the kills. Whether to roll\n  it back is a rollback's question, under its own guidance, never a\n  reason to raise the limit here.\n- oom_after_long_run is true, the containers are killed again and again\n  after hours of running, and the limit held for days before: memory\n  that grows until the container is killed, at any limit. A higher limit\n  only delays the next kill; say so and leave it to a person.\n- memory_at_limit_before_kill is false: the containers never came near\n  their limit, so the limit isn't what killed them.\n- evicted_for_node_memory is true: the node ran short of memory. A\n  higher limit doesn't give it more, and can make it worse.\n- oom_killed_current_revision is not true: a container killed with exit\n  code 137 and no OOMKilled reason may have been stopped for another\n  reason. Don't infer a memory kill from restarts, exit codes or the\n  alert alone; say what is missing.",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"catalog-7f4c9d2b8-a1b2c\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":false,\"startedAt\":\"2026-10-25T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/catalog:3.8.0\",\"ready\":false,\"restartCount\":6,\"state\":{\"status\":\"waiting\",\"reason\":\"CrashLoopBackOff\"},\"lastTermination\":{\"status\":\"terminated\",\"reason\":\"OOMKilled\",\"exitCode\":137,\"startedAt\":\"2026-11-04T13:48:10Z\",\"finishedAt\":\"2026-11-04T13:52:40Z\"}}]},{\"name\":\"catalog-7f4c9d2b8-d3e4f\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":false,\"startedAt\":\"2026-10-25T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/catalog:3.8.0\",\"ready\":false,\"restartCount\":5,\"state\":{\"status\":\"waiting\",\"reason\":\"CrashLoopBackOff\"},\"lastTermination\":{\"status\":\"terminated\",\"reason\":\"OOMKilled\",\"exitCode\":137,\"startedAt\":\"2026-11-04T13:50:05Z\",\"finishedAt\":\"2026-11-04T13:54:20Z\"}}]},{\"name\":\"catalog-7f4c9d2b8-g5h6i\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-25T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/catalog:3.8.0\",\"ready\":true,\"restartCount\":5,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-11-04T13:56:30Z\"},\"lastTermination\":{\"status\":\"terminated\",\"reason\":\"OOMKilled\",\"exitCode\":137,\"startedAt\":\"2026-11-04T13:46:00Z\",\"finishedAt\":\"2026-11-04T13:50:15Z\"}}]}],\"totalPods\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-container_memory",
+      "template": "container_memory",
+      "data": "{\"window\":\"1h\",\"usage\":{\"source\":\"prometheus\"},\"peak\":{\"source\":\"prometheus\"},\"containers\":[{\"name\":\"app\",\"requestBytes\":402653184,\"limitBytes\":536870912,\"usageBytes\":477102080,\"peakBytes\":536870912,\"usageOfLimit\":0.889,\"peakOfLimit\":1}]}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"catalog\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":1,\"unavailableReplicas\":2,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-09-01T09:00:00Z\",\"lastTransitionTime\":\"2026-09-01T09:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-25T10:00:00Z\",\"lastTransitionTime\":\"2026-10-25T10:00:00Z\"}]},\"revisions\":[{\"replicaSet\":\"catalog-7f4c9d2b8\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-25T10:00:00Z\",\"replicas\":3,\"readyReplicas\":1,\"containers\":[{\"name\":\"app\",\"image\":\"example/catalog:3.8.0\",\"requests\":{\"cpu\":\"250m\",\"memory\":\"384Mi\"},\"limits\":{\"memory\":\"512Mi\"}}]},{\"replicaSet\":\"catalog-5d8e1a3c6\",\"revision\":\"1\",\"createdAt\":\"2026-09-01T09:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/catalog:3.7.2\",\"requests\":{\"cpu\":\"250m\",\"memory\":\"384Mi\"},\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/catalog-7f4c9d2b8-a1b2c\",\"type\":\"Warning\",\"reason\":\"BackOff\",\"message\":\"Back-off restarting failed container app in pod catalog-7f4c9d2b8-a1b2c\",\"count\":21,\"firstSeen\":\"2026-11-04T11:44:00Z\",\"lastSeen\":\"2026-11-04T13:58:00Z\"},{\"object\":\"Pod/catalog-7f4c9d2b8-d3e4f\",\"type\":\"Warning\",\"reason\":\"BackOff\",\"message\":\"Back-off restarting failed container app in pod catalog-7f4c9d2b8-d3e4f\",\"count\":17,\"firstSeen\":\"2026-11-04T11:47:00Z\",\"lastSeen\":\"2026-11-04T13:57:00Z\"},{\"object\":\"Pod/catalog-7f4c9d2b8-g5h6i\",\"type\":\"Warning\",\"reason\":\"BackOff\",\"message\":\"Back-off restarting failed container app in pod catalog-7f4c9d2b8-g5h6i\",\"count\":15,\"firstSeen\":\"2026-11-04T11:41:00Z\",\"lastSeen\":\"2026-11-04T13:51:00Z\"}],\"totalEvents\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"catalog-7f4c9d2b8-a1b2c\",\"container\":\"app\",\"previousRun\":true,\"logs\":\"\",\"note\":\"The container wrote nothing. Processes killed for using too much memory often write nothing, so the silence proves nothing either way.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "container_memory",
+      "description": "Memory each container of the current revision uses now and at its peak over a window (default 1h), against its request and limit, and which metrics source said so. A figure the source can't give is null, with why.",
+      "params": [
+        "window"
+      ]
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "rollout_recent",
+      "version": "1",
+      "value": "false",
+      "reason": "revision 2 rolled out 244h0m0s ago, beyond 6h0m0s",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failure_onset_after_rollout",
+      "version": "1",
+      "value": "true",
+      "reason": "all 6 failures follow revision 2 at 2026-10-25T10:00:00Z",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-target_events",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "prior_revision_was_healthy",
+      "version": "1",
+      "value": "unknown",
+      "reason": "revision 1 has no pods left to judge"
+    },
+    {
+      "name": "oom_killed_new_revision",
+      "version": "1",
+      "value": "true",
+      "reason": "catalog-7f4c9d2b8-a1b2c/app of revision 2 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "config_changed_before_failure",
+      "version": "1",
+      "value": "false",
+      "reason": "no referenced ConfigMap changed between the rollout and the first failure",
+      "evidence_ids": [
+        "ev-referenced_config",
+        "ev-rollout_history",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "oom_killed_current_revision",
+      "version": "1",
+      "value": "true",
+      "reason": "catalog-7f4c9d2b8-a1b2c/app of revision 2 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "oom_without_recent_rollout",
+      "version": "1",
+      "value": "true",
+      "reason": "revision 2 rolled out 244h0m0s ago, and its pod catalog-7f4c9d2b8-a1b2c was OOMKilled",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "memory_data_available",
+      "version": "1",
+      "value": "true",
+      "reason": "prometheus says each container's peak memory over 1h",
+      "evidence_ids": [
+        "ev-container_memory"
+      ]
+    },
+    {
+      "name": "memory_at_limit_before_kill",
+      "version": "1",
+      "value": "true",
+      "reason": "app peaked at 100% of its memory limit of 512Mi over 1h",
+      "evidence_ids": [
+        "ev-container_memory"
+      ]
+    },
+    {
+      "name": "oom_after_long_run",
+      "version": "1",
+      "value": "false",
+      "reason": "a container of revision 2 was OOMKilled after running 4m15s",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "evicted_for_node_memory",
+      "version": "1",
+      "value": "false",
+      "reason": "no pod was evicted for its node's memory",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    }
+  ],
+  "policy": {
+    "fix": {
+      "capability": "deployment.set-resources",
+      "params": {
+        "containers": {
+          "app": {
+            "limits": {
+              "memory": "640Mi"
+            }
+          }
+        }
+      }
+    },
+    "outcome": "require_approval",
+    "reason": "Policy rule raise-needs-approval requires a person's approval. It is the oom-limit-too-low profile's policy."
+  }
+}
