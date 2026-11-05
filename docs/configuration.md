@@ -203,6 +203,9 @@ profiles:
       allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
     checks: [rollout_recent, oom_killed_new_revision]   # optional; none means all
     capabilities: [deployment.rollback-to-revision]
+    guidance: |                          # optional
+      A rollback is right when the current revision introduced the failure
+      and a prior revision was healthy. ...
     investigation: {maxSteps: 8, maxEvidenceRequests: 6, timeout: 5m}
     policy: {...}
     verification: {window: 5m, stability: 2m}
@@ -247,7 +250,35 @@ A profile runs every check unless its `checks` lists the ones to run. A name The
 
 ### Capabilities
 
-`deployment.rollback-to-revision` restores the pod template of a prior ReplicaSet revision, as `kubectl rollout undo` does, with the target's resource version as a precondition and a server-side dry run first. A profile without `capabilities` is diagnosis only.
+A profile without `capabilities` is diagnosis only. Every fix writes with the target's resource version as a precondition, after a server-side dry run.
+
+`deployment.rollback-to-revision` restores the pod template of a prior ReplicaSet revision, as `kubectl rollout undo` does.
+
+`deployment.set-probes` changes the timing of a container's liveness, readiness and startup probes. The investigator picks the probes and the values from the evidence; Themis doesn't estimate or cap them.
+
+- **It may change** `initialDelaySeconds`, `periodSeconds`, `timeoutSeconds` and `failureThreshold` of any of the three, and `successThreshold` of a readiness probe. Kubernetes requires `successThreshold` to be 1 for the other two. Parameters: `{"container": "app", "readiness": {"timeoutSeconds": 5}, "liveness": {"failureThreshold": 6}}`, only the fields to change.
+- **It never** adds or removes a probe, or changes what a probe calls (its HTTP path or port, command, TCP or gRPC check): those are changes to the application, for a person. Its parameters can't express them.
+- **It refuses** a container or a probe the workload doesn't have, and values Kubernetes wouldn't accept: whole numbers, `initialDelaySeconds` from 0, the others from 1, up to 2147483647.
+- **The approver sees** each field before and after, marked "more lenient" or "stricter", and a readiness probe made more lenient on a line of its own: pods that fail it keep receiving traffic for longer.
+- **It worked** when the rollout is complete, every replica is ready, and no container restarted during the verification window, as one would if its liveness probe still failed it.
+- **Undoing it** sets the fields it changed back to what they were.
+
+`deployment.set-resources` sets the memory and CPU requests and limits of containers in the pod template, which rolls out new pods. The investigator picks the containers and the values from the evidence; Themis checks they are valid and that the cluster can run them, never how big they are. Policy and the approver decide whether the size is acceptable.
+
+- **It may change** the `memory` and `cpu` requests and limits of the containers it names. Parameters: `{"containers": {"app": {"limits": {"memory": "512Mi"}, "requests": {"memory": "384Mi"}}}}`, as Kubernetes quantities, only the values to set.
+- **It never** removes a request or a limit, or touches any other resource, field or container: its parameters can't express them.
+- **It refuses** a container the workload doesn't have, a value that isn't a positive quantity, and a request that would end above its limit. Before policy decides, it also refuses, saying by how much, a change the cluster can't run: a value a LimitRange in the namespace forbids (including a default limit below the new request); a pod request larger than the allocatable of every node the pods could be scheduled on; or a rollout that would exceed a ResourceQuota in the namespace, counting the extra pods it runs at once. When Themis isn't allowed to read nodes, ResourceQuotas or LimitRanges, it refuses rather than guess.
+- **The approver sees** each value before and after, per container, such as `app` `memory limit` `256Mi` → `512Mi`.
+- **It worked** when the rollout is complete, every replica is ready, and no container restarted or ran out of memory during the verification window.
+- **Undoing it** sets the values it changed back to what they were. A value the workload didn't have before can't be put back, since the fix never removes one, so Themis escalates with its change in place.
+
+More lenient means slower to call a container failed or quicker to call it ready: a longer delay, period or timeout, a higher `failureThreshold`, or a lower `successThreshold`.
+
+### Guidance
+
+`guidance` is plain text the investigator reads with every investigation of the profile: when the profile's fixes are right, and when they are wrong, for this kind of incident. For example, the `rollout-regression` pack says a rollback is right only when the new revision brought the failure and the one before it was healthy, and that empty logs after a container was killed for memory prove nothing. Up to 4000 characters.
+
+It is guidance, not a rule. What must hold before a fix runs belongs in [checks](#predicates) and [policy](#policy): Themis enforces those on every suggested fix, whoever suggests it, and guidance on none.
 
 ### Investigation
 
@@ -287,7 +318,8 @@ policy:
 
 These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
 
-- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
+- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
+- `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. `deployment.set-resources` sets `change.containers`, the containers it changes, comma-separated; `change.memory` and `change.cpu`, each `increase`, `decrease` or `mixed`; `change["memory.ratio"]` and `change["cpu.ratio"]`, the largest new value over its old one; and for each value it changes, `change["<container>.<memory|cpu>.<request|limit>"]`, `increase`, `decrease` or `set` (where there was none), with `.before`, `.after` and `.ratio` beside it, such as `change["app.memory.limit.ratio"] == "2"`. The shipped policies set no size limits. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
 - The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
 - A rule that fails to evaluate denies. Policy never fails open.
 - In **guarded** mode `allow` still needs approval: no action runs without a human. In **observe** mode every action is denied, so Themis only diagnoses and recommends.

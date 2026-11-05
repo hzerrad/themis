@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to memory limit regression in revision 2 causing OOMKilled\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's memory limit is too low\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n        \"contradicting\": [],\n        \"missing\": [\"prior_revision_was_healthy\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"Code failure in new revision\",\n        \"supporting\": [\"ev-pod_states\"],\n        \"contradicting\": [\"ev-referenced_config\"],\n        \"missing\": [],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Revert to revision 1 which had no OOMKilled incidents\",\n    \"rationale\": \"The OOMKilled events in revision 2 (ev-pod_states) with memory limit 256Mi (ev-rollout_history) suggest memory limit regression. Rollback is justified as failure_onset_after_rollout (ev-rollout_history) and gitops_managed=false (ev-rollout_history) prevent other rollback conditions from being met.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\", \"gitops_managed\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3466,
+        "output_tokens": 863
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

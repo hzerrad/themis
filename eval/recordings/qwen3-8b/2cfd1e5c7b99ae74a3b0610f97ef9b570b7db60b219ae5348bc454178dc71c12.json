@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The new revision (2) is OOM killed, but prior_revision_was_healthy is false, preventing rollback. Evidence lacks details on memory usage differences between revisions or node capacity issues.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New revision's memory limit is too low, but limits are same as prior revision.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting",
+      "usage": {
+        "input_tokens": 2934,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": true
+    }
+  ]
+}

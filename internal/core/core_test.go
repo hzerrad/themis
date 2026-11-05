@@ -156,9 +156,12 @@ func start(t *testing.T, options func() core.Options) (core.Options, <-chan erro
 	t.Helper()
 	for attempt := 1; ; attempt++ {
 		o := options()
-		ctx, cancel := context.WithCancel(context.Background())
-		exited := make(chan error, 1)
-		go func() { exited <- core.Run(ctx, o) }()
+		ctx, cancelRun := context.WithCancel(context.Background())
+		exited, stopped := make(chan error, 1), make(chan struct{})
+		go func() { exited <- core.Run(ctx, o); close(stopped) }()
+		// Stopping waits for Run to return, so the next core doesn't start
+		// while this one still holds its metrics and ports.
+		cancel := func() { cancelRun(); <-stopped }
 		ready, err := waitReady(o, exited)
 		if ready {
 			t.Cleanup(cancel)

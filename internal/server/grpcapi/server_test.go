@@ -83,6 +83,7 @@ func profile() config.Profile {
 			Allowed: []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents, evidence.ContainerLogsTail},
 		},
 		Capabilities:  []string{"deployment.rollback-to-revision"},
+		Guidance:      "Roll back only what the rollout broke.",
 		Investigation: config.Investigation{MaxEvidenceRequests: 2},
 	}
 }

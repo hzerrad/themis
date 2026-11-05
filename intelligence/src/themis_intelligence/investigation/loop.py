@@ -1,6 +1,7 @@
 """The investigation loop: an explicit state machine over model decisions."""
 
 import json
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -31,7 +32,7 @@ from themis_intelligence.platform.contract import (
     Usage,
 )
 
-PROMPT_VERSION = "rollout_v4"
+PROMPT_VERSION = "investigate_v1"
 LOGS_TEMPLATE = "container_logs_tail"
 MAX_OUTPUT_TOKENS = 2048
 STEP_DEADLINE_S = 120.0
@@ -124,25 +125,45 @@ def render_evidence(item: common_pb2.EvidenceItem) -> str:
     )
 
 
+# A block of the prompt kept only in some investigations: "{if fix}" when a
+# fix is on offer, "{if no fix}" when none is, "{if guidance}" when the pack
+# gives some. Each runs from its own line to an "{end}" line.
+_BLOCK = re.compile(r"^\{if (fix|no fix|guidance)\}\n(.*?)^\{end\}\n", re.MULTILINE | re.DOTALL)
+
+
+def fixes_on_offer(job: investigation_pb2.Investigation) -> list[str]:
+    return [c.name for c in job.capabilities] or list(job.candidate_capabilities)
+
+
 def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
     text = resources.files(__package__).joinpath("prompts", f"{PROMPT_VERSION}.md").read_text()
+    kept = {
+        "fix": bool(fixes_on_offer(job)),
+        "no fix": not fixes_on_offer(job),
+        "guidance": bool(job.guidance.strip()),
+    }
+    text = _BLOCK.sub(lambda m: m[2] if kept[m[1]] else "", text)
     templates = "\n".join(
         f"  - {t.name}: {t.description}" + (f" Params: {', '.join(t.params)}." if t.params else "")
         for t in job.allowed_templates
     )
     causes = "\n".join(f"  - {c.name}: {c.description}" for c in job.root_causes)
+    cited = checks(job)
     return (
         text.replace("{root_causes}", causes)
         .replace("{templates}", templates)
         .replace("{capabilities}", capabilities(job))
+        .replace("{cited_example}", f", such as {cited[0]}" if cited else "")
         .replace("{max_steps}", str(max_steps))
+        # Last, so nothing in the pack's text is taken for a placeholder.
+        .replace("{guidance}", job.guidance.strip())
     )
 
 
 def capabilities(job: investigation_pb2.Investigation) -> str:
     """The fixes on offer, each with what it does and its parameters' schema."""
     if not job.capabilities:
-        return "  " + (", ".join(job.candidate_capabilities) or "none")
+        return "  " + ", ".join(job.candidate_capabilities)
     return "\n".join(
         f"  - {c.name}: {c.description} Parameters: {c.params_schema}" for c in job.capabilities
     )
@@ -293,7 +314,7 @@ async def investigate(
             level = higher(level, classification(i))
     allowed = {t.name for t in job.allowed_templates}
     # The fixes on offer, and a reply schema that only allows them.
-    offered = [c.name for c in job.capabilities] or list(job.candidate_capabilities)
+    offered = fixes_on_offer(job)
     schema = reply_schema(job)
     causes, cited = root_causes(job), checks(job)
     seen = {i.template for i in job.initial_evidence}
@@ -429,7 +450,11 @@ async def investigate(
                     invalid += 1
                     tell("A propose decision needs a proposal.")
                     continue
-                if offered and decision.proposal.capability not in offered:
+                if not offered:
+                    invalid += 1
+                    tell("No fix is allowed for this incident: name the cause and conclude.")
+                    continue
+                if decision.proposal.capability not in offered:
                     invalid += 1
                     tell(
                         f"{fence(repr(decision.proposal.capability))} is not an allowed fix. "

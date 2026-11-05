@@ -146,7 +146,7 @@ class FailInvestigationResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class Investigation(_message.Message):
-    __slots__ = ("lease_id", "lease_deadline", "incident_id", "profile", "target", "initial_evidence", "initial_failures", "predicates", "allowed_templates", "candidate_capabilities", "budget", "capabilities", "root_causes")
+    __slots__ = ("lease_id", "lease_deadline", "incident_id", "profile", "target", "initial_evidence", "initial_failures", "predicates", "allowed_templates", "candidate_capabilities", "budget", "capabilities", "root_causes", "guidance")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_DEADLINE_FIELD_NUMBER: _ClassVar[int]
     INCIDENT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -160,6 +160,7 @@ class Investigation(_message.Message):
     BUDGET_FIELD_NUMBER: _ClassVar[int]
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     ROOT_CAUSES_FIELD_NUMBER: _ClassVar[int]
+    GUIDANCE_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     lease_deadline: _timestamp_pb2.Timestamp
     incident_id: str
@@ -173,7 +174,8 @@ class Investigation(_message.Message):
     budget: _common_pb2.Budget
     capabilities: _containers.RepeatedCompositeFieldContainer[_common_pb2.Capability]
     root_causes: _containers.RepeatedCompositeFieldContainer[_common_pb2.RootCause]
-    def __init__(self, lease_id: _Optional[str] = ..., lease_deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., incident_id: _Optional[str] = ..., profile: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., initial_evidence: _Optional[_Iterable[_Union[_common_pb2.EvidenceItem, _Mapping]]] = ..., initial_failures: _Optional[_Iterable[_Union[_common_pb2.CollectionFailure, _Mapping]]] = ..., predicates: _Optional[_Iterable[_Union[_common_pb2.PredicateResult, _Mapping]]] = ..., allowed_templates: _Optional[_Iterable[_Union[EvidenceTemplate, _Mapping]]] = ..., candidate_capabilities: _Optional[_Iterable[str]] = ..., budget: _Optional[_Union[_common_pb2.Budget, _Mapping]] = ..., capabilities: _Optional[_Iterable[_Union[_common_pb2.Capability, _Mapping]]] = ..., root_causes: _Optional[_Iterable[_Union[_common_pb2.RootCause, _Mapping]]] = ...) -> None: ...
+    guidance: str
+    def __init__(self, lease_id: _Optional[str] = ..., lease_deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., incident_id: _Optional[str] = ..., profile: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., initial_evidence: _Optional[_Iterable[_Union[_common_pb2.EvidenceItem, _Mapping]]] = ..., initial_failures: _Optional[_Iterable[_Union[_common_pb2.CollectionFailure, _Mapping]]] = ..., predicates: _Optional[_Iterable[_Union[_common_pb2.PredicateResult, _Mapping]]] = ..., allowed_templates: _Optional[_Iterable[_Union[EvidenceTemplate, _Mapping]]] = ..., candidate_capabilities: _Optional[_Iterable[str]] = ..., budget: _Optional[_Union[_common_pb2.Budget, _Mapping]] = ..., capabilities: _Optional[_Iterable[_Union[_common_pb2.Capability, _Mapping]]] = ..., root_causes: _Optional[_Iterable[_Union[_common_pb2.RootCause, _Mapping]]] = ..., guidance: _Optional[str] = ...) -> None: ...
 
 class Hypothesis(_message.Message):
     __slots__ = ("root_cause_class", "summary", "supporting_evidence_ids", "contradicting_evidence_ids", "missing", "status")

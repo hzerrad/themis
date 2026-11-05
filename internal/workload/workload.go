@@ -167,6 +167,34 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef) (*Workload
 // its resourceVersion as precondition, or renders fields only it has.
 func (w *Workload) Object() *appsv1.Deployment { return w.deployment }
 
+// Identity is the workload as an action binds it: a change to any of it
+// since an approval makes the approval void.
+func (w *Workload) Identity() digest.TargetIdentity {
+	t := w.Target
+	return digest.TargetIdentity{
+		Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID,
+		Generation: w.Generation, SpecHash: w.TemplateHash, Manager: w.Writer,
+	}
+}
+
+// SetTemplate writes template as the workload's pod template, with the
+// resourceVersion it was read at as precondition, so a write since conflicts.
+// dryRun has the API server check the write without making it. It returns
+// the resulting generation.
+func (w *Workload) SetTemplate(ctx context.Context, c client.Client, template corev1.PodTemplateSpec, dryRun bool) (int64, error) {
+	d := w.deployment.DeepCopy()
+	d.Spec.Template = *template.DeepCopy()
+	opts := []client.PatchOption{}
+	if dryRun {
+		opts = append(opts, client.DryRunAll)
+	}
+	patch := client.MergeFromWithOptions(w.deployment, client.MergeFromWithOptimisticLock{})
+	if err := c.Patch(ctx, d, patch, opts...); err != nil {
+		return 0, fmt.Errorf("patch Deployment %s: %w", d.Name, err)
+	}
+	return d.Generation, nil
+}
+
 // Revisions are the revisions Kubernetes keeps, in no particular order.
 func (w *Workload) Revisions(ctx context.Context) ([]Revision, error) {
 	if w.listedRS {

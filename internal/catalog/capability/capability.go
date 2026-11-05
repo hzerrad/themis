@@ -63,6 +63,16 @@ type Capability interface {
 	Check(ctx context.Context, r client.Reader, t incident.TargetRef, mark string, start json.RawMessage, since time.Time) (Reading, error)
 }
 
+// Feasibility is a fix that can tell whether its change could work in the
+// cluster as it is, beyond the target itself: whether nodes, quotas and
+// limits allow it. Governance asks after Plan and before policy decides. The
+// executor doesn't: it may read only the target, and acts on what governance
+// decided.
+type Feasibility interface {
+	// Feasible returns a *Refusal saying why p can't work.
+	Feasible(ctx context.Context, r client.Reader, p Plan) error
+}
+
 // Health is how the target is doing next to when checking began, for the
 // symptom the fix is meant to cure.
 type Health string
@@ -108,6 +118,9 @@ type Plan struct {
 	// Risk and BlastRadius are what policy and the approver see.
 	Risk        string
 	BlastRadius map[string]any
+	// Facts are what policy sees of the change beyond its name and risk,
+	// as change.<key>. Each fix documents its keys; most have none.
+	Facts map[string]string
 
 	// Done says what was done, once applied.
 	Done string

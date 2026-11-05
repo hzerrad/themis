@@ -273,15 +273,34 @@ async def test_past_deadline_stops_before_the_next_step() -> None:
 
 # The root causes the model may name, and the checks it may cite, are those
 # the core sent with the investigation: listed in the prompt, and the only
-# ones the reply schema allows.
+# ones the reply schema allows. The pack's guidance is in the prompt too.
 def test_the_model_is_offered_what_the_core_sent() -> None:
     prompt = system_prompt(job(), 6)
     assert "  - memory_limit_regression: too little memory\n  - other: none of these\n" in prompt
+    assert "\n\nRoll back only what the rollout broke.\n\n" in prompt
+    assert "predicate names, such as oom_killed_new_revision," in prompt
     schema = reply_schema(job())["$defs"]
     cause = schema["HypothesisOut"]["properties"]["root_cause_class"]
     assert cause["enum"] == ["memory_limit_regression", "other"]
     cited = schema["ProposalOut"]["properties"]["cited_predicates"]["items"]
     assert cited["enum"] == ["oom_killed_new_revision"]
+
+
+# A profile may offer no fix: the model can then only diagnose. The prompt
+# and the schema leave proposing out, and a proposal sent anyway is refused.
+async def test_with_no_fix_on_offer_the_model_cannot_propose() -> None:
+    diagnose_only = job()
+    del diagnose_only.capabilities[:]
+    del diagnose_only.candidate_capabilities[:]
+    prompt = system_prompt(diagnose_only, 6)
+    assert "No fix is on offer for this incident" in prompt
+    assert '"propose"' not in prompt
+    assert "{end}" not in prompt
+    kinds = reply_schema(diagnose_only)["properties"]["kind"]["enum"]
+    assert kinds == ["request_evidence", "conclude_inconclusive"]
+    model = ScriptedModel(propose(), {"kind": "conclude_inconclusive"})
+    await investigate(diagnose_only, FakeCore(), model, max_steps=6)
+    assert "No fix is allowed for this incident" in model.requests[1].messages[-1].content
 
 
 # Logs can carry orders. The rule against following them is repeated right

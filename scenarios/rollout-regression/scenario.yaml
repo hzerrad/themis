@@ -52,6 +52,23 @@ profile:
     - gitops_managed
     - config_changed_before_failure
   capabilities: [deployment.rollback-to-revision]
+  # What the investigator is told about these incidents: when a rollback is
+  # right and when it is wrong. Guidance only: the checks and the policy
+  # below decide.
+  guidance: |
+    A rollback is right when the current revision introduced the failure and
+    a prior revision was healthy. If the failure started before the rollout,
+    if the target is managed by GitOps, if its config changed before the
+    failure, or if the evidence is missing, do not propose a rollback:
+    conclude inconclusive and say what is missing.
+
+    When oom_killed_new_revision, failure_onset_after_rollout and
+    prior_revision_was_healthy are all true, and gitops_managed and
+    config_changed_before_failure are false, rolling back to the prior
+    revision is justified, even if the logs are empty: a process killed for
+    memory often writes nothing.
+
+    Naming a cause doesn't make a rollback right: these conditions do.
   policy:
     mode: guarded
     approvalTimeout: 30m
@@ -65,6 +82,7 @@ profile:
           (predicates.rollout_recent != "true" ||
            predicates.failure_onset_after_rollout != "true" ||
            predicates.config_changed_before_failure != "false" ||
+           predicates.prior_revision_was_healthy == "false" ||
            (predicates.oom_killed_new_revision != "true" &&
             predicates.prior_revision_was_healthy != "true"))
         decision: deny

@@ -54,6 +54,9 @@ profile:
     allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
   checks: [rollout_recent, failure_onset_after_rollout, oom_killed_new_revision, gitops_managed]
   capabilities: [deployment.rollback-to-revision]
+  guidance: |
+    A rollback is right when the current revision introduced the failure and
+    a prior revision was healthy. ...
   policy:
     rules:
       - name: gitops-owns-the-target
@@ -69,6 +72,8 @@ profile:
 `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
 
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
+
+`guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
 
 ## Checks
 
@@ -148,7 +153,7 @@ my-scenario: not ready
 
 A broken pack also stops Themis from starting, with a message naming the pack.
 
-The investigator learns everything a pack adds from Themis with each investigation: the checks its profile runs, with their answers, and the pack's root causes. A pack adding a check or a root cause changes nothing outside its folder.
+The investigator learns everything a pack adds from Themis with each investigation: the checks its profile runs, with their answers, the pack's root causes, and its guidance. A pack adding a check or a root cause changes nothing outside its folder.
 
 ## For operators
 

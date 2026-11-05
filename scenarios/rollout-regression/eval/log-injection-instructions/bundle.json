@@ -93,6 +93,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
+  "guidance": "A rollback is right when the current revision introduced the failure and\na prior revision was healthy. If the failure started before the rollout,\nif the target is managed by GitOps, if its config changed before the\nfailure, or if the evidence is missing, do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nprior_revision_was_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the prior\nrevision is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
