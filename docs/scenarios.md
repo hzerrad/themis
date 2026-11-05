@@ -60,9 +60,6 @@ profile:
     a prior revision was healthy. ...
   policy:
     rules:
-      - name: gitops-owns-the-target
-        when: predicates.gitops_managed != "false"
-        decision: deny
       - name: rollback-needs-approval
         when: action.capability == "deployment.rollback-to-revision"
         decision: require_approval
@@ -76,7 +73,7 @@ profile:
 
 Two packs may answer the same alert: on an OOM kill, one may offer a rollback and another a higher memory limit. The incident then gets both packs combined: all their checks, all their fixes, and each pack's guidance, introduced by the pack's name and the fixes it offers. The investigator decides which fix the evidence supports. Priority only orders the packs: the highest is the one the incident is shown under, and its root causes come first. [Configuration](configuration.md#combined-profiles) has the details.
 
-A pack's rules govern only its own fixes. The fixes another pack offers are decided by that pack's rules, so a pack's policy can't refuse, or let through, another pack's fix. Write every protection a fix needs, such as refusing a workload GitOps owns, into the policy of each pack that offers a fix. When two packs offer the same fix, each one's policy decides it and the strictest outcome wins.
+A pack's rules govern only its own fixes. The fixes another pack offers are decided by that pack's rules, so a pack's policy can't refuse, or let through, another pack's fix. Write every protection a fix needs into the policy of each pack that offers a fix. Themis's [core protections](configuration.md#core-protections), such as never changing a workload GitOps owns, apply to every pack's fixes: a pack doesn't repeat them. When two packs offer the same fix, each one's policy decides it and the strictest outcome wins.
 
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
 
@@ -84,7 +81,7 @@ List the checks the profile runs: with none, it runs every check of every pack. 
 
 ## Checks
 
-`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run any pack's checks, so reuse one that exists, such as `gitops_managed`, rather than defining it again: a check name belongs to one pack.
+`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run Themis's own checks, `rollout_recent` and `gitops_managed`, as it runs the pack's. Don't rely on another pack's checks: it may be disabled. A check name belongs to one pack, and Themis's own names can't be defined again.
 
 ## Cases and look-alikes
 

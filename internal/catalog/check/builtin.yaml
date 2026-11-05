@@ -1,0 +1,44 @@
+# Themis's own checks: every scenario pack's profile may name them, and
+# Themis runs gitops_managed for every incident with a fix on offer, since its
+# answer decides whether Themis may change the workload at all.
+# docs/checks.md says what each field means and what the expressions see.
+
+# The current revision rolled out within the last 6 hours.
+- name: rollout_recent
+  version: "1"
+  description: A rollout happened recently
+  reads: [rollout_history]
+  answers:
+    - when: rollout_at == null
+      answer: unknown
+      reason: the current revision or its rollout time is unknown
+    - when: now - rollout_at <= duration("6h")
+      answer: true
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago
+      cite: [ids.rollout_history]
+    - answer: false
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, beyond ${duration("6h")}
+      cite: [ids.rollout_history]
+
+# The target carries GitOps markers or is written by a GitOps controller.
+- name: gitops_managed
+  version: "1"
+  description: Managed by GitOps (Argo CD or Flux)
+  reads: [rollout_history]
+  let:
+    markers: rollout_history.deployment.ownershipMarkers.map(k, k).sort()
+    managers: >-
+      rollout_history.deployment.fieldManagers.filter(m, m in
+        ["argocd-controller", "argocd-application-controller", "kustomize-controller", "helm-controller"])
+  answers:
+    - when: size(markers) > 0
+      answer: true
+      reason: the target carries ${markers[0]}
+      cite: [ids.rollout_history]
+    - when: size(managers) > 0
+      answer: true
+      reason: the target is managed by ${managers[0]}
+      cite: [ids.rollout_history]
+    - answer: false
+      reason: no GitOps markers or managers
+      cite: [ids.rollout_history]

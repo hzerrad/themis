@@ -629,10 +629,13 @@ function summary(inc, inv, actions, proposals, headline, missed) {
   const accepted = proposals.find((p) => p.Status === "accepted");
   const action = actions[actions.length - 1];
   if (inv && inv.Summary) facts.push(h("li", {}, h("strong", {}, "Diagnosis: "), inv.Summary));
+  // Themis never changes a workload GitOps manages: its fix is a
+  // recommendation, to apply in Git.
+  const gitOps = action && action.PolicyID === "gitops-owns-the-target";
   if (action) {
     const changed = (action.Changes || []).map((c) => c.field).join(", ") || "nothing visible";
-    facts.push(h("li", {}, h("strong", {}, "Proposed fix: "),
-      `roll back to revision ${action.Params.revision}, which changes ${changed} on ${action.BlastRadius.replicas} pods.`));
+    facts.push(h("li", {}, h("strong", {}, gitOps ? "Recommended fix: " : "Proposed fix: "),
+      `${fix(action.Capability, action.Params)}, which changes ${changed} on ${action.BlastRadius.replicas} pods.`));
     facts.push(h("li", {}, h("strong", {}, "Policy: "), action.DecisionReason));
   } else if (accepted) {
     facts.push(h("li", {}, h("strong", {}, "Proposed fix: "), accepted.Rationale));
@@ -642,7 +645,8 @@ function summary(inc, inv, actions, proposals, headline, missed) {
   const lead = inc.supersededBy
     ? ["The workload was changed outside Themis and still fails, so a new incident investigates it as it is now: ",
       h("a", { href: `#/incidents/${inc.supersededBy}` }, "open the new incident"), "."]
-    : headline || NEXT[inc.state] || inc.state;
+    : headline || (gitOps ? "Themis recommends this fix but won't apply it: GitOps manages, or may manage, this workload." : null)
+      || NEXT[inc.state] || inc.state;
   // A headline promises the list of what Themis couldn't see: it follows.
   const seen = headline && missed && missed.length ? h("ul", {}, missed.map((m) => h("li", {}, m))) : null;
   return h("div", { class: `callout ${inc.state === "awaiting_approval" ? "" : "quiet"}` },

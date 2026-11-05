@@ -3,6 +3,7 @@ package catalog_test
 import (
 	"io/fs"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -138,8 +139,8 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			"scenario pack crashes: check has_pods: answer 1: when: ERROR: <input>:1:6: undeclared reference to 'pod_state'",
 		},
 		{
-			"check defined by two packs", func(f fstest.MapFS) { replace(f, "crashes/checks.yaml", "has_pods", "rollout_recent") },
-			"check rollout_recent: already defined by the pack",
+			"check Themis has", func(f fstest.MapFS) { replace(f, "crashes/checks.yaml", "has_pods", "gitops_managed") },
+			"scenario pack crashes: check gitops_managed: already defined by Themis",
 		},
 		{
 			"profile the catalog can't run", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "[pod_states]", "[pod_state]") },
@@ -179,15 +180,20 @@ func TestBuild_LoadsPacks(t *testing.T) {
 	}
 }
 
-// A disabled pack brings neither its profile nor its checks, and disabling a
-// pack Themis doesn't have stops it.
+// A disabled pack brings neither its profile nor its checks, while Themis's
+// own checks stay for every other pack; disabling a pack Themis doesn't have
+// stops it.
 func TestBuild_DisablesPacks(t *testing.T) {
 	cat, err := catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regression"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || len(cat.Checks) != 1 {
-		t.Errorf("profiles %+v, %d checks: want only the crashes pack's", cat.Profiles, len(cat.Checks))
+	var checks []string
+	for _, c := range cat.Checks {
+		checks = append(checks, c.Name)
+	}
+	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || !slices.Equal(checks, []string{"rollout_recent", "gitops_managed", "has_pods"}) {
+		t.Errorf("profiles %+v, checks %v: want only the crashes pack's, and Themis's own", cat.Profiles, checks)
 	}
 	_, err = catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})
 	if want := `scenarios.disabled: no scenario pack is named "rollout-regresion"`; errText(err) != want {

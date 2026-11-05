@@ -153,8 +153,10 @@ func TestDiagnose_ExpiredEvents(t *testing.T) {
 	}
 }
 
-// A profile runs the checks it names, in the catalog's order, or all of them
-// when it names none.
+// A profile runs the checks it names, in the order it names them, or all of
+// them when it names none. With a fix on offer, Themis also runs
+// gitops_managed, from the evidence it reads, which the profile may not
+// collect: whether Themis may change the workload at all depends on it.
 func TestDiagnose_RunsTheProfilesChecks(t *testing.T) {
 	cat, err := catalog.Themis(nil)
 	if err != nil {
@@ -165,19 +167,24 @@ func TestDiagnose_RunsTheProfilesChecks(t *testing.T) {
 		all = append(all, c.Name)
 	}
 	for _, tt := range []struct {
-		checks, want []string
+		checks, fixes, want []string
 	}{
-		{[]string{"gitops_managed", "rollout_recent"}, []string{"rollout_recent", "gitops_managed"}},
-		{nil, all},
+		{[]string{"oom_killed_new_revision", "rollout_recent"}, nil, []string{"oom_killed_new_revision", "rollout_recent"}},
+		{[]string{"oom_killed_new_revision"}, []string{"deployment.rollback-to-revision"}, []string{"oom_killed_new_revision", "gitops_managed"}},
+		{nil, nil, all},
 	} {
 		p := initial(evidence.TargetEvents)
-		p.Checks = tt.checks
+		p.Checks, p.Capabilities = tt.checks, tt.fixes
+		d := diagnose(t, cat.Evidence, p, catalog.Moment{Now: diagnosedAt})
 		var got []string
-		for _, r := range diagnose(t, cat.Evidence, p, catalog.Moment{Now: diagnosedAt}).Results {
+		for _, r := range d.Results {
 			got = append(got, r.Name)
 		}
 		if !slices.Equal(got, tt.want) {
 			t.Errorf("checks %v ran %v, want %v", tt.checks, got, tt.want)
+		}
+		if i := slices.IndexFunc(d.Results, func(r check.Result) bool { return r.Name == check.GitOpsManaged }); tt.fixes != nil && (i < 0 || d.Results[i].Value != check.False) {
+			t.Errorf("results %+v, want gitops_managed false from the rollout history Themis read for it", d.Results)
 		}
 	}
 }

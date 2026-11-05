@@ -16,10 +16,13 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// ManagedCheck is the check governance overrides with what it reads live:
-// whether GitOps owns the target. A scenario pack's check of this name is
-// overridden.
-const ManagedCheck = "gitops_managed"
+// GitOpsRule names the decision of Themis's own rule that it never changes a
+// workload Argo CD or Flux manages, or may manage: it only recommends the fix.
+// Every profile's policy comes after it.
+const GitOpsRule = "gitops-owns-the-target"
+
+// gitOpsTools are the GitOps tools Themis recognizes, as people call them.
+var gitOpsTools = map[string]string{"argocd": "Argo CD", "flux": "Flux"}
 
 // Fix is a fix to decide for an incident's target.
 type Fix struct {
@@ -97,10 +100,6 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 	for _, c := range fix.Checks {
 		predicates[c.Name] = c.Value.String()
 	}
-	// Live ownership wins over what the evidence said.
-	if plan.ManagedBy != "" {
-		predicates[ManagedCheck] = check.True.String()
-	}
 	decision, err := d.decide(fix, policy.Input{
 		Capability: fix.Capability.Name(), Risk: plan.Risk, Namespace: fix.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates, Change: plan.Facts,
@@ -140,6 +139,10 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 // A fix no profile offers is forbidden. Judging refuses it before it gets
 // here; the evaluation, which skips judging, learns from the first profile
 // with a rule forbidding it which rule that is.
+//
+// Before any policy, a fix to a workload GitOps manages, or may manage, is
+// forbidden, whatever it changes: Argo CD or Flux would undo it, so Themis
+// only recommends it.
 func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 	offering := fix.Profiles.Offering(fix.governs())
 	if len(offering) == 0 {
@@ -153,6 +156,9 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 			}
 		}
 		return policy.Decision{Outcome: policy.Deny, Reason: "None of this incident's profiles offers this fix, so it is forbidden."}, nil
+	}
+	if reason, managed := gitOps(in); managed {
+		return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: GitOpsRule}, nil
 	}
 	var (
 		out  policy.Decision
@@ -171,6 +177,28 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 		out.Reason += " It is the " + from + " profile's policy."
 	}
 	return out, nil
+}
+
+// gitOps says why Themis only recommends a fix to in's workload, if it does:
+// Argo CD or Flux manages it, as read live or by check.GitOpsManaged, or the
+// check couldn't tell, or didn't run.
+func gitOps(in policy.Input) (string, bool) {
+	const recommend = ", so Themis only recommends the change: apply it in Git."
+	if in.ManagedBy != "" {
+		tool, ok := gitOpsTools[in.ManagedBy]
+		if !ok {
+			tool = in.ManagedBy
+		}
+		return tool + " manages this workload" + recommend, true
+	}
+	switch check.ParseTruth(in.Predicates[check.GitOpsManaged]) {
+	case check.False:
+		return "", false
+	case check.True:
+		return "Argo CD or Flux manages this workload" + recommend, true
+	case check.Unknown:
+	}
+	return "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change.", true
 }
 
 // policy returns p's compiled policy.

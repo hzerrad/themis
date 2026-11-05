@@ -137,8 +137,10 @@ spec:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(b.Initial) != 1 || b.Initial[0].ID != "ev-"+evidence.PodStates {
-		t.Errorf("initial = %+v, want pod_states alone", b.Initial)
+	// The rollout history is read too, as for every incident with a fix on
+	// offer: Themis needs it to tell whether GitOps manages the workload.
+	if len(b.Initial) != 2 || b.Initial[0].ID != "ev-"+evidence.PodStates || b.Initial[1].ID != "ev-"+evidence.RolloutHistory {
+		t.Errorf("initial = %+v, want pod_states, then rollout_history", b.Initial)
 	}
 	if len(b.Gaps) != 1 || b.Gaps[0].Template != evidence.ContainerLogsTail || b.Gaps[0].Cause != string(evidence.GapAbsent) {
 		t.Errorf("gaps = %+v, want container_logs_tail absent: there are no pods", b.Gaps)

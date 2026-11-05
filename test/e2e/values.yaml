@@ -27,9 +27,6 @@ profiles:
     policy:
       mode: guarded
       rules:
-        - name: gitops-owns-the-target
-          when: predicates.gitops_managed != "false"
-          decision: deny
         - name: rollback-needs-a-bad-rollout
           when: >-
             action.restore != "true" &&
