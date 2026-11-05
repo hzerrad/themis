@@ -2,15 +2,19 @@
 output accepts, and the reply turned back into Themis's shape.
 
 The subset has no maps keyed by name, such as a fix's containers or an evidence
-template's params, and no free-form values: a part like that is asked for as a
-string holding its JSON, with its schema in the description, and parsed back
-from the reply. Constraints the subset lacks, such as maxLength or minimum, move
-into the description, so the model still reads them. Themis validates every
-reply against its own schema either way.
+template's params: a map is asked for as a list of entries, each a key and its
+value, so the value's schema still binds the model, and turned back into a map.
+Nor does it have free-form values: a part like that is asked for as a string
+holding its JSON, with its schema in the description, and parsed back from the
+reply. Models write JSON inside a string less reliably, so only what can't be
+described otherwise is asked for that way. Constraints the subset lacks, such as
+maxLength or minimum, move into the description, so the model still reads them.
+Themis validates every reply against its own schema either way.
 
-A request may hold at most 24 optional properties and 16 that are unions. When
-the schema has more, which a choice between several fixes can bring, each such
-choice is asked for as JSON text too.
+A request may hold at most 24 optional properties and 16 that are unions. A map's
+entries can count toward them, so when the schema has more, such maps are asked
+for as JSON text instead; and when it still has more, which a choice between several
+fixes can bring, each such choice is asked for as JSON text too.
 """
 
 import json
@@ -34,8 +38,10 @@ FORMATS = {
     "uuid",
 }
 
-# Marks a part sent as JSON text. It never reaches the provider.
+# Mark a part sent as JSON text, and a map sent as a list of entries. Neither
+# reaches the provider.
 _AS_TEXT = "x-themis-json-text"
+_AS_ENTRIES = "x-themis-map-entries"
 
 Schema = dict[str, Any]
 
@@ -58,10 +64,25 @@ class ReplySchema:
         return json.dumps(_decode(value, self._marked, defs))
 
 
+@dataclass(frozen=True)
+class _Asking:
+    """Which parts are asked for as JSON text, besides free-form values."""
+
+    # Only maps whose entries count toward the limits.
+    maps_as_text: bool = False
+    unions_as_text: bool = False
+
+
+# From the most the subset can describe to the least, the first within limits.
+_FALLBACKS = (_Asking(), _Asking(maps_as_text=True), _Asking(True, True))
+
+
 def reply_schema(schema: Schema) -> ReplySchema:
-    marked = _convert(schema, unions_as_text=False)
-    if not within_limits(marked):
-        marked = _convert(schema, unions_as_text=True)
+    marked = _convert(schema, _FALLBACKS[0])
+    for asking in _FALLBACKS[1:]:
+        if within_limits(marked):
+            break
+        marked = _convert(schema, asking)
     return ReplySchema(sent=_unmarked(marked), _marked=marked)
 
 
@@ -73,6 +94,38 @@ def _as_text(node: Schema) -> Schema:
         "type": "string",
         "description": f"{described}\n\n{note}" if described else note,
         _AS_TEXT: True,
+    }
+
+
+def _map_values(node: Schema) -> Schema | None:
+    """The schema of a map's values, if node is a map whose values have one."""
+    values = node.get("additionalProperties")
+    if node.get("type") != "object" or "properties" in node or not isinstance(values, dict):
+        return None
+    return cast(Schema, values) or None
+
+
+def _as_entries(node: Schema, values: Schema, asking: _Asking) -> Schema:
+    entry = {
+        "type": "object",
+        "properties": {"key": {"type": "string"}, "value": _convert(values, asking)},
+        "required": ["key", "value"],
+        "additionalProperties": False,
+    }
+    rest = {
+        k: v
+        for k, v in node.items()
+        if k not in ("type", "additionalProperties", "description", "title", "default")
+    }
+    note = "Entries by key, each key once."
+    if rest:
+        note += f" {json.dumps(rest, sort_keys=True)}"
+    described = node.get("description")
+    return {
+        "type": "array",
+        "items": entry,
+        "description": f"{described}\n\n{note}" if described else note,
+        _AS_ENTRIES: True,
     }
 
 
@@ -94,14 +147,17 @@ def _is_choice_of_objects(node: Schema) -> bool:
     return len(objects) > 1
 
 
-def _convert(node: Schema, unions_as_text: bool) -> Schema:
-    if _is_open(node) or (unions_as_text and _is_choice_of_objects(node)):
+def _convert(node: Schema, asking: _Asking) -> Schema:
+    values = _map_values(node)
+    if values is not None and not (asking.maps_as_text and _counts(values) != (0, 0)):
+        return _as_entries(node, values, asking)
+    if _is_open(node) or (asking.unions_as_text and _is_choice_of_objects(node)):
         return _as_text(node)
     rest = dict(node)
     out: Schema = {}
     if "$defs" in rest:
         defs = cast(dict[str, Schema], rest.pop("$defs"))
-        out["$defs"] = {k: _convert(v, unions_as_text) for k, v in defs.items()}
+        out["$defs"] = {k: _convert(v, asking) for k, v in defs.items()}
     if "$ref" in rest:
         # The subset takes nothing beside a reference.
         out["$ref"] = rest.pop("$ref")
@@ -109,19 +165,17 @@ def _convert(node: Schema, unions_as_text: bool) -> Schema:
     for word in ("anyOf", "oneOf", "allOf"):
         if word in rest:
             branches = cast(list[Schema], rest.pop(word))
-            out["allOf" if word == "allOf" else "anyOf"] = [
-                _convert(b, unions_as_text) for b in branches
-            ]
+            out["allOf" if word == "allOf" else "anyOf"] = [_convert(b, asking) for b in branches]
     for word in ("type", "enum", "const", "description", "title", "default", "required"):
         if word in rest:
             out[word] = rest.pop(word)
     if "properties" in rest:
         props = cast(dict[str, Schema], rest.pop("properties"))
-        out["properties"] = {k: _convert(v, unions_as_text) for k, v in props.items()}
+        out["properties"] = {k: _convert(v, asking) for k, v in props.items()}
         rest.pop("additionalProperties", None)
         out["additionalProperties"] = False
     if "items" in rest:
-        out["items"] = _convert(cast(Schema, rest.pop("items")), unions_as_text)
+        out["items"] = _convert(cast(Schema, rest.pop("items")), asking)
     if rest.get("minItems") in (0, 1):
         out["minItems"] = rest.pop("minItems")
     if rest.get("format") in FORMATS:
@@ -159,7 +213,11 @@ def within_limits(schema: Schema) -> bool:
 
 def _unmarked(node: Any) -> Any:
     if isinstance(node, dict):
-        return {k: _unmarked(v) for k, v in cast(Schema, node).items() if k != _AS_TEXT}
+        return {
+            k: _unmarked(v)
+            for k, v in cast(Schema, node).items()
+            if k not in (_AS_TEXT, _AS_ENTRIES)
+        }
     if isinstance(node, list):
         return [_unmarked(v) for v in cast(list[Any], node)]
     return node
@@ -176,6 +234,8 @@ def _fits(value: Any, node: Schema, defs: dict[str, Schema]) -> bool:
     node = _resolve(node, defs)
     if node.get(_AS_TEXT):
         return isinstance(value, str)
+    if node.get(_AS_ENTRIES):
+        return isinstance(value, list)
     if "anyOf" in node:
         return any(_fits(value, b, defs) for b in cast(list[Schema], node["anyOf"]))
     match node.get("type"):
@@ -205,6 +265,8 @@ def _decode(value: Any, node: Schema, defs: dict[str, Schema]) -> Any:
             return json.loads(value)
         except ValueError:
             return value
+    if node.get(_AS_ENTRIES):
+        return _decode_entries(value, node, defs)
     if "anyOf" in node:
         for branch in cast(list[Schema], node["anyOf"]):
             if _fits(value, branch, defs):
@@ -220,3 +282,19 @@ def _decode(value: Any, node: Schema, defs: dict[str, Schema]) -> Any:
         items = cast(Schema, node["items"])
         return [_decode(v, items, defs) for v in cast(list[Any], value)]
     return cast(Any, value)
+
+
+def _decode_entries(value: Any, node: Schema, defs: dict[str, Schema]) -> Any:
+    """The entries as a map. Entries that don't make one, such as a key given
+    twice, are left as they are, for Themis's validation to refuse."""
+    if not isinstance(value, list):
+        return value
+    entries = cast(list[Any], value)
+    if not all(isinstance(e, dict) and set(cast(Schema, e)) == {"key", "value"} for e in entries):
+        return entries
+    pairs = [(e["key"], e["value"]) for e in cast(list[Schema], entries)]
+    keys = {k for k, _ in pairs if isinstance(k, str)}
+    if len(keys) != len(pairs):
+        return entries
+    values = cast(Schema, node["items"])["properties"]["value"]
+    return {k: _decode(v, values, defs) for k, v in pairs}

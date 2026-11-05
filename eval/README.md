@@ -54,7 +54,7 @@ make eval-record EVAL_PROVIDER=anthropic EVAL_MODEL=claude-sonnet-5-5 \
 | Reasoning effort | `medium` unless `--reasoning-effort` says otherwise: `low`, `medium`, `high`, `xhigh` or `max`. It is in the report |
 | Thinking | Left to the model, which decides how much it needs. It counts as output, so each reply may use up to 16000 tokens unless `--max-output-tokens` says otherwise |
 | Temperature | Not sent: these models take only their own. The report says so |
-| Reply schema | Asked for as structured output. Anthropic accepts a subset of JSON Schema, so a part it can't describe, such as a fix's containers by name, is asked for as a string holding its JSON, and limits such as a string's length move into the description. Themis checks every reply against its full schema, as for any model |
+| Reply schema | Asked for as structured output. Anthropic accepts a subset of JSON Schema, so a map, such as a fix's containers by name, is asked for as a list of entries, each a key and its value; a free-form part, as a string holding its JSON; and limits such as a string's length move into the description. Themis checks every reply against its full schema, as for any model |
 
 A refusal is reported as one, and counts as an invalid reply, like a reply cut off at the output limit.
 

@@ -71,7 +71,8 @@ def claude(fake: Callable[[httpx2.Request], httpx2.Response], effort: str | None
 
 
 async def test_a_step_maps_to_a_messages_call_and_back() -> None:
-    fake = Fake(200, message(json.dumps({"verdict": "rollout", "params": '{"pod": "a"}'})))
+    entries = [{"key": "pod", "value": "a"}]
+    fake = Fake(200, message(json.dumps({"verdict": "rollout", "params": entries})))
     messages = [Message(role="system", content="be careful"), Message(role="user", content="why?")]
     result = await claude(fake, "medium").complete(request(messages=messages), Decision)
 
@@ -90,7 +91,15 @@ async def test_a_step_maps_to_a_messages_call_and_back() -> None:
     schema = sent["output_config"]["format"]["schema"]
     assert schema["additionalProperties"] is False
     assert "maxLength" not in schema["properties"]["verdict"]
-    assert schema["properties"]["params"]["type"] == "string"
+    # A map is a list of entries, so its values' schema still binds the model.
+    assert schema["properties"]["params"]["items"]["properties"]["value"] == {"type": "string"}
+
+
+def test_entries_that_dont_make_a_map_are_left_for_validation_to_refuse() -> None:
+    schema = reply_schema(Decision.model_json_schema())
+    twice = [{"key": "pod", "value": "a"}, {"key": "pod", "value": "b"}]
+    reply = json.loads(schema.decode(json.dumps({"verdict": "x", "params": twice})))
+    assert reply["params"] == twice
 
 
 @pytest.mark.parametrize(("stop", "kind"), [("refusal", "refused"), ("max_tokens", "truncated")])

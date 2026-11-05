@@ -23,7 +23,7 @@ uv run python -m themis_intelligence
 
 ## How an investigation runs
 
-- Each step, the model answers with one typed decision: read another evidence template, propose a fix, or conclude that the evidence does not support one. Replies are validated against a JSON schema, and an invalid reply is repaired once.
+- Each step, the model answers with one typed decision: read another evidence template, propose a fix, or conclude that the evidence does not support one. Replies are validated against a JSON schema, and an invalid reply is repaired once. Text only people read, such as a summary or a rationale, is cut to its limit rather than refused; anything Themis acts on or cites is never cut.
 - Evidence reaches the model fenced as untrusted data. A template outside the profile's allowed set is refused without asking the core.
 - A proposal's target is forwarded exactly as the model wrote it: the core decides, and records a wrong target as a safety event.
 - A proposal waits until the failing pod's logs have been read.
