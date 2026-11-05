@@ -240,7 +240,7 @@ The investigator cannot query the cluster: it can only ask for a template by nam
 
 | Template | What it reads |
 |---|---|
-| `rollout_history` | The Deployment's rollout progress and conditions, when its template last changed and by which field manager, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits |
+| `rollout_history` | The Deployment's rollout progress and conditions, when its template last changed and by which field manager, GitOps ownership markers, and each ReplicaSet revision with its images, resource limits and probe timings (never what a probe calls) |
 | `pod_states` | Each pod: its revision, readiness, and each container's current state and last termination, where `OOMKilled` shows |
 | `target_events` | Recent events of the Deployment, its ReplicaSets and its pods |
 | `referenced_config` | The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only. Secrets are listed by name and never read. |

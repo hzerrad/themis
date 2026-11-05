@@ -1,0 +1,124 @@
+# The checks of the probe-restart-storm pack, in the order Themis reports them.
+# They read what the kubelet said about the target's pods, how its containers
+# last ended, and the probe timings of the current revision.
+# docs/checks.md says what each field means and what the expressions see.
+
+# The kubelet restarted a container because its liveness or startup probe
+# failed: what a probe that is too strict does.
+- name: probe_kills
+  version: "1"
+  description: The kubelet restarts a container because its liveness or startup probe fails
+  reads: [target_events]
+  let:
+    kills: >-
+      target_events.events.filter(e, e.reason == "Killing" && e.object.startsWith("Pod/") &&
+        (e.message.contains("failed liveness probe") || e.message.contains("failed startup probe")))
+  answers:
+    - when: size(kills) > 0
+      answer: true
+      reason: "${kills[0].object}: ${kills[0].message}${kills[0].count > 1 ? ', ' + string(kills[0].count) + ' times' : ''}"
+      cite: [ids.target_events]
+    - answer: false
+      reason: no event says a container was restarted for failing its liveness or startup probe
+      cite: [ids.target_events]
+
+# Every probe failure the kubelet reported is a probe that ran out of time,
+# not an answer: the container is slow to answer, rather than saying it is
+# unhealthy or not listening.
+- name: probe_timeouts
+  version: "1"
+  description: Probes fail by running out of time, not by an error answer
+  reads: [target_events]
+  let:
+    failed: >-
+      target_events.events.filter(e, e.reason == "Unhealthy" &&
+        ["Liveness probe failed", "Readiness probe failed", "Startup probe failed"].exists(m, e.message.startsWith(m)))
+    answered: >-
+      failed.filter(e, !["context deadline exceeded", "Client.Timeout exceeded", "timed out", "i/o timeout"]
+        .exists(m, e.message.contains(m)))
+  answers:
+    - when: size(failed) == 0
+      answer: false
+      reason: no event says a probe failed
+      cite: [ids.target_events]
+    - when: size(answered) > 0
+      answer: false
+      reason: "a probe failed other than by running out of time: ${answered[0].object}: ${answered[0].message}"
+      cite: [ids.target_events]
+    - answer: true
+      reason: "every probe failure is a timeout, such as ${failed[0].object}: ${failed[0].message}"
+      cite: [ids.target_events]
+
+# A container of the current revision was killed at the first moment it could
+# be: by its startup probe, or, without one, by its liveness probe no later
+# than its initial delay, its failures and one more period of slack allow,
+# plus the default 30 seconds to stop. A container killed that soon never
+# passed its liveness probe, so it was killed while still starting.
+- name: killed_during_startup
+  version: "1"
+  description: Containers are killed before they finish starting
+  reads: [target_events, rollout_history, pod_states]
+  let:
+    startup: >-
+      target_events.events.filter(e, e.reason == "Killing" && e.message.contains("failed startup probe"))
+    probed: >-
+      current == null ? [] : current.containers.filter(t, "liveness" in t.probes && !("startup" in t.probes))
+    # Each as [pod/container, how long it ran].
+    early: >-
+      pod_states.pods.filter(p, p.revision == current_revision).map(p,
+        p.containers.filter(c, !c.init && c.lastTermination != null &&
+          c.lastTermination.status == "terminated" && c.lastTermination.reason != "OOMKilled" &&
+          c.lastTermination.exitCode != null && c.lastTermination.exitCode in [0, 137, 143] &&
+          c.lastTermination.startedAt != null && c.lastTermination.finishedAt != null &&
+          probed.exists(t, t.name == c.name &&
+            c.lastTermination.finishedAt - c.lastTermination.startedAt <= duration(string(
+              t.probes.liveness.initialDelaySeconds +
+              (t.probes.liveness.failureThreshold + 1) * t.probes.liveness.periodSeconds + 30) + "s")))
+        .map(c, [p.name + "/" + c.name, c.lastTermination.finishedAt - c.lastTermination.startedAt])
+      ).flatten()
+  answers:
+    - when: size(startup) > 0
+      answer: true
+      reason: "${startup[0].object}: ${startup[0].message}"
+      cite: [ids.target_events]
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: size(early) > 0
+      answer: true
+      reason: >-
+        ${early[0][0]} ran ${early[0][1]} before it was stopped, as soon as its
+        liveness probe could fail it: it never passed the probe
+      cite: [ids.rollout_history, ids.pod_states]
+    - when: size(probed) == 0
+      answer: false
+      reason: no container of revision ${current_revision} has a liveness probe without a startup probe, and none failed a startup probe
+      cite: [ids.rollout_history, ids.target_events]
+    - answer: false
+      reason: no container of revision ${current_revision} was stopped as soon as its liveness probe could fail it
+      cite: [ids.rollout_history, ids.pod_states, ids.target_events]
+
+# A container ended by itself: it exited with an error, or ran out of memory.
+# The kubelet stopping a container for a failed probe ends it with 0, 137 or
+# 143, so other exit codes are the application failing, which no probe timing
+# fixes.
+- name: crashed_on_its_own
+  version: "1"
+  description: A container exits with an error or runs out of memory, rather than being stopped by the kubelet
+  reads: [pod_states]
+  let:
+    crashed: >-
+      pod_states.pods.map(p, p.containers.filter(c, !c.init).map(c,
+        [c.state, c.lastTermination].filter(s, s != null && s.status == "terminated" &&
+          (s.reason == "OOMKilled" || (s.exitCode != null && !(s.exitCode in [0, 137, 143])))).map(s,
+          p.name + "/" + c.name + " ended" + (s.exitCode != null ? " with exit code " + string(s.exitCode) : "") +
+          (s.reason != "" ? " (" + s.reason + ")" : ""))
+      ).flatten()).flatten()
+  answers:
+    - when: size(crashed) > 0
+      answer: true
+      reason: ${crashed[0]}
+      cite: [ids.pod_states]
+    - answer: false
+      reason: no container ended with an error or ran out of memory; any that ended were stopped
+      cite: [ids.pod_states]

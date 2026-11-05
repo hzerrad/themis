@@ -90,6 +90,21 @@ type TemplateContainerView struct {
 	Image    string            `json:"image"`
 	Requests map[string]string `json:"requests,omitempty"`
 	Limits   map[string]string `json:"limits,omitempty"`
+
+	// Probes are the timing of each probe the container has, by kind:
+	// liveness, readiness or startup.
+	Probes map[string]ProbeView `json:"probes,omitempty"`
+}
+
+// ProbeView is a probe's timing, with Kubernetes's default for a field left
+// unset. What the probe calls is left out: its headers and commands can hold
+// secrets.
+type ProbeView struct {
+	InitialDelaySeconds int32 `json:"initialDelaySeconds"`
+	PeriodSeconds       int32 `json:"periodSeconds"`
+	TimeoutSeconds      int32 `json:"timeoutSeconds"`
+	FailureThreshold    int32 `json:"failureThreshold"`
+	SuccessThreshold    int32 `json:"successThreshold"`
 }
 
 type rolloutHistory struct{}
@@ -210,9 +225,29 @@ func viewRevision(rs *appsv1.ReplicaSet, current string) RevisionView {
 			Image:    ctr.Image,
 			Requests: quantities(ctr.Resources.Requests),
 			Limits:   quantities(ctr.Resources.Limits),
+			Probes:   probes(&ctr),
 		})
 	}
 	return v
+}
+
+func probes(c *corev1.Container) map[string]ProbeView {
+	m := map[string]ProbeView{}
+	for kind, p := range map[string]*corev1.Probe{"liveness": c.LivenessProbe, "readiness": c.ReadinessProbe, "startup": c.StartupProbe} {
+		if p != nil {
+			m[kind] = ProbeView{
+				InitialDelaySeconds: p.InitialDelaySeconds,
+				PeriodSeconds:       cmp.Or(p.PeriodSeconds, 10),
+				TimeoutSeconds:      cmp.Or(p.TimeoutSeconds, 1),
+				FailureThreshold:    cmp.Or(p.FailureThreshold, 3),
+				SuccessThreshold:    cmp.Or(p.SuccessThreshold, 1),
+			}
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 func quantities(l corev1.ResourceList) map[string]string {

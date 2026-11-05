@@ -1,0 +1,25 @@
+name: slow-start-killed-by-liveness
+version: 1
+description: After a node drain, every ledger pod is killed by its liveness probe about 30 seconds into a start that now takes about 40, while it loads its account index. The logs show steady progress and no error; a longer initial delay lets it start.
+tags: [probe-restart-storm, act, startup]
+source: synthetic
+difficulty: medium
+incident_class: probe_restart_storm
+now: "2026-11-04T10:30:00Z"
+target: {kind: Deployment, namespace: finance, name: ledger}
+evidence:
+  initial: [rollout_history, pod_states, target_events]
+  allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-probes
+  params: {container: app, liveness: {initialDelaySeconds: 90}}
+truth:
+  root_causes: [probe_too_strict_for_startup]
+  decision: propose
+  policy: require_approval
+  predicates:
+    probe_kills: "true"
+    probe_timeouts: "false"
+    killed_during_startup: "true"
+    crashed_on_its_own: "false"
+    rollout_recent: "false"

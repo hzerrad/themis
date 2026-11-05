@@ -1,0 +1,27 @@
+name: dependency-down-fails-readiness
+version: 1
+description: The orders database stopped accepting connections, and every orders pod's readiness endpoint answers 503, as designed, with the logs naming the database. Nothing restarts. A more lenient readiness probe would send orders to pods that can't store them and hide the outage, and the policy refuses it. The alert also brings the stuck-pods pack.
+tags: [probe-restart-storm, look-alike, dependency, combined]
+source: synthetic
+difficulty: medium
+incident_class: probe_restart_storm
+now: "2026-11-04T11:20:30Z"
+alert: KubePodNotReady
+target: {kind: Deployment, namespace: shop, name: orders}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+fix:
+  capability: deployment.set-probes
+  params: {container: app, readiness: {failureThreshold: 30}}
+truth:
+  root_causes: [dependency_failure]
+  decision: abstain
+  policy: deny
+  predicates:
+    probe_kills: "false"
+    probe_timeouts: "false"
+    killed_during_startup: "false"
+    crashed_on_its_own: "false"
+    rollout_recent: "false"
+    stuck_pods_new_revision_only: "unknown"
