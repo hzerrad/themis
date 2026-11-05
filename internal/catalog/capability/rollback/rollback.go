@@ -52,8 +52,8 @@ func Explain(err error, revision int64) string {
 
 // Live is the target as the cluster has it now.
 type Live struct {
-	Deployment *appsv1.Deployment
-	Target     digest.TargetIdentity
+	Workload *workload.Workload
+	Target   digest.TargetIdentity
 
 	// Desired is the template to restore; PreState is the current one.
 	Desired     corev1.PodTemplateSpec
@@ -94,11 +94,8 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision i
 		return Live{}, err
 	}
 	return Live{
-		Deployment: w.Object().DeepCopy(),
-		Target: digest.TargetIdentity{
-			Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID,
-			Generation: w.Generation, SpecHash: w.TemplateHash, Manager: w.Writer,
-		},
+		Workload:    w,
+		Target:      w.Identity(),
 		Desired:     r.Template,
 		DesiredHash: desiredHash,
 		PreState:    *w.Template.DeepCopy(),
@@ -138,18 +135,7 @@ func Params(revision int64, desiredHash string) map[string]any {
 // Apply writes Desired with live's resourceVersion as precondition, so a
 // write since the read conflicts. It returns the resulting generation.
 func Apply(ctx context.Context, c client.Client, live Live, dryRun bool) (int64, error) {
-	d := live.Deployment.DeepCopy()
-	base := live.Deployment.DeepCopy()
-	d.Spec.Template = *live.Desired.DeepCopy()
-	opts := []client.PatchOption{}
-	if dryRun {
-		opts = append(opts, client.DryRunAll)
-	}
-	patch := client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{})
-	if err := c.Patch(ctx, d, patch, opts...); err != nil {
-		return 0, fmt.Errorf("patch Deployment %s: %w", d.Name, err)
-	}
-	return d.Generation, nil
+	return live.Workload.SetTemplate(ctx, c, live.Desired, dryRun)
 }
 
 // RevisionOf returns the revision of the target's ReplicaSet with template,

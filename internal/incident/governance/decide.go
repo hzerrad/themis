@@ -68,11 +68,17 @@ type Decider struct {
 
 // Decide plans fix against what r reads live, and decides it by policy. A
 // fix that can't go ahead returns its Plan's error: a *capability.Refusal,
-// or capability.ErrInvalidParams.
+// or capability.ErrInvalidParams. So does one the cluster can't take, for a
+// fix that can tell.
 func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided, error) {
 	plan, err := fix.Capability.Plan(ctx, r, fix.Target, fix.Params)
 	if err != nil {
 		return Decided{}, err
+	}
+	if f, ok := fix.Capability.(capability.Feasibility); ok {
+		if err := f.Feasible(ctx, r, plan); err != nil {
+			return Decided{}, err
+		}
 	}
 	pol, err := d.policy(fix.Profile)
 	if err != nil {

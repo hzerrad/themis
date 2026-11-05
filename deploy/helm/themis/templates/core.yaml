@@ -112,6 +112,10 @@ rules:
   - apiGroups: [authentication.k8s.io]
     resources: [tokenreviews]
     verbs: [create]
+  # To tell whether a node can fit the pods a resource change asks for.
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -146,6 +150,10 @@ rules:
   - apiGroups: [batch]
     resources: [jobs]
     verbs: [get, list]
+  # The quotas and limits a resource change must fit.
+  - apiGroups: [""]
+    resources: [resourcequotas, limitranges]
+    verbs: [list]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
