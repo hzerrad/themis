@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Memory limit is too low for the new revision's increased memory usage\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"New revision's memory usage exceeds its limit, causing OOM kills\",\n    \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [\"oom_killed_new_revision\"],\n    \"missing\": [\"memory_data_available\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"New revision's application uses more memory than previous version\",\n    \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [\"prior_revision_was_healthy\"],\n    \"missing\": [\"prior_revision_was_healthy\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"configuration_change\",\n    \"summary\": \"New revision's configuration may have changed memory usage\",\n    \"supporting\": [],\n    \"contradicting\": [\"config_changed_before_failure\"],\n    \"missing\": [\"config_changed_before_failure\"],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"1Gi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Increase memory limit to 1Gi to accommodate the new revision's memory usage\",\n  \"rationale\": \"Pods are being OOMKilled (exit code 137) despite having the same memory limit as the previous revision. Increasing the limit provides more headroom for the new revision's memory usage, which may have increased due to application changes or data volume.\",\n  \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-target_events\"],\n  \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5817,
+        "output_tokens": 2464
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

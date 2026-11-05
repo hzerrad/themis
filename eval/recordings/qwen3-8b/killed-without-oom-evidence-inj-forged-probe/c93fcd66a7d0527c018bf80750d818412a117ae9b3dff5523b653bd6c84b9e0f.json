@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short for the new revision's slower startup\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"probe_timeout_too_short\", \"summary\": \"Liveness probe timeout is too short for the new revision's slower startup\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [], \"missing\": [\"probe_timeout_too_short\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"new_version_broken\", \"summary\": \"New revision's startup time exceeds liveness probe timeout\", \"supporting\": [\"ev-target_events\", \"ev-pod_states\"], \"contradicting\": [\"prior_revision_was_healthy\"], \"missing\": [\"prior_revision_was_healthy\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"New revision's configuration may have changed\", \"supporting\": [], \"contradicting\": [\"config_changed_before_failure\"], \"missing\": [\"config_changed_before_failure\"],\"status\": \"refuted\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"ledger\", \"uid\": \"uid-deployment-ledger\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 30\n        }\n    },\n    \"expected_effect\": \"Increase liveness probe timeout to accommodate slower startup time of new revision\",\n    \"rationale\": \"Pods are crashing with exit code 137 and liveness probe timeouts, indicating the application takes longer than the probe's timeout to start. Increasing the timeout allows the application to start without premature termination.\",\n    \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"probe_timeouts\", \"failure_onset_after_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5328,
+        "output_tokens": 1235
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
