@@ -162,7 +162,7 @@
   "predicates": [
     {
       "name": "probe_kills",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a container was restarted for failing its liveness or startup probe",
       "evidence_ids": [
@@ -171,7 +171,7 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "a probe failed other than by running out of time: Pod/orders-8a6c2e4f1-d2f4g: Readiness probe failed: HTTP probe failed with statuscode: 503",
       "evidence_ids": [
@@ -180,7 +180,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no container of revision 15 was stopped as soon as its liveness probe could fail it",
       "evidence_ids": [
@@ -209,7 +209,7 @@
     },
     {
       "name": "scheduler_rejected_pods",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "the 3 pod(s) that aren't ready were all scheduled",
       "evidence_ids": [
@@ -228,7 +228,7 @@
     },
     {
       "name": "volume_not_bound",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a volume of the 3 pod(s) that aren't ready can't be bound or mounted",
       "evidence_ids": [
@@ -257,7 +257,7 @@
     },
     {
       "name": "quota_refused_pods",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a quota refused a pod",
       "evidence_ids": [

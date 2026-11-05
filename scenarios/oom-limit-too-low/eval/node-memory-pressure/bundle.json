@@ -188,11 +188,12 @@
     },
     {
       "name": "evicted_for_node_memory",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "Pod/search-3b7e1c9d5-h6i7j was evicted: The node was low on resource: memory. Threshold quantity: 100Mi, available: 64Mi. Container app was using 402Mi, request is 512Mi.",
       "evidence_ids": [
-        "ev-target_events"
+        "ev-target_events",
+        "ev-pod_states"
       ]
     },
     {

@@ -134,16 +134,17 @@
   "predicates": [
     {
       "name": "probe_kills",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "Pod/ledger-6b8d4f7c9-k4m2p: Container app failed liveness probe, will be restarted, 6 times",
       "evidence_ids": [
-        "ev-target_events"
+        "ev-target_events",
+        "ev-pod_states"
       ]
     },
     {
       "name": "probe_timeouts",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "a probe failed other than by running out of time: Pod/ledger-6b8d4f7c9-k4m2p: Liveness probe failed: Get \"http://10.42.3.21:8080/healthz\": dial tcp 10.42.3.21:8080: connect: connection refused",
       "evidence_ids": [
@@ -152,7 +153,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "ledger-6b8d4f7c9-k4m2p/app ran 32s before it was stopped, as soon as its liveness probe could fail it: it never passed the probe",
       "evidence_ids": [

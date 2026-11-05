@@ -42,6 +42,19 @@ This is one of them:
 | `answers[].reason` | Why, in plain words. `${expression}` puts in a value: times print as RFC 3339, durations to the second. |
 | `answers[].cite` | Expressions for the IDs of the evidence the answer rests on, each an ID or a list of them. |
 
+**Event text alone never makes a check true.** Anyone who may create events in a namespace can write one that reads word for word like the kubelet's or the scheduler's. A check that decides from an event's message must also find what the event says in status that only Kubernetes' own components write in practice: a pod's container states and restart counts, its phase, or a Deployment's conditions. When the status doesn't show it, the check answers `unknown`, not `true`, and the policy treats `unknown` as not safe wherever that matters. An event may still make a check `false`, or `true` where `true` only makes the policy stricter, as `evidence_has_instructions` does.
+
+| Check | The event | What has to show it too |
+|---|---|---|
+| `probe_kills` | `Killing`: failed liveness or startup probe | A container of that pod, of the current revision, restarted, and its last end, no earlier than the event, was a kill: exit code 137 or 143, not `OOMKilled` |
+| `killed_during_startup` | `Killing`: failed startup probe | The same as `probe_kills`. Its other answer reads only the pod's status |
+| `probe_timeouts` | `Unhealthy`: a probe timed out | A pod of the current revision that a failure names has a container that isn't ready, or that restarted no earlier than the event |
+| `evicted_for_node_memory` | `Evicted`: the node was low on memory | The pod is still there and has failed |
+| `scheduler_rejected_pods` | `FailedScheduling` | The pod is pending with no container statuses: no node took it |
+| `volume_not_bound` | `FailedMount`, `FailedAttachVolume`, or `FailedScheduling` naming a volume | The pod is pending, with no container running |
+| `quota_refused_pods` | `FailedCreate`: exceeded quota | The Deployment's `ReplicaFailure` condition is true, for `FailedCreate`, and names the quota |
+| `failure_onset_after_rollout` | Any warning event, through `failures` | A pod of the current revision isn't ready, or a container of one restarted |
+
 **Missing evidence needs no answer.** When a template an answer reads has no evidence, the check stops there as `unknown`, with a reason such as "no pod states", and the gap that explains it is attached, as for every check.
 
 ## What the expressions see

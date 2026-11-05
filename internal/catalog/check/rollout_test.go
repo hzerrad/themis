@@ -162,6 +162,11 @@ func TestFailureOnsetAfterRollout(t *testing.T) {
 
 	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.RolloutHistory)), check.Unknown)
 
+	// Anyone may write an event: one the pods don't bear out, ready and never
+	// restarted, can't make it true.
+	healthy := replace(t, b, evidence.PodStates, pods(healthyPod("checkout-7d9f8b6c4-x2kqp", "2")))
+	assertTruth(t, run("failure_onset_after_rollout", healthy), check.Unknown)
+
 	// Without the events an earlier failure could be hiding there: the pods
 	// alone can't make it true, though they can still show it false.
 	assertTruth(t, run("failure_onset_after_rollout", without(b, evidence.TargetEvents)), check.Unknown)

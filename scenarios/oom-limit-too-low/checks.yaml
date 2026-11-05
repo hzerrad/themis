@@ -145,19 +145,28 @@
       cite: [ids.pod_states]
 
 # A pod of the target was evicted because its node was short of memory: the
-# node, not the container's limit, ran out.
+# node, not the container's limit, ran out. An event says so; the pod's status
+# bears it out when the pod is still there and has failed, as an evicted pod
+# does. An event the status doesn't bear out leaves it unknown, and the
+# policy refuses a raise until it is false.
 - name: evicted_for_node_memory
-  version: "1"
+  version: "2"
   description: Its pods were evicted because their node was short of memory
-  reads: [target_events]
+  reads: [target_events, pod_states]
   let:
     evicted: >-
       target_events.events.filter(e, e.reason == "Evicted" && e.message.contains("low on resource: memory"))
+    borne: >-
+      evicted.filter(e, pod_states.pods.exists(p, "Pod/" + p.name == e.object && p.phase == "Failed"))
   answers:
-    - when: size(evicted) > 0
+    - when: size(borne) > 0
       answer: true
-      reason: "${evicted[0].object} was evicted: ${evicted[0].message}"
-      cite: [ids.target_events]
+      reason: "${borne[0].object} was evicted: ${borne[0].message}"
+      cite: [ids.target_events, ids.pod_states]
+    - when: size(evicted) > 0
+      answer: unknown
+      reason: "an event says ${evicted[0].object} was evicted for its node's memory, but no such pod has failed"
+      cite: [ids.target_events, ids.pod_states]
     - answer: false
       reason: no pod was evicted for its node's memory
       cite: [ids.target_events]

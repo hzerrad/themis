@@ -199,7 +199,7 @@
     },
     {
       "name": "evicted_for_node_memory",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no pod was evicted for its node's memory",
       "evidence_ids": [

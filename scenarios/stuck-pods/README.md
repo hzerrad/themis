@@ -24,12 +24,12 @@ Each looks at the pods that aren't ready, and is false when every pod is ready.
 
 | Check | True when |
 |---|---|
-| `scheduler_rejected_pods` | The scheduler can't place one: too little CPU or memory, a taint, an affinity, or a volume no node satisfies |
+| `scheduler_rejected_pods` | The scheduler can't place one: too little CPU or memory, a taint, an affinity, or a volume no node satisfies. The pod must still wait for a node; an event about a pod that has one makes it `unknown` |
 | `image_pull_failing` | A container waits for its image |
-| `volume_not_bound` | An event says a volume can't be bound, attached or mounted |
+| `volume_not_bound` | An event says a volume can't be bound, attached or mounted, and the pod is pending with no container running. An event alone makes it `unknown` |
 | `init_container_stuck` | An init container failed, or has run for over 5 minutes |
 | `config_error_on_start` | A container can't be created for a missing ConfigMap, Secret or key, or a ConfigMap the pods need doesn't exist |
-| `quota_refused_pods` | A namespace quota refused a pod its ReplicaSet tried to create |
+| `quota_refused_pods` | A namespace quota refused a pod its ReplicaSet tried to create: an event says so, and the Deployment's `ReplicaFailure` condition does too. An event alone makes it `unknown` |
 | `stuck_pods_new_revision_only` | Every stuck pod is of the current revision, and the revision before it runs ready pods |
 
 Some causes can't be read from Themis's evidence, and are left to the investigator: why the scheduler refused, which credentials a registry wants, why a claim isn't bound (the claim and its events aren't read), what an init container waits for, which key a Secret lacks (Secrets are never read), and which quota refused a pod beyond what the event says.

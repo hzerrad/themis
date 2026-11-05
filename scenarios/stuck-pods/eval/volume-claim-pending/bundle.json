@@ -133,7 +133,7 @@
   "predicates": [
     {
       "name": "scheduler_rejected_pods",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "Pod/ledger-84d6c9f7b-h2j3k can't be scheduled: 0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.",
       "evidence_ids": [
@@ -152,7 +152,7 @@
     },
     {
       "name": "volume_not_bound",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "Pod/ledger-84d6c9f7b-h2j3k, FailedScheduling: 0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.",
       "evidence_ids": [
@@ -181,7 +181,7 @@
     },
     {
       "name": "quota_refused_pods",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a quota refused a pod",
       "evidence_ids": [

@@ -209,7 +209,7 @@
     },
     {
       "name": "failure_onset_after_rollout",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "all 6 failures follow revision 2 at 2026-10-25T10:00:00Z",
       "evidence_ids": [
@@ -301,7 +301,7 @@
     },
     {
       "name": "evicted_for_node_memory",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no pod was evicted for its node's memory",
       "evidence_ids": [

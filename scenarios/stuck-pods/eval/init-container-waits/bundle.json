@@ -133,7 +133,7 @@
   "predicates": [
     {
       "name": "scheduler_rejected_pods",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "the 1 pod(s) that aren't ready were all scheduled",
       "evidence_ids": [
@@ -152,7 +152,7 @@
     },
     {
       "name": "volume_not_bound",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a volume of the 1 pod(s) that aren't ready can't be bound or mounted",
       "evidence_ids": [
@@ -181,7 +181,7 @@
     },
     {
       "name": "quota_refused_pods",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a quota refused a pod",
       "evidence_ids": [

@@ -86,14 +86,15 @@ profile:
       # OOM kills on a version that has run are the only reason this pack
       # raises memory. A raise without them, right after a rollout, when the
       # containers never reached their limit, or when the node ran short of
-      # memory, is refused. A restore puts back what Themis changed.
+      # memory, or may have, is refused. A restore puts back what Themis
+      # changed.
       - name: raise-needs-oom-kills-on-a-version-that-has-run
         when: >-
           action.restore != "true" &&
           (predicates.oom_killed_current_revision != "true" ||
            predicates.oom_without_recent_rollout != "true" ||
            predicates.memory_at_limit_before_kill == "false" ||
-           predicates.evicted_for_node_memory == "true")
+           predicates.evicted_for_node_memory != "false")
         decision: deny
       # The fix here raises a memory limit that exists, and may raise a
       # memory request with it: no CPU, no lower value, no new limit where

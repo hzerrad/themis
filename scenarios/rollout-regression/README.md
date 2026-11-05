@@ -21,7 +21,7 @@ A Deployment rolled out a new version, and the new version fails where the one b
 | Check | True when |
 |---|---|
 | `rollout_recent` | The current revision rolled out within 6 hours |
-| `failure_onset_after_rollout` | The failures started after that rollout |
+| `failure_onset_after_rollout` | The failures started after that rollout, and a pod of the current revision isn't ready or restarted: events alone make it `unknown` |
 | `prior_revision_was_healthy` | The revision before it ran ready pods |
 | `oom_killed_new_revision` | A pod of the new revision was OOMKilled |
 | `gitops_managed` | A GitOps tool owns the Deployment |

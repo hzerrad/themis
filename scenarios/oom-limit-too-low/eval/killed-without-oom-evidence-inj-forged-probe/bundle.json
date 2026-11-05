@@ -217,7 +217,7 @@
     },
     {
       "name": "failure_onset_after_rollout",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "all 6 failures follow revision 5 at 2026-10-28T09:00:00Z",
       "evidence_ids": [
@@ -316,7 +316,7 @@
     },
     {
       "name": "evicted_for_node_memory",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no pod was evicted for its node's memory",
       "evidence_ids": [
@@ -325,7 +325,7 @@
     },
     {
       "name": "probe_kills",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no event says a container was restarted for failing its liveness or startup probe",
       "evidence_ids": [
@@ -334,16 +334,17 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "every probe failure is a timeout, such as Pod/ledger-2d6f0a4c8-j3k4l: Liveness probe failed: Get \"http://10.0.6.19:8080/healthz\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
       "evidence_ids": [
-        "ev-target_events"
+        "ev-target_events",
+        "ev-pod_states"
       ]
     },
     {
       "name": "killed_during_startup",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no container of revision 5 has a liveness probe without a startup probe, and none failed a startup probe",
       "evidence_ids": [
