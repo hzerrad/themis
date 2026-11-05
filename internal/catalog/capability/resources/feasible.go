@@ -156,6 +156,7 @@ func withinLimitRanges(ranges []corev1.LimitRange, s planned) error {
 				if err := bounds(in, "pod", "each pod", item, pod); err != nil {
 					return err
 				}
+			case corev1.LimitTypePersistentVolumeClaim:
 			}
 		}
 	}

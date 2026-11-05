@@ -32,8 +32,10 @@ type field struct {
 
 // fields are every value the fix can set, in the order they are shown.
 var fields = []field{
-	{"requests", corev1.ResourceMemory}, {"limits", corev1.ResourceMemory},
-	{"requests", corev1.ResourceCPU}, {"limits", corev1.ResourceCPU},
+	{"requests", corev1.ResourceMemory},
+	{"limits", corev1.ResourceMemory},
+	{"requests", corev1.ResourceCPU},
+	{"limits", corev1.ResourceCPU},
 }
 
 func (f field) String() string {

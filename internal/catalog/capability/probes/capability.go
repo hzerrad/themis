@@ -8,7 +8,6 @@ import (
 	"math"
 	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -70,10 +69,10 @@ func (Capability) Validate(params map[string]any) (map[string]any, error) {
 	return r.params(), nil
 }
 
-// state is what Apply writes: the template planned, over the Deployment read.
+// state is what Apply writes: the template planned, over the workload read.
 type state struct {
-	deployment *appsv1.Deployment
-	desired    corev1.PodTemplateSpec
+	workload *workload.Workload
+	desired  corev1.PodTemplateSpec
 }
 
 // Plan reads the target and sets the fields params name on its container's
@@ -134,7 +133,7 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 		Facts:       facts(edits, req.container),
 		Done:        done(edits, req.container),
 		Mark:        mark,
-		State:       state{deployment: w.Object().DeepCopy(), desired: desired},
+		State:       state{workload: w, desired: desired},
 	}, nil
 }
 
@@ -157,17 +156,7 @@ func (Capability) Apply(ctx context.Context, c client.Client, p capability.Plan,
 	if !ok {
 		return 0, errors.New("not a probe plan")
 	}
-	d := s.deployment.DeepCopy()
-	d.Spec.Template = *s.desired.DeepCopy()
-	var opts []client.PatchOption
-	if dryRun {
-		opts = append(opts, client.DryRunAll)
-	}
-	patch := client.MergeFromWithOptions(s.deployment, client.MergeFromWithOptimisticLock{})
-	if err := c.Patch(ctx, d, patch, opts...); err != nil {
-		return 0, fmt.Errorf("patch Deployment %s: %w", d.Name, err)
-	}
-	return d.Generation, nil
+	return s.workload.SetTemplate(ctx, c, s.desired, dryRun)
 }
 
 // Undo sets back the probe fields that differ between the template before

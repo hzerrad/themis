@@ -43,7 +43,7 @@ func set(container string, values map[string]string) map[string]any {
 
 func list(values ...string) corev1.ResourceList {
 	l := corev1.ResourceList{}
-	for i := 0; i < len(values); i += 2 {
+	for i := 0; i+1 < len(values); i += 2 {
 		l[corev1.ResourceName(values[i])] = resource.MustParse(values[i+1])
 	}
 	return l
@@ -91,9 +91,9 @@ func TestValidate(t *testing.T) {
 			params: set("app", map[string]string{"limits.memory": "1024Mi", "requests.cpu": "0.5"}),
 			want:   set("app", map[string]string{"limits.memory": "1Gi", "requests.cpu": "500m"}),
 		},
-		"nothing to set":       {params: map[string]any{}, err: "needs only containers"},
-		"something else too":   {params: map[string]any{"containers": set("app", map[string]string{"limits.memory": "1Gi"})["containers"], "revision": 1}, err: "needs only containers"},
-		"a container with none": {params: map[string]any{"containers": map[string]any{"app": map[string]any{}}}, err: `container "app" needs requests or limits`},
+		"nothing to set":         {params: map[string]any{}, err: "needs only containers"},
+		"something else too":     {params: map[string]any{"containers": set("app", map[string]string{"limits.memory": "1Gi"})["containers"], "revision": 1}, err: "needs only containers"},
+		"a container with none":  {params: map[string]any{"containers": map[string]any{"app": map[string]any{}}}, err: `container "app" needs requests or limits`},
 		"not requests or limits": {params: set("app", map[string]string{"claims.memory": "1Gi"}), err: "only requests and limits"},
 		"not memory or CPU":      {params: set("app", map[string]string{"limits.ephemeral-storage": "1Gi"}), err: `only memory and cpu can be set, not "ephemeral-storage"`},
 		"not a quantity":         {params: set("app", map[string]string{"limits.memory": "lots"}), err: "the memory limit lots is not a Kubernetes quantity"},

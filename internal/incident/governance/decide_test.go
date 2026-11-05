@@ -3,13 +3,18 @@ package governance_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability/resources"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
@@ -192,5 +197,50 @@ func TestDecide(t *testing.T) {
 				t.Errorf("pre-state %s, desired %s", pre.Spec.Template.Spec.Containers[0].Image, desired.Spec.Template.Spec.Containers[0].Image)
 			}
 		})
+	}
+}
+
+// Policy sees what a fix says of its change, and a change the cluster can't
+// run is refused before policy decides.
+func TestDecide_WhatTheChangeIs(t *testing.T) {
+	p := profile("resources")
+	p.Capabilities = []string{resources.Name}
+	p.Policy.Rules = []config.PolicyRule{{Name: "no-doubling", When: `change["app.memory.limit.ratio"] == "2"`, Decision: config.DecisionDeny}}
+	double := map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "128Mi"}}}}
+	for name, tc := range map[string]struct {
+		maximum string
+		rule    string
+		refusal string
+	}{
+		"policy sees the ratio": {rule: "no-doubling"},
+		"a LimitRange forbids it": {
+			maximum: "100Mi",
+			refusal: "The LimitRange limits in %s allows at most 100Mi of memory per container, and app would have a memory limit of 128Mi.",
+		},
+	} {
+		target := cluster(t)
+		if tc.maximum != "" {
+			k8s.Create(t, &corev1.LimitRange{
+				ObjectMeta: metav1.ObjectMeta{Name: "limits", Namespace: target.Namespace},
+				Spec: corev1.LimitRangeSpec{Limits: []corev1.LimitRangeItem{{
+					Type: corev1.LimitTypeContainer, Max: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse(tc.maximum)},
+				}}},
+			})
+		}
+		var decider governance.Decider
+		d, err := decider.Decide(t.Context(), k8s, governance.Fix{
+			Incident: "incident-1", Target: target, Profile: p,
+			Capability: resources.Capability{}, Params: double, By: investigator,
+		})
+		if tc.refusal != "" {
+			want := fmt.Sprintf(tc.refusal, target.Namespace)
+			if refusal, ok := errors.AsType[*capability.Refusal](err); !ok || refusal.Reason != want {
+				t.Errorf("%s: err = %v, want the refusal %q", name, err, want)
+			}
+			continue
+		}
+		if err != nil || d.Decision.Outcome != policy.Deny || d.Decision.PolicyID != tc.rule {
+			t.Errorf("%s: decision %+v, %v; want a deny by %s", name, d.Decision, err, tc.rule)
+		}
 	}
 }
