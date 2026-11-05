@@ -25,6 +25,10 @@ on:
       - "Makefile"
       - "build/**"
       - ".github/workflows/e2e.yml"
+      # Tests and docs alone change nothing the cluster runs.
+      - "!**/*_test.go"
+      - "!**/testdata/**"
+      - "!**/*.md"
   workflow_dispatch:
 
 permissions:
