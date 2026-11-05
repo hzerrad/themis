@@ -1,9 +1,12 @@
 """What the model may answer at each step of an investigation."""
 
 import json
-from typing import Annotated, Any, Literal
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, Field
+from annotated_types import GroupedMetadata, MaxLen
+from pydantic import BaseModel, BeforeValidator, Field
 
 from themis.v1 import investigation_pb2
 
@@ -14,10 +17,54 @@ SCHEMA_VERSION = "6"
 # instead of running into the output limit and losing the whole reply.
 MAX_HYPOTHESES = 3
 
+# A reply that runs past a bound is rejected, and the model asked again, unless
+# the part is only read by people: text such as a summary is cut to its bound,
+# and a list of notes keeps its first items. Names, the fix, its parameters and
+# whatever a reply cites are never cut, since cutting them could change what
+# Themis does.
+
+
+def _trimmed(text: str, limit: int) -> str:
+    """text, cut to at most limit characters at a word, with an ellipsis."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    # Drop the word the cut runs through, unless it is the only one.
+    broken = not cut[-1].isspace() and not text[limit - 1].isspace()
+    if broken and len(words := cut.rsplit(maxsplit=1)) == 2:
+        cut = words[0]
+    return cut.rstrip(" \t\n,;:.") + "…"
+
+
+@dataclass(frozen=True)
+class Prose(GroupedMetadata):
+    """Text for people, of at most limit characters: longer text is trimmed."""
+
+    limit: int
+
+    def __iter__(self) -> Iterator[object]:
+        # Listed after the bound, the trimming runs before the bound is checked.
+        yield MaxLen(self.limit)
+        yield BeforeValidator(lambda v: _trimmed(v, self.limit) if isinstance(v, str) else v)
+
+
+@dataclass(frozen=True)
+class FirstOf(GroupedMetadata):
+    """A list of notes for people, of at most limit items: the rest are dropped."""
+
+    limit: int
+
+    def __iter__(self) -> Iterator[object]:
+        yield MaxLen(self.limit)
+        yield BeforeValidator(
+            lambda v: cast(list[Any], v)[: self.limit] if isinstance(v, list) else v
+        )
+
+
 # A name: of a Kubernetes object, a root cause, a check, a fix or evidence.
 Name = Annotated[str, Field(max_length=253)]
 # What a hypothesis is missing, in a few words.
-Note = Annotated[str, Field(max_length=160)]
+Note = Annotated[str, Prose(160)]
 
 
 class TargetOut(BaseModel):
@@ -33,13 +80,13 @@ class TargetOut(BaseModel):
 class HypothesisOut(BaseModel):
     # One of the root causes the core sent: reply_schema lists them.
     root_cause_class: Name
-    summary: str = Field(max_length=300)
+    summary: Annotated[str, Prose(300)]
     supporting: list[Name] = Field(
         max_length=6, description="IDs of evidence supporting the hypothesis."
     )
     contradicting: list[Name] = Field(max_length=6, description="IDs of evidence against it.")
-    missing: list[Note] = Field(
-        max_length=5, description="Evidence that would settle it but is missing."
+    missing: Annotated[list[Note], FirstOf(5)] = Field(
+        description="Evidence that would settle it but is missing."
     )
     status: Literal["supported", "refuted", "open"]
 
@@ -48,8 +95,8 @@ class ProposalOut(BaseModel):
     capability: Name = Field(description="One of the allowed fixes, by name.")
     target: TargetOut
     params: dict[str, Any] = Field(description="The fix's parameters, as its schema describes.")
-    expected_effect: str = Field(max_length=300)
-    rationale: str = Field(max_length=600)
+    expected_effect: Annotated[str, Prose(300)]
+    rationale: Annotated[str, Prose(600)]
     cited_evidence_ids: list[Name] = Field(max_length=8)
     # Checks the core sent, by name: reply_schema lists them.
     cited_predicates: list[Name] = Field(max_length=8)
@@ -61,7 +108,7 @@ class StepDecision(BaseModel):
         default=None, description="For request_evidence: a template name."
     )
     params: dict[str, Name] = Field(default_factory=dict[str, str])
-    summary: str = Field(default="", max_length=400)
+    summary: Annotated[str, Prose(400)] = ""
     hypotheses: list[HypothesisOut] = Field(
         default_factory=list[HypothesisOut], max_length=MAX_HYPOTHESES
     )

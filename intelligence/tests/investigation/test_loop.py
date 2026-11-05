@@ -1,6 +1,9 @@
+import json
+from functools import reduce
 from typing import Any, cast
 
 import pytest
+from pydantic import ValidationError
 
 from tests.investigation.fakes import TARGET, AbortingCore, FakeCore, ScriptedModel, item, job
 from themis.v1 import common_pb2, investigation_pb2, proposal_pb2
@@ -11,7 +14,7 @@ from themis_intelligence.investigation.loop import (
     render_evidence,
     system_prompt,
 )
-from themis_intelligence.investigation.schemas import MAX_HYPOTHESES, reply_schema
+from themis_intelligence.investigation.schemas import MAX_HYPOTHESES, StepDecision, reply_schema
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -326,6 +329,51 @@ def test_every_list_and_string_in_a_reply_is_bounded() -> None:
     schema["$defs"]["ProposalOut"]["properties"]["params"] = {"type": "object"}
     assert unbounded(schema, "") == []
     assert f"at most {MAX_HYPOTHESES} hypotheses," in system_prompt(job(), 6)
+
+
+LONG = "words " * 200
+
+
+# Past a bound, what only people read is cut, with any provider's reply; what
+# Themis acts on or cites is refused, so the model is asked again.
+@pytest.mark.parametrize(
+    ("path", "value", "limit"),
+    [
+        ("summary", LONG, 400),
+        ("hypotheses.0.summary", LONG, 300),
+        ("hypotheses.0.missing.0", LONG, 160),
+        ("hypotheses.0.missing", ["a note"] * 6, 5),
+        ("proposal.expected_effect", LONG, 300),
+        ("proposal.rationale", LONG, 600),
+        ("hypotheses", [HYPOTHESIS] * (MAX_HYPOTHESES + 1), None),
+        ("hypotheses.0.supporting", ["ev-pods"] * 7, None),
+        ("proposal.cited_evidence_ids", ["ev-pods"] * 9, None),
+        ("proposal.capability", "x" * 254, None),
+        ("proposal.target.name", "x" * 254, None),
+    ],
+)
+def test_a_reply_past_a_bound_is_cut_only_where_people_read_it(
+    path: str, value: Any, limit: int | None
+) -> None:
+    def at(node: Any, key: str) -> Any:
+        return cast(Any, node[int(key)] if isinstance(node, list) else node[key])
+
+    decision = propose()
+    decision["hypotheses"] = [{**HYPOTHESIS, "missing": ["a note"]}]
+    *parents, last = path.split(".")
+    parent = reduce(at, parents, decision)
+    parent[int(last) if isinstance(parent, list) else last] = value
+    reply = json.dumps(decision)
+    if limit is None:
+        with pytest.raises(ValidationError):
+            StepDecision.model_validate_json(reply)
+        return
+    got = reduce(at, path.split("."), StepDecision.model_validate_json(reply).model_dump())
+    if isinstance(value, list):
+        assert got == value[:limit]
+    else:
+        # Cut at a word, with an ellipsis, within the bound.
+        assert len(got) <= limit and got.endswith("words…") and LONG.startswith(got[:-1])
 
 
 # A profile may offer no fix: the model can then only diagnose. The prompt

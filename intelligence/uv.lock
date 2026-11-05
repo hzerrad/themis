@@ -1165,6 +1165,7 @@ name = "themis-intelligence"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "annotated-types" },
     { name = "anthropic" },
     { name = "grpcio" },
     { name = "httpx" },
@@ -1191,6 +1192,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "annotated-types", specifier = ">=0.7.0" },
     { name = "anthropic", specifier = ">=2.6.0" },
     { name = "grpcio", specifier = ">=1.84.0" },
     { name = "httpx", specifier = ">=0.28.1" },
