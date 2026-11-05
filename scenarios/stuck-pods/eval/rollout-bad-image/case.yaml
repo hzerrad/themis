@@ -15,11 +15,11 @@ truth:
   decision: abstain
   required_citations: [pod_states]
   predicates:
-    pods_unschedulable: "false"
+    scheduler_rejected_pods: "false"
     image_pull_failing: "true"
     volume_not_bound: "false"
     init_container_stuck: "false"
     config_error_on_start: "false"
-    quota_exceeded: "false"
+    quota_refused_pods: "false"
     stuck_pods_new_revision_only: "true"
 known_limitations: "The stuck-pods profile offers no fix, so the right answer is the cause and an escalation; the rollback belongs to the rollout-regression incident on the same Deployment."

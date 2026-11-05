@@ -15,8 +15,8 @@
       "config_error_on_start": "false",
       "image_pull_failing": "false",
       "init_container_stuck": "false",
-      "pods_unschedulable": "false",
-      "quota_exceeded": "true",
+      "quota_refused_pods": "true",
+      "scheduler_rejected_pods": "false",
       "stuck_pods_new_revision_only": "false",
       "volume_not_bound": "false"
     }
@@ -32,7 +32,7 @@
   "fixes": [],
   "root_causes": [
     {
-      "name": "unschedulable",
+      "name": "cannot_be_scheduled",
       "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
     },
     {
@@ -133,7 +133,7 @@
   ],
   "predicates": [
     {
-      "name": "pods_unschedulable",
+      "name": "scheduler_rejected_pods",
       "version": "1",
       "value": "false",
       "reason": "every pod is ready",
@@ -178,7 +178,7 @@
       ]
     },
     {
-      "name": "quota_exceeded",
+      "name": "quota_refused_pods",
       "version": "1",
       "value": "true",
       "reason": "ReplicaSet/search-5f7d8c9b6 can't create pods: Error creating: pods \"search-5f7d8c9b6-k2m4p\" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6",

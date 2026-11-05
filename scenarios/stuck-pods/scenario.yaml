@@ -8,7 +8,7 @@ description: Pods of a Deployment never become ready; Themis finds out why and h
 # What the investigator may name as the root cause, most likely first, and
 # what each means.
 rootCauses:
-  - name: unschedulable
+  - name: cannot_be_scheduled
     description: no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches
   - name: image_pull_failure
     description: its image can't be pulled, for a wrong name or tag, or missing registry credentials
@@ -39,12 +39,12 @@ profile:
     initial: [pod_states, target_events, rollout_history, referenced_config]
     allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
   checks:
-    - pods_unschedulable
+    - scheduler_rejected_pods
     - image_pull_failing
     - volume_not_bound
     - init_container_stuck
     - config_error_on_start
-    - quota_exceeded
+    - quota_refused_pods
     - stuck_pods_new_revision_only
   # Diagnosis only: no fix is offered, and the rule below refuses any fix all
   # the same, so the policy never lets one through, wherever it is asked.

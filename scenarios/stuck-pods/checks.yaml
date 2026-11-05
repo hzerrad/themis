@@ -4,7 +4,7 @@
 
 # The scheduler said why it can't place a pod that isn't ready: it names the
 # resource, taint, affinity or volume no node satisfies.
-- name: pods_unschedulable
+- name: scheduler_rejected_pods
   version: "1"
   description: No node can take a pod
   reads: [pod_states, target_events]
@@ -164,7 +164,7 @@
 
 # A ReplicaSet couldn't create a pod because a namespace quota refused it. Such
 # a pod never exists, so only its ReplicaSet's events show it.
-- name: quota_exceeded
+- name: quota_refused_pods
   version: "1"
   description: A namespace quota refuses new pods
   reads: [target_events]

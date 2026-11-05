@@ -16,11 +16,11 @@ truth:
   rollback_is_harmful: true
   required_citations: [target_events]
   predicates:
-    pods_unschedulable: "false"
+    scheduler_rejected_pods: "false"
     image_pull_failing: "true"
     volume_not_bound: "false"
     init_container_stuck: "false"
     config_error_on_start: "false"
-    quota_exceeded: "false"
+    quota_refused_pods: "false"
     stuck_pods_new_revision_only: "unknown"
 known_limitations: "stuck_pods_new_revision_only is unknown because revision 1 runs no pods; that it rolled out five days ago is in rollout_history, not in a check."

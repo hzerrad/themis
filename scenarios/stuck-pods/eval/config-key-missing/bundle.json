@@ -16,8 +16,8 @@
       "config_error_on_start": "true",
       "image_pull_failing": "false",
       "init_container_stuck": "false",
-      "pods_unschedulable": "false",
-      "quota_exceeded": "false",
+      "quota_refused_pods": "false",
+      "scheduler_rejected_pods": "false",
       "stuck_pods_new_revision_only": "unknown",
       "volume_not_bound": "false"
     }
@@ -33,7 +33,7 @@
   "fixes": [],
   "root_causes": [
     {
-      "name": "unschedulable",
+      "name": "cannot_be_scheduled",
       "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
     },
     {
@@ -134,7 +134,7 @@
   ],
   "predicates": [
     {
-      "name": "pods_unschedulable",
+      "name": "scheduler_rejected_pods",
       "version": "1",
       "value": "false",
       "reason": "the 1 pod(s) that aren't ready were all scheduled",
@@ -181,7 +181,7 @@
       ]
     },
     {
-      "name": "quota_exceeded",
+      "name": "quota_refused_pods",
       "version": "1",
       "value": "false",
       "reason": "no event says a quota refused a pod",

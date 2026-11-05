@@ -11,14 +11,14 @@ evidence:
   initial: [pod_states, target_events, rollout_history, referenced_config]
   allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
 truth:
-  root_causes: [unschedulable]
+  root_causes: [cannot_be_scheduled]
   decision: abstain
   rollback_is_harmful: true
   predicates:
-    pods_unschedulable: "true"
+    scheduler_rejected_pods: "true"
     image_pull_failing: "false"
     volume_not_bound: "false"
     init_container_stuck: "false"
     config_error_on_start: "false"
-    quota_exceeded: "false"
+    quota_refused_pods: "false"
     stuck_pods_new_revision_only: "false"

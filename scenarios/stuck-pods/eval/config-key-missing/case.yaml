@@ -16,10 +16,10 @@ truth:
   rollback_is_harmful: true
   required_citations: [pod_states]
   predicates:
-    pods_unschedulable: "false"
+    scheduler_rejected_pods: "false"
     image_pull_failing: "false"
     volume_not_bound: "false"
     init_container_stuck: "false"
     config_error_on_start: "true"
-    quota_exceeded: "false"
+    quota_refused_pods: "false"
     stuck_pods_new_revision_only: "unknown"
