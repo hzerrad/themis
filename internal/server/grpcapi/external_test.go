@@ -16,11 +16,8 @@ import (
 
 	rollbackfix "github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
-	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/testutil/pgtest"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -49,7 +46,7 @@ func (e *env) external(t *testing.T, edit ...func(*config.ExternalProposals)) th
 	for _, f := range edit {
 		f(&cfg.ExternalProposals)
 	}
-	e.server.Config, e.server.Suggestions.Config = cfg, cfg
+	e.server.Config, e.server.Suggestions.Config, e.server.Investigations.Config = cfg, cfg, cfg
 	e.server.Reviewer = reviewer{"agent-token": agentAccount, "stranger-token": "agents/stranger"}
 	return e.clientWith(t, "agent-token")
 }
@@ -66,16 +63,6 @@ func fromOutside(inv *themisv1.Investigation, clientID string) *themisv1.SubmitP
 	req.IncidentId = inv.GetIncidentId()
 	req.Provenance = &themisv1.Provenance{Source: "claims-to-be-themis", Model: "other"}
 	return req
-}
-
-func (e *env) abstain(t *testing.T, inv *themisv1.Investigation) {
-	t.Helper()
-	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
-		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_INCONCLUSIVE, Summary: "can't tell",
-	})
-	if err != nil {
-		t.Fatalf("CompleteInvestigation: %v", err)
-	}
 }
 
 func withWindow(x *config.ExternalProposals) { x.Window.Duration = time.Hour }
@@ -169,22 +156,6 @@ func TestExternal_WithholdsEvidenceAboveItsCeiling(t *testing.T) {
 	}
 }
 
-func TestExternal_SuggestionDuringTheInvestigationIsUsedIfThemisHasNone(t *testing.T) {
-	e := newEnv(t)
-	agent := e.external(t)
-	inv := e.lease(t)
-	if _, err := agent.SubmitProposal(t.Context(), fromOutside(inv, "c1")); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Investigating {
-		t.Fatalf("state = %s, want the investigation undisturbed", got)
-	}
-	e.abstain(t, inv)
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-}
-
 func reviewing(status authenticationv1.TokenReviewStatus, audiences *[]string) *fake.Clientset {
 	c := fake.NewClientset()
 	c.PrependReactor("create", "tokenreviews", func(a clienttesting.Action) (bool, runtime.Object, error) {
@@ -221,97 +192,5 @@ func TestKubeTokenReviewer(t *testing.T) {
 				t.Errorf("asked for audiences %v", asked)
 			}
 		})
-	}
-}
-
-func (e *env) failEveryAttempt(t *testing.T, agent themisv1.ProposalServiceClient) (string, *themisv1.SubmitProposalResponse) {
-	t.Helper()
-	var (
-		id   string
-		resp *themisv1.SubmitProposalResponse
-	)
-	for i := range store.MaxInvestigationAttempts {
-		inv := e.lease(t)
-		id = inv.GetIncidentId()
-		if i == 0 {
-			var err error
-			if resp, err = agent.SubmitProposal(t.Context(), fromOutside(inv, "c1")); err != nil {
-				t.Fatal(err)
-			}
-		}
-		_, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
-			LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		e.clock.now = e.clock.now.Add(10 * time.Minute)
-	}
-	return id, resp
-}
-
-// An agent was told its suggestion was accepted: the investigator failing
-// doesn't lose it.
-func TestExternal_SuggestionIsUsedWhenTheInvestigationFails(t *testing.T) {
-	e := newEnv(t)
-	id, resp := e.failEveryAttempt(t, e.external(t))
-	if got := e.state(t, id); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern' AND args ->> 'proposalID' = $1`, resp.GetProposalId()); n != 1 {
-		t.Errorf("%d govern jobs, want 1", n)
-	}
-}
-
-func TestExternal_SuggestionIsUsedWhenTheInvestigatorStopsResponding(t *testing.T) {
-	e := newEnv(t)
-	agent := e.external(t)
-	var (
-		id   string
-		resp *themisv1.SubmitProposalResponse
-	)
-	for i := range store.MaxInvestigationAttempts {
-		inv := e.lease(t)
-		id = inv.GetIncidentId()
-		if i == 0 {
-			var err error
-			if resp, err = agent.SubmitProposal(t.Context(), fromOutside(inv, "c1")); err != nil {
-				t.Fatal(err)
-			}
-		}
-		e.clock.now = e.clock.now.Add(10 * time.Minute)
-	}
-	if _, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w"}); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'govern' AND args ->> 'proposalID' = $1`, resp.GetProposalId()); n != 1 {
-		t.Errorf("%d govern jobs, want 1", n)
-	}
-}
-
-// With no suggestion to fall back on, a failed investigation still escalates:
-// the investigator's own fix, from a lease that failed, isn't used.
-func TestExternal_FailureWithOnlyTheInvestigatorsFixEscalates(t *testing.T) {
-	e := newEnv(t)
-	e.external(t)
-	var id string
-	for i := range store.MaxInvestigationAttempts {
-		inv := e.lease(t)
-		id = inv.GetIncidentId()
-		if i == 0 {
-			e.submit(t, rollback(inv, "ours"))
-		}
-		if _, err := e.investigations.FailInvestigation(t.Context(), &themisv1.FailInvestigationRequest{
-			LeaseId: inv.GetLeaseId(), Reason: themisv1.InvestigationFailureReason_INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE,
-		}); err != nil {
-			t.Fatal(err)
-		}
-		e.clock.now = e.clock.now.Add(10 * time.Minute)
-	}
-	if got := e.state(t, id); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
 	}
 }

@@ -96,7 +96,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `scenarios/` | **The incidents Themis handles**, one scenario pack per folder: its profile, its checks and the evaluation cases that prove it, built into the binary; see [scenarios.md](scenarios.md) |
 | `internal/incident` | An incident and its states |
 | `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |
-| `internal/incident/investigation` | Hands incidents to an investigator, and waits for a suggested fix when there is none |
+| `internal/incident/investigation` | An incident's investigation: prepares it, hands it to an investigator under a lease, reads the evidence it asks for within its profile and budget, records what it couldn't have, and ends it with the state its outcome leads to; waits for a suggested fix when there is none |
 | `internal/incident/suggestion` | Takes a fix suggested for an incident, from the investigator, a tool outside Themis or a person: judges it once, keeps it with why it was refused, and hands the one that goes next to governance |
 | `internal/incident/governance` | Deciding each action by policy, approvals, handing approved actions to the executor, and putting a failed fix back |
 | `internal/incident/governance/policy` | Policy rules: compiling them, and deciding an action with them |
@@ -105,7 +105,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/incident/notification` | Tells people when an incident is handed to them |
 | `internal/workload` | The target as Themis reads it: whether it is still the same object, its template, revisions, pods and replica counts. Everything else asks here |
 | `internal/digest` | The action digest an approval is bound to, and the template hash it covers |
-| `internal/server/httpapi`, `internal/server/grpcapi` | The HTTP API and the UI, and the investigators' gRPC API |
+| `internal/server/httpapi`, `internal/server/grpcapi` | The HTTP API and the UI, and the investigators' gRPC API: who is calling, and translating to and from the incident's stages |
 | `internal/server/identity` | Who is calling: accounts, sessions, sign-in, the setup door |
 | `internal/server/statuspage` | The status page: whether each part of an install works |
 | `internal/config`, `internal/config/resources`, `internal/config/settings` | Configuration from the file, from custom resources, and from the Setup page |

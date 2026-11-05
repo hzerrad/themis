@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
@@ -28,8 +29,10 @@ func profile() config.Profile {
 		Name: "rollout-regression", Priority: 100,
 		Evidence: config.Evidence{
 			Initial: []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents},
-			Allowed: []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents},
+			Allowed: []string{evidence.RolloutHistory, evidence.PodStates, evidence.TargetEvents, evidence.ContainerLogsTail},
 		},
+		Capabilities:  []string{rollback.Name},
+		Investigation: config.Investigation{MaxEvidenceRequests: 2},
 	}
 }
 
@@ -38,6 +41,9 @@ type env struct {
 	store  *store.Store
 	pool   *pgxpool.Pool
 	target incident.TargetRef
+	cat    catalog.Catalog
+	// now is the time the code under test sees; a test moves it forward.
+	now time.Time
 }
 
 func newEnv(t *testing.T) *env {
@@ -54,7 +60,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{
+	e := &env{
 		worker: &investigation.PrepareWorker{
 			Config: config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile()}},
 			Store:  s,
@@ -63,11 +69,14 @@ func newEnv(t *testing.T) *env {
 				Evidence: evidence.NewRegistry(evidence.NewRolloutHistory(), evidence.NewPodStates(), evidence.NewTargetEvents()),
 				Checks:   rolloutChecks(t, cat),
 			},
-			Now: func() time.Time { return time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC) },
 		},
-		store: s, pool: pool, target: target,
+		store: s, pool: pool, target: target, cat: cat, now: time.Date(2026, 10, 27, 9, 20, 0, 0, time.UTC),
 	}
+	e.worker.Now = e.clock
+	return e
 }
+
+func (e *env) clock() time.Time { return e.now }
 
 // rolloutChecks are the checks the rollout-regression pack's profile runs,
 // whatever other packs are there.

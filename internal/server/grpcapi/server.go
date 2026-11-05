@@ -1,6 +1,7 @@
 // Package grpcapi serves the core's gRPC API to investigators: leases,
-// evidence by named template, and proposals. It is the single point that
-// enforces an investigation's scope.
+// evidence by named template, and proposals. It says who is calling and
+// translates; the investigation's lifecycle and scope are the investigation
+// package's, and suggestions the suggestion package's.
 package grpcapi
 
 import (
@@ -16,7 +17,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
@@ -24,6 +24,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
+	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
@@ -33,15 +34,6 @@ import (
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
-// DefaultLeaseFor is how long a lease lasts without renewal.
-const DefaultLeaseFor = time.Minute
-
-// retryBackoff delays the lease after a failure, doubling with each attempt,
-// so a brief model outage does not use up every attempt.
-const retryBackoff = 30 * time.Second
-
-const actor = "investigator"
-
 type Server struct {
 	themisv1.UnimplementedInvestigationServiceServer
 	themisv1.UnimplementedEvidenceServiceServer
@@ -49,14 +41,15 @@ type Server struct {
 
 	Store  *store.Store
 	Config config.Provider
-	// Evidence is the templates investigators may ask for.
+	// Investigations hands out leases, reads evidence under them, and ends
+	// each investigation.
+	Investigations *investigation.Leases
+	// Evidence is the templates investigators may ask for, described to them.
 	Evidence evidence.Registry
 	// Checks are the checks Themis runs, described to suggesters.
-	Checks   check.List
-	Reader   client.Reader
-	Logger   *slog.Logger
-	Now      func() time.Time
-	LeaseFor time.Duration
+	Checks check.List
+	Logger *slog.Logger
+	Now    func() time.Time
 
 	// Reviewer proves who a caller outside Themis is. Without one, there are
 	// no such callers.
@@ -148,10 +141,23 @@ func (s *Server) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// internal hides an unexpected error from the caller and logs it.
+// refusalCodes say in gRPC why a request under a lease was refused.
+var refusalCodes = map[investigation.Kind]codes.Code{
+	investigation.Gone:        codes.FailedPrecondition,
+	investigation.NotAllowed:  codes.PermissionDenied,
+	investigation.BudgetSpent: codes.ResourceExhausted,
+	investigation.Invalid:     codes.InvalidArgument,
+}
+
+// internal says in gRPC why a request was refused, or hides an unexpected
+// error from the caller and logs it.
 func (s *Server) internal(ctx context.Context, err error) error {
 	if errors.Is(err, store.ErrLeaseLost) {
 		return status.Error(codes.FailedPrecondition, "the lease is unknown, expired or superseded")
+	}
+	var refused *investigation.Error
+	if errors.As(err, &refused) {
+		return status.Error(refusalCodes[refused.Kind], refused.Message)
 	}
 	if st, ok := status.FromError(err); ok && st.Code() != codes.Unknown {
 		return err
@@ -161,13 +167,4 @@ func (s *Server) internal(ctx context.Context, err error) error {
 	}
 	s.logger().ErrorContext(ctx, "gRPC request failed", telemetry.FieldError, err)
 	return status.Error(codes.Internal, "internal error")
-}
-
-// profile returns the configured profile of an investigation.
-func (s *Server) profile(inv store.Investigation) (config.Profile, error) {
-	p, ok := s.Config.Current().Profile(inv.Profile)
-	if !ok {
-		return config.Profile{}, status.Errorf(codes.FailedPrecondition, "profile %q is no longer configured", inv.Profile)
-	}
-	return p, nil
 }

@@ -55,7 +55,7 @@ func TestExternal_ReviewsATokenOnceAMinute(t *testing.T) {
 		}
 	}
 	wantReviews(t, reviews, 1)
-	e.clock.now = e.clock.now.Add(time.Minute)
+	e.now = e.now.Add(time.Minute)
 	if err := list(t, agent); err != nil {
 		t.Fatal(err)
 	}
@@ -65,13 +65,13 @@ func TestExternal_ReviewsATokenOnceAMinute(t *testing.T) {
 func TestExternal_ReviewsATokenAgainOnceItExpires(t *testing.T) {
 	e := newEnv(t)
 	e.external(t)
-	claims := fmt.Sprintf(`{"exp":%d}`, e.clock.now.Add(10*time.Second).Unix())
+	claims := fmt.Sprintf(`{"exp":%d}`, e.now.Add(10*time.Second).Unix())
 	tok := "h." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + ".s"
 	e.server.Reviewer.(reviewer)[tok] = agentAccount //nolint:forcetypeassert // set by external
 	reviews := e.countReviews()
 	agent := e.clientWith(t, tok)
 	for _, wait := range []time.Duration{0, 5 * time.Second, 6 * time.Second} {
-		e.clock.now = e.clock.now.Add(wait)
+		e.now = e.now.Add(wait)
 		if err := list(t, agent); err != nil {
 			t.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func TestExternal_LimitsAttemptsPerAddressBeforeReview(t *testing.T) {
 	if err := list(t, agent); err != nil {
 		t.Errorf("accepted token: %v", err)
 	}
-	e.clock.now = e.clock.now.Add(time.Minute)
+	e.now = e.now.Add(time.Minute)
 	wantCode(t, list(t, e.clientWith(t, "forged")), codes.Unauthenticated)
 }
 
@@ -112,7 +112,7 @@ func TestExternal_LimitsReads(t *testing.T) {
 	_, err := agent.GetIncident(t.Context(), &themisv1.GetIncidentRequest{IncidentId: "00000000-0000-7000-8000-000000000000"})
 	wantCode(t, err, codes.ResourceExhausted)
 	wantCode(t, list(t, agent), codes.ResourceExhausted)
-	e.clock.now = e.clock.now.Add(time.Minute)
+	e.now = e.now.Add(time.Minute)
 	if err := list(t, agent); err != nil {
 		t.Errorf("after a minute: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestExternal_RemembersARefusalBriefly(t *testing.T) {
 		wantCode(t, list(t, forged), codes.Unauthenticated)
 	}
 	wantReviews(t, reviews, 1)
-	e.clock.now = e.clock.now.Add(5 * time.Second)
+	e.now = e.now.Add(5 * time.Second)
 	wantCode(t, list(t, forged), codes.Unauthenticated)
 	wantReviews(t, reviews, 2)
 }
