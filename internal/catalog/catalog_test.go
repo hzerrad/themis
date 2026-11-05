@@ -37,6 +37,10 @@ func TestCheckConfig(t *testing.T) {
 		{"policy reads a check that doesn't exist", func(c *config.Config) {
 			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates["gitops_manged"] == "true"`, Decision: config.DecisionDeny}}
 		}, `profile p: rule r reads the check "gitops_manged", which doesn't exist`},
+		{"a fix justified by a check the profile doesn't run", func(c *config.Config) {
+			c.Profiles[0].Checks = []string{"rollout_recent"}
+			c.Profiles[0].JustifiedBy = map[string][]string{"deployment.rollback-to-revision": {"failure_onset_after_rollout"}}
+		}, `profile p: justifiedBy deployment.rollback-to-revision names the check "failure_onset_after_rollout", which the profile doesn't run`},
 		{"unknown fix for an outside agent", func(c *config.Config) {
 			c.ExternalProposals.Sources = []config.ProposalSource{{ServiceAccount: "agents/triage", Capabilities: []string{"delete.everything"}}}
 		}, `externalProposals: sources[0].capabilities[0]: unknown capability "delete.everything"`},

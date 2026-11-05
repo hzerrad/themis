@@ -202,6 +202,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule raise-needs-throttling forbids this fix."
+    "reason": "The check that justifies a memory or CPU change isn't true: cpu_throttled_at_limit is unknown."
   }
 }

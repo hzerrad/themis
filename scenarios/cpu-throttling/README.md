@@ -32,11 +32,11 @@ Throttling can only be seen from a metrics source with history, such as Promethe
 
 `deployment.set-resources`, raising the CPU limit of the throttled container. The investigator decides by how much, from the evidence; 1.5 times the current limit is the starting point its guidance suggests. Themis checks the values are valid and that the cluster can run them, never how big they are.
 
-Themis never changes a Deployment GitOps manages, or may manage: GitOps would put the old limit back, so Themis only recommends the raise. Beyond that, the policy enforces, whoever suggests the fix:
+Themis never changes a Deployment GitOps manages, or may manage: GitOps would put the old limit back, so Themis only recommends the raise. It refuses a raise unless `cpu_throttled_at_limit`, the check the profile names to justify it, is true: without throttling figures there is nothing to act on. Beyond that, the policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
-| `raise-needs-throttling` | deny | Unless `cpu_throttled_at_limit` is true and `rollout_recent` is false: without throttling figures there is nothing to act on, and right after a rollout the new version may be what uses more CPU, which is a rollback's question |
+| `no-raise-after-a-rollout` | deny | Unless `rollout_recent` is false: right after a rollout the new version may be what uses more CPU, which is a rollback's question |
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
 

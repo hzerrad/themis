@@ -12,6 +12,7 @@ import (
 	"github.com/google/cel-go/cel"
 	celast "github.com/google/cel-go/common/ast"
 	"github.com/google/cel-go/common/operators"
+	"github.com/google/cel-go/common/types"
 
 	"github.com/hzerrad/themis/internal/config"
 )
@@ -114,7 +115,8 @@ func Compile(p config.Policy) (*Policy, error) {
 			errs = append(errs, fmt.Errorf("rule %s: must be a boolean, not %s", r.Name, ast.OutputType()))
 			continue
 		}
-		program, err := env.Program(ast, cel.CostLimit(costLimit))
+		// Partial evaluation lets Forbids leave the change unknown.
+		program, err := env.Program(ast, cel.CostLimit(costLimit), cel.EvalOptions(cel.OptPartialEval))
 		if err != nil {
 			errs = append(errs, fmt.Errorf("rule %s: %w", r.Name, err))
 			continue
@@ -205,18 +207,7 @@ func (p *Policy) Evaluate(in Input) Decision {
 // that can't be evaluated, which denies; false when none matches. Neither the
 // mode nor what happens when no rule matches plays a part.
 func (p *Policy) Rule(in Input) (Decision, bool) {
-	change := in.Change
-	if change == nil {
-		change = map[string]string{}
-	}
-	vars := map[string]any{
-		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
-		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},
-		"predicates": in.Predicates,
-		"change":     change,
-		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
-		"mode":       p.mode,
-	}
+	vars := p.vars(in)
 	for _, r := range p.rules {
 		val, _, err := r.program.Eval(vars)
 		if err != nil {
@@ -230,6 +221,47 @@ func (p *Policy) Rule(in Input) (Decision, bool) {
 		}
 	}
 	return Decision{}, false
+}
+
+// Forbids reports whether p forbids a fix whatever it changes: the first
+// rule that matches in without knowing the change denies, or can't be
+// evaluated. A rule that reads the change is passed over, since some change
+// may get past it; in.Change is ignored. Neither the mode nor what happens
+// when no rule matches plays a part.
+func (p *Policy) Forbids(in Input) bool {
+	vars, err := cel.PartialVars(p.vars(in), cel.AttributePattern("change"))
+	if err != nil {
+		return true
+	}
+	for _, r := range p.rules {
+		val, _, err := r.program.Eval(vars)
+		if err != nil {
+			return true
+		}
+		if types.IsUnknown(val) {
+			continue
+		}
+		if matched, ok := val.Value().(bool); ok && matched {
+			return Outcome(r.Decision) == Deny
+		}
+	}
+	return false
+}
+
+// vars are what rules see of in.
+func (p *Policy) vars(in Input) map[string]any {
+	change := in.Change
+	if change == nil {
+		change = map[string]string{}
+	}
+	return map[string]any{
+		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
+		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},
+		"predicates": in.Predicates,
+		"change":     change,
+		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
+		"mode":       p.mode,
+	}
 }
 
 // Stricter reports whether a holds back more than b: deny holds back more

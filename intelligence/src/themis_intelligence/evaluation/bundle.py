@@ -124,6 +124,10 @@ class Bundle(BaseModel):
     requestable: dict[str, Item]
     templates: list[Template]
     predicates: list[Check]
+    # What the core tells the person it hands the incident to when the
+    # investigator proposes no fix but the checks support one; empty when it
+    # would close or wait instead.
+    unproposed: str = ""
 
 
 def bundle_dirs(

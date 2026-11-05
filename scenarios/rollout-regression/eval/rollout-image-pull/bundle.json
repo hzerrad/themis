@@ -204,7 +204,7 @@
     },
     {
       "name": "config_changed_before_failure",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no referenced ConfigMap changed between the rollout and the first failure",
       "evidence_ids": [
@@ -217,5 +217,6 @@
   "policy": {
     "outcome": "require_approval",
     "reason": "Policy rule rollback-needs-approval requires a person's approval."
-  }
+  },
+  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it."
 }

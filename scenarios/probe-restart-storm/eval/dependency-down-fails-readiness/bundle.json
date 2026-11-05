@@ -162,7 +162,7 @@
   "predicates": [
     {
       "name": "probe_kills",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "no event says a container was restarted for failing its liveness or startup probe",
       "evidence_ids": [
@@ -171,7 +171,7 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "a probe failed other than by running out of time: Pod/orders-8a6c2e4f1-d2f4g: Readiness probe failed: HTTP probe failed with statuscode: 503",
       "evidence_ids": [
@@ -180,7 +180,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "no container of revision 15 was stopped as soon as its liveness probe could fail it",
       "evidence_ids": [
@@ -295,6 +295,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule probe-change-needs-probe-failures forbids this fix. It is the probe-restart-storm profile's policy."
+    "reason": "None of the checks that justify a probe change is true: probe_kills is false, probe_timeouts is false."
   }
 }

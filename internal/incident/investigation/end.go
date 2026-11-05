@@ -27,11 +27,20 @@ const (
 	Inconclusive = "inconclusive"
 )
 
+// What the timeline says of an investigation's end. The investigator's own
+// summary is shown apart, as its note: what operators read of a decision
+// comes from what Themis can check.
+const (
+	couldntDecide = "The investigator couldn't decide."
+	suggestedFix  = "The investigator suggested a fix."
+)
+
 // Complete ends the investigation leaseID holds with r, keeping the gaps the
 // investigator reported. The accepted suggestion that goes next is handed to
-// governance. Without one, an inconclusive investigation waits for a
-// suggestion if the install gives time for one, and otherwise, like a
-// proposed one, closes the incident.
+// governance. Without one, an inconclusive investigation is handed to a
+// person when the incident's checks support a fix the investigator didn't
+// propose; otherwise it waits for a suggestion if the install gives time for
+// one, and otherwise, like a proposed one, closes the incident.
 func (l *Leases) Complete(ctx context.Context, leaseID string, r store.InvestigationResult, reported []catalog.Gap) error {
 	return l.Store.InTx(ctx, func(tx pgx.Tx) error {
 		inv, err := l.Store.LeasedInvestigation(ctx, tx, leaseID, l.now())
@@ -61,18 +70,27 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		}
 		if r.Conclusion == Inconclusive {
 			store.CountInvestigation(tx, store.InvestigationAbstained)
-			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, r.Summary, incident.Investigating, incident.Inconclusive); handed || err != nil {
+			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, couldntDecide, incident.Investigating, incident.Inconclusive); handed || err != nil {
 				return err
+			}
+			// Text in the evidence may have talked the investigator out of a
+			// fix the checks support: a person decides.
+			note, err := l.Suggestions.Unproposed(ctx, inv.IncidentID, l.Config.Current().Matched(inv.Profiles), inv.Target.Namespace)
+			if err != nil {
+				return err
+			}
+			if note != "" {
+				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide+" "+note, investigator, incident.Investigating, incident.Escalated)
 			}
 			// Someone may yet suggest a fix: CloseUndecidedWorker closes it if not.
 			if l.Config.Current().SuggestionWindow() > 0 {
-				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, r.Summary, investigator, incident.Investigating, incident.Inconclusive)
+				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide, investigator, incident.Investigating, incident.Inconclusive)
 			}
-			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, r.Summary, investigator, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
+			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide, investigator, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
 		store.CountInvestigation(tx, store.InvestigationProposed)
-		if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, r.Summary, incident.Investigating); handed || err != nil {
+		if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, suggestedFix, incident.Investigating); handed || err != nil {
 			return err
 		}
 		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)

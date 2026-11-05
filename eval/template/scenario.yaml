@@ -41,6 +41,10 @@ profile:
   checks: []
   # The fixes Themis may suggest. None means it diagnoses and escalates. TODO
   capabilities: []
+  # For each fix above, the checks that justify it: Themis refuses the fix
+  # unless one of them is true, whoever suggests it. Each must be a check the
+  # profile runs, such as deployment.set-probes: [probe_kills]. TODO
+  justifiedBy: {}
   # What the investigator should know about these incidents, in plain words:
   # when the fixes above are right and when they are wrong, which checks
   # settle it, what evidence misleads. Don't name the root causes. Guidance

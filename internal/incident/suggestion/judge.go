@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
@@ -93,9 +94,18 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 			"It cites evidence Themis never collected: " + strings.Join(missing, ", ") + ".",
 		}, nil
 	}
+	if len(p.CitedPredicates) == 0 {
+		return nil, nil
+	}
+	// A check is cited for what it answered for this incident: one Themis
+	// didn't run for it answered nothing.
+	ran, err := b.Store.Predicates(ctx, in.incidentID)
+	if err != nil {
+		return nil, err
+	}
 	for _, name := range p.CitedPredicates {
-		if _, ok := b.Checks.Get(name); !ok {
-			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "It cites a check that doesn't exist: " + name + "."}, nil
+		if !slices.ContainsFunc(ran, func(r check.Result) bool { return r.Name == name }) {
+			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "It cites a check Themis didn't run for this incident: " + name + "."}, nil
 		}
 	}
 	return nil, nil

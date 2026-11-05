@@ -22,6 +22,7 @@ var _ capability.Capability = Capability{}
 
 func (Capability) Name() string    { return Name }
 func (Capability) Version() string { return Version }
+func (Capability) Noun() string    { return "a rollback" }
 
 func (Capability) Description() string {
 	return "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history."

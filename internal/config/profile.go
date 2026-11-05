@@ -40,6 +40,11 @@ type Profile struct {
 	// diagnosis only.
 	Capabilities []string `json:"capabilities,omitempty" jsonschema:"uniqueItems=true"`
 
+	// JustifiedBy names, for each fix in Capabilities, the checks that
+	// justify it: Themis refuses the fix unless one of them is true for the
+	// incident, whoever suggests it. Each must be a check the profile runs.
+	JustifiedBy map[string][]string `json:"justifiedBy,omitempty"`
+
 	// Guidance tells the investigator, in plain words, when this profile's
 	// fixes are right and when they are wrong. It guides; checks and policy
 	// decide.

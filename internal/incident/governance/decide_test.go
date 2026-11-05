@@ -122,10 +122,13 @@ func TestDecide(t *testing.T) {
 		// A new version that crashes, or never starts, while the one before it
 		// was healthy is a bad rollout too, though nothing ran out of memory.
 		{name: "bad rollout without OOM", checks: set(facts(check.True), 0, check.False), want: policy.RequireApproval, rule: "rollback-needs-approval"},
-		// The crash loop began before the rollout: rolling back would not help.
-		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		// The crash loop began before the rollout: the check that justifies a
+		// rollback is false, so Themis refuses it before any rule.
+		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "The check that justifies a rollback isn't true: failure_onset_after_rollout is false."},
 		// Without the evidence that says when the failures started, no rollback.
-		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: governance.UnjustifiedRule},
+		// Every profile offering the fix must find it justified.
+		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "The check that justifies a rollback isn't true: oom_killed_new_revision is false. They are the watching profile's."},
 		// A referenced ConfigMap changed between the rollout and the failures:
 		// rolling back wouldn't undo it.
 		{name: "config changed before the failure", checks: set(facts(check.True), 3, check.True), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
@@ -194,8 +197,8 @@ func TestDecide(t *testing.T) {
 			if tt.reason != "" && d.Decision.Reason != tt.reason {
 				t.Errorf("reason = %q, want %q", d.Decision.Reason, tt.reason)
 			}
-			// With several profiles, the reason says whose policy decided.
-			if len(tt.also) > 0 && !strings.HasSuffix(d.Decision.Reason, " profile's policy.") {
+			// With several profiles, the reason says whose profile decided.
+			if len(tt.also) > 0 && !strings.HasSuffix(d.Decision.Reason, " profile's policy.") && !strings.HasSuffix(d.Decision.Reason, " profile's.") {
 				t.Errorf("reason %q doesn't say which profile's policy decided", d.Decision.Reason)
 			}
 			a := d.Action
@@ -237,6 +240,7 @@ func TestDecide(t *testing.T) {
 func TestDecide_WhatTheChangeIs(t *testing.T) {
 	p := profile("resources")
 	p.Capabilities = []string{resources.Name}
+	p.JustifiedBy = map[string][]string{resources.Name: {"oom_killed_new_revision"}}
 	p.Policy.Rules = []config.PolicyRule{{Name: "no-doubling", When: `change["app.memory.limit.ratio"] == "2"`, Decision: config.DecisionDeny}}
 	double := map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "128Mi"}}}}
 	for name, tc := range map[string]struct {

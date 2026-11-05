@@ -517,6 +517,24 @@ function citedChecks(names, d) {
   }).join("; ");
 }
 
+// written marks text someone outside Themis's checks wrote, such as the
+// model: Themis decides nothing on it.
+function written(by) {
+  return h("div", { class: "muted" }, `Written by ${by}; Themis didn't check it.`);
+}
+
+// diagnosis is the leading cause the investigator named, from its list, and
+// the checks the fix cites with what Themis found: what decides, not what
+// the model wrote.
+function diagnosis(inv, p, d) {
+  const lead = ((inv && inv.Hypotheses) || []).find((x) => !String(x.status).endsWith("_REFUTED"));
+  const parts = [];
+  if (lead) parts.push(label(ROOT_CAUSE_LABEL, lead.rootCauseClass || "unclassified"));
+  const checks = p ? citedChecks(p.CitedPredicates, d) : "";
+  if (checks) parts.push(`checks cited: ${checks}`);
+  return parts.join(". ");
+}
+
 function proposalPanel(p, d) {
   return h("div", { class: "panel" },
     h("h3", {}, "What was suggested"),
@@ -525,10 +543,11 @@ function proposalPanel(p, d) {
       h("dt", {}, "Status"), h("dd", {}, h("span", { class: `state ${p.Status === "rejected" ? "bad" : "neutral"}` }, label(SUGGESTION_LABEL, p.Status)), p.RejectionReason ? h("div", {}, label(REJECTION_LABEL, p.RejectionReason)) : null),
       h("dt", {}, "Fix"), h("dd", {}, fix(p.Capability, p.Params)),
       h("dt", {}, "Workload"), h("dd", {}, target(p.Target), h("div", { class: "mono muted" }, p.Target.UID)),
-      h("dt", {}, "Expected effect"), h("dd", {}, p.ExpectedEffect || "—"),
-      h("dt", {}, "Why"), h("dd", {}, p.Rationale || "—"),
       h("dt", {}, "Evidence cited"), h("dd", { class: "mono" }, (p.CitedEvidenceIDs || []).map(short).join(", ") || "—"),
       h("dt", {}, "Checks cited"), h("dd", {}, citedChecks(p.CitedPredicates, d) || "—"),
+      // What the suggester wrote: for people, Themis checks none of it.
+      h("dt", {}, "Its note"), h("dd", {}, written("the suggester"),
+        h("div", {}, `Why: ${p.Rationale || "—"}`), h("div", {}, `Expected effect: ${p.ExpectedEffect || "—"}`)),
       p.Message ? [h("dt", {}, "Note"), h("dd", {}, p.Message)] : null,
       // What the suggester says it looked at: for people, nothing decides on it.
       p.Notes ? [h("dt", {}, "What it looked at"), h("dd", {}, h("details", {},
@@ -601,7 +620,7 @@ function hypotheses(inv) {
   return hs.map((x) => h("div", { class: "cause" },
     h("strong", {}, label(ROOT_CAUSE_LABEL, x.rootCauseClass || "unclassified")), " ",
     h("span", { class: "muted" }, label(CAUSE_LABEL, x.status)),
-    h("div", {}, x.summary),
+    x.summary ? h("div", {}, x.summary, written("the model")) : null,
     h("div", { class: "muted" },
       `Evidence for it: ${(x.supportingEvidenceIds || []).map(short).join(", ") || "—"}`,
       h("br"), `Evidence against it: ${(x.contradictingEvidenceIds || []).map(short).join(", ") || "—"}`,
@@ -631,11 +650,19 @@ const NEXT = {
 };
 
 // summary says, in plain words, what happened and what is expected of you.
-function summary(inc, inv, actions, proposals, headline, missed) {
+function summary(inc, inv, actions, proposals, headline, missed, d) {
   const facts = [];
   const accepted = proposals.find((p) => p.Status === "accepted");
   const action = actions[actions.length - 1];
-  if (inv && inv.Summary) facts.push(h("li", {}, h("strong", {}, "Diagnosis: "), inv.Summary));
+  const cited = action ? proposals.find((p) => p.ID === action.ProposalID) : accepted;
+  const found = diagnosis(inv, cited, d);
+  if (found) facts.push(h("li", {}, h("strong", {}, "Diagnosis: "), found));
+  // Why Themis handed it over, such as a fix its checks support that the
+  // investigator didn't propose.
+  const last = (d.Transitions || [])[(d.Transitions || []).length - 1];
+  if (["escalated", "contained_escalated"].includes(inc.state) && last && last.Reason) {
+    facts.push(h("li", {}, h("strong", {}, "Why it was handed over: "), last.Reason));
+  }
   // Themis never changes a workload GitOps manages: its fix is a
   // recommendation, to apply in Git.
   const gitOps = action && action.PolicyID === "gitops-owns-the-target";
@@ -645,7 +672,10 @@ function summary(inc, inv, actions, proposals, headline, missed) {
       `${fix(action.Capability, action.Params)}, which changes ${changed} on ${action.BlastRadius.replicas} pods.`));
     facts.push(h("li", {}, h("strong", {}, "Policy: "), action.DecisionReason));
   } else if (accepted) {
-    facts.push(h("li", {}, h("strong", {}, "Proposed fix: "), accepted.Rationale));
+    facts.push(h("li", {}, h("strong", {}, "Proposed fix: "), fix(accepted.Capability, accepted.Params)));
+  }
+  if (inv && inv.Summary) {
+    facts.push(h("li", {}, h("strong", {}, "The investigator's note: "), inv.Summary, written("the model")));
   }
   const rejected = proposals.filter((p) => p.Status === "rejected").length;
   if (rejected) facts.push(h("li", {}, h("strong", {}, "Refused suggestions: "), `${rejected}, listed below.`));
@@ -746,7 +776,7 @@ async function detail(id) {
     h("h1", {}, target(inc.target), " ", state(inc.state)),
     h("p", { class: "muted mono" }, `${inc.id} · ${matched(inc)} · uid ${inc.target.UID} · opened ${time(inc.createdAt)}`),
 
-    summary(inc, inv, actions, proposals, d.Headline, d.Missing),
+    summary(inc, inv, actions, proposals, d.Headline, d.Missing, d),
     d.Headline ? null : missing(d.Missing),
 
     actions.map((a) => {
@@ -761,7 +791,7 @@ async function detail(id) {
       ? [h("dl", {},
         h("dt", {}, "State"), h("dd", {}, label(INVESTIGATION_LABEL, inv.State), inv.Failure ? h("div", {}, inv.Failure) : null),
         h("dt", {}, "Outcome"), h("dd", {}, label({ proposed: "suggested a fix", inconclusive: "couldn't decide" }, inv.Conclusion) || "—"),
-        h("dt", {}, "Summary"), h("dd", {}, inv.Summary || "—"),
+        h("dt", {}, "The investigator's note"), h("dd", {}, inv.Summary || "—", inv.Summary ? written("the model") : null),
         h("dt", {}, "Model"), h("dd", {}, (inv.Provenance && inv.Provenance.model) || "—"),
         h("dt", {}, "Usage"), h("dd", {}, usage(inv.Usage))),
       h("h2", {}, "Possible causes"), hypotheses(inv)]

@@ -34,11 +34,11 @@ A metrics source helps but isn't needed. With Prometheus, Themis sees each conta
 
 `deployment.set-resources`, raising the memory limit of the killed containers, and their memory request with it if needed. The investigator decides by how much, from the evidence; its guidance suggests the peak plus 25% when there are figures, otherwise 1.5 times the current limit. Themis checks the values are valid and that the cluster can run them, never how big they are.
 
-The policy enforces, whoever suggests the fix:
+Themis refuses a raise unless `oom_killed_current_revision`, the check the profile names to justify it, is true: without OOM kills there is nothing to act on. Beyond that, the policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
-| `raise-needs-oom-kills-on-a-version-that-has-run` | deny | Unless `oom_killed_current_revision` and `oom_without_recent_rollout` are true, `memory_at_limit_before_kill` isn't false, and `evicted_for_node_memory` is false: without OOM kills there is nothing to act on, right after a rollout the new version may be the cause, which is a rollback's question, a container that never reached its limit wasn't killed by it, and a node short of memory isn't helped by a higher limit |
+| `raise-needs-oom-kills-on-a-version-that-has-run` | deny | Unless `oom_without_recent_rollout` is true, `memory_at_limit_before_kill` isn't false, and `evicted_for_node_memory` is false: right after a rollout the new version may be the cause, which is a rollback's question, a container that never reached its limit wasn't killed by it, and a node short of memory isn't helped by a higher limit |
 | `raise-a-memory-limit-only` | deny | Unless the change raises a memory limit that exists, and does nothing else but raise a memory request: no CPU, no lower value, and no new limit where there was none |
 | `raise-needs-approval` | require_approval | A person approves every raise, and its size |
 

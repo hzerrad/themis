@@ -41,6 +41,9 @@ profile:
     - rollout_recent
     - gitops_managed
   capabilities: [deployment.set-resources]
+  # A raise is refused unless the container is throttled at its limit.
+  justifiedBy:
+    deployment.set-resources: [cpu_throttled_at_limit]
   # What the investigator is told about these incidents: when raising the CPU
   # limit is right and when it is wrong. It names checks, never root causes,
   # and gives a starting size as guidance only: the checks and the policy
@@ -75,13 +78,12 @@ profile:
     # Themis never changes a workload GitOps manages, or may manage, whatever
     # these rules say: it only recommends the fix.
     rules:
-      # Throttling is the only reason this pack changes CPU: a raise without
-      # throttling figures that show it, or with a recent rollout that may
-      # have caused it, is refused. A restore puts back what Themis changed.
-      - name: raise-needs-throttling
-        when: >-
-          action.restore != "true" &&
-          (predicates.cpu_throttled_at_limit != "true" || predicates.rollout_recent != "false")
+      # Throttling is the only reason this pack changes CPU, and justifiedBy
+      # asks for it. A raise right after a rollout, which may have caused it,
+      # or when Themis can't tell, is refused too. A restore puts back what
+      # Themis changed.
+      - name: no-raise-after-a-rollout
+        when: action.restore != "true" && predicates.rollout_recent != "false"
         decision: deny
       # The fix here raises a CPU limit that exists, and nothing else: no
       # memory, no lower value, no new limit where there was none, which

@@ -33,11 +33,10 @@ Whether the logs show errors, whether a probe's error answer means the applicati
 
 `deployment.set-probes`, changing the timing of the container's liveness, readiness or startup probe: the investigator decides which probes and which values, from the evidence, and cites it. The fix never adds or removes a probe, or changes what it calls. Themis sets no limit on the values: the approver sees each field before and after.
 
-Themis refuses any fix on a Deployment GitOps owns, whatever the pack. Besides that, the policy enforces, whoever suggests the fix:
+Themis refuses any fix on a Deployment GitOps owns, whatever the pack, and a probe change unless `probe_kills` or `probe_timeouts`, the checks the profile names to justify it, is true: otherwise nothing shows the probes failing the container. Besides that, the policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
-| `probe-change-needs-probe-failures` | deny | Unless `probe_kills` or `probe_timeouts` is true: nothing shows the probes failing the container |
 | `probe-change-cannot-fix-a-crash` | deny | Unless `crashed_on_its_own` is false: a container that exits with an error or runs out of memory fails by itself |
 | `lenient-readiness-keeps-traffic-on-failing-pods` | require_approval | A more lenient readiness probe keeps traffic going to pods that fail it for longer; the rule's name says so to the approver |
 | `probe-change-needs-approval` | require_approval | A person approves every probe change |

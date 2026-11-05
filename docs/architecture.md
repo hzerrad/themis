@@ -48,6 +48,7 @@ Every transition is stored with its time, reason and actor, together with the jo
 | Acting on a stale picture | Every 30 seconds Themis compares open incidents' targets with the template they were investigated against. A fix made elsewhere closes the incident; a change that does not help supersedes it with a new one. |
 | Secrets reaching the model or the UI | Evidence never includes pod specs, and every item is redacted. The UI shows what an action changes, hiding values that look secret by name or content. |
 | Evidence posing as instructions | Evidence reaches the model fenced as untrusted data, with any tag-like text escaped. Text that looks like instructions, forged tool output or an order to make a fix is flagged in the core: the investigator, whichever it is, is told before it reads it, the approver is warned on the fix, and policy can read `evidence_has_instructions`. See [suspicious evidence](configuration.md#suspicious-evidence). |
+| Evidence that talks a fix in or out | Logs, event messages and config values may raise a hypothesis, never settle a decision. A fix is refused unless a check its profile names to justify it is true, and when the checks support a fix the investigator didn't propose, a person is told. What operators read is built from checks and the fix's changes; the investigator's own summary is shown apart, as its note. See [justified fixes](configuration.md#justified-fixes). |
 | A misconfiguration | The configuration is validated whole, policy rules are compiled at startup, and a rule that fails at runtime denies. |
 
 ## Data

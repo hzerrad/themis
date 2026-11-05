@@ -32,8 +32,9 @@ const (
 	// pods, then containers that died. Each has at (null when unknown), what
 	// and id, the item it was read from.
 	varFailures = "failures"
-	// varFirstFailure is the earliest failure, or null when there is none or
-	// one has no time and so could be earlier still.
+	// varFirstFailure is the earliest failure, dated by the pods' status and
+	// by the events it agrees with, or null when there is none or one can't
+	// be dated and so could be earlier still.
 	varFirstFailure = "first_failure"
 
 	// varSuspicious is text in any evidence that looks written for the
@@ -110,7 +111,7 @@ func newInputs(b evidence.Bundle, now time.Time) inputs {
 	}
 	in.vars[varFailures] = list
 	in.vars[varFirstFailure] = nil
-	if first, ok := firstFailure(fs); ok {
+	if first, ok := firstFailure(decoded, in.ids); ok {
 		in.vars[varFirstFailure] = first.value()
 	}
 
@@ -286,17 +287,68 @@ func failures(decoded map[string]any, ids map[string]string) []failure {
 	return fs
 }
 
-// firstFailure is the earliest failure, if every failure has a time: one
-// without could be earlier still.
-func firstFailure(fs []failure) (failure, bool) {
-	if len(fs) == 0 {
+// firstFailure is the earliest failure, dated by the pods' status, which only
+// Kubernetes' own components write in practice: anyone who may create events
+// can date one as they like. A container's last termination dates a failure,
+// and its first when it restarted at most once. The status doesn't date the
+// first failure of a container that restarted more than once, or of a pod
+// that isn't ready for another reason: an event about that pod dates it, when
+// the pod started no later than the event. Other events are left out, since
+// the status already says when, or that nothing failed. There is none when a
+// failure can't be dated, as it could be earlier still.
+func firstFailure(decoded map[string]any, ids map[string]string) (failure, bool) {
+	ps, ok := decoded[evidence.PodStates].(*evidence.PodStatesView)
+	if !ok {
+		return failure{}, false
+	}
+	var fs []failure
+	// The pods whose first failure only an event can date, and for those
+	// that must have one, the latest it can be.
+	open := map[string]evidence.PodView{}
+	needed := map[string]time.Time{}
+	for _, p := range ps.Pods {
+		ended := false
+		for _, c := range p.Containers {
+			t := c.LastTermination
+			if t == nil || t.Reason == "Completed" {
+				continue
+			}
+			if t.FinishedAt.IsZero() {
+				return failure{}, false
+			}
+			ended = true
+			fs = append(fs, failure{t.FinishedAt, t.Reason + " of " + p.Name + "/" + c.Name, ids[evidence.PodStates]})
+			if c.RestartCount > 1 {
+				open["Pod/"+p.Name] = p
+				if by, ok := needed[p.Name]; !ok || t.FinishedAt.Before(by) {
+					needed[p.Name] = t.FinishedAt
+				}
+			}
+		}
+		if !p.Ready && !ended {
+			open["Pod/"+p.Name] = p
+		}
+	}
+	if ev, ok := decoded[evidence.TargetEvents].(*evidence.TargetEventsView); ok {
+		for _, e := range ev.Events {
+			p, ok := open[e.Object]
+			if e.Type != "Warning" || !ok || p.StartedAt.IsZero() || (!e.FirstSeen.IsZero() && e.FirstSeen.Before(p.StartedAt)) {
+				continue
+			}
+			if e.FirstSeen.IsZero() {
+				return failure{}, false
+			}
+			fs = append(fs, failure{e.FirstSeen, e.Reason + " on " + e.Object, ids[evidence.TargetEvents]})
+			if by, ok := needed[p.Name]; ok && !e.FirstSeen.After(by) {
+				delete(needed, p.Name)
+			}
+		}
+	}
+	if len(fs) == 0 || len(needed) > 0 {
 		return failure{}, false
 	}
 	first := fs[0]
 	for _, f := range fs {
-		if f.at.IsZero() {
-			return failure{}, false
-		}
 		if f.at.Before(first.at) {
 			first = f
 		}

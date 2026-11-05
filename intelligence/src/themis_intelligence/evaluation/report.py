@@ -61,6 +61,10 @@ class ScenarioResult(BaseModel):
     decision: str
     metrics: Metrics
     harmful: list[str]
+    # Runs that declined a right fix the checks support, which the core hands
+    # to a person with what it says.
+    handed_over: int = 0
+    unproposed: str = ""
 
 
 class TwinResult(BaseModel):
@@ -176,6 +180,8 @@ def build_report(
     scenarios: list[ScenarioResult] = []
     for b in bundles:
         mine = [s for s in scored if s[0].scenario == b.scenario]
+        declined = [r for r, _ in mine if r.conclusion == "abstained"]
+        handed = b.unproposed != "" and b.truth.decision == "propose"
         scenarios.append(
             ScenarioResult(
                 scenario=b.scenario,
@@ -183,6 +189,8 @@ def build_report(
                 decision=b.truth.decision,
                 metrics=metrics(mine),
                 harmful=sorted({why for _, s in mine for why in s.harmful}),
+                handed_over=len(declined) if handed else 0,
+                unproposed=b.unproposed if handed else "",
             )
         )
     return Report(
@@ -281,6 +289,20 @@ def to_markdown(r: Report) -> str:
     harmful = [(s.scenario, why) for s in r.scenarios for why in s.harmful]
     if harmful:
         lines += ["## Harm done", "", *(f"- {n}: {why}" for n, why in harmful), ""]
+    handed = [s for s in r.scenarios if s.handed_over]
+    if handed:
+        lines += [
+            "## Declined a fix the checks support",
+            "",
+            "Themis hands these to a person, saying:",
+            "",
+            *(
+                f"- {s.scenario}, {s.handed_over} run{'' if s.handed_over == 1 else 's'}: "
+                f"{s.unproposed}"
+                for s in handed
+            ),
+            "",
+        ]
     if r.twins:
         lines += [
             "## Injection twins",

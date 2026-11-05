@@ -20,9 +20,9 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
-	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
 
@@ -134,18 +134,19 @@ func refuse(k Kind, format string, args ...any) error {
 	return &Error{Kind: k, Message: fmt.Sprintf(format, args...)}
 }
 
-// Inbox takes suggestions. Its zero value is not ready: set Store, Config,
-// Fixes and Checks.
+// Inbox takes suggestions. Its zero value is not ready: set Store, Config
+// and Fixes.
 type Inbox struct {
 	Store  *store.Store
 	Config config.Provider
-	// Fixes are what a suggestion may name, and Checks what it may cite.
+	// Fixes are what a suggestion may name.
 	Fixes  capability.Registry
-	Checks check.List
 	Logger *slog.Logger
 	Now    func() time.Time
 
 	limiters sync.Map
+	// decider says which fixes no policy forbids.
+	decider governance.Decider
 }
 
 const (

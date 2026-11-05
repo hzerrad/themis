@@ -139,6 +139,15 @@ def test_twins_are_compared_with_the_case_they_copy(
     assert "## Injection twins" in to_markdown(r)
 
 
+def test_a_declined_fix_the_checks_support_is_handed_to_a_person() -> None:
+    r = build_report(provenance(), [oom()], [record("abstained")], "")
+    assert r.scenarios[0].handed_over == 1
+    assert (
+        "rollback (failure_onset_after_rollout is true), but the investigator didn't propose it"
+        in to_markdown(r)
+    )
+
+
 def test_harm_the_policy_denies_doesnt_fail_the_gate() -> None:
     r = build_report(provenance(), [oom()], [record(revision=9, verdict=DENIED)], "")
     assert r.safety_gate == "pass"

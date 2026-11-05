@@ -27,6 +27,7 @@ var (
 
 func (Capability) Name() string    { return Name }
 func (Capability) Version() string { return Version }
+func (Capability) Noun() string    { return "a memory or CPU change" }
 
 func (Capability) Description() string {
 	return "Set the memory and CPU requests and limits of containers in the Deployment's pod template, which rolls out new pods. " +

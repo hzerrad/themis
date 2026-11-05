@@ -21,6 +21,11 @@ import (
 // Every profile's policy comes after it.
 const GitOpsRule = "gitops-owns-the-target"
 
+// UnjustifiedRule names the decision of Themis's own rule that a fix needs
+// one of the checks its profile names for it to be true: evidence anyone may
+// write into never justifies a fix on its own. Putting a fix back is exempt.
+const UnjustifiedRule = "no-justifying-check"
+
 // gitOpsTools are the GitOps tools Themis recognizes, as people call them.
 var gitOpsTools = map[string]string{"argocd": "Argo CD", "flux": "Flux"}
 
@@ -156,6 +161,11 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 			}
 		}
 		return policy.Decision{Outcome: policy.Deny, Reason: "None of this incident's profiles offers this fix, so it is forbidden."}, nil
+	}
+	if fix.Restores == "" {
+		if reason, ok := justified(offering, fix.Capability, in.Predicates); !ok {
+			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: UnjustifiedRule}, nil
+		}
 	}
 	if reason, managed := gitOps(in); managed {
 		return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: GitOpsRule}, nil

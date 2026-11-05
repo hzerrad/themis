@@ -201,8 +201,10 @@ profiles:
     evidence:
       initial: [rollout_history, pod_states, target_events, referenced_config]
       allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
-    checks: [rollout_recent, oom_killed_new_revision]   # optional; none means all
+    checks: [rollout_recent, failure_onset_after_rollout, oom_killed_new_revision]   # optional; none means all
     capabilities: [deployment.rollback-to-revision]
+    justifiedBy:                         # for each fix, the checks that justify it
+      deployment.rollback-to-revision: [failure_onset_after_rollout]
     guidance: |                          # optional
       A rollback is right when the current revision introduced the failure
       and a prior revision was healthy. ...
@@ -230,7 +232,7 @@ When several profiles match, such as two scenario packs that both answer `KubePo
 | Guidance | Each profile's, introduced by its name and the fixes it offers, so the investigator knows which part is about which fix |
 | Investigation | The largest `maxSteps`, `maxEvidenceRequests` and `timeout` among them |
 
-The investigator decides which fix the evidence supports. Each fix is then decided only by the profiles that offer it: a profile's policy governs its own fixes, never another profile's. When several profiles offer the same fix, each one's policy decides it, mode and all, and the strictest outcome wins: `deny` over `require_approval` over `allow`. The shortest `approvalTimeout` and the longest `verification` among them apply. A fix none of the incident's profiles offers is refused, whoever suggests it.
+The investigator decides which fix the evidence supports. Each fix is then decided only by the profiles that offer it: a profile's policy governs its own fixes, never another profile's, and each one's [justifying checks](#justifying-checks) must hold. When several profiles offer the same fix, each one's policy decides it, mode and all, and the strictest outcome wins: `deny` over `require_approval` over `allow`. The shortest `approvalTimeout` and the longest `verification` among them apply. A fix none of the incident's profiles offers is refused, whoever suggests it.
 
 So a rule that protects a workload belongs in every profile that offers a fix. Themis's own protections, such as [never changing a workload GitOps owns](#gitops), apply to every fix before any profile's policy. An incident that matched one profile is decided exactly as before.
 
@@ -271,7 +273,7 @@ The `rollout-regression` pack's:
 | `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`, and so do missing events: an earlier failure could be among them. A pod failure from before the rollout still makes it `false`. When every pod of the current revision is ready and none restarted, it is `unknown`, whatever the events say. |
 | `prior_revision_was_healthy` | Pods of the previous revision are ready and never failed |
 | `oom_killed_new_revision` | A container of the current revision was OOMKilled |
-| `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. `unknown` when a required ConfigMap is missing or doesn't say when it changed. Secrets are never read, so a change to one can't be seen. |
+| `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. The first failure is dated by the pods' status, and by an event only when the status agrees with it, so an event anyone could write can't move it earlier. `unknown` when a required ConfigMap is missing or doesn't say when it changed, or the status can't date the first failure. Secrets are never read, so a change to one can't be seen. |
 
 ### Capabilities
 
@@ -298,6 +300,18 @@ A profile without `capabilities` is diagnosis only. Every fix writes with the ta
 - **Undoing it** sets the values it changed back to what they were. A value the workload didn't have before can't be put back, since the fix never removes one, so Themis escalates with its change in place.
 
 More lenient means slower to call a container failed or quicker to call it ready: a longer delay, period or timeout, a higher `failureThreshold`, or a lower `successThreshold`.
+
+### Justifying checks
+
+`justifiedBy` names, for every fix a profile offers, the checks that justify it. Themis refuses the fix unless at least one of them is true for the incident, before any policy and whoever suggests it, and says why on the incident's timeline, such as "None of the checks that justify a probe change is true: probe_kills is unknown, probe_timeouts is false." Putting a fix back is exempt.
+
+```yaml
+capabilities: [deployment.set-probes]
+justifiedBy:
+  deployment.set-probes: [probe_kills, probe_timeouts]   # either one true is enough
+```
+
+A profile that offers a fix must name its justifying checks, and each must be a check the profile runs: a check that doesn't run is never true, so the fix would always be refused. Logs, event messages and config values are written by whoever can write to the workload, and they may suggest a fix to the investigator, never justify one: only checks, which read what Kubernetes itself records, do. Policy still decides everything else, such as forbidding a raise right after a rollout.
 
 ### Guidance
 
@@ -328,7 +342,6 @@ policy:
       when: >-
         action.restore != "true" &&
         (predicates.rollout_recent != "true" ||
-         predicates.failure_onset_after_rollout != "true" ||
          predicates.config_changed_before_failure != "false" ||
          (predicates.oom_killed_new_revision != "true" &&
           predicates.prior_revision_was_healthy != "true"))
@@ -338,7 +351,7 @@ policy:
       decision: require_approval
 ```
 
-A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. Anything allowed still needs a person's approval. A workload owned by GitOps is never changed either, but no rule says so: [Themis does that itself](#gitops).
+A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: no ConfigMap changed before the failures, and either the new version runs out of memory or the version before it was healthy. That the failures began after the rollout is the check that [justifies](#justifying-checks) a rollback, so no rule repeats it. Anything allowed still needs a person's approval. A workload owned by GitOps is never changed either, but no rule says so: [Themis does that itself](#gitops).
 
 - Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. `deployment.set-resources` sets `change.containers`, the containers it changes, comma-separated; `change.memory` and `change.cpu`, each `increase`, `decrease` or `mixed`; `change["memory.ratio"]` and `change["cpu.ratio"]`, the largest new value over its old one; and for each value it changes, `change["<container>.<memory|cpu>.<request|limit>"]`, `increase`, `decrease` or `set` (where there was none), with `.before`, `.after` and `.ratio` beside it, such as `change["app.memory.limit.ratio"] == "2"`. The shipped policies set no size limits. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
@@ -362,6 +375,14 @@ Themis never changes a workload that Argo CD or Flux manages: the GitOps control
 - "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
 
 This holds for putting a fix back too. A rule of your own that reads `predicates.gitops_managed` or `target.managed_by` still works, but is never needed for this.
+
+#### Justified fixes
+
+A fix none of its [justifying checks](#justifying-checks) supports is refused before any policy, with the reason, and recorded as denied by `no-justifying-check`. Putting a fix back is exempt.
+
+When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
+
+What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, marked as written by the model or the suggester.
 
 #### Suspicious evidence
 
@@ -469,4 +490,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail)." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail)." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

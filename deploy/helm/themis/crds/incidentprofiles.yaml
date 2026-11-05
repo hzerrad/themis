@@ -81,6 +81,16 @@ spec:
                     pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
                     type: string
                 type: object
+              justifiedBy:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                description: |-
+                  JustifiedBy names, for each fix in Capabilities, the checks that
+                  justify it: Themis refuses the fix unless one of them is true for the
+                  incident, whoever suggests it. Each must be a check the profile runs.
+                type: object
               match:
                 description: Match decides which alerts belong to this profile.
                 properties:

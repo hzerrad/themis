@@ -105,10 +105,12 @@
 # A ConfigMap the target refers to changed after the current revision rolled
 # out and no later than the first failure, so rolling back the revision might
 # not undo the cause. A write within a minute of the rollout is part of the
-# same release: tools apply a release's objects in any order. Secrets are never
-# read, so a change to one can't be seen, and the reason says so.
+# same release: tools apply a release's objects in any order. The first
+# failure is dated by the pods' status, and by events only where the status
+# agrees, so an event anyone may write can't move it earlier. Secrets are
+# never read, so a change to one can't be seen, and the reason says so.
 - name: config_changed_before_failure
-  version: "1"
+  version: "2"
   description: Its config changed before the failures began
   reads: [referenced_config, rollout_history, pod_states]
   let:
