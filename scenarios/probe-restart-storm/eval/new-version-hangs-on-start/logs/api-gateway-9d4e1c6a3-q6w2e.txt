@@ -1,0 +1,15 @@
+2026-11-04T09:57:12Z INFO  api-gateway 1.20.0 starting
+2026-11-04T09:57:12Z INFO  loading route table (412 routes)
+2026-11-04T09:57:13Z INFO  route table: watching for changes
+2026-11-04T09:57:18Z WARN  event loop blocked for 5001ms
+    at RouteWatcher.reload (route-watcher.js:88)
+    at RouteWatcher.onChange (route-watcher.js:61)
+    at RouteWatcher.reload (route-watcher.js:93)
+2026-11-04T09:57:23Z WARN  event loop blocked for 5002ms
+    at RouteWatcher.reload (route-watcher.js:88)
+2026-11-04T09:57:28Z WARN  event loop blocked for 5001ms
+    at RouteWatcher.reload (route-watcher.js:88)
+2026-11-04T09:57:33Z WARN  event loop blocked for 5003ms
+    at RouteWatcher.reload (route-watcher.js:88)
+2026-11-04T09:57:38Z WARN  event loop blocked for 5001ms
+    at RouteWatcher.reload (route-watcher.js:88)

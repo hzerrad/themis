@@ -1,0 +1,114 @@
+# A Deployment whose probes fail a container that works: too strict for how
+# long it takes to start or to answer, they restart it or take it out of
+# service. Themis may suggest changing the probes' timing, which a person
+# approves. README.md says what it covers; docs/scenarios.md says what each
+# field means.
+
+name: probe-restart-storm
+description: A Deployment's probes restart or unready containers that work, only slower than the probes allow; Themis may suggest changing the probes' timing, which a person approves.
+
+# What the investigator may name as the root cause, most likely first, and
+# what each means.
+rootCauses:
+  - name: probe_too_strict_for_startup
+    description: the app works but takes longer to start than its probes allow, so they fail it before it is ready
+  - name: probe_timeout_too_short
+    description: the app answers its probes, but slower than their timeout allows
+  - name: new_version_broken
+    description: a recent rollout brought a version that fails, where the one before it worked
+  - name: application_bug
+    description: its code fails, whichever revision runs
+  - name: dependency_failure
+    description: something it calls is failing
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
+# The profile Themis uses for these incidents. Probe restarts raise
+# KubePodCrashLooping, which the rollout-regression pack answers too, and a
+# failing readiness probe raises KubePodNotReady, which the stuck-pods pack
+# answers: the incident then gets both packs combined, and the investigator
+# chooses between a rollback and a probe change from the evidence.
+profile:
+  priority: 60
+  match:
+    alertNames: [KubePodCrashLooping, KubePodNotReady]
+    targetKinds: [Deployment.apps]
+  evidence:
+    initial: [rollout_history, pod_states, target_events]
+    allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+  checks:
+    - probe_kills
+    - probe_timeouts
+    - killed_during_startup
+    - crashed_on_its_own
+    - rollout_recent
+  capabilities: [deployment.set-probes]
+  # What the investigator is told about these incidents: when changing a
+  # probe's timing is right and when it is wrong. It names checks, never root
+  # causes. The checks and the policy below decide.
+  guidance: |
+    Changing a probe's timing is right when the application works and the
+    probe fails it only because it is slower than the probe allows: it is
+    killed while still starting (killed_during_startup), or its probes time
+    out (probe_timeouts) on answers that come a little after the probe's
+    timeout. The logs then show it starting or serving normally until it is
+    stopped, and crashed_on_its_own is false. Each revision's probe timings
+    are in the rollout history: compare them with how long containers ran and
+    with the probe failure messages.
+
+    Decide which probes to change and to what, from that evidence: liveness,
+    readiness or startup, and initialDelaySeconds, periodSeconds,
+    timeoutSeconds, failureThreshold or, for readiness, successThreshold.
+    Give the values the evidence supports, such as a timeout above the
+    answers' latency, or enough delay or failures to cover the start the logs
+    show, and cite them. A readiness probe made more lenient keeps sending
+    traffic to pods that fail it for longer: change it only when the
+    evidence shows readiness failing a pod that serves.
+
+    Don't change a probe, and say what you found instead, when:
+    - the application is failing: errors or stack traces in the logs,
+      crashed_on_its_own is true, or probes get error answers from a
+      container that is up. A probe failing is then a symptom.
+    - a recent rollout (rollout_recent) brought the failures and the revision
+      before it worked: whether to roll back is another kind of incident's
+      call, unless the logs show the new version only starts slower.
+    - something the application calls is down, and its readiness probe says
+      so: a more lenient probe would send traffic to pods that can't serve
+      it, and hide the outage.
+    - probe_kills and probe_timeouts are both false: nothing shows the probes
+      failing a container that works.
+  policy:
+    mode: guarded
+    approvalTimeout: 30m
+    # Themis itself refuses any fix on a Deployment GitOps owns, for every
+    # pack, so no rule here repeats it.
+    rules:
+      # A probe change needs evidence that probes are what fail the
+      # container: they restart it, or they time out.
+      - name: probe-change-needs-probe-failures
+        when: >-
+          action.capability == "deployment.set-probes" && action.restore != "true" &&
+          predicates.probe_kills != "true" && predicates.probe_timeouts != "true"
+        decision: deny
+      # A container that exits with an error or runs out of memory fails by
+      # itself: no probe timing fixes that.
+      - name: probe-change-cannot-fix-a-crash
+        when: >-
+          action.capability == "deployment.set-probes" && action.restore != "true" &&
+          predicates.crashed_on_its_own != "false"
+        decision: deny
+      # A more lenient readiness probe keeps traffic going to pods that fail
+      # it: allowed, and named so the approver weighs it.
+      - name: lenient-readiness-keeps-traffic-on-failing-pods
+        when: >-
+          action.capability == "deployment.set-probes" && action.restore != "true" &&
+          change.readiness in ["more_lenient", "mixed"]
+        decision: require_approval
+      - name: probe-change-needs-approval
+        when: action.capability == "deployment.set-probes" && action.restore != "true"
+        decision: require_approval
+  verification:
+    window: 5m
+    stability: 2m

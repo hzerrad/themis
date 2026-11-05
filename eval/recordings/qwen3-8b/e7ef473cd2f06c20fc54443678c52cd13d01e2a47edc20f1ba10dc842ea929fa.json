@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"Adjust liveness probe timeout and initial delay to accommodate application startup time\",\"hypotheses\":[{\"root_cause_class\":\"probe_too_strict_for_startup\",\"summary\":\"The liveness probe's timeout and initial delay are too short for the application's startup time, causing it to be killed before it's ready.\",\"supporting\":[\"probe_kills\",\"killed_during_startup\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\",\"container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"new_version_broken\",\"summary\":\"The new revision's liveness probe configuration is incompatible with the application's startup behavior.\",\"supporting\":[\"rollout_recent\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.set-probes\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"edge\",\"name\":\"api-gateway\",\"uid\":\"uid-deployment-api-gateway\"},\"params\":{\"container\":\"app\",\"liveness\":{\"initialDelaySeconds\":30,\"timeoutSeconds\":5}},\"expected_effect\":\"The liveness probe will wait longer for the application to start and allow more time for the probe to succeed, preventing premature termination of the pod.\",\"rationale\":\"The logs show the application took 1m2s to fail, with warnings about the event loop being blocked. The liveness probe's timeout of 1s is insufficient for the application's startup time. Increasing the initial delay to 30s and timeout to 5s aligns with the observed startup duration and prevents probe failures during initialization.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"probe_kills\",\"killed_during_startup\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\"]}}",
+      "usage": {
+        "input_tokens": 5552,
+        "output_tokens": 829
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -8,7 +8,9 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident"
@@ -167,5 +169,40 @@ func TestRolloutHistory_RecordsOwnershipMarkers(t *testing.T) {
 	}
 	if strings.Contains(data, "fixture-s3cr3t-do-not-leak") {
 		t.Error("Data contains the last applied configuration")
+	}
+}
+
+// A revision shows each probe's timing, so the investigator can weigh it
+// against when containers were killed, but not what the probe calls: a
+// header can hold a credential.
+func TestRolloutHistory_ShowsProbeTimingOnly(t *testing.T) {
+	ns := k8s.NewNamespace(t)
+	d := k8s.NewDeployment(t, ns, "checkout")
+	template := kubetest.PodTemplate()
+	template.Spec.Containers[0].LivenessProbe = &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+			Path: "/healthz", Port: intstr.FromInt32(8080),
+			HTTPHeaders: []corev1.HTTPHeader{{Name: "Authorization", Value: "Bearer fixture-s3cr3t-do-not-leak"}},
+		}},
+		InitialDelaySeconds: 5, TimeoutSeconds: 2,
+	}
+	k8s.Create(t, &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ns, Name: "checkout-probed", Labels: kubetest.PodLabels,
+			Annotations:     map[string]string{"deployment.kubernetes.io/revision": "1"},
+			OwnerReferences: []metav1.OwnerReference{kubetest.RefTo(d, "apps/v1", "Deployment")},
+		},
+		Spec: appsv1.ReplicaSetSpec{Selector: kubetest.Selector(), Template: template},
+	})
+
+	data := collectRolloutHistory(t, deploymentTarget(d)).Data
+	want := `"liveness":{"failureThreshold":3,"initialDelaySeconds":5,"periodSeconds":10,"successThreshold":1,"timeoutSeconds":2}`
+	if obj := objectNamed(t, data, "checkout-probed"); !contains(obj, want) {
+		t.Errorf("the liveness probe's timing is missing, want %s: %v", want, obj)
+	}
+	for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "/healthz"} {
+		if strings.Contains(string(data), leak) {
+			t.Errorf("Data contains %s", leak)
+		}
 	}
 }

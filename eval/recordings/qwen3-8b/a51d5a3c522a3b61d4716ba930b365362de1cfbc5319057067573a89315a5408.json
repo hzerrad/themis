@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout to accommodate slower startup\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Pod",
+      "usage": {
+        "input_tokens": 5793,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": true
+    }
+  ]
+}

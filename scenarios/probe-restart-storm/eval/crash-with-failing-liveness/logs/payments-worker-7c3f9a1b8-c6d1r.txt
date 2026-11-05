@@ -1,0 +1,14 @@
+2026-11-04T08:47:02Z INFO  payments-worker 2.11.1 starting
+2026-11-04T08:47:03Z INFO  connected to queue settlements (partition 3)
+2026-11-04T08:47:03Z INFO  resuming at offset 88412906
+2026-11-04T08:47:19Z ERROR processing message 88412906 failed
+panic: settlement currency "" is not a valid ISO 4217 code
+
+goroutine 41 [running]:
+example.com/payments/settle.(*Batch).Add(0xc0001a2000, {0xc000312a80, 0x0, 0x0})
+	/src/settle/batch.go:118 +0x3e5
+example.com/payments/worker.(*Consumer).handle(0xc00011c0f0, 0xc0002d4000)
+	/src/worker/consumer.go:72 +0x1b9
+example.com/payments/worker.(*Consumer).Run(0xc00011c0f0)
+	/src/worker/consumer.go:44 +0x88
+exit status 1

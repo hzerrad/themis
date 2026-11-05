@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout to accommodate slower startup\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"The liveness probe timeout is too short (2s) for the application to respond, leading to connection refused errors.\",\n        \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"probe_timeouts\"],\n        \"contradicting\": [\"rollout_recent\"],\n        \"missing\": [\"container_logs_tail\", \"application_bug\", \"dependency_failure\", \"new_version_broken\", \"insufficient_evidence\", \"other\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"The liveness probe is too strict, killing the pod before it is ready.\",\n        \"supporting\": [\"killed_during_startup\", \"probe_kills\"],\n        \"contradicting\": [\"crashed_on_its_own\", \"application_bug\", \"dependency_failure\", \"new_version_broken\", \"insufficient_evidence\", \"other\"],\n        \"missing\": [\"container_logs_tail\", \"probe_timeout_too_short\", \"rollout_recent\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"payments\",\n        \"name\": \"payments-worker\",\n        \"uid\": \"uid-deployment-payments-worker\"\n    },\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Increase the liveness probe timeout to 5 seconds, allowing the application more time to respond before timing out.\",\n    \"rationale\": \"The liveness probe is failing with connection refused errors, likely because the application is not yet ready to handle the probe request. The current timeout of 2 seconds is too short for the application to respond, leading to premature termination. Increasing the timeout to 5 seconds should allow the application sufficient time to start and respond to the probe, preventing unnecessary restarts.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4306,
+        "output_tokens": 1688
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

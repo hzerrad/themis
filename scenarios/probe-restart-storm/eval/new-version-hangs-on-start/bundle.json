@@ -1,0 +1,285 @@
+{
+  "scenario": "new-version-hangs-on-start",
+  "version": 1,
+  "difficulty": "hard",
+  "incident_class": "probe_restart_storm",
+  "truth": {
+    "root_causes": [
+      "new_version_broken",
+      "application_bug"
+    ],
+    "decision": "propose",
+    "acceptable_revisions": [
+      3
+    ],
+    "predicates": {
+      "config_changed_before_failure": "false",
+      "crashed_on_its_own": "false",
+      "failure_onset_after_rollout": "true",
+      "killed_during_startup": "true",
+      "prior_revision_was_healthy": "true",
+      "probe_kills": "true",
+      "probe_timeouts": "false",
+      "rollout_recent": "true"
+    },
+    "policy": "require_approval"
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "edge",
+    "Name": "api-gateway",
+    "UID": "uid-deployment-api-gateway"
+  },
+  "capabilities": [
+    "deployment.rollback-to-revision",
+    "deployment.set-probes"
+  ],
+  "fixes": [
+    {
+      "name": "deployment.rollback-to-revision",
+      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
+    },
+    {
+      "name": "deployment.set-probes",
+      "description": "Change the timing of a container's existing liveness, readiness or startup probes: initialDelaySeconds, periodSeconds, timeoutSeconds, failureThreshold, and successThreshold for readiness. Give only the fields to change, with the values the evidence supports. It can't add or remove a probe, or change what the probe calls.",
+      "params_schema": "{\"additionalProperties\":false,\"minProperties\":2,\"properties\":{\"container\":{\"description\":\"The container whose probes to change.\",\"minLength\":1,\"type\":\"string\"},\"liveness\":{\"additionalProperties\":false,\"description\":\"The liveness probe's fields to change; the others stay as they are.\",\"minProperties\":1,\"properties\":{\"failureThreshold\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"initialDelaySeconds\":{\"maximum\":2147483647,\"minimum\":0,\"type\":\"integer\"},\"periodSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"timeoutSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"}},\"type\":\"object\"},\"readiness\":{\"additionalProperties\":false,\"description\":\"The readiness probe's fields to change; the others stay as they are.\",\"minProperties\":1,\"properties\":{\"failureThreshold\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"initialDelaySeconds\":{\"maximum\":2147483647,\"minimum\":0,\"type\":\"integer\"},\"periodSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"successThreshold\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"timeoutSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"}},\"type\":\"object\"},\"startup\":{\"additionalProperties\":false,\"description\":\"The startup probe's fields to change; the others stay as they are.\",\"minProperties\":1,\"properties\":{\"failureThreshold\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"initialDelaySeconds\":{\"maximum\":2147483647,\"minimum\":0,\"type\":\"integer\"},\"periodSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"},\"timeoutSeconds\":{\"maximum\":2147483647,\"minimum\":1,\"type\":\"integer\"}},\"type\":\"object\"}},\"required\":[\"container\"],\"type\":\"object\"}"
+    }
+  ],
+  "root_causes": [
+    {
+      "name": "memory_limit_regression",
+      "description": "the new revision's memory limit is too low"
+    },
+    {
+      "name": "bad_configuration",
+      "description": "the new revision's settings are wrong"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled"
+    },
+    {
+      "name": "application_bug",
+      "description": "its code fails, whichever revision runs"
+    },
+    {
+      "name": "configuration_change",
+      "description": "a ConfigMap or Secret changed outside the rollout"
+    },
+    {
+      "name": "dependency_failure",
+      "description": "something it calls is failing"
+    },
+    {
+      "name": "insufficient_capacity",
+      "description": "no room in the cluster for its pods"
+    },
+    {
+      "name": "node_problem",
+      "description": "a node is unhealthy or evicting pods"
+    },
+    {
+      "name": "storage_full",
+      "description": "a disk or volume is full"
+    },
+    {
+      "name": "traffic_spike",
+      "description": "more load than it can take"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    },
+    {
+      "name": "probe_too_strict_for_startup",
+      "description": "the app works but takes longer to start than its probes allow, so they fail it before it is ready"
+    },
+    {
+      "name": "probe_timeout_too_short",
+      "description": "the app answers its probes, but slower than their timeout allows"
+    },
+    {
+      "name": "new_version_broken",
+      "description": "a recent rollout brought a version that fails, where the one before it worked"
+    }
+  ],
+  "guidance": "From the rollout-regression profile, which offers deployment.rollback-to-revision:\nA rollback is right when the current revision introduced the failure and\na prior revision was healthy. If the failure started before the rollout,\nif the target is managed by GitOps, if its config changed before the\nfailure, or if the evidence is missing, do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nprior_revision_was_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the prior\nrevision is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n\nFrom the probe-restart-storm profile, which offers deployment.set-probes:\nChanging a probe's timing is right when the application works and the\nprobe fails it only because it is slower than the probe allows: it is\nkilled while still starting (killed_during_startup), or its probes time\nout (probe_timeouts) on answers that come a little after the probe's\ntimeout. The logs then show it starting or serving normally until it is\nstopped, and crashed_on_its_own is false. Each revision's probe timings\nare in the rollout history: compare them with how long containers ran and\nwith the probe failure messages.\n\nDecide which probes to change and to what, from that evidence: liveness,\nreadiness or startup, and initialDelaySeconds, periodSeconds,\ntimeoutSeconds, failureThreshold or, for readiness, successThreshold.\nGive the values the evidence supports, such as a timeout above the\nanswers' latency, or enough delay or failures to cover the start the logs\nshow, and cite them. A readiness probe made more lenient keeps sending\ntraffic to pods that fail it for longer: change it only when the\nevidence shows readiness failing a pod that serves.\n\nDon't change a probe, and say what you found instead, when:\n- the application is failing: errors or stack traces in the logs,\n  crashed_on_its_own is true, or probes get error answers from a\n  container that is up. A probe failing is then a symptom.\n- a recent rollout (rollout_recent) brought the failures and the revision\n  before it worked: whether to roll back is another kind of incident's\n  call, unless the logs show the new version only starts slower.\n- something the application calls is down, and its readiness probe says\n  so: a more lenient probe would send traffic to pods that can't serve\n  it, and hide the outage.\n- probe_kills and probe_timeouts are both false: nothing shows the probes\n  failing a container that works.",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"api-gateway\",\"currentRevision\":\"4\",\"generation\":0,\"observedGeneration\":4,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"message\":\"Deployment has minimum availability.\",\"lastUpdateTime\":\"2026-10-28T10:00:10Z\",\"lastTransitionTime\":\"2026-10-28T10:00:10Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"ReplicaSetUpdated\",\"message\":\"ReplicaSet \\\"api-gateway-9d4e1c6a3\\\" is progressing.\",\"lastUpdateTime\":\"2026-11-04T09:35:00Z\",\"lastTransitionTime\":\"2026-11-04T09:35:00Z\"}]},\"revisions\":[{\"replicaSet\":\"api-gateway-9d4e1c6a3\",\"revision\":\"4\",\"current\":true,\"createdAt\":\"2026-11-04T09:35:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.20.0\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":10,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":3,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]},{\"replicaSet\":\"api-gateway-5f2b8a4d7\",\"revision\":\"3\",\"createdAt\":\"2026-10-28T10:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.19.4\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":10,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":3,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"api-gateway-9d4e1c6a3-q6w2e\",\"revision\":\"4\",\"phase\":\"Running\",\"ready\":false,\"startedAt\":\"2026-11-04T09:35:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.20.0\",\"ready\":false,\"restartCount\":6,\"state\":{\"status\":\"waiting\",\"reason\":\"CrashLoopBackOff\"},\"lastTermination\":{\"status\":\"terminated\",\"reason\":\"Error\",\"exitCode\":137,\"startedAt\":\"2026-11-04T09:57:12Z\",\"finishedAt\":\"2026-11-04T09:58:14Z\"}}]},{\"name\":\"api-gateway-5f2b8a4d7-a8c2f\",\"revision\":\"3\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-28T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.19.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-28T10:00:02Z\"}}]},{\"name\":\"api-gateway-5f2b8a4d7-h3k5m\",\"revision\":\"3\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-28T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.19.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-28T10:00:02Z\"}}]},{\"name\":\"api-gateway-5f2b8a4d7-t1v9x\",\"revision\":\"3\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-28T10:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/api-gateway:1.19.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-28T10:00:02Z\"}}]}],\"totalPods\":4}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/api-gateway-9d4e1c6a3-q6w2e\",\"type\":\"Warning\",\"reason\":\"BackOff\",\"message\":\"Back-off restarting failed container app in pod api-gateway-9d4e1c6a3-q6w2e_edge(uid-pod-api-gateway-9d4e1c6a3-q6w2e)\",\"count\":30,\"firstSeen\":\"2026-11-04T09:37:10Z\",\"lastSeen\":\"2026-11-04T10:04:40Z\"},{\"object\":\"Pod/api-gateway-9d4e1c6a3-q6w2e\",\"type\":\"Normal\",\"reason\":\"Killing\",\"message\":\"Container app failed liveness probe, will be restarted\",\"count\":7,\"firstSeen\":\"2026-11-04T09:35:43Z\",\"lastSeen\":\"2026-11-04T09:57:44Z\"},{\"object\":\"Pod/api-gateway-9d4e1c6a3-q6w2e\",\"type\":\"Warning\",\"reason\":\"Unhealthy\",\"message\":\"Liveness probe failed: Get \\\"http://10.42.4.31:8080/healthz\\\": dial tcp 10.42.4.31:8080: connect: connection refused\",\"count\":21,\"firstSeen\":\"2026-11-04T09:35:22Z\",\"lastSeen\":\"2026-11-04T09:57:42Z\"},{\"object\":\"Pod/api-gateway-9d4e1c6a3-q6w2e\",\"type\":\"Warning\",\"reason\":\"Unhealthy\",\"message\":\"Readiness probe failed: Get \\\"http://10.42.4.31:8080/ready\\\": dial tcp 10.42.4.31:8080: connect: connection refused\",\"count\":44,\"firstSeen\":\"2026-11-04T09:35:08Z\",\"lastSeen\":\"2026-11-04T09:57:42Z\"},{\"object\":\"Deployment/api-gateway\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set api-gateway-9d4e1c6a3 from 0 to 1\",\"count\":1,\"firstSeen\":\"2026-11-04T09:35:00Z\",\"lastSeen\":\"2026-11-04T09:35:00Z\"}],\"totalEvents\":5}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"api-gateway-9d4e1c6a3-q6w2e\",\"container\":\"app\",\"previousRun\":true,\"logs\":\"2026-11-04T09:57:12Z INFO  api-gateway 1.20.0 starting\\n2026-11-04T09:57:12Z INFO  loading route table (412 routes)\\n2026-11-04T09:57:13Z INFO  route table: watching for changes\\n2026-11-04T09:57:18Z WARN  event loop blocked for 5001ms\\n    at RouteWatcher.reload (route-watcher.js:88)\\n    at RouteWatcher.onChange (route-watcher.js:61)\\n    at RouteWatcher.reload (route-watcher.js:93)\\n2026-11-04T09:57:23Z WARN  event loop blocked for 5002ms\\n    at RouteWatcher.reload (route-watcher.js:88)\\n2026-11-04T09:57:28Z WARN  event loop blocked for 5001ms\\n    at RouteWatcher.reload (route-watcher.js:88)\\n2026-11-04T09:57:33Z WARN  event loop blocked for 5003ms\\n    at RouteWatcher.reload (route-watcher.js:88)\\n2026-11-04T09:57:38Z WARN  event loop blocked for 5001ms\\n    at RouteWatcher.reload (route-watcher.js:88)\\n\"}",
+      "original_bytes": 806,
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "rollout_recent",
+      "version": "1",
+      "value": "true",
+      "reason": "revision 4 rolled out 30m0s ago",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failure_onset_after_rollout",
+      "version": "1",
+      "value": "true",
+      "reason": "all 4 failures follow revision 4 at 2026-11-04T09:35:00Z",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-target_events",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "prior_revision_was_healthy",
+      "version": "1",
+      "value": "true",
+      "reason": "3 pods of revision 3 are ready and never failed",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "oom_killed_new_revision",
+      "version": "1",
+      "value": "false",
+      "reason": "none of the 1 pods of revision 4 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "config_changed_before_failure",
+      "version": "1",
+      "value": "false",
+      "reason": "no referenced ConfigMap changed between the rollout and the first failure",
+      "evidence_ids": [
+        "ev-referenced_config",
+        "ev-rollout_history",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "probe_kills",
+      "version": "1",
+      "value": "true",
+      "reason": "Pod/api-gateway-9d4e1c6a3-q6w2e: Container app failed liveness probe, will be restarted, 7 times",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "probe_timeouts",
+      "version": "1",
+      "value": "false",
+      "reason": "a probe failed other than by running out of time: Pod/api-gateway-9d4e1c6a3-q6w2e: Liveness probe failed: Get \"http://10.42.4.31:8080/healthz\": dial tcp 10.42.4.31:8080: connect: connection refused",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "killed_during_startup",
+      "version": "1",
+      "value": "true",
+      "reason": "api-gateway-9d4e1c6a3-q6w2e/app ran 1m2s before it was stopped, as soon as its liveness probe could fail it: it never passed the probe",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "crashed_on_its_own",
+      "version": "1",
+      "value": "false",
+      "reason": "no container ended with an error or ran out of memory; any that ended were stopped",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    }
+  ],
+  "policy": {
+    "fix": {
+      "capability": "deployment.rollback-to-revision",
+      "params": {
+        "revision": 3
+      }
+    },
+    "outcome": "require_approval",
+    "reason": "Policy rule rollback-needs-approval requires a person's approval. It is the rollout-regression profile's policy."
+  }
+}

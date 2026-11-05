@@ -1,0 +1,25 @@
+name: liveness-timeout-under-load
+version: 1
+description: Under the afternoon peak, search-api answers every request, its probes included, in 1.2 to 1.6 seconds without errors, and its 1-second probe timeouts restart each container after an hour of serving and keep it out of service. Longer timeouts are right, the readiness one shown to the approver as more lenient.
+tags: [probe-restart-storm, act, timeout]
+source: synthetic
+difficulty: medium
+incident_class: probe_restart_storm
+now: "2026-11-04T14:10:00Z"
+target: {kind: Deployment, namespace: shop, name: search-api}
+evidence:
+  initial: [rollout_history, pod_states, target_events]
+  allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-probes
+  params: {container: app, liveness: {timeoutSeconds: 5}, readiness: {timeoutSeconds: 3}}
+truth:
+  root_causes: [probe_timeout_too_short]
+  decision: propose
+  policy: require_approval
+  predicates:
+    probe_kills: "true"
+    probe_timeouts: "true"
+    killed_during_startup: "false"
+    crashed_on_its_own: "false"
+    rollout_recent: "false"
