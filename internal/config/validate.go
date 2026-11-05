@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"k8s.io/apimachinery/pkg/util/validation"
 
@@ -171,6 +172,9 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 		if !p.AllowsTemplate(name) {
 			add(fmt.Sprintf("evidence.initial[%d]", j), "template %q is not in evidence.allowed", name)
 		}
+	}
+	if n := utf8.RuneCountInString(p.Guidance); n > MaxGuidance {
+		add("guidance", "must be at most %d characters, got %d", MaxGuidance, n)
 	}
 	if p.Investigation.MaxSteps < 0 {
 		add("investigation.maxSteps", "must be positive")

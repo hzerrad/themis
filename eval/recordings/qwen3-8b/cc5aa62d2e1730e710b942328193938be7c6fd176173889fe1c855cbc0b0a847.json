@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to OOMKilled in revision 2 with same memory limit, indicating potential application bug or memory regression\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's memory limit is too low despite same limit as prior\",\n        \"supporting\": [\"ev-rollout",
+      "usage": {
+        "input_tokens": 3451,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": true
+    }
+  ]
+}

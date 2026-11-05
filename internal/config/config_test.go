@@ -136,6 +136,7 @@ func TestValidate_Errors(t *testing.T) {
 		{"no allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = nil }, "profiles[1].evidence.allowed"},
 		{"duplicate allowed evidence", func(c *config.Config) { c.Profiles[1].Evidence.Allowed = []string{"pod_states", "pod_states"} }, "profiles[1].evidence.allowed[1]"},
 		{"initial not allowed", func(c *config.Config) { c.Profiles[0].Evidence.Initial = []string{"target_events"} }, "profiles[0].evidence.initial[0]"},
+		{"guidance too long", func(c *config.Config) { c.Profiles[0].Guidance = strings.Repeat("é", config.MaxGuidance+1) }, "profiles[0].guidance"},
 		{"negative max steps", func(c *config.Config) { c.Profiles[0].Investigation.MaxSteps = -1 }, "profiles[0].investigation.maxSteps"},
 		{"unknown mode", func(c *config.Config) { c.Profiles[0].Policy.Mode = "autonomous" }, "profiles[0].policy.mode"},
 		{"rule without condition", func(c *config.Config) {

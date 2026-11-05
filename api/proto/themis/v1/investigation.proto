@@ -120,6 +120,10 @@ message Investigation {
   // The root causes a hypothesis may name: those of the profile's scenario
   // pack.
   repeated RootCause root_causes = 13;
+  // What the profile's scenario pack tells the investigator about this kind
+  // of incident: when its fixes are right and when they are wrong. Guidance
+  // only: the core's checks and policy decide.
+  string guidance = 14;
 }
 
 message Hypothesis {

@@ -480,6 +480,11 @@
             "uniqueItems": true,
             "description": "Capabilities are the remediations proposals may name; none means\ndiagnosis only."
           },
+          "guidance": {
+            "type": "string",
+            "maxLength": 4000,
+            "description": "Guidance tells the investigator, in plain words, when this profile's\nfixes are right and when they are wrong. It guides; checks and policy\ndecide."
+          },
           "investigation": {
             "properties": {
               "maxSteps": {

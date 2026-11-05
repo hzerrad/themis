@@ -61,6 +61,7 @@ def job() -> investigation_pb2.Investigation:
             ),
         ],
         candidate_capabilities=["deployment.rollback-to-revision"],
+        guidance="Roll back only what the rollout broke.",
         budget=common_pb2.Budget(max_steps=6),
         root_causes=[
             common_pb2.RootCause(name="memory_limit_regression", description="too little memory"),

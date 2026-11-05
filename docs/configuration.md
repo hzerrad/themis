@@ -203,6 +203,9 @@ profiles:
       allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
     checks: [rollout_recent, oom_killed_new_revision]   # optional; none means all
     capabilities: [deployment.rollback-to-revision]
+    guidance: |                          # optional
+      A rollback is right when the current revision introduced the failure
+      and a prior revision was healthy. ...
     investigation: {maxSteps: 8, maxEvidenceRequests: 6, timeout: 5m}
     policy: {...}
     verification: {window: 5m, stability: 2m}
@@ -270,6 +273,12 @@ A profile without `capabilities` is diagnosis only. Every fix writes with the ta
 - **Undoing it** sets the values it changed back to what they were. A value the workload didn't have before can't be put back, since the fix never removes one, so Themis escalates with its change in place.
 
 More lenient means slower to call a container failed or quicker to call it ready: a longer delay, period or timeout, a higher `failureThreshold`, or a lower `successThreshold`.
+
+### Guidance
+
+`guidance` is plain text the investigator reads with every investigation of the profile: when the profile's fixes are right, and when they are wrong, for this kind of incident. For example, the `rollout-regression` pack says a rollback is right only when the new revision brought the failure and the one before it was healthy, and that empty logs after a container was killed for memory prove nothing. Up to 4000 characters.
+
+It is guidance, not a rule. What must hold before a fix runs belongs in [checks](#predicates) and [policy](#policy): Themis enforces those on every suggested fix, whoever suggests it, and guidance on none.
 
 ### Investigation
 

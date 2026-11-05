@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to prior revision due to memory limit regression in new revision causing OOM.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's memory limit is too low despite matching prior revision's limit, leading to OOM.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"open\"\n    },\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"New revision's code may have a memory leak causing OOM despite same memory limit.\",\n        \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n        \"contradicting\": [\"ev-referenced_config\"],\n        \"missing\": [],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n    \"params\": {\"revision\": 1},\n    \"expected_effect\": \"Revert to revision 1 which had a healthy pod state despite prior errors, avoiding OOM in new revision.\",\n    \"rationale\": \"OOMKilled in new revision (2) occurred after rollout, with prior revision (1) having a healthy pod. Memory limit is same, but new revision's code may have memory leak. Rollback to prior revision resolves the issue as it was healthy before the rollout, despite its own prior errors.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3348,
+        "output_tokens": 1574
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

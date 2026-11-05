@@ -47,8 +47,8 @@ func TestLeaseInvestigation(t *testing.T) {
 	if len(inv.GetAllowedTemplates()) != 4 || inv.GetAllowedTemplates()[0].GetDescription() == "" || len(inv.GetAllowedTemplates()[3].GetParams()) == 0 {
 		t.Errorf("allowed templates = %v, want 4 described, with their parameters", inv.GetAllowedTemplates())
 	}
-	if len(inv.GetCandidateCapabilities()) != 1 || len(inv.GetCapabilities()) != 1 {
-		t.Errorf("capabilities = %v, %v", inv.GetCandidateCapabilities(), inv.GetCapabilities())
+	if len(inv.GetCandidateCapabilities()) != 1 || len(inv.GetCapabilities()) != 1 || inv.GetGuidance() != profile().Guidance {
+		t.Errorf("capabilities = %v, %v, guidance %q", inv.GetCandidateCapabilities(), inv.GetCapabilities(), inv.GetGuidance())
 	}
 	// The root causes of the profile's pack, described.
 	if causes := inv.GetRootCauses(); len(causes) != 12 || causes[0].GetName() != "memory_limit_regression" || causes[0].GetDescription() == "" {

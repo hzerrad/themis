@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"prior_revision_was_healthy\"], \"status\": \"supported\"}, {\"root_cause_class\": \"application_bug\", \"summary\": \"Code failure in new revision\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 4030,
+        "output_tokens": 1144
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

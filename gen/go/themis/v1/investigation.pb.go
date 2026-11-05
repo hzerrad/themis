@@ -829,7 +829,11 @@ type Investigation struct {
 	Capabilities          []*Capability `protobuf:"bytes,12,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	// The root causes a hypothesis may name: those of the profile's scenario
 	// pack.
-	RootCauses    []*RootCause `protobuf:"bytes,13,rep,name=root_causes,json=rootCauses,proto3" json:"root_causes,omitempty"`
+	RootCauses []*RootCause `protobuf:"bytes,13,rep,name=root_causes,json=rootCauses,proto3" json:"root_causes,omitempty"`
+	// What the profile's scenario pack tells the investigator about this kind
+	// of incident: when its fixes are right and when they are wrong. Guidance
+	// only: the core's checks and policy decide.
+	Guidance      string `protobuf:"bytes,14,opt,name=guidance,proto3" json:"guidance,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -953,6 +957,13 @@ func (x *Investigation) GetRootCauses() []*RootCause {
 		return x.RootCauses
 	}
 	return nil
+}
+
+func (x *Investigation) GetGuidance() string {
+	if x != nil {
+		return x.Guidance
+	}
+	return ""
 }
 
 type Hypothesis struct {
@@ -1203,7 +1214,7 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\btemplate\x18\x01 \x01(\tR\btemplate\x121\n" +
 	"\x05cause\x18\x02 \x01(\x0e2\x1b.themis.v1.EvidenceGapCauseR\x05cause\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\"\x1b\n" +
-	"\x19FailInvestigationResponse\"\xbd\x05\n" +
+	"\x19FailInvestigationResponse\"\xd9\x05\n" +
 	"\rInvestigation\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12A\n" +
 	"\x0elease_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rleaseDeadline\x12\x1f\n" +
@@ -1222,7 +1233,8 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\x06budget\x18\v \x01(\v2\x11.themis.v1.BudgetR\x06budget\x129\n" +
 	"\fcapabilities\x18\f \x03(\v2\x15.themis.v1.CapabilityR\fcapabilities\x125\n" +
 	"\vroot_causes\x18\r \x03(\v2\x14.themis.v1.RootCauseR\n" +
-	"rootCauses\"\x95\x02\n" +
+	"rootCauses\x12\x1a\n" +
+	"\bguidance\x18\x0e \x01(\tR\bguidance\"\x95\x02\n" +
 	"\n" +
 	"Hypothesis\x12(\n" +
 	"\x10root_cause_class\x18\x01 \x01(\tR\x0erootCauseClass\x12\x18\n" +

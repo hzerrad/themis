@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to prior revision due to new revision's configuration error\",\"hypotheses\":[{\"root_cause_class\":\"bad_configuration\",\"summary\":\"New revision lacks required PAYMENTS_ENDPOINT configuration\",\"supporting\":[\"ev-container_logs_tail\",\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore healthy prior revision with correct configuration\",\"rationale\":\"The new revision (2) failed due to missing PAYMENTS_ENDPOINT configuration, while the prior revision (1) was healthy. No config changes occurred before failure, but the new revision's deployment likely lacks the required environment variable.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"rollout_recent\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3139,
+        "output_tokens": 748
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

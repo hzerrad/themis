@@ -194,9 +194,12 @@ type Bundle struct {
 	Fixes []BundleFix `json:"fixes"`
 	// RootCauses are the root causes the core sends the investigator for
 	// the pack's profile, for the same reason.
-	RootCauses          []catalog.RootCause `json:"root_causes"`
-	MaxSteps            int                 `json:"max_steps"`
-	MaxEvidenceRequests int                 `json:"max_evidence_requests"`
+	RootCauses []catalog.RootCause `json:"root_causes"`
+	// Guidance is what the pack's profile tells the investigator, as the
+	// core sends it.
+	Guidance            string `json:"guidance,omitempty"`
+	MaxSteps            int    `json:"max_steps"`
+	MaxEvidenceRequests int    `json:"max_evidence_requests"`
 
 	// Initial is what the investigation starts with; Requestable is what it
 	// may ask for, by template.
@@ -281,7 +284,7 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
 		Truth: s.Truth, Target: target, Capabilities: profile.Capabilities, Fixes: bundleFixes(cat.Fixes, profile.Capabilities),
-		RootCauses: cat.RootCauses.For(profile.Name), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
+		RootCauses: cat.RootCauses.For(profile.Name), Guidance: profile.Guidance, MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
 	w, err := workload.Read(ctx, c, target)
