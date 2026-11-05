@@ -99,7 +99,7 @@ The investigator reports its use of the model by `route`: the configured route, 
 
 | Metric | Labels | Counts |
 |---|---|---|
-| `themis_model_requests_total` | `route`, `outcome` | Model requests: `ok`, `validation_failed`, `budget_exceeded`, `ineligible`, `deadline_exceeded`, `unavailable` |
+| `themis_model_requests_total` | `route`, `outcome` | Model requests: `ok`, `validation_failed`, `truncated` (cut off at the output limit), `refused` (the model declined to answer), `budget_exceeded`, `ineligible`, `deadline_exceeded`, `unavailable` |
 | `themis_model_request_duration_seconds` (histogram) | `route` | Time to a request's result, repairs included |
 | `themis_model_tokens_total` | `route`, `kind` | Tokens the model reported, `input` and `output` |
 | `themis_model_cost_usd_total` | `route` | Cost at the route's price (`model.price` in the chart). Without a price nothing is reported: a guessed price would be wrong |

@@ -101,6 +101,7 @@ MODEL_OUTCOMES = (
     "ok",
     "validation_failed",
     "truncated",
+    "refused",
     "budget_exceeded",
     "ineligible",
     "deadline_exceeded",

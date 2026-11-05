@@ -18,6 +18,7 @@ from themis_intelligence.platform.contract import (
     Message,
     ModelRequest,
     ModelResult,
+    ProviderError,
     ProviderRequest,
     ProviderResponse,
     TypedError,
@@ -164,6 +165,8 @@ class ModelClient:
                     if resp.truncated:
                         # A repair would be cut off the same way.
                         return fail("truncated", f"the reply was cut off at {max_output} tokens")
+                    if resp.refused:
+                        return fail("refused", "the model declined to answer")
                     try:
                         result.output = schema.model_validate_json(resp.content)
                         return result
@@ -188,5 +191,7 @@ class ModelClient:
             return fail("deadline_exceeded", f"no valid reply within {req.deadline_s}s")
         except httpx.HTTPError as e:
             return fail("unavailable", f"{type(e).__name__}: {e}")
+        except ProviderError as e:
+            return fail("unavailable", str(e))
         finally:
             result.latency_ms = int((time.monotonic() - started) * 1000)

@@ -7,7 +7,8 @@ import pytest
 from themis.v1 import investigation_pb2
 from themis_intelligence.investigation.loop import Model
 from themis_intelligence.model_source import Installed, ModelSource
-from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
+from themis_intelligence.platform.adapters import ProviderAdapter
+from themis_intelligence.platform.adapters.anthropic_messages import AnthropicAdapter
 from themis_intelligence.platform.client import Endpoint
 
 
@@ -23,10 +24,10 @@ class Made:
     """Records what each model client was made with."""
 
     def __init__(self) -> None:
-        self.adapter: OpenAICompatAdapter | None = None
+        self.adapter: ProviderAdapter | None = None
         self.endpoint: Endpoint | None = None
 
-    def __call__(self, adapter: OpenAICompatAdapter, endpoint: Endpoint) -> Model:
+    def __call__(self, adapter: ProviderAdapter, endpoint: Endpoint) -> Model:
         self.adapter, self.endpoint = adapter, endpoint
         return cast(Model, object())
 
@@ -91,6 +92,17 @@ async def test_a_change_in_setup_applies_to_the_next_investigation() -> None:
         "http://b/v1",
         "k",
     )
+
+
+# Anthropic's address is its own: setup's, made for another provider, doesn't apply.
+async def test_anthropic_needs_only_a_model() -> None:
+    installed = Installed(base_url=None, model=None, api_key=None, provider="anthropic")
+    core = SetupCore(base_url="http://ollama:11434/v1", model="claude-sonnet-5-5", api_key="k")
+    s, made = source(installed, core)
+    assert await s.ready()
+    s.new_model()
+    assert isinstance(made.adapter, AnthropicAdapter)
+    assert (made.adapter.base_url, made.adapter.api_key) == (None, "k")
 
 
 def test_new_model_before_ready() -> None:

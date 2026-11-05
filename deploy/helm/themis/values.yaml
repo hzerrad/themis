@@ -41,6 +41,10 @@ model:
   # checks, then each incident waits for a fix suggested by a person or a
   # tool outside Themis, such as HolmesGPT.
   enabled: true
+  # openai: an OpenAI-compatible API, such as OpenAI's, Ollama's or vLLM's.
+  # anthropic: Anthropic's Messages API, for Claude models; baseURL can stay
+  # empty, and the Setup page's address doesn't apply. Empty means openai.
+  provider: ""
   # For example https://api.openai.com/v1 or http://ollama:11434/v1. Left
   # empty, it's set on Themis's Setup page instead.
   baseURL: ""

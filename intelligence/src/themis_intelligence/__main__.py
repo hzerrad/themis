@@ -4,7 +4,10 @@ Configuration comes from the environment:
 
     THEMIS_CORE_ADDR         themis-core's gRPC address (localhost:9090)
     THEMIS_TOKEN_FILE        file holding the investigator bearer token
-    MODEL_BASE_URL           an OpenAI-compatible API, such as http://localhost:11434/v1
+    MODEL_PROVIDER           openai (the default): an OpenAI-compatible API, as Ollama,
+                             vLLM and OpenAI serve; or anthropic: Anthropic's Messages API
+    MODEL_BASE_URL           the API's address, such as http://localhost:11434/v1; for
+                             anthropic, unset uses Anthropic's
     MODEL_NAME               the model, such as qwen3:8b
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
                              The three above, and MODEL_STRICT_OUTPUT with the address,
@@ -12,8 +15,9 @@ Configuration comes from the environment:
                              address and a name, no incident is investigated
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
-    MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low; unset
-                             leaves the provider's default
+    MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low (for
+                             anthropic: low, medium, high, xhigh or max); unset leaves
+                             the provider's default
     MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (4096); raise it for a model that
                              reasons, or its replies are cut off
     MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
@@ -29,9 +33,11 @@ import argparse
 import asyncio
 import os
 from pathlib import Path
+from typing import cast
 
 from themis_intelligence import telemetry, tracing
 from themis_intelligence.model_source import Installed, ModelSource
+from themis_intelligence.platform.adapters import PROVIDERS, Provider
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price
 from themis_intelligence.platform.contract import CLASSIFICATION_RANK
@@ -74,6 +80,13 @@ def read_price() -> Price | None:
         raise SystemExit("Model prices must be numbers: US dollars per million tokens.") from None
 
 
+def read_provider() -> Provider:
+    value = os.environ.get("MODEL_PROVIDER", "").strip().lower() or "openai"
+    if value not in PROVIDERS:
+        raise SystemExit(f"MODEL_PROVIDER must be one of {', '.join(PROVIDERS)}.")
+    return cast(Provider, value)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="themis_intelligence")
     p.add_argument("--metrics-port", type=int, default=8082, help="port of /metrics; 0 disables it")
@@ -100,6 +113,7 @@ async def main() -> None:
         model=env("MODEL_NAME") or None,
         api_key=read_secret(key_file) if key_file else None,
         strict_output=read_flag("MODEL_STRICT_OUTPUT", default=True),
+        provider=read_provider(),
     )
     max_output = env("MODEL_MAX_OUTPUT_TOKENS")
     endpoint = Endpoint(

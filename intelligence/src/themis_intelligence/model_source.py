@@ -9,7 +9,12 @@ from typing import Protocol
 
 from themis.v1 import investigation_pb2
 from themis_intelligence.investigation.loop import Model
-from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
+from themis_intelligence.platform.adapters import (
+    Provider,
+    ProviderAdapter,
+    connect,
+    needs_address,
+)
 from themis_intelligence.platform.client import Endpoint
 
 log = logging.getLogger(__name__)
@@ -18,12 +23,15 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Installed:
     """What the install set. None leaves a setting to Themis's setup. Strict
-    output goes with the address: both describe the same endpoint."""
+    output goes with the address: both describe the same endpoint. The
+    provider is the install's alone; Anthropic's address is its own, so with
+    it the address on the setup page doesn't apply."""
 
     base_url: str | None
     model: str | None
     api_key: str | None
     strict_output: bool = True
+    provider: Provider = "openai"
 
 
 class SettingsCore(Protocol):
@@ -36,14 +44,14 @@ class ModelSource:
         installed: Installed,
         core: SettingsCore,
         endpoint: Endpoint,
-        make: Callable[[OpenAICompatAdapter, Endpoint], Model],
+        make: Callable[[ProviderAdapter, Endpoint], Model],
     ) -> None:
         self.installed = installed
         self.core = core
         # The endpoint's other settings come from the environment only.
         self.template = endpoint
         self.make = make
-        self.adapter: OpenAICompatAdapter | None = None
+        self.adapter: ProviderAdapter | None = None
         self.endpoint: Endpoint | None = None
         self.said_missing = False
 
@@ -51,9 +59,10 @@ class ModelSource:
         """Reads the settings; False while no model is set, so no work is leased."""
         got = await self.core.model_settings()
         inst = self.installed
-        base_url = inst.base_url or got.base_url or None
+        addressed = needs_address(inst.provider)
+        base_url = inst.base_url or (got.base_url if addressed else None) or None
         model = inst.model or got.model or None
-        if not base_url or not model:
+        if not model or (addressed and not base_url):
             if not self.said_missing:
                 log.warning(
                     "no model is set, so no incident is investigated: set it on Themis's"
@@ -69,12 +78,18 @@ class ModelSource:
             strict = got.strict_output if got.HasField("strict_output") else True
         endpoint = replace(self.template, model=model, strict_output=strict)
         old = self.adapter
-        if old is None or (old.base_url, old.api_key) != (base_url.rstrip("/"), api_key):
-            self.adapter = OpenAICompatAdapter(base_url=base_url, api_key=api_key)
+        if old is None or (old.base_url, old.api_key) != (
+            base_url.rstrip("/") if base_url else None,
+            api_key,
+        ):
+            self.adapter = connect(inst.provider, base_url, api_key)
             if old is not None:
-                await old.client.aclose()
+                await old.aclose()
         if endpoint != self.endpoint:
-            log.info("using the model", extra={"model": model, "address": base_url})
+            log.info(
+                "using the model",
+                extra={"model": model, "address": base_url or inst.provider},
+            )
             self.endpoint = endpoint
         return True
 

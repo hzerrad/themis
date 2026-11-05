@@ -54,19 +54,35 @@ endif
 eval-bundles: ## Rebuild every scenario pack case's evaluation bundle
 	go test ./eval -run 'TestPacks$$' -count=1 -update
 
-# The model whose replies CI replays, and where to reach it to record them.
+# The model whose replies CI replays.
+EVAL_BASELINE := eval/recordings/qwen3-8b
+# The model to record or replay, and where to reach it. For a Claude model:
+# EVAL_PROVIDER=anthropic EVAL_MODEL=claude-sonnet-5-5 EVAL_KEY_FILE=<file holding the key>.
+EVAL_PROVIDER ?= openai
 EVAL_BASE_URL ?= http://127.0.0.1:11434/v1
 EVAL_MODEL    ?= qwen3:8b
-EVAL_SAVED    := eval/recordings/qwen3-8b
+EVAL_KEY_FILE ?=
+EVAL_RUNS     ?= 1
+EVAL_MAX_USD  ?= 5
+# Each model's replies and report have a folder of their own, named after it.
+EVAL_SLUG     ?= $(subst :,-,$(subst /,-,$(EVAL_MODEL)))
+EVAL_SAVED    := eval/recordings/$(EVAL_SLUG)
+EVAL_MODEL_FLAGS = --provider $(EVAL_PROVIDER) --model $(EVAL_MODEL) \
+	$(if $(filter openai,$(EVAL_PROVIDER)),--base-url $(EVAL_BASE_URL) --context-tokens 16384)
 
-.PHONY: eval-record eval-replay
-eval-record: ## Run the model once on every case, or one pack's with NAME=..., and save its replies for CI; review the report before committing
+.PHONY: eval-record eval-replay eval-compare
+eval-record: ## Run a model on every case, or one pack's with NAME=..., and save its replies and report; review the report before committing
 	$(if $(NAME),,rm -rf $(EVAL_SAVED))
-	$(UV) run python -m themis_intelligence.evaluation --runs 1 --base-url $(EVAL_BASE_URL) --model $(EVAL_MODEL) \
-		--context-tokens 16384 --step-deadline 600 --record ../$(EVAL_SAVED) --out ../eval/out/record $(if $(NAME),--pack $(NAME))
+	$(UV) run python -m themis_intelligence.evaluation --runs $(EVAL_RUNS) $(EVAL_MODEL_FLAGS) \
+		$(if $(EVAL_KEY_FILE),--api-key-file $(abspath $(EVAL_KEY_FILE))) --max-usd $(EVAL_MAX_USD) \
+		--step-deadline 600 --record ../$(EVAL_SAVED) --out ../eval/out/models/$(EVAL_SLUG) $(if $(NAME),--pack $(NAME))
 
-eval-replay: ## Replay the saved replies through the real loop and scorer: fails on harm, or if the prompt changed since recording
-	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_SAVED) --out ../eval/out/replay --gate
+eval-replay: ## Replay a model's saved replies (EVAL_MODEL, the baseline by default) through the real loop and scorer: fails on harm, or if the prompt changed since recording
+	$(UV) run python -m themis_intelligence.evaluation --runs $(EVAL_RUNS) $(EVAL_MODEL_FLAGS) \
+		--replay ../$(EVAL_SAVED) --out ../eval/out/replay/$(EVAL_SLUG) --gate
+
+eval-compare: ## Compare the models recorded with eval-record, from their reports in eval/out/models
+	@$(UV) run python -m themis_intelligence.evaluation.compare $(abspath $(wildcard eval/out/models/*))
 
 # Scenario packs: one folder each under scenarios/; see docs/scenarios.md.
 
@@ -77,7 +93,7 @@ scenario: ## Create a scenario pack to fill in: make scenario NAME=my-scenario
 
 scenario-check: ## Check every scenario pack, or one with NAME=..., and replay its cases: fails until it is complete
 	go run ./scripts/scenario check $(NAME)
-	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_SAVED) --out ../eval/out/scenario-check \
+	$(UV) run python -m themis_intelligence.evaluation --runs 1 --replay ../$(EVAL_BASELINE) --out ../eval/out/scenario-check \
 		--gate $(if $(NAME),--pack $(NAME))
 
 .PHONY: eval-local

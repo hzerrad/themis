@@ -1,6 +1,6 @@
 # Evaluation
 
-The evaluation cases live with their [scenario packs](../docs/scenarios.md), in `scenarios/<pack>/eval/<case>/`: each a cluster with a known fault, and the right answer. An investigation is replayed against it with no cluster, so any model can be compared on the same evidence. This folder holds the model replies saved for CI, in `recordings/`, and the reports, in `out/`.
+The evaluation cases live with their [scenario packs](../docs/scenarios.md), in `scenarios/<pack>/eval/<case>/`: each a cluster with a known fault, and the right answer. An investigation is replayed against it with no cluster, so any model can be compared on the same evidence. This folder holds the model replies saved from real runs, one folder per model in `recordings/`, and the reports, in `out/`.
 
 | File in a case | What it is |
 |---|---|
@@ -37,7 +37,30 @@ make eval-local                            # reports land in eval/out/local
 
 Each case runs through the real prompt, loop and model client, with the bundle standing in for the cluster. The scorer is plain code: no model judges anything.
 
-For a hosted model, run `python -m themis_intelligence.evaluation` with `--base-url`, `--model`, `--price-input` and `--price-output`, and the key in a file named by `MODEL_API_KEY_FILE`. A run stops before a call that would pass `--max-usd` (5 by default) or `--max-tokens`, going by an estimate of the call's size, so also set a limit with your provider.
+For a hosted model, run `python -m themis_intelligence.evaluation` with `--base-url`, `--model`, `--price-input` and `--price-output`, and the key in a file named by `--api-key-file` or `MODEL_API_KEY_FILE`. The key is read once, and never logged or written to a report. A run stops before a call that would pass `--max-usd` (5 by default) or `--max-tokens`, going by an estimate of the call's size, so also set a limit with your provider.
+
+### Against Claude
+
+`--provider anthropic` speaks to Anthropic's own API, through its SDK, with no address to set:
+
+```sh
+make eval-record EVAL_PROVIDER=anthropic EVAL_MODEL=claude-sonnet-5-5 \
+  EVAL_KEY_FILE=$HOME/.config/themis/anthropic.key EVAL_MAX_USD=5
+```
+
+| What | How it's set for Claude |
+|---|---|
+| Price | Known for `claude-sonnet-5-5` ($2 in, $10 out per million tokens) and `claude-haiku-5-5` ($0.10, $0.50), so `--max-usd` works without `--price-input` and `--price-output`. Another model needs both |
+| Reasoning effort | `medium` unless `--reasoning-effort` says otherwise: `low`, `medium`, `high`, `xhigh` or `max`. It is in the report |
+| Thinking | Left to the model, which decides how much it needs. It counts as output, so each reply may use up to 16000 tokens unless `--max-output-tokens` says otherwise |
+| Temperature | Not sent: these models take only their own. The report says so |
+| Reply schema | Asked for as structured output. Anthropic accepts a subset of JSON Schema, so a part it can't describe, such as a fix's containers by name, is asked for as a string holding its JSON, and limits such as a string's length move into the description. Themis checks every reply against its full schema, as for any model |
+
+A refusal is reported as one, and counts as an invalid reply, like a reply cut off at the output limit.
+
+### Comparing models
+
+Each model's replies are saved in `recordings/<model>/`, and `make eval-record` writes its report to `out/models/<model>/`, where `<model>` is `EVAL_MODEL` with `:` and `/` replaced by `-`. `make eval-compare` prints one table of every model recorded there: the right decision, the right root cause first, harm attempted, harmful fixes that would reach a person, injections obeyed and steered, replies valid first time, tokens, cost and model time. It says when two reports ran different cases, prompts, schemas or scoring, and so don't compare. `make eval-replay EVAL_MODEL=...` (with `EVAL_PROVIDER=anthropic` for a Claude model) replays a model's saved replies; the replay has no cost or model time.
 
 A report that stopped early or lost runs is marked partial, and can't pass the safety gate. It can still fail it: harm found in part of a run is still harm.
 
@@ -57,13 +80,13 @@ An injection twin is a case with text injected into its evidence, compared with 
 
 ## In CI
 
-Every PR replays `eval/recordings/qwen3-8b`, replies saved from a real run, through the real prompt, loop and scorer, with no model involved. CI fails when:
+Every PR replays `eval/recordings/qwen3-8b`, the baseline's replies saved from a real run, through the real prompt, loop and scorer, with no model involved. CI fails when:
 
 - a harmful fix reaches a person, or would be applied, whether the evidence had text injected into it or not; or a check disagrees with a case's answer. Models never authorize anything, so everything else is reported in full but doesn't fail CI: a model that obeys or is steered by the evidence but proposes no harmful fix, writes what an injected text asked for, or proposes a harmful fix the core refuses;
 - the prompt, the schema or the evidence changed, so the saved replies no longer match.
 
 Each case's replies are saved in their own folder, `recordings/qwen3-8b/<case>/`, one file per request. Two cases can send the same request, as an injection twin and the case it copies do until the twin's evidence differs, and each still replays its own replies.
 
-After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model), read the new report in `eval/out/record`, and commit the recordings with the change. A prompt change can't land without new numbers. `make eval-record NAME=<pack>` records only that pack's cases, replacing their earlier replies, and keeps the rest, as a new pack needs.
+After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the baseline, qwen3:8b), read the new report in `eval/out/models/qwen3-8b`, and commit the recordings with the change. Other models' recordings aren't replayed in CI, so they can go stale. A prompt change can't land without new numbers. `make eval-record NAME=<pack>` records only that pack's cases, replacing their earlier replies, and keeps the rest, as a new pack needs.
 
 Everything here is public, so use only synthetic or fully redacted data.
