@@ -1,17 +1,17 @@
 # Themis
 
-Themis investigates Kubernetes workload incidents with AI and, when policy and a human allow it, applies a constrained fix whose effect is measured and audited.
+Themis is a governance engine for AI-proposed fixes to Kubernetes incidents and workloads. Fixes come from Themis's own LLM investigator or from any AI SRE agent. Themis applies a fix only if the evidence backs it, policy allows it and a person approves it, then checks that it worked.
 
 Models propose; deterministic controls decide. A Kubernetes write is never considered a success because the API accepted it: Themis watches the result and reports whether the incident was resolved, contained, unchanged, worsened, or impossible to judge.
 
-> **Status:** early development (v0.1). One incident class works end to end: a bad rollout that makes a Deployment's new pods crash or run out of memory, fixed by rolling back to the prior revision. Not for production use yet.
+> **Status:** early development (v0.1). Five kinds of incident on Deployments are covered: a bad rollout, pods that never become ready, a memory limit set too low, probe restart storms and CPU throttling. Three fixes: rolling back, changing memory and CPU requests and limits, and changing probe timings. Not for production use yet.
 
 ## What it does
 
 1. **Alertmanager fires** (for example `KubePodCrashLooping`). Themis resolves the alert to the workload it is about, deduplicates it into an incident, and records why it ignores the alerts it ignores.
-2. **Evidence and facts.** Themis reads the target through named, read-only templates (rollout history, pod states, events, log tails), hides secrets, and checks facts in code, such as *the new revision runs out of memory* or *the failures started after the rollout*. Each answer is yes, no or can't tell, and points to the evidence behind it.
-3. **Investigation.** A model, any OpenAI-compatible endpoint you choose, reads that evidence and may ask for more. It proposes a fix from the profile's allowed capabilities, citing evidence. Its output is untrusted: a proposal for another target, an unknown capability, or made-up evidence is rejected and recorded as a safety event.
-4. **Governance.** Themis derives the action from the live cluster rather than from the proposal, checks ownership (a GitOps-managed target is never changed behind Argo CD's or Flux's back), evaluates your CEL policy, and binds everything that matters into a digest.
+2. **Evidence and facts.** Themis reads the target through named, read-only templates (rollout history, pod states, events, log tails, and memory and CPU use from the Kubernetes metrics API or Prometheus), hides secrets, and checks facts in code, such as *the new revision runs out of memory* or *the failures started after the rollout*. Each answer is yes, no or can't tell, and points to the evidence behind it. A check never trusts the text of an event alone: the pods' own status has to agree.
+3. **Investigation.** A model reads that evidence and may ask for more: any OpenAI-compatible endpoint, such as Ollama or vLLM, or Claude through Anthropic's API. It proposes a fix that the incident's scenario packs offer, citing evidence. An outside AI SRE agent can suggest a fix through the same API instead. Every suggestion is untrusted: one for another target, an unknown fix, or made-up evidence is rejected and recorded as a safety event. Evidence containing text that looks like instructions or forged tool output is flagged, to the investigator and to the person approving.
+4. **Governance.** Themis applies a fix only if a check that justifies it is true for the incident. It derives the action from the live cluster rather than from the proposal, checks ownership (a GitOps-managed target only ever gets a recommendation, never a change behind Argo CD's or Flux's back), evaluates your CEL policy, and binds everything that matters into a digest. If the checks support a fix the investigator didn't propose, a person is told.
 5. **Approval.** In the UI you compare the proposal with the action derived from the cluster, see exactly what changes, and approve the digest you were shown, or deny it.
 6. **Execution.** A separate executor, the only component with write access, rechecks the digest and the live target, dry-runs the change, then writes it. If anything changed since approval, it refuses.
 7. **Verification.** Themis watches the workload for a window and decides the outcome. A change made by someone else during the window makes the result `inconclusive`, never a false success.
@@ -24,21 +24,22 @@ To try Themis in about 10 minutes, on kind or on your own cluster, follow the **
 
 For a closer look at each step, see the bad-rollout demo on a local [kind](https://kind.sigs.k8s.io/) cluster, with real Prometheus and Alertmanager: **[docs/demo.md](docs/demo.md)**.
 
-To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README.md)**. Themis brings no model: point it at any OpenAI-compatible endpoint, hosted or local. Or run it without one (`model.enabled=false`): it still collects evidence and runs its checks, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT, governed exactly like its own.
+To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README.md)**. Themis brings no model: point it at any OpenAI-compatible endpoint, hosted or local, or at Claude. Or run it without one (`model.enabled=false`): it still collects evidence and runs its checks, and each incident waits for a fix suggested by a person or an AI SRE agent, governed exactly like its own.
 
 ## Principles
 
 - **Read-only by default.** The component that can change workloads is not installed unless you enable it.
 - **Models never authorize.** Model output is an untrusted proposal. Authorization is a deterministic decision over live cluster state and explicit policy, then a human approval bound to a digest.
-- **Evidence before assertion.** Diagnoses cite the facts that support and contradict them, and `unknown` is a real answer that blocks action.
+- **Evidence before assertion.** Diagnoses cite the facts that support and contradict them, and `unknown` is a real answer that blocks action. Free text from the cluster, such as logs, can raise a question but never justify a fix on its own.
 - **Verification is mandatory.** Every action is followed by a measured outcome.
 - **Bring your own model.** Works with hosted providers or local, air-gapped endpoints such as Ollama or vLLM.
+- **Measured, not claimed.** A replayable evaluation suite, including prompt-injection attacks, runs on every change; CI fails if a harmful fix would reach a person. See [eval/README.md](eval/README.md).
 
 ## Architecture
 
 | Component | Language | Role |
 |---|---|---|
-| `themis-core` | Go | Intake, evidence, predicates, governance, approvals, verification, reconciliation, audit, HTTP API and UI |
+| `themis-core` | Go | Intake, evidence, checks, governance, approvals, verification, reconciliation, audit, HTTP API and UI |
 | `themis-intelligence` | Python | The bounded investigation loop and model access; holds no cluster or database credentials |
 | `themis-executor` | Go | Executes approved, digest-bound actions after independent re-verification; installed only when enabled |
 | PostgreSQL | | Durable state, the audit trail, and the job queue |
@@ -54,7 +55,7 @@ Themis supports the same Kubernetes releases the Kubernetes project maintains: t
 |---|---|
 | Kubernetes | 1.35, 1.36, 1.37 |
 | Alertmanager | any release sending webhook payload version `4` |
-| Model | any OpenAI-compatible chat completions endpoint with JSON-schema structured output |
+| Model | any OpenAI-compatible chat completions endpoint with JSON-schema structured output, or Claude through Anthropic's API |
 
 CI runs the tests against every Kubernetes version in the window, and weekly against the next, unreleased one. Themis logs the warnings the API server sends, such as for a deprecated API, and counts them in the `themis_kube_api_deprecation_warnings_total` metric.
 
@@ -68,7 +69,8 @@ Requirements: Docker, plus Go, [uv](https://docs.astral.sh/uv/), Helm and kubect
 make help      # list targets
 make lint      # lint Go, Python, protobuf
 make test      # unit and integration tests (needs Docker for PostgreSQL)
-make e2e       # the bad-rollout scenarios on a fresh kind cluster, with a fake model
+make e2e       # end-to-end scenarios on a fresh kind cluster, with a fake model
+make scenario-check  # every scenario pack's cases, replayed against recorded model replies
 make vuln      # known vulnerabilities in the Go and Python dependencies
 ```
 
