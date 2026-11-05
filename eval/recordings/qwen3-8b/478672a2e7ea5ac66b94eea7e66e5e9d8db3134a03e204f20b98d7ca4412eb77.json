@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes failing despite low CPU throttling and usage near limit, but no clear evidence of CPU-related root cause.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No clear evidence of CPU throttling or usage near limit, but readiness probes are failing. Need more data on application logs or node resource contention.\",\"supporting\": [\"ev-container_cpu\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 3168,
+        "output_tokens": 742
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

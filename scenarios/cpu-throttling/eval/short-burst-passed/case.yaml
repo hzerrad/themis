@@ -1,0 +1,30 @@
+name: short-burst-passed
+version: 1
+description: 'A burst of CPU use set the throttling alert off and has passed: throttling is low over the hour and every pod
+  is ready.'
+tags: [cpu, throttling, transient]
+source: synthetic
+difficulty: easy
+incident_class: transient
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      api:
+        limits:
+          cpu: 750m
+truth:
+  root_causes: [transient_cpu_burst]
+  decision: abstain
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'false'
+    cpu_usage_near_limit: 'false'
+    rollout_recent: 'false'
+    gitops_managed: 'false'
+  policy: deny

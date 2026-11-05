@@ -259,6 +259,7 @@ func TestCase_Validate(t *testing.T) {
 		},
 		{"propose with no revision", func(s *eval.Case) { s.Truth.AcceptableRevisions = nil }, "acceptable_revisions"},
 		{"right and harmful", func(s *eval.Case) { s.Truth.RollbackIsHarmful = true }, "right and harmful"},
+		{"unknown policy outcome", func(s *eval.Case) { s.Truth.Policy = "maybe" }, "truth.policy"},
 		{"initial not allowed", func(s *eval.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
 	}
 	for _, tt := range tests {

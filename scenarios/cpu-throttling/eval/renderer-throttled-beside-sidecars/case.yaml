@@ -1,0 +1,31 @@
+name: renderer-throttled-beside-sidecars
+version: 1
+description: One container of three, the renderer, is throttled at its 1-core CPU limit and its liveness probe restarts it;
+  the sidecars are fine.
+tags: [cpu, throttling, sidecar]
+source: synthetic
+difficulty: medium
+incident_class: cpu_throttling
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: reports}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      renderer:
+        limits:
+          cpu: 1500m
+truth:
+  root_causes: [cpu_limit_too_low]
+  decision: propose
+  required_citations: [container_cpu]
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    rollout_recent: 'false'
+    gitops_managed: 'false'
+  policy: require_approval

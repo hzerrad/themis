@@ -1,0 +1,83 @@
+# The checks of the cpu-throttling pack, in the order Themis reports them. They
+# read container_cpu, what the install's metrics source says of the current
+# revision's containers. docs/checks.md says what each field means and what the
+# expressions see.
+
+# A metrics source says how often the containers were throttled. Only a source
+# with history, such as Prometheus, can; the Kubernetes metrics API can't.
+- name: throttling_data_available
+  version: "1"
+  description: A metrics source says how often the containers were throttled
+  reads: [container_cpu]
+  answers:
+    - when: container_cpu.throttling.unavailable != ""
+      answer: false
+      reason: "no throttling figures: ${container_cpu.throttling.unavailable}"
+      cite: [ids.container_cpu]
+    - answer: true
+      reason: ${container_cpu.throttling.source} says how often each container was throttled over ${container_cpu.window}
+      cite: [ids.container_cpu]
+
+# A container with a CPU limit was held back in a quarter or more of its CPU
+# periods over the window, the share at which kube-prometheus-stack's
+# CPUThrottlingHigh fires. Only a CPU limit throttles a container.
+- name: cpu_throttled_at_limit
+  version: "1"
+  description: A container is throttled at its CPU limit
+  reads: [container_cpu]
+  let:
+    limited: container_cpu.containers.filter(c, c.limitCores != null)
+    measured: limited.filter(c, c.throttledRatio != null)
+    throttled: >-
+      measured.filter(c, c.throttledRatio >= 0.25).map(c,
+        c.name + " was throttled in " + string(int(c.throttledRatio * 100.0 + 0.5)) + "% of its CPU periods over " +
+        container_cpu.window + ", at its limit of " + string(c.limitCores) + " CPU")
+  answers:
+    - when: size(limited) == 0
+      answer: false
+      reason: no container has a CPU limit, so none is throttled at one
+      cite: [ids.container_cpu]
+    - when: container_cpu.throttling.unavailable != ""
+      answer: unknown
+      reason: "no throttling figures: ${container_cpu.throttling.unavailable}"
+      cite: [ids.container_cpu]
+    - when: size(throttled) > 0
+      answer: true
+      reason: ${throttled[0]}
+      cite: [ids.container_cpu]
+    - when: size(measured) == 0
+      answer: unknown
+      reason: no throttling figure for the ${size(limited)} container(s) with a CPU limit
+      cite: [ids.container_cpu]
+    - answer: false
+      reason: none of the ${size(measured)} container(s) with a CPU limit was throttled in 25% or more of its CPU periods over ${container_cpu.window}
+      cite: [ids.container_cpu]
+
+# A container with a CPU limit uses most of it now. Throttling while far below
+# the limit means bursts, not steady demand, hit it.
+- name: cpu_usage_near_limit
+  version: "1"
+  description: A container uses 80% or more of its CPU limit
+  reads: [container_cpu]
+  let:
+    limited: container_cpu.containers.filter(c, c.limitCores != null)
+    measured: limited.filter(c, c.usageOfLimit != null)
+    near: >-
+      measured.filter(c, c.usageOfLimit >= 0.8).map(c,
+        c.name + " uses " + string(c.usageCores) + " CPU of its limit of " + string(c.limitCores))
+  answers:
+    - when: size(limited) == 0
+      answer: false
+      reason: no container has a CPU limit
+      cite: [ids.container_cpu]
+    - when: size(near) > 0
+      answer: true
+      reason: ${near[0]}
+      cite: [ids.container_cpu]
+    - when: size(measured) == 0
+      answer: unknown
+      reason: "no CPU use figures for the ${size(limited)} container(s) with a CPU limit${container_cpu.usage.unavailable != '' ? ': ' + container_cpu.usage.unavailable : ''}"
+      cite: [ids.container_cpu]
+    - answer: false
+      reason: none of the ${size(measured)} container(s) with a CPU limit uses 80% or more of it
+      cite: [ids.container_cpu]

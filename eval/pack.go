@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/config"
 )
 
@@ -113,9 +114,17 @@ func checkCase(ctx context.Context, dir string, packs fs.FS, profile config.Prof
 	if err != nil {
 		return s, errors.Join(append(errs, err)...)
 	}
+	// A pack whose fixes don't include a rollback says which of them its
+	// policy is to decide.
+	if s.Fix == nil && len(profile.Capabilities) > 0 && !slices.Contains(profile.Capabilities, rollback.Name) {
+		return s, errors.Join(append(errs, errors.New("case.yaml: fix is required: the fix, of the pack's, to put to its policy"))...)
+	}
 	b, err := Build(ctx, dir, s, packs, profile)
 	if err != nil {
 		return s, errors.Join(append(errs, err)...)
+	}
+	if want := s.Truth.Policy; want != "" && b.Policy.Outcome != want {
+		errs = append(errs, fmt.Errorf("policy decides %s (%s), want %s", b.Policy.Outcome, b.Policy.Reason, want))
 	}
 	got := map[string]Check{}
 	for _, c := range b.Predicates {

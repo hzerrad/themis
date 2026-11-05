@@ -14,6 +14,7 @@ scenarios/my-scenario/
     │   ├── case.yaml
     │   ├── cluster.yaml
     │   ├── logs/<pod>.txt       optional
+    │   ├── metrics.yaml         optional: what the metrics source says
     │   └── bundle.json          generated
     └── my-scenario-look-alike/  a case where acting is wrong
         └── ...
@@ -114,6 +115,18 @@ truth:
 A case may also name the alert that raised it, as `alert: KubePodOOMKilled`. Its bundle then holds what Themis gives an incident from that alert: every pack whose profile matches the alert and the target, combined, so the case shows how the investigator chooses among their fixes. Without `alert`, the case gets its own pack's profile only.
 
 `cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `rootCauses`.
+
+Each case also puts a fix to the pack's policy, as an investigator would suggest it, so the bundle says what Themis would let through: by default a rollback to the revision before the current one. A pack whose fixes don't include a rollback names the fix in `fix`, and `truth.policy` says what its policy must decide, `allow`, `require_approval` or `deny`:
+
+```yaml
+fix:
+  capability: deployment.set-resources
+  params: {containers: {app: {limits: {cpu: 750m}}}}
+truth:
+  policy: require_approval
+```
+
+A case that needs metrics adds a `metrics.yaml`, saying what the install's metrics source reads; see [eval/README.md](../eval/README.md). Without one, the install has no metrics source.
 
 A pack needs both kinds of case, or only look-alikes if its profile allows no fix:
 
