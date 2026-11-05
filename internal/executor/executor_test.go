@@ -50,6 +50,7 @@ func profile() config.Profile {
 		Name: "rollout-regression", Priority: 100,
 		Evidence:     config.Evidence{Allowed: []string{evidence.PodStates}},
 		Capabilities: []string{"deployment.rollback-to-revision"},
+		JustifiedBy:  map[string][]string{"deployment.rollback-to-revision": {"failure_onset_after_rollout"}},
 	}
 }
 
@@ -76,7 +77,10 @@ func approved(t *testing.T) (*env, store.Action) {
 				return err
 			}
 		}
-		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: check.GitOpsManaged, Version: "1", Value: check.False}}); err != nil {
+		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{
+			{Name: check.GitOpsManaged, Version: "1", Value: check.False},
+			{Name: "failure_onset_after_rollout", Version: "1", Value: check.True},
+		}); err != nil {
 			return err
 		}
 		p, _, err := s.InsertProposal(ctx, tx, store.Proposal{
