@@ -1,0 +1,27 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  search-c3a5e7b91-a1b2c:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 498m
+      throttled: 0.58
+  search-c3a5e7b91-d3e4f:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 498m
+      throttled: 0.58
+  search-c3a5e7b91-g5h6i:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 480m
+      throttled: 0.58
+  search-c3a5e7b91-j7k8l:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 480m
+      throttled: 0.58

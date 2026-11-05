@@ -68,8 +68,22 @@ type Case struct {
 	Evidence Evidence `json:"evidence"`
 	Truth    Truth    `json:"truth"`
 
+	// Fix is the fix put to the pack's policy, as an investigator would
+	// suggest it. Without it, a rollback to the revision before the current
+	// one.
+	Fix *Fix `json:"fix,omitempty"`
+
 	KnownLimitations string `json:"known_limitations,omitempty"`
 }
+
+// Fix is a fix as an investigator suggests it.
+type Fix struct {
+	Capability string         `json:"capability"`
+	Params     map[string]any `json:"params"`
+}
+
+// rolledBack reports whether the case's fix is a rollback.
+func (s Case) rolledBack() bool { return s.Fix == nil || s.Fix.Capability == rollback.Name }
 
 // Target names the incident's workload in cluster.yaml.
 type Target struct {
@@ -104,6 +118,10 @@ type Truth struct {
 	// Predicates are the checks' right answers. Those not listed aren't
 	// compared.
 	Predicates map[string]string `json:"predicates"`
+
+	// Policy is what the pack's policy must decide for the case's fix:
+	// allow, require_approval or deny. Not compared when empty.
+	Policy string `json:"policy,omitempty"`
 }
 
 // Validate reports every problem in s, not only the first. rootCauses are the
@@ -147,7 +165,7 @@ func (s Case) Validate(rootCauses []string) error {
 	}
 	switch s.Truth.Decision {
 	case DecisionPropose:
-		if len(s.Truth.AcceptableRevisions) == 0 {
+		if s.rolledBack() && len(s.Truth.AcceptableRevisions) == 0 {
 			add("truth.acceptable_revisions is required when the right decision is to propose")
 		}
 		if s.Truth.RollbackIsHarmful {
@@ -156,6 +174,12 @@ func (s Case) Validate(rootCauses []string) error {
 	case DecisionAbstain, DecisionEither:
 	default:
 		add("truth.decision must be propose, abstain or either, got %q", s.Truth.Decision)
+	}
+	if p := s.Truth.Policy; p != "" && !slices.Contains([]policy.Outcome{policy.Allow, policy.RequireApproval, policy.Deny}, policy.Outcome(p)) {
+		add("truth.policy must be allow, require_approval or deny, got %q", p)
+	}
+	if s.Fix != nil && s.Fix.Capability == "" {
+		add("fix.capability names the fix to put to the pack's policy")
 	}
 	return errors.Join(errs...)
 }
@@ -216,14 +240,17 @@ type Bundle struct {
 
 	Predicates []Check `json:"predicates"`
 
-	// Policy is what governance decides for a rollback of the target to the
-	// revision before the current one, given these checks. A harmful proposal the policy denies never reaches
-	// anyone; one it lets through reaches a person to approve.
+	// Policy is what governance decides for the case's fix, given these
+	// checks: by default a rollback of the target to the revision before the
+	// current one. A harmful proposal the policy denies never reaches anyone;
+	// one it lets through reaches a person to approve.
 	Policy PolicyCheck `json:"policy"`
 }
 
-// PolicyCheck is a policy's verdict on rolling the target back.
+// PolicyCheck is a policy's verdict on the case's fix.
 type PolicyCheck struct {
+	// Fix is the fix decided, when it isn't the default rollback.
+	Fix     *Fix   `json:"fix,omitempty"`
 	Outcome string `json:"outcome"`
 	Reason  string `json:"reason"`
 }
@@ -276,13 +303,19 @@ func bundleItem(item evidence.Item) Item {
 // Build reads the case in dir with the real templates and checks, under the
 // profiles the incident gets: profile, a scenario pack's from packs, or, for
 // a case naming its alert, every pack's profile matching that alert and the
-// target, as Themis matches them. It decides a rollback as governance would.
+// target, as Themis matches them. It decides the case's fix, or a rollback,
+// as governance would. Its metrics source is the one the case's metrics.yaml
+// describes, or none without the file.
 func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.Profile) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, nil, packs, nil)
+	usage, err := loadMetrics(filepath.Join(dir, "metrics.yaml"))
+	if err != nil {
+		return Bundle{}, err
+	}
+	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, usage, packs, nil)
 	if err != nil {
 		return Bundle{}, err
 	}
@@ -348,17 +381,20 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 		}
 		b.Predicates = append(b.Predicates, out)
 	}
-	b.Policy, err = decide(ctx, c, w, matched, d.Results, cat.Fixes[rollback.Name])
+	if s.Fix == nil {
+		b.Policy, err = decideRollback(ctx, c, w, matched, d.Results, cat.Fixes[rollback.Name])
+	} else {
+		b.Policy, err = decide(ctx, c, w, matched, d.Results, cat.Fixes, *s.Fix)
+	}
 	if err != nil {
 		return Bundle{}, err
 	}
 	return b, nil
 }
 
-// decide decides, as governance decides the investigator's suggestion, a
-// rollback of w to the revision before its current one. A rollback that
-// can't go ahead reaches nobody, as a denied one doesn't.
-func decide(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fix capability.Capability) (PolicyCheck, error) {
+// decideRollback decides a rollback of w to the revision before its current
+// one.
+func decideRollback(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fix capability.Capability) (PolicyCheck, error) {
 	revisions, err := w.Revisions(ctx)
 	if err != nil {
 		return PolicyCheck{}, err
@@ -372,17 +408,36 @@ func decide(ctx context.Context, c client.Reader, w *workload.Workload, profiles
 	if previous == 0 {
 		return PolicyCheck{Outcome: string(policy.Deny), Reason: "The workload has no earlier revision to roll back to."}, nil
 	}
+	return govern(ctx, c, w, profiles, checks, fix, map[string]any{"revision": previous})
+}
+
+// decide decides the case's own fix, which must be one the incident's
+// profiles offer.
+func decide(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fixes capability.Registry, fix Fix) (PolicyCheck, error) {
+	f, ok := fixes[fix.Capability]
+	if !ok || len(profiles.Offering(fix.Capability)) == 0 {
+		return PolicyCheck{}, fmt.Errorf("fix: %s isn't a fix the pack's profile offers", fix.Capability)
+	}
+	out, err := govern(ctx, c, w, profiles, checks, f, fix.Params)
+	out.Fix = &fix
+	return out, err
+}
+
+// govern decides fix with params as governance decides the investigator's
+// suggestion. A fix that can't go ahead reaches nobody, as a denied one
+// doesn't; params it can't take are the case's mistake.
+func govern(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fix capability.Capability, params map[string]any) (PolicyCheck, error) {
 	var decider governance.Decider
 	decided, err := decider.Decide(ctx, c, governance.Fix{
 		Target: w.Target, Profiles: profiles, Checks: checks,
-		Capability: fix, Params: map[string]any{"revision": previous},
+		Capability: fix, Params: params,
 		By: governance.Suggester{Source: "themis-intelligence", Authenticated: true},
 	})
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		return PolicyCheck{Outcome: string(policy.Deny), Reason: refusal.Reason}, nil
 	}
 	if err != nil {
-		return PolicyCheck{}, err
+		return PolicyCheck{}, fmt.Errorf("fix: %w", err)
 	}
 	return PolicyCheck{Outcome: string(decided.Decision.Outcome), Reason: decided.Decision.Reason}, nil
 }

@@ -1,0 +1,19 @@
+# What the metrics source says of each pod's containers.
+source: kubernetes
+pods:
+  search-84f6d9c2b-a1b2c:
+    api:
+      memory: 310Mi
+      cpu: 490m
+  search-84f6d9c2b-d3e4f:
+    api:
+      memory: 310Mi
+      cpu: 495m
+  search-84f6d9c2b-g5h6i:
+    api:
+      memory: 310Mi
+      cpu: 450m
+  search-84f6d9c2b-j7k8l:
+    api:
+      memory: 310Mi
+      cpu: 430m

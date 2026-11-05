@@ -7,7 +7,22 @@ The evaluation cases live with their [scenario packs](../docs/scenarios.md), in 
 | `case.yaml` | What's being tested, and the right answer (`truth`) |
 | `cluster.yaml` | The cluster as the controllers and the kubelet left it. Owners are linked by kind and name, and `creationTimestamp` is set by hand, since checks depend on it |
 | `logs/<pod>.txt` | What each pod logged, if anything |
+| `metrics.yaml` | What the install's [metrics source](../docs/configuration.md#metrics) says each pod's containers use, below. Without it, the install has none, and `container_memory` and `container_cpu` are gaps |
 | `bundle.json` | Generated: what Themis's real evidence templates, redaction and the pack's checks make of the cluster |
+
+```yaml
+# metrics.yaml
+source: prometheus        # or kubernetes: the metrics API, which knows only the present
+pods:
+  checkout-7d9f8b6c4-a1b2c:
+    app:
+      memory: 200Mi       # working set now
+      peakMemory: 240Mi   # the most over the window; Prometheus only
+      cpu: 480m           # now
+      throttled: 0.62     # share of CPU periods throttled over the window; Prometheus only
+```
+
+A figure left out is one the source has none of. Each container's figure in the evidence is the highest among the current revision's pods, as with a real source. For `kubernetes`, the real metrics API source reads the figures, and needs both `memory` and `cpu`.
 
 Run `make eval-bundles` after changing a case, or code that changes what evidence looks like, and review the diff. `make scenario-check` and `go test ./eval` fail if a bundle is stale, or if a check disagrees with `truth.predicates`.
 
