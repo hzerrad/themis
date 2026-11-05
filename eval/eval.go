@@ -270,13 +270,18 @@ func bundleItem(item evidence.Item) Item {
 
 // Build reads the case in dir with the real templates and the checks of
 // profile, a scenario pack's from packs, and decides a rollback as governance
-// would.
+// would. Its metrics source is the one the case's metrics.yaml describes, or
+// none without the file.
 func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.Profile) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, nil, packs, nil)
+	usage, err := loadMetrics(filepath.Join(dir, "metrics.yaml"))
+	if err != nil {
+		return Bundle{}, err
+	}
+	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, usage, packs, nil)
 	if err != nil {
 		return Bundle{}, err
 	}

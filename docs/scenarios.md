@@ -14,6 +14,7 @@ scenarios/my-scenario/
     │   ├── case.yaml
     │   ├── cluster.yaml
     │   ├── logs/<pod>.txt       optional
+    │   ├── metrics.yaml         optional: what the metrics source says
     │   └── bundle.json          generated
     └── my-scenario-look-alike/  a case where acting is wrong
         └── ...
