@@ -1,4 +1,4 @@
-package rollback_test
+package capability_test
 
 import (
 	"strings"
@@ -13,12 +13,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
-	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/workload"
 )
 
-// checked is a rolled-back Deployment at revision 3 with three pods, as
+// checked is a Deployment a fix rolled out, at revision 3 with three pods, as
 // change leaves it, read through a fake API server.
 func checked(t *testing.T, change func(d *appsv1.Deployment, pods []*corev1.Pod)) (client.Reader, incident.TargetRef, string) {
 	t.Helper()
@@ -64,10 +63,10 @@ func checked(t *testing.T, change func(d *appsv1.Deployment, pods []*corev1.Pod)
 	return fake.NewClientBuilder().WithObjects(objs...).Build(), target, mark
 }
 
-// A rollback cured its symptom when every replica is ready and nothing has
+// A rolled-out fix cured its symptom when every replica is ready and nothing has
 // restarted or run out of memory since: compared with how things were when
 // checking began, and in words the timeline shows.
-func TestCheck(t *testing.T) {
+func TestReadRollout(t *testing.T) {
 	since := time.Date(2026, 11, 4, 9, 0, 0, 0, time.UTC)
 	allReady := []byte(`{"ready": 3, "restarts": 0}`)
 	for name, tc := range map[string]struct {
@@ -101,7 +100,7 @@ func TestCheck(t *testing.T) {
 		if tc.mark != "" {
 			mark = tc.mark
 		}
-		got, err := rollback.Capability{}.Check(t.Context(), r, target, mark, tc.start, since)
+		got, err := capability.ReadRollout(t.Context(), r, target, mark, tc.start, since)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
