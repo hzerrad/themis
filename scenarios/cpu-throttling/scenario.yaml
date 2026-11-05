@@ -76,10 +76,6 @@ profile:
       - name: gitops-owns-the-target
         when: predicates.gitops_managed != "false"
         decision: deny
-      # Only set-resources is offered here; anything else is another pack's.
-      - name: only-set-resources
-        when: action.capability != "deployment.set-resources"
-        decision: deny
       # Throttling is the only reason this pack changes CPU: a raise without
       # throttling figures that show it, or with a recent rollout that may
       # have caused it, is refused. A restore puts back what Themis changed.

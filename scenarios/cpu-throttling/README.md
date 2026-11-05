@@ -37,7 +37,6 @@ The policy enforces, whoever suggests the fix:
 | Rule | Decision | Why |
 |---|---|---|
 | `gitops-owns-the-target` | deny | GitOps would put the old limit back |
-| `only-set-resources` | deny | No other fix is this pack's |
 | `raise-needs-throttling` | deny | Unless `cpu_throttled_at_limit` is true and `rollout_recent` is false: without throttling figures there is nothing to act on, and right after a rollout the new version may be what uses more CPU, which is a rollback's question |
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
