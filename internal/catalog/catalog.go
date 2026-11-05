@@ -12,6 +12,7 @@ import (
 	"slices"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/capability/probes"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
@@ -148,7 +149,7 @@ func (c *Catalog) add(packs []pack) error {
 // Fixes is the fixes Themis ships with, for the executor, which needs no
 // more of the catalog.
 func Fixes() capability.Registry {
-	return capability.NewRegistry(rollback.Capability{})
+	return capability.NewRegistry(rollback.Capability{}, probes.Capability{})
 }
 
 // CheckProfile says what in p this catalog can't do, one error per problem:

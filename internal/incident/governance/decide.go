@@ -88,7 +88,7 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 	}
 	decision := pol.Evaluate(policy.Input{
 		Capability: fix.Capability.Name(), Risk: plan.Risk, Namespace: fix.Target.Namespace,
-		ManagedBy: plan.ManagedBy, Predicates: predicates,
+		ManagedBy: plan.ManagedBy, Predicates: predicates, Change: plan.Facts,
 		Source: fix.By.Source, Authenticated: fix.By.Authenticated, External: fix.By.External,
 		Restore: fix.Restores != "",
 	})

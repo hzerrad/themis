@@ -49,6 +49,10 @@ type Input struct {
 	Namespace  string
 	ManagedBy  string
 	Predicates map[string]string
+	// Change is what the fix says about this change, beyond its name and
+	// risk, such as which probes it makes more lenient. Rules see it as
+	// change.<key>; each fix documents its keys.
+	Change map[string]string
 	// Restore is set when the action puts back what Themis changed, after
 	// a fix that didn't help. Rules see it as action.restore.
 	Restore bool
@@ -86,6 +90,7 @@ func Compile(p config.Policy) (*Policy, error) {
 		cel.Variable("action", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("target", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("predicates", cel.MapType(cel.StringType, cel.StringType)),
+		cel.Variable("change", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("proposal", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("mode", cel.StringType),
 	)
@@ -174,10 +179,15 @@ func checksRead(a *cel.Ast) []string {
 // Evaluate decides in rule order. Errors deny; observe mode denies; guarded
 // mode never allows without approval.
 func (p *Policy) Evaluate(in Input) Decision {
+	change := in.Change
+	if change == nil {
+		change = map[string]string{}
+	}
 	vars := map[string]any{
 		"action":     map[string]string{"capability": in.Capability, "risk": in.Risk, "restore": strconv.FormatBool(in.Restore)},
 		"target":     map[string]string{"namespace": in.Namespace, "managed_by": in.ManagedBy},
 		"predicates": in.Predicates,
+		"change":     change,
 		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
 		"mode":       p.mode,
 	}

@@ -94,11 +94,8 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision i
 		return Live{}, err
 	}
 	return Live{
-		Deployment: w.Object().DeepCopy(),
-		Target: digest.TargetIdentity{
-			Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID,
-			Generation: w.Generation, SpecHash: w.TemplateHash, Manager: w.Writer,
-		},
+		Deployment:  w.Object().DeepCopy(),
+		Target:      w.Identity(),
 		Desired:     r.Template,
 		DesiredHash: desiredHash,
 		PreState:    *w.Template.DeepCopy(),

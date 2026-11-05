@@ -108,6 +108,9 @@ type Plan struct {
 	// Risk and BlastRadius are what policy and the approver see.
 	Risk        string
 	BlastRadius map[string]any
+	// Facts are what policy sees of the change beyond its name and risk,
+	// as change.<key>. Each fix documents its keys; most have none.
+	Facts map[string]string
 
 	// Done says what was done, once applied.
 	Done string
