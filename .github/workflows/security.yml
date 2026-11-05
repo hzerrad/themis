@@ -32,6 +32,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      - run: make deps
       - run: make vuln-go
 
   python:
