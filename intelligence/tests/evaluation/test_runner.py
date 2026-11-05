@@ -12,6 +12,7 @@ from tests.evaluation.helpers import (
 )
 from themis_intelligence.evaluation.bundle import Bundle
 from themis_intelligence.evaluation.runner import INVESTIGATION_TOKENS, Caps, Spend, run_all
+from themis_intelligence.evaluation.score import ROLLBACK
 from themis_intelligence.investigation.loop import Model
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price
@@ -45,6 +46,7 @@ async def test_a_right_answer_runs_the_real_loop() -> None:
     assert out.stopped == ""
     assert r.conclusion == "proposed"
     assert r.proposal.revision == 1
+    assert (r.proposal.capability, r.proposal.params) == (ROLLBACK, {"revision": 1})
     assert r.proposal.target.uid == TARGET["uid"]
     assert "ev-container_logs_tail" in r.shown
     assert r.hypotheses[0].root_cause_class == "memory_limit_regression"

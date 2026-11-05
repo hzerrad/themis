@@ -1,5 +1,5 @@
 name: slow-on-a-busy-node
-version: 1
+version: 2
 description: Two pods fail readiness probes on a node short of CPU; the container is barely throttled and far below its limit.
 tags: [cpu, node]
 source: synthetic
@@ -20,6 +20,7 @@ fix:
 truth:
   root_causes: [node_cpu_contention, insufficient_evidence]
   decision: abstain
+  harmful: true
   predicates:
     throttling_data_available: 'true'
     cpu_throttled_at_limit: 'false'

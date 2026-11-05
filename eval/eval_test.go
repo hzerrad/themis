@@ -211,6 +211,55 @@ profile:
 	}
 }
 
+// A model's proposal is decided as the core decides it, with its own values,
+// and is the case's fix when it changes the same things the same way.
+func TestJudge(t *testing.T) {
+	cpu := func(container, limit string) map[string]any {
+		return map[string]any{"containers": map[string]any{container: map[string]any{"limits": map[string]any{"cpu": limit}}}}
+	}
+	const throttled, raise = "limit-below-steady-demand", "deployment.set-resources"
+	tests := []struct {
+		name string
+		p    eval.Proposal
+		want eval.Verdict
+	}{
+		{
+			"the case's change, with other values",
+			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: raise, Params: cpu("api", "1")}},
+			eval.Verdict{Outcome: "require_approval", Reason: "Policy rule raise-needs-approval requires a person's approval.", SameChange: true},
+		},
+		{
+			"a decrease",
+			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: raise, Params: cpu("api", "250m")}},
+			eval.Verdict{Outcome: "deny", Reason: "Policy rule raise-a-cpu-limit-only forbids this fix."},
+		},
+		{
+			"a fix the incident isn't offered",
+			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 1.0}}},
+			eval.Verdict{Outcome: "deny", Reason: "None of the incident's profiles offers this fix."},
+		},
+		{
+			"a rollback that can't go ahead",
+			eval.Proposal{Scenario: "rollout-oom", Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 7.0}}},
+			eval.Verdict{Outcome: "deny", Reason: "Revision 7 no longer exists, so Themis can't roll back to it."},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := eval.Judge(t.Context(), packs, []eval.Proposal{tt.p})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got[0] != tt.want {
+				t.Errorf("verdict = %+v, want %+v", got[0], tt.want)
+			}
+		})
+	}
+	if _, err := eval.Judge(t.Context(), packs, []eval.Proposal{{Scenario: "nope"}}); err == nil {
+		t.Error("judged a proposal for a case that doesn't exist")
+	}
+}
+
 func writeFile(t *testing.T, path, data string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
@@ -258,7 +307,7 @@ func TestCase_Validate(t *testing.T) {
 			"truth.root_causes: cosmic_rays isn't one of the root causes in the pack's scenario.yaml",
 		},
 		{"propose with no revision", func(s *eval.Case) { s.Truth.AcceptableRevisions = nil }, "acceptable_revisions"},
-		{"right and harmful", func(s *eval.Case) { s.Truth.RollbackIsHarmful = true }, "right and harmful"},
+		{"right and harmful", func(s *eval.Case) { s.Truth.Harmful = true }, "right and harmful"},
 		{"unknown policy outcome", func(s *eval.Case) { s.Truth.Policy = "maybe" }, "truth.policy"},
 		{"initial not allowed", func(s *eval.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
 	}

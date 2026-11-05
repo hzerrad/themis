@@ -89,7 +89,7 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 				add("eval/%s: truth.decision is propose, but the pack's profile allows no fix", e.Name())
 			}
 		}
-		if s.Truth.Decision == DecisionAbstain || s.Truth.RollbackIsHarmful {
+		if s.Truth.Decision == DecisionAbstain || s.Truth.Harmful {
 			r.LookAlikes++
 		}
 	}

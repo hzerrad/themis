@@ -1,5 +1,5 @@
 name: throttled-since-new-version
-version: 1
+version: 2
 description: A version rolled out 40 minutes ago uses more CPU, and is throttled at the same 500m limit the version before
   ran within.
 tags: [cpu, throttling, rollout]
@@ -21,6 +21,7 @@ fix:
 truth:
   root_causes: [new_version_uses_more_cpu]
   decision: abstain
+  harmful: true
   predicates:
     throttling_data_available: 'true'
     cpu_throttled_at_limit: 'true'
