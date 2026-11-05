@@ -1,10 +1,13 @@
 name: Images
 
-# Publishes the images on every merge to main, so people can install Themis
-# without building it. Tags: main, and sha-<commit> to pin an exact build.
+# Every merge to main publishes the edge images, tagged main and
+# sha-<commit>. A version tag (v0.2.0) publishes a release: the three images
+# under that version, the chart pinned to them, and a GitHub release. All of
+# Themis shares one version: the parts only work as a set.
 on:
   push:
     branches: [main]
+    tags: ["v*.*.*"]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +48,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/themis-${{ matrix.component }}
           tags: |
-            type=raw,value=main
+            type=raw,value=main,enable={{is_default_branch}}
+            type=ref,event=tag
             type=sha,prefix=sha-,format=short
       - id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -65,3 +69,39 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/themis-${{ matrix.component }}@${{ steps.build.outputs.digest }}
         run: cosign sign --yes "$IMAGE"
+
+  release:
+    name: Release the chart
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Package the chart for this version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          chart=deploy/helm/themis
+          sed -i "s/^version: .*/version: ${version}/; s/^appVersion: .*/appVersion: \"${TAG}\"/" "$chart/Chart.yaml"
+          # A release installs exactly these images, pulled once.
+          sed -i "s/^  tag: main$/  tag: ${TAG}/; s/^  pullPolicy: Always$/  pullPolicy: IfNotPresent/" "$chart/values.yaml"
+          grep -q "^  tag: ${TAG}$" "$chart/values.yaml"
+          helm package "$chart" --destination dist
+      - name: Publish the chart
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "$TOKEN" | helm registry login ghcr.io --username "$OWNER" --password-stdin
+          helm push dist/*.tgz "oci://ghcr.io/${OWNER}/charts"
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/*.tgz --repo "$GITHUB_REPOSITORY" --title "Themis $TAG" --generate-notes --verify-tag
