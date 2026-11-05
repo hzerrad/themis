@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Node memory pressure is the root cause, but raising container limits won't resolve node-level resource exhaustion.\",\"hypotheses\":[{\"root_cause_class\":\"node_memory_pressure\",\"summary\":\"Pods evicted due to node memory shortage, not container limits.\",\"supporting\":[\"evicted_for_node_memory\",\"oom_without_recent_rollout\"],\"contradicting\":[],\"missing\":[\"node_memory_usage_data\",\"node_capacity_data\"],\"status\":\"supported\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"Current revision's memory limit may be insufficient despite not hitting the limit.\",\"supporting\":[\"oom_killed_current_revision\",\"oom_without_recent_rollout\"],\"contradicting\":[\"memory_at_limit_before_kill\"],\"missing\":[\"container_memory_peak_data\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4114,
+        "output_tokens": 881
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

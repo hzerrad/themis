@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":\"deployment.set-resources\",\"params\":{\"containers\":\":{\"}}",
+      "usage": {
+        "input_tokens": 3884,
+        "output_tokens": 530
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

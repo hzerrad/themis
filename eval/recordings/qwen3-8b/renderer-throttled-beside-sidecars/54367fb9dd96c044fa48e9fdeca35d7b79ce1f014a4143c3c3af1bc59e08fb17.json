@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Renderer container's CPU limit is too low, causing throttling and liveness probe failures. Increasing the CPU limit to 1500m should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Renderer is throttled at 1 CPU limit (93% usage), causing liveness probe timeouts.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No logs to confirm OOM kills, but liveness failures align with CPU throttling.\",\n    \"supporting\": [\"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"reports\",\n    \"uid\": \"uid-deployment-reports\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"renderer\": {\n        \"limits\": {\n          \"cpu\": \"1500m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise CPU limit to 1.5x current value, clearing throttling and resolving probe timeouts.\",\n  \"rationale\": \"Throttling_data_available is true, cpu_throttled_at_limit and cpu_usage_near_limit are true, and liveness probes fail due to timeouts. Raising the CPU limit addresses sustained throttling without affecting memory or other containers.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_recent\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4374,
+        "output_tokens": 1172
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

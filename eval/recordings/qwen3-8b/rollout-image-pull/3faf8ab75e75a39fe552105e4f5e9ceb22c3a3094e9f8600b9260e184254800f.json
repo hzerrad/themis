@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to image pull failure in new revision\", \"hypotheses\": [{\"root_cause_class\": \"image_pull_failure\", \"summary\": \"New revision's image cannot be pulled\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore functioning pods using revision 1's image\", \"rationale\": \"New revision's image pull failure is confirmed by multiple evidence sources, and prior revision was healthy.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 2993,
+        "output_tokens": 606
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

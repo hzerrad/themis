@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause. Missing CPU usage and throttling data.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No container CPU data available to assess throttling or usage near limits.\", \"supporting\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"], \"contradicting\": [],\"missing\": [\"container_cpu\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 3206,
+        "output_tokens": 625
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The init container 'wait-for-migrations' is stuck in a running state for 24m50s, preventing the pod from progressing. No logs are available to determine the cause.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"init_container_failure\",\n    \"summary\": \"Init container stuck without logs\",\n    \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 3358,
+        "output_tokens": 416
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

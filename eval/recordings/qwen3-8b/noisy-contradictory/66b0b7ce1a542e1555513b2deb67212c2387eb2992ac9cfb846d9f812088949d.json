@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient evidence to confirm memory limit regression; logs do not show memory-related errors\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit is too low\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[\"ev-container_logs_tail\"],\"missing\":[\"memory_usage_data\"],\"status\":\"supported\"},{\"root_cause_class\":\"node_problem\",\"summary\":\"Node memory pressure causing OOMKilled\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"node_memory_metrics\"],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"Code in new revision causes unexpected memory usage\",\"supporting\":[],\"contradicting\":[\"ev-container_logs_tail\"],\"missing\":[\"heap_dump\",\"memory_profiling_data\"],\"status\":\"refuted\"}]}",
+      "usage": {
+        "input_tokens": 3584,
+        "output_tokens": 772
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

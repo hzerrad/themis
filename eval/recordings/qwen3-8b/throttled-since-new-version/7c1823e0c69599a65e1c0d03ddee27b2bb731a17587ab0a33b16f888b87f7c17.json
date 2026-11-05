@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (revision 3) is using nearly its CPU limit, causing throttling and readiness probe failures. Raising the CPU limit from 0.5 to 0.75 cores should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Rollout_recent is true, and the container is throttled at its limit, suggesting the new version uses more CPU than before.\",\n    \"supporting\": [\"rollout_recent\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"contradicting\": [],\n    \"missing\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The container's CPU usage is near its limit (0.498/0.5), and it's throttled 58% of the time, indicating the limit is too low for the current workload.\",\n    \"supporting\": [\"cpu_usage_near_limit\", \"cpu_throttled_at_limit\", \"throttling_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raising the CPU limit from 0.5 to 0.75 cores should reduce throttling and allow the container to meet its CPU demand without hitting the limit.\",\n  \"rationale\": \"The container is consistently near its CPU limit (0.498/0.5) and throttled 58% of the time, causing readiness probe timeouts. Increasing the limit to 0.75 cores (1.5x current) should alleviate throttling without requiring node-level changes. The rollout_recent flag suggests the new version may have higher CPU usage, but the limit is the immediate constraint here.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_recent\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3708,
+        "output_tokens": 1385
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

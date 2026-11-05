@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Node memory pressure caused eviction, but container memory limits weren't exceeded. No applicable fix available.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Pod evicted due to node memory pressure, not container limit.\",\n    \"supporting\": [\"evicted_for_node_memory\", \"memory_at_limit_before_kill\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_memory_usage_exceeding_node_limits\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_leak\",\n    \"summary\": \"Long-running OOM kills suggest memory growth, but no peak data.\",\n    \"supporting\": [\"oom_after_long_run\"],\n    \"contradicting\": [\"memory_at_limit_before_kill\"],\n    \"missing\": [\"container_memory_peak_data\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Unclear if container limits were exceeded or node memory was the issue.\",\n    \"supporting\": [\"evicted_for_node_memory\", \"memory_at_limit_before_kill\"],\n    \"contradicting\": [\"oom_killed_current_revision\"],\n    \"missing\": [\"container_memory_peak_data\", \"node_memory_usage_data\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 3741,
+        "output_tokens": 1219
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

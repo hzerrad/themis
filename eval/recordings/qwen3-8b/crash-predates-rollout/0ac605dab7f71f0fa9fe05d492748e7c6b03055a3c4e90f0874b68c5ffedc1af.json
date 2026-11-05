@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Dependency failure detected but no applicable fix available\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Pod logs show database connection refused to 10.0.4.17:5432\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[\"ev-rollout_history\"],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No fix available for dependency failures in allowed fixes\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3643,
+        "output_tokens": 930
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

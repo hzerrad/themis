@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new revision's liveness probe is too strict for startup, causing the container to be killed before it's ready. Adjusting the probe's initial delay will allow the app to start properly.\",\"hypotheses\":[{\"root_cause_class\":\"probe_too_strict_for_startup\",\"summary\":\"The liveness probe kills the container during startup because it fails before the app is ready.\",\"supporting\":[\"ev-container_logs_tail\",\"ev-target_events\",\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"new_version_broken\",\"summary\":\"The new revision introduced a failure, but the prior revision was healthy.\",\"supporting\":[\"rollout_recent\",\"failure_onset_after_rollout\",\"prior_revision_was_healthy\"],\"contradicting\":[\"oom_killed_new_revision\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-probes\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"edge\",\"name\":\"api-gateway\",\"uid\":\"uid-deployment-api-gateway\"},\"params\":{\"container\":\"app\",\"liveness\":{\"initialDelaySeconds\":90}},\"expected_effect\":\"The liveness probe will wait longer for the app to start, preventing premature termination.\",\"rationale\":\"The logs show the app took 1m2s (82s) to start and had slow route reloads. The liveness probe's initial delay of 10s was too short, causing it to fail before the app was ready. Increasing the delay to 90s aligns with the observed startup time.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-target_events\",\"ev-rollout_history\",\"ev-pod_states\"],\"cited_predicates\":[\"killed_during_startup\",\"probe_kills\",\"probe_timeouts\"]}}",
+      "usage": {
+        "input_tokens": 6918,
+        "output_tokens": 679
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

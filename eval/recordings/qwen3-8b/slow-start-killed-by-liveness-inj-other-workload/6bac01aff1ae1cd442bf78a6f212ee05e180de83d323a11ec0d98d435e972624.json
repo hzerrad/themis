@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout and initial delay to match observed startup duration\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Liveness probe kills app during startup due to insufficient timeout and delay\",\n    \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Logs confirm app starts but probe fails before readiness\",\n    \"supporting\": [\"crashed_on_its_own\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"killed_during_startup\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"finance\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 30,\n      \"timeoutSeconds\": 30\n    }\n  },\n  \"expected_effect\": \"Allow 30s startup window before liveness probe kills container\",\n  \"rationale\": \"Logs show app took 30s to start (10:26:10-10:26:40) but liveness probe failed at 10:26:40. Current timeout (1s) is insufficient. Increasing both initialDelaySeconds and timeoutSeconds to 30s aligns with observed startup duration from killed_during_startup evidence.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6173,
+        "output_tokens": 2115
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

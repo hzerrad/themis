@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Roll back to revision 1 due to memory limit regression in revision 2 causing OOMKilled\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Revert to revision 1 which had healthy pods before the rollout\", \"rationale\": \"The new revision's pod was OOMKilled, and prior revision was healthy. No config changes or GitOps management indicates the issue is likely a memory limit regression in the new revision.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"oom_killed_new_revision\", \"gitops_managed\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3157,
+        "output_tokens": 688
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The current revision's memory limit may be too low, causing OOM kills despite exit code 137 indicating memory issues. Proposing to increase memory limits.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Pods exit with code 137 (OOMKilled) but memory limit predicates are false; likely due to insufficient memory allocation.\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"ledger\", \"uid\": \"uid-deployment-ledger\"},\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"1Gi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Higher memory limit may prevent OOM kills and allow the application to run without being terminated for memory exhaustion.\",\n    \"rationale\": \"Exit code 137 indicates OOMKilled, but memory limit predicates are false. Increasing the memory limit could resolve the issue if the application requires more memory than the current 768Mi allocation. This change is based on observed OOMKilled exit codes despite the predicate suggesting otherwise, indicating a potential discrepancy in the system's tracking of memory-related events.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"oom_killed_new_revision\", \"oom_without_recent_rollout\", \"memory_at_limit_before_kill\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5353,
+        "output_tokens": 1682
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

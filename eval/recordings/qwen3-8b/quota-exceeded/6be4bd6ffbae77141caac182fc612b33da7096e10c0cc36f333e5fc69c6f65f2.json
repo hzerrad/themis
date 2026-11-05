@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Quota exceeded prevents new pods from being created.\",\"hypotheses\":[{\"root_cause_class\":\"quota_exceeded\",\"summary\":\"The ReplicaSet search-5f7d8c9b6 cannot create pods due to exceeding the shop-compute CPU quota (requested 2, used 6, limit 6).\",\"supporting\":[\"ev-target_events\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"evidence of quota configuration\"],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"The quota might be misconfigured or the existing pods are using all allocated CPU.\",\"supporting\":[\"ev-target_events\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"evidence of quota configuration\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3081,
+        "output_tokens": 641
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

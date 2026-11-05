@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Quota exceeded prevents new pods from being created, but image pull failure in logs may indicate a separate issue.\", \"hypotheses\": [{\"root_cause_class\": \"quota_exceeded\", \"summary\": \"ReplicaSet search-5f7d8c9b6 cannot create pods due to CPU quota limits (requests.cpu=2, used=6, limit=6).\", \"supporting\": [\"ev-target_events\", \"ev-rollout_history\"], \"contradicting\": [], \"missing\": [\"ev-referenced_config\"],\"status\":\"supported\"},{\"root_cause_class\":\"image_pull_failure\",\"summary\":\"Logs suggest new image search:3.1.0 cannot be pulled, but this is flagged as suspicious evidence.\",\"supporting\": [\"ev-container_logs_tail\"],\"contradicting\": [\"ev-pod_states\"],\"missing\": [\"ev-referenced_config\"],\"status\":\"supported\"}]}",
+      "usage": {
+        "input_tokens": 3357,
+        "output_tokens": 653
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
