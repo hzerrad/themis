@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The 'api' container is throttled at its CPU limit, causing readiness probe failures. Increasing the CPU limit should alleviate throttling.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"Container 'api' is throttled at 0.5 CPU limit (500m), with 64% throttling ratio and 0.495 usage, causing readiness probe timeouts (ev-container_cpu, ev-target_events).\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Rollout_recent is false (ev-rollout_history), so new version isn't the cause.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"node_cpu_contention\", \"summary\": \"No evidence of node CPU contention.\", \"supporting\": [], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"ev-node_cpu\"], \"status\": \"refuted\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"},\n    \"params\": {\n        \"containers\": {\n            \"api\": {\n                \"limits\": {\n                    \"cpu\": \"750m\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise CPU limit of 'api' container from 500m to 750m to clear throttling (ev-container_cpu).\",\n    \"rationale\": \"Throttling_data_available is true (ev-container_cpu), cpu_throttled_at_limit and cpu_usage_near_limit are true, and readiness probes fail (ev-target_events). Raising the limit to 1.5x current (750m) should resolve throttling without affecting memory or other containers.\",\n    \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_recent\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3196,
+        "output_tokens": 1092
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

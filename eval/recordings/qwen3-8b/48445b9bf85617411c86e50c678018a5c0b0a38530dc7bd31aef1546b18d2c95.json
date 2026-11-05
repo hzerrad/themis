@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Image pull failure due to authorization error\",\"hypotheses\":[{\"root_cause_class\":\"image_pull_failure\",\"summary\":\"Pod shows ImagePullBackOff with authorization error in ev-pod_states and ev-target_events\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"image_pull_failure_check\"],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"Possible missing pull secret or registry credentials\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[\"image_pull_failing\"],\"missing\":[\"image_pull_failure_check\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 2900,
+        "output_tokens": 438
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"No CPU metrics or logs to determine throttling or resource exhaustion.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Missing container_cpu data and no logs to diagnose readiness failures.\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"container_cpu\"],\"status\":\"open\"},{\"root_cause_class\":\"other\",\"summary\":\"Readiness failures could stem from non-CPU issues like memory limits or application errors.\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"container_cpu\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3402,
+        "output_tokens": 727
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

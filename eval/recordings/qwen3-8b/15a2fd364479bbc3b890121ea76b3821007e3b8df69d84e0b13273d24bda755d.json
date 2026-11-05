@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Pod scheduling failed due to unbound PVC with no additional logs\",\"hypotheses\":[{\"root_cause_class\":\"volume_unavailable\",\"summary\":\"Pod failed scheduling due to unbound PVC (ev-pod_states, ev-target_events).\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"PVC definition details\",\"volume provisioning status\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No evidence of PVC existence or binding issues in logs.\",\"supporting\":[\"ev-referenced_config\",\"ev-container_logs_tail\"],\"contradicting\":[\"ev-pod_states\",\"ev-target_events\"],\"missing\":[\"PVC specification\",\"volume provider logs\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 2368,
+        "output_tokens": 392
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
