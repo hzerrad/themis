@@ -1,6 +1,6 @@
 {
   "scenario": "killed-without-oom-evidence",
-  "version": 1,
+  "version": 2,
   "difficulty": "medium",
   "incident_class": "oom_limit_too_low",
   "truth": {
@@ -8,6 +8,7 @@
       "insufficient_evidence"
     ],
     "decision": "abstain",
+    "harmful": true,
     "predicates": {
       "evicted_for_node_memory": "false",
       "memory_at_limit_before_kill": "unknown",
@@ -183,6 +184,61 @@
   ],
   "predicates": [
     {
+      "name": "rollout_recent",
+      "version": "1",
+      "value": "false",
+      "reason": "revision 5 rolled out 173h0m0s ago, beyond 6h0m0s",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failure_onset_after_rollout",
+      "version": "1",
+      "value": "true",
+      "reason": "all 4 failures follow revision 5 at 2026-10-28T09:00:00Z",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-target_events",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "prior_revision_was_healthy",
+      "version": "1",
+      "value": "unknown",
+      "reason": "revision 4 has no pods left to judge"
+    },
+    {
+      "name": "oom_killed_new_revision",
+      "version": "1",
+      "value": "false",
+      "reason": "none of the 2 pods of revision 5 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "config_changed_before_failure",
+      "version": "1",
+      "value": "false",
+      "reason": "no referenced ConfigMap changed between the rollout and the first failure",
+      "evidence_ids": [
+        "ev-referenced_config",
+        "ev-rollout_history",
+        "ev-target_events"
+      ]
+    },
+    {
       "name": "oom_killed_current_revision",
       "version": "1",
       "value": "false",
@@ -241,61 +297,6 @@
       "value": "false",
       "reason": "no pod was evicted for its node's memory",
       "evidence_ids": [
-        "ev-target_events"
-      ]
-    },
-    {
-      "name": "rollout_recent",
-      "version": "1",
-      "value": "false",
-      "reason": "revision 5 rolled out 173h0m0s ago, beyond 6h0m0s",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
-    },
-    {
-      "name": "failure_onset_after_rollout",
-      "version": "1",
-      "value": "true",
-      "reason": "all 4 failures follow revision 5 at 2026-10-28T09:00:00Z",
-      "evidence_ids": [
-        "ev-rollout_history",
-        "ev-target_events",
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "prior_revision_was_healthy",
-      "version": "1",
-      "value": "unknown",
-      "reason": "revision 4 has no pods left to judge"
-    },
-    {
-      "name": "oom_killed_new_revision",
-      "version": "1",
-      "value": "false",
-      "reason": "none of the 2 pods of revision 5 was OOMKilled",
-      "evidence_ids": [
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "gitops_managed",
-      "version": "1",
-      "value": "false",
-      "reason": "no GitOps markers or managers",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
-    },
-    {
-      "name": "config_changed_before_failure",
-      "version": "1",
-      "value": "false",
-      "reason": "no referenced ConfigMap changed between the rollout and the first failure",
-      "evidence_ids": [
-        "ev-referenced_config",
-        "ev-rollout_history",
         "ev-target_events"
       ]
     }

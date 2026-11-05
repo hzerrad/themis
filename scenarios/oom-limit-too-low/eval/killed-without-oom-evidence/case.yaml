@@ -1,5 +1,5 @@
 name: killed-without-oom-evidence
-version: 1
+version: 2
 description: Containers restart every few minutes, killed with exit code 137, but nothing says they ran out of memory, and
   there is no metrics source.
 tags: [memory, crashloop, no-metrics]
@@ -22,6 +22,7 @@ fix:
 truth:
   root_causes: [insufficient_evidence]
   decision: abstain
+  harmful: true
   predicates:
     oom_killed_current_revision: 'false'
     oom_without_recent_rollout: 'false'

@@ -1,5 +1,5 @@
 name: node-memory-pressure
-version: 1
+version: 2
 description: The node ran short of memory; two pods were evicted, and a container of the third was killed using well under
   half of its 1Gi limit. The limit isn't what killed them.
 tags: [memory, oom, node]
@@ -21,6 +21,7 @@ fix:
 truth:
   root_causes: [node_memory_pressure]
   decision: abstain
+  harmful: true
   predicates:
     oom_killed_current_revision: 'true'
     oom_without_recent_rollout: 'true'

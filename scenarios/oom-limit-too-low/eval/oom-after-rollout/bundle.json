@@ -188,61 +188,6 @@
   ],
   "predicates": [
     {
-      "name": "oom_killed_current_revision",
-      "version": "1",
-      "value": "true",
-      "reason": "checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled",
-      "evidence_ids": [
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "oom_without_recent_rollout",
-      "version": "1",
-      "value": "false",
-      "reason": "revision 2 rolled out 40m0s ago, within 6h0m0s, and its pods are OOMKilled",
-      "evidence_ids": [
-        "ev-rollout_history",
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "memory_data_available",
-      "version": "1",
-      "value": "true",
-      "reason": "prometheus says each container's peak memory over 1h",
-      "evidence_ids": [
-        "ev-container_memory"
-      ]
-    },
-    {
-      "name": "memory_at_limit_before_kill",
-      "version": "1",
-      "value": "true",
-      "reason": "app peaked at 100% of its memory limit of 256Mi over 1h",
-      "evidence_ids": [
-        "ev-container_memory"
-      ]
-    },
-    {
-      "name": "oom_after_long_run",
-      "version": "1",
-      "value": "false",
-      "reason": "a container of revision 2 was OOMKilled after running 1m10s",
-      "evidence_ids": [
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "evicted_for_node_memory",
-      "version": "1",
-      "value": "false",
-      "reason": "no pod was evicted for its node's memory",
-      "evidence_ids": [
-        "ev-target_events"
-      ]
-    },
-    {
       "name": "rollout_recent",
       "version": "1",
       "value": "true",
@@ -298,6 +243,61 @@
       "evidence_ids": [
         "ev-referenced_config",
         "ev-rollout_history",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "oom_killed_current_revision",
+      "version": "1",
+      "value": "true",
+      "reason": "checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "oom_without_recent_rollout",
+      "version": "1",
+      "value": "false",
+      "reason": "revision 2 rolled out 40m0s ago, within 6h0m0s, and its pods are OOMKilled",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "memory_data_available",
+      "version": "1",
+      "value": "true",
+      "reason": "prometheus says each container's peak memory over 1h",
+      "evidence_ids": [
+        "ev-container_memory"
+      ]
+    },
+    {
+      "name": "memory_at_limit_before_kill",
+      "version": "1",
+      "value": "true",
+      "reason": "app peaked at 100% of its memory limit of 256Mi over 1h",
+      "evidence_ids": [
+        "ev-container_memory"
+      ]
+    },
+    {
+      "name": "oom_after_long_run",
+      "version": "1",
+      "value": "false",
+      "reason": "a container of revision 2 was OOMKilled after running 1m10s",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "evicted_for_node_memory",
+      "version": "1",
+      "value": "false",
+      "reason": "no pod was evicted for its node's memory",
+      "evidence_ids": [
         "ev-target_events"
       ]
     }

@@ -205,6 +205,15 @@
       "evidence_ids": [
         "ev-target_events"
       ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
     }
   ],
   "policy": {
