@@ -72,10 +72,9 @@ profile:
   policy:
     mode: guarded
     approvalTimeout: 30m
+    # Themis never changes a workload GitOps manages, or may manage, whatever
+    # these rules say: it only recommends the fix.
     rules:
-      - name: gitops-owns-the-target
-        when: predicates.gitops_managed != "false"
-        decision: deny
       # Throttling is the only reason this pack changes CPU: a raise without
       # throttling figures that show it, or with a recent rollout that may
       # have caused it, is refused. A restore puts back what Themis changed.
