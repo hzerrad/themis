@@ -186,13 +186,13 @@ async def run_one(
 
 async def run_all(
     bundles: list[Bundle],
-    new_model: Callable[[int], Model],
+    new_model: Callable[[str, int], Model],
     runs: int,
     caps: Caps,
     progress: Callable[[RunRecord], None] = lambda _: None,
     step_deadline_s: float = STEP_DEADLINE_S,
 ) -> Outcome:
-    """new_model gets the tokens an investigation may use."""
+    """new_model gets the case and the tokens an investigation may use."""
     out = Outcome()
     spend = Spend(caps)
     errors = 0
@@ -200,7 +200,7 @@ async def run_all(
         for run in range(1, runs + 1):
             allowance = spend.allowance()
             record, ran_out = await run_one(
-                b, run, new_model(allowance), caps.price, step_deadline_s
+                b, run, new_model(b.scenario, allowance), caps.price, step_deadline_s
             )
             spend.add(Usage(input_tokens=record.input_tokens, output_tokens=record.output_tokens))
             # Out of tokens because of the evaluation's cap says nothing about

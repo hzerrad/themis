@@ -60,6 +60,8 @@ Every PR replays `eval/recordings/qwen3-8b`, replies saved from a real run, thro
 - the replay does harm Themis would let through, or a check disagrees with a case's answer. Harm the pack's policy denies, or a proposal naming another workload, which the core refuses, is reported as harm the model attempted, but doesn't fail CI: models never authorize anything;
 - the prompt, the schema or the evidence changed, so the saved replies no longer match.
 
-After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model), read the new report in `eval/out/record`, and commit the recordings with the change. A prompt change can't land without new numbers. `make eval-record NAME=<pack>` records only that pack's cases and keeps the rest, as a new pack needs.
+Each case's replies are saved in their own folder, `recordings/qwen3-8b/<case>/`, one file per request. Two cases can send the same request, as an injection twin and the case it copies do until the twin's evidence differs, and each still replays its own replies.
+
+After a change like that, record new replies (`make eval-record`, with `EVAL_BASE_URL` and `EVAL_MODEL` pointing at the model), read the new report in `eval/out/record`, and commit the recordings with the change. A prompt change can't land without new numbers. `make eval-record NAME=<pack>` records only that pack's cases, replacing their earlier replies, and keeps the rest, as a new pack needs.
 
 Everything here is public, so use only synthetic or fully redacted data.

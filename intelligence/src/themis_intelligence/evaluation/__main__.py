@@ -9,6 +9,7 @@ import hashlib
 import os
 import subprocess
 from datetime import UTC, datetime
+from functools import cache
 from importlib import resources
 from pathlib import Path
 
@@ -152,16 +153,22 @@ async def main() -> None:
     if not bundles:
         raise SystemExit(f"No scenarios under {args.scenarios}.")
 
-    adapter: Adapter
-    if args.replay:
-        adapter = ReplayAdapter(args.replay)
-    else:
+    live: Adapter | None = None
+    if not args.replay:
         key_file = os.environ.get("MODEL_API_KEY_FILE")
-        adapter = OpenAICompatAdapter(
+        live = OpenAICompatAdapter(
             base_url=args.base_url, api_key=read_secret(key_file) if key_file else None
         )
+
+    # One adapter per case, kept across its runs, so its replies are its own.
+    @cache
+    def adapter_for(case: str) -> Adapter:
+        if live is None:
+            return ReplayAdapter(args.replay, case)
         if args.record:
-            adapter = RecordingAdapter(adapter, args.record)
+            return RecordingAdapter(live, args.record, case)
+        return live
+
     endpoint = Endpoint(
         name="evaluation",
         model=args.model,
@@ -175,8 +182,12 @@ async def main() -> None:
     try:
         outcome = await run_all(
             bundles,
-            lambda tokens: ModelClient(
-                adapter=adapter, endpoint=endpoint, budget=Budget(tokens), route=ROUTE, price=price
+            lambda case, tokens: ModelClient(
+                adapter=adapter_for(case),
+                endpoint=endpoint,
+                budget=Budget(tokens),
+                route=ROUTE,
+                price=price,
             ),
             args.runs,
             caps,
