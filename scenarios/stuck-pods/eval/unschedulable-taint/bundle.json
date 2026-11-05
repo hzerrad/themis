@@ -1,0 +1,212 @@
+{
+  "scenario": "unschedulable-taint",
+  "version": 1,
+  "difficulty": "easy",
+  "incident_class": "stuck_pods",
+  "truth": {
+    "root_causes": [
+      "unschedulable"
+    ],
+    "decision": "abstain",
+    "rollback_is_harmful": true,
+    "predicates": {
+      "config_error_on_start": "false",
+      "image_pull_failing": "false",
+      "init_container_stuck": "false",
+      "pods_unschedulable": "true",
+      "quota_exceeded": "false",
+      "stuck_pods_new_revision_only": "false",
+      "volume_not_bound": "false"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "reports",
+    "UID": "uid-deployment-reports"
+  },
+  "capabilities": [
+    "deployment.rollback-to-revision"
+  ],
+  "fixes": [
+    {
+      "name": "deployment.rollback-to-revision",
+      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
+    }
+  ],
+  "root_causes": [
+    {
+      "name": "unschedulable",
+      "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled, for a wrong name or tag, or missing registry credentials"
+    },
+    {
+      "name": "volume_unavailable",
+      "description": "a volume it needs can't be bound or mounted"
+    },
+    {
+      "name": "init_container_failure",
+      "description": "an init container fails or never finishes"
+    },
+    {
+      "name": "startup_config_error",
+      "description": "a ConfigMap, Secret or key its containers need is missing, so they can't start"
+    },
+    {
+      "name": "quota_exceeded",
+      "description": "a namespace quota refuses new pods"
+    },
+    {
+      "name": "still_starting",
+      "description": "its pods are starting slowly and nothing has failed"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"reports-6b8f9c7d5-k7m8n\",\"revision\":\"1\",\"phase\":\"Pending\",\"ready\":false,\"containers\":[]},{\"name\":\"reports-6b8f9c7d5-p4q5r\",\"revision\":\"1\",\"phase\":\"Pending\",\"ready\":false,\"containers\":[]},{\"name\":\"reports-6b8f9c7d5-a1b2c\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/reports:1.8.2\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:10Z\"}}]}],\"totalPods\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/reports-6b8f9c7d5-k7m8n\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:18:00Z\"},{\"object\":\"Pod/reports-6b8f9c7d5-p4q5r\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:18:00Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-k7m8n\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-p4q5r\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":4}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"reports\",\"currentRevision\":\"1\",\"generation\":0,\"observedGeneration\":1,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":1,\"unavailableReplicas\":2,\"conditions\":[{\"type\":\"Available\",\"status\":\"False\",\"reason\":\"MinimumReplicasUnavailable\",\"lastUpdateTime\":\"2026-10-27T09:00:00Z\",\"lastTransitionTime\":\"2026-10-27T09:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"}]},\"revisions\":[{\"replicaSet\":\"reports-6b8f9c7d5\",\"revision\":\"1\",\"current\":true,\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":1,\"containers\":[{\"name\":\"app\",\"image\":\"example/reports:1.8.2\",\"requests\":{\"cpu\":\"500m\",\"memory\":\"512Mi\"},\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":1}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"reports-6b8f9c7d5-k7m8n\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container hasn't started yet, so it has no logs.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "pods_unschedulable",
+      "version": "1",
+      "value": "true",
+      "reason": "Pod/reports-6b8f9c7d5-k7m8n can't be scheduled: 0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "image_pull_failing",
+      "version": "1",
+      "value": "false",
+      "reason": "no container of the 2 pod(s) that aren't ready is waiting for its image",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "volume_not_bound",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a volume of the 2 pod(s) that aren't ready can't be bound or mounted",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "init_container_stuck",
+      "version": "1",
+      "value": "false",
+      "reason": "no init container of the 2 pod(s) that aren't ready failed or ran longer than 5m0s",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "config_error_on_start",
+      "version": "1",
+      "value": "false",
+      "reason": "no container waits for its configuration, and every ConfigMap the pods need exists",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-referenced_config"
+      ]
+    },
+    {
+      "name": "quota_exceeded",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a quota refused a pod",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "stuck_pods_new_revision_only",
+      "version": "1",
+      "value": "false",
+      "reason": "revision 1 is the only one",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    }
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "The workload has no earlier revision to roll back to."
+  }
+}

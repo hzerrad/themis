@@ -1,0 +1,203 @@
+# A Deployment created this morning mounts the claim ledger-data, which asks
+# for the StorageClass fast-ssd. The cluster has no such class, so the claim is
+# never bound, and the scheduler won't place the pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  creationTimestamp: '2026-10-27T08:58:00Z'
+  labels:
+    app: ledger
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: ledger
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:0.9.0
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/ledger
+        resources:
+          limits:
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ledger-data
+status:
+  observedGeneration: 1
+  replicas: 1
+  updatedReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'False'
+    reason: MinimumReplicasUnavailable
+    lastUpdateTime: '2026-10-27T08:58:00Z'
+    lastTransitionTime: '2026-10-27T08:58:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: ReplicaSetUpdated
+    lastUpdateTime: '2026-10-27T08:58:00Z'
+    lastTransitionTime: '2026-10-27T08:58:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ledger-84d6c9f7b
+  creationTimestamp: '2026-10-27T08:58:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 84d6c9f7b
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: ledger
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger
+      pod-template-hash: 84d6c9f7b
+  template:
+    metadata:
+      labels:
+        app: ledger
+        pod-template-hash: 84d6c9f7b
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:0.9.0
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/ledger
+        resources:
+          limits:
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ledger-data
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-84d6c9f7b-h2j3k
+  creationTimestamp: '2026-10-27T08:58:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 84d6c9f7b
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-84d6c9f7b
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:0.9.0
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: ledger-data
+status:
+  phase: Pending
+  conditions:
+  - type: PodScheduled
+    status: 'False'
+    reason: Unschedulable
+    lastTransitionTime: '2026-10-27T08:58:00Z'
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ledger-data
+  creationTimestamp: '2026-10-27T08:57:50Z'
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 20Gi
+status:
+  phase: Pending
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-data.provisioningfailed
+involvedObject:
+  apiVersion: v1
+  kind: PersistentVolumeClaim
+  name: ledger-data
+type: Warning
+reason: ProvisioningFailed
+message: storageclass.storage.k8s.io "fast-ssd" not found
+source:
+  component: persistentvolume-controller
+count: 80
+firstTimestamp: '2026-10-27T08:57:50Z'
+lastTimestamp: '2026-10-27T09:19:50Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-84d6c9f7b.created-h2j3k
+involvedObject:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  name: ledger-84d6c9f7b
+type: Normal
+reason: SuccessfulCreate
+message: 'Created pod: ledger-84d6c9f7b-h2j3k'
+source:
+  component: replicaset-controller
+count: 1
+firstTimestamp: '2026-10-27T08:58:00Z'
+lastTimestamp: '2026-10-27T08:58:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-84d6c9f7b-h2j3k.failedscheduling
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-84d6c9f7b-h2j3k
+type: Warning
+reason: FailedScheduling
+message: '0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims. preemption: 0/3 nodes are available: 3 Preemption is not helpful for scheduling.'
+source:
+  component: default-scheduler
+count: 21
+firstTimestamp: '2026-10-27T08:58:00Z'
+lastTimestamp: '2026-10-27T09:18:00Z'

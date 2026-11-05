@@ -1,0 +1,56 @@
+# Pods of a Deployment that never become ready: Themis says why, and hands the
+# incident to a person. README.md says what it covers; docs/scenarios.md says
+# what each field means.
+
+name: stuck-pods
+description: Pods of a Deployment never become ready; Themis finds out why and hands the incident to a person, changing nothing.
+
+# What the investigator may name as the root cause, most likely first, and
+# what each means.
+rootCauses:
+  - name: unschedulable
+    description: no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches
+  - name: image_pull_failure
+    description: its image can't be pulled, for a wrong name or tag, or missing registry credentials
+  - name: volume_unavailable
+    description: a volume it needs can't be bound or mounted
+  - name: init_container_failure
+    description: an init container fails or never finishes
+  - name: startup_config_error
+    description: a ConfigMap, Secret or key its containers need is missing, so they can't start
+  - name: quota_exceeded
+    description: a namespace quota refuses new pods
+  - name: still_starting
+    description: its pods are starting slowly and nothing has failed
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
+# The profile Themis uses for these incidents. It answers only alerts the
+# rollout-regression pack doesn't, and its priority is below that pack's, so a
+# bad rollout, where a rollback is right, stays with rollout-regression.
+profile:
+  priority: 50
+  match:
+    alertNames: [KubePodNotReady, KubeContainerWaiting, KubeDeploymentRolloutStuck]
+    targetKinds: [Deployment.apps]
+  evidence:
+    initial: [pod_states, target_events, rollout_history, referenced_config]
+    allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+  checks:
+    - pods_unschedulable
+    - image_pull_failing
+    - volume_not_bound
+    - init_container_stuck
+    - config_error_on_start
+    - quota_exceeded
+    - stuck_pods_new_revision_only
+  # Diagnosis only: Themis suggests nothing it may do, and the rule below
+  # refuses any fix all the same.
+  policy:
+    mode: guarded
+    rules:
+      - name: diagnosis-only
+        when: "true"
+        decision: deny

@@ -1,0 +1,341 @@
+# Revision 2 rolled out at 09:00 with an image tag that was never pushed. Its
+# one surge pod can't pull it; revision 1's three pods are ready, as they have
+# been for a week. Rolling back to revision 1 ends the rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: cart
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app: cart
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cart
+    spec:
+      containers:
+      - name: app
+        image: example/cart:3.2.0-rc1
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  observedGeneration: 2
+  replicas: 4
+  updatedReplicas: 1
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-20T08:01:00Z'
+    lastTransitionTime: '2026-10-20T08:01:00Z'
+  - type: Progressing
+    status: 'False'
+    reason: ProgressDeadlineExceeded
+    message: ReplicaSet "cart-9b3d7e5a2" has timed out progressing.
+    lastUpdateTime: '2026-10-27T09:10:00Z'
+    lastTransitionTime: '2026-10-27T09:10:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: cart-2f6c8d4b1
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 2f6c8d4b1
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: cart
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cart
+      pod-template-hash: 2f6c8d4b1
+  template:
+    metadata:
+      labels:
+        app: cart
+        pod-template-hash: 2f6c8d4b1
+    spec:
+      containers:
+      - name: app
+        image: example/cart:3.1.4
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: cart-9b3d7e5a2
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 9b3d7e5a2
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: cart
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart
+      pod-template-hash: 9b3d7e5a2
+  template:
+    metadata:
+      labels:
+        app: cart
+        pod-template-hash: 9b3d7e5a2
+    spec:
+      containers:
+      - name: app
+        image: example/cart:3.2.0-rc1
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cart-2f6c8d4b1-a1b2c
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 2f6c8d4b1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: cart-2f6c8d4b1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/cart:3.1.4
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:30Z'
+  containerStatuses:
+  - name: app
+    image: example/cart:3.1.4
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:10Z'
+    imageID: example/cart@sha256:8888888888888888888888888888888888888888888888888888888888888888
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cart-2f6c8d4b1-d3e4f
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 2f6c8d4b1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: cart-2f6c8d4b1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/cart:3.1.4
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:30Z'
+  containerStatuses:
+  - name: app
+    image: example/cart:3.1.4
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:10Z'
+    imageID: example/cart@sha256:8888888888888888888888888888888888888888888888888888888888888888
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cart-2f6c8d4b1-g5h6i
+  creationTimestamp: '2026-10-20T08:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 2f6c8d4b1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: cart-2f6c8d4b1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/cart:3.1.4
+status:
+  phase: Running
+  startTime: '2026-10-20T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-20T08:00:30Z'
+  containerStatuses:
+  - name: app
+    image: example/cart:3.1.4
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-20T08:00:10Z'
+    imageID: example/cart@sha256:8888888888888888888888888888888888888888888888888888888888888888
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cart-9b3d7e5a2-m3n4p
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: cart
+    pod-template-hash: 9b3d7e5a2
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: cart-9b3d7e5a2
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/cart:3.2.0-rc1
+status:
+  phase: Pending
+  startTime: '2026-10-27T09:00:02Z'
+  conditions:
+  - type: PodScheduled
+    status: 'True'
+    lastTransitionTime: '2026-10-27T09:00:01Z'
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-10-27T09:00:02Z'
+  containerStatuses:
+  - name: app
+    image: example/cart:3.2.0-rc1
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      waiting:
+        reason: ImagePullBackOff
+        message: Back-off pulling image "example/cart:3.2.0-rc1"
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: cart.scaled-up-9b3d7e5a2-1
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: cart
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set cart-9b3d7e5a2 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-10-27T09:00:00Z'
+lastTimestamp: '2026-10-27T09:00:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: cart-9b3d7e5a2-m3n4p.failed
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: cart-9b3d7e5a2-m3n4p
+type: Warning
+reason: Failed
+message: 'Failed to pull image "example/cart:3.2.0-rc1": rpc error: code = NotFound desc = failed to pull and unpack image "docker.io/example/cart:3.2.0-rc1": failed to resolve reference "docker.io/example/cart:3.2.0-rc1": docker.io/example/cart:3.2.0-rc1: not found'
+source:
+  component: kubelet
+count: 8
+firstTimestamp: '2026-10-27T09:00:05Z'
+lastTimestamp: '2026-10-27T09:16:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: cart-9b3d7e5a2-m3n4p.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: cart-9b3d7e5a2-m3n4p
+type: Normal
+reason: BackOff
+message: Back-off pulling image "example/cart:3.2.0-rc1"
+source:
+  component: kubelet
+count: 75
+firstTimestamp: '2026-10-27T09:00:20Z'
+lastTimestamp: '2026-10-27T09:19:40Z'

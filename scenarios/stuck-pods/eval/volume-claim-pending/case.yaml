@@ -1,0 +1,25 @@
+name: volume-claim-pending
+version: 1
+description: A new Deployment's claim names a StorageClass that doesn't exist, so the claim stays unbound and the pod can't be scheduled. There is no earlier revision.
+tags: [stuck-pods, storage, scheduling]
+source: synthetic
+difficulty: medium
+incident_class: stuck_pods
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: ledger}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [volume_unavailable]
+  decision: abstain
+  rollback_is_harmful: true
+  predicates:
+    pods_unschedulable: "true"
+    image_pull_failing: "false"
+    volume_not_bound: "true"
+    init_container_stuck: "false"
+    config_error_on_start: "false"
+    quota_exceeded: "false"
+    stuck_pods_new_revision_only: "false"
+known_limitations: "The claim's own ProvisioningFailed event, which names the missing StorageClass, isn't among the evidence: target_events reads only the Deployment, its ReplicaSets and its pods."

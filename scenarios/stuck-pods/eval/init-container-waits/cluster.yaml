@@ -1,0 +1,344 @@
+# Revision 3 has run for two days. The autoscaler added a third pod at 08:55;
+# its init container waits for the database migration lock before the app
+# starts, and a migration job that crashed at 08:41 never released it. The two
+# older pods passed the same wait days ago.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  creationTimestamp: '2026-10-10T08:00:00Z'
+  labels:
+    app: orders
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      initContainers:
+      - name: wait-for-migrations
+        image: example/orders-migrate:5.2.0
+        args: [wait]
+      containers:
+      - name: app
+        image: example/orders:5.2.0
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  observedGeneration: 4
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-10T08:01:00Z'
+    lastTransitionTime: '2026-10-10T08:01:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-25T14:03:00Z'
+    lastTransitionTime: '2026-10-25T14:03:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: orders-58b7c6d9f
+  creationTimestamp: '2026-10-18T11:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 58b7c6d9f
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: orders
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: orders
+      pod-template-hash: 58b7c6d9f
+  template:
+    metadata:
+      labels:
+        app: orders
+        pod-template-hash: 58b7c6d9f
+    spec:
+      initContainers:
+      - name: wait-for-migrations
+        image: example/orders-migrate:5.1.3
+        args: [wait]
+      containers:
+      - name: app
+        image: example/orders:5.1.3
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: orders-6f4d8b2c7
+  creationTimestamp: '2026-10-25T14:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 6f4d8b2c7
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: orders
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orders
+      pod-template-hash: 6f4d8b2c7
+  template:
+    metadata:
+      labels:
+        app: orders
+        pod-template-hash: 6f4d8b2c7
+    spec:
+      initContainers:
+      - name: wait-for-migrations
+        image: example/orders-migrate:5.2.0
+        args: [wait]
+      containers:
+      - name: app
+        image: example/orders:5.2.0
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-6f4d8b2c7-b4c5d
+  creationTimestamp: '2026-10-25T14:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 6f4d8b2c7
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-6f4d8b2c7
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  initContainers:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+  containers:
+  - name: app
+    image: example/orders:5.2.0
+status:
+  phase: Running
+  startTime: '2026-10-25T14:00:00Z'
+  conditions:
+  - type: Initialized
+    status: 'True'
+    lastTransitionTime: '2026-10-25T14:00:40Z'
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-25T14:01:10Z'
+  initContainerStatuses:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+    ready: true
+    restartCount: 0
+    state:
+      terminated:
+        reason: Completed
+        exitCode: 0
+        startedAt: '2026-10-25T14:00:05Z'
+        finishedAt: '2026-10-25T14:00:38Z'
+    imageID: example/orders-migrate@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  containerStatuses:
+  - name: app
+    image: example/orders:5.2.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-25T14:00:40Z'
+    imageID: example/orders@sha256:5555555555555555555555555555555555555555555555555555555555555555
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-6f4d8b2c7-e6f7g
+  creationTimestamp: '2026-10-25T14:01:10Z'
+  labels:
+    app: orders
+    pod-template-hash: 6f4d8b2c7
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-6f4d8b2c7
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  initContainers:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+  containers:
+  - name: app
+    image: example/orders:5.2.0
+status:
+  phase: Running
+  startTime: '2026-10-25T14:01:10Z'
+  conditions:
+  - type: Initialized
+    status: 'True'
+    lastTransitionTime: '2026-10-25T14:01:20Z'
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-25T14:02:00Z'
+  initContainerStatuses:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+    ready: true
+    restartCount: 0
+    state:
+      terminated:
+        reason: Completed
+        exitCode: 0
+        startedAt: '2026-10-25T14:01:12Z'
+        finishedAt: '2026-10-25T14:01:19Z'
+    imageID: example/orders-migrate@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  containerStatuses:
+  - name: app
+    image: example/orders:5.2.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-25T14:01:20Z'
+    imageID: example/orders@sha256:5555555555555555555555555555555555555555555555555555555555555555
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-6f4d8b2c7-r8s9t
+  creationTimestamp: '2026-10-27T08:55:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 6f4d8b2c7
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-6f4d8b2c7
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  initContainers:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+  containers:
+  - name: app
+    image: example/orders:5.2.0
+status:
+  phase: Pending
+  startTime: '2026-10-27T08:55:02Z'
+  conditions:
+  - type: PodScheduled
+    status: 'True'
+    lastTransitionTime: '2026-10-27T08:55:01Z'
+  - type: Initialized
+    status: 'False'
+    reason: ContainersNotInitialized
+    lastTransitionTime: '2026-10-27T08:55:02Z'
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-10-27T08:55:02Z'
+  initContainerStatuses:
+  - name: wait-for-migrations
+    image: example/orders-migrate:5.2.0
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-27T08:55:10Z'
+    imageID: example/orders-migrate@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  containerStatuses:
+  - name: app
+    image: example/orders:5.2.0
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      waiting:
+        reason: PodInitializing
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders.scaled-up-6f4d8b2c7-3
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: orders
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set orders-6f4d8b2c7 from 2 to 3
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-10-27T08:55:00Z'
+lastTimestamp: '2026-10-27T08:55:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders-6f4d8b2c7-r8s9t.started-init
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: orders-6f4d8b2c7-r8s9t
+type: Normal
+reason: Started
+message: Started container wait-for-migrations
+source:
+  component: kubelet
+count: 1
+firstTimestamp: '2026-10-27T08:55:10Z'
+lastTimestamp: '2026-10-27T08:55:10Z'

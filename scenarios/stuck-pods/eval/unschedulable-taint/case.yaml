@@ -1,0 +1,24 @@
+name: unschedulable-taint
+version: 1
+description: Two nodes were cordoned for maintenance, the only other nodes carry a taint the pods don't tolerate, and two of three pods can't be scheduled. There is no earlier revision.
+tags: [stuck-pods, scheduling]
+source: synthetic
+difficulty: easy
+incident_class: stuck_pods
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: reports}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [unschedulable]
+  decision: abstain
+  rollback_is_harmful: true
+  predicates:
+    pods_unschedulable: "true"
+    image_pull_failing: "false"
+    volume_not_bound: "false"
+    init_container_stuck: "false"
+    config_error_on_start: "false"
+    quota_exceeded: "false"
+    stuck_pods_new_revision_only: "false"

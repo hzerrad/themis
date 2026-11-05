@@ -1,0 +1,215 @@
+# The checks of the stuck-pods pack, in the order Themis reports them. Each
+# looks at the pods that aren't ready, and names the first sign of one cause.
+# docs/checks.md says what each field means and what the expressions see.
+
+# The scheduler said why it can't place a pod that isn't ready: it names the
+# resource, taint, affinity or volume no node satisfies.
+- name: pods_unschedulable
+  version: "1"
+  description: No node can take a pod
+  reads: [pod_states, target_events]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    names: stuck.map(p, "Pod/" + p.name)
+    refused: target_events.events.filter(e, e.reason == "FailedScheduling" && e.object in names)
+    # A pod no node took has no container statuses yet.
+    waiting: stuck.filter(p, p.phase == "Pending" && size(p.containers) == 0)
+  answers:
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(refused) > 0
+      answer: true
+      reason: "${refused[0].object} can't be scheduled: ${refused[0].message}"
+      cite: [ids.pod_states, ids.target_events]
+    - when: size(waiting) > 0
+      answer: unknown
+      reason: pod ${waiting[0].name} waits for a node, and no event says why
+      cite: [ids.pod_states, ids.target_events]
+    - answer: false
+      reason: the ${size(stuck)} pod(s) that aren't ready were all scheduled
+      cite: [ids.pod_states, ids.target_events]
+
+# A container of a pod that isn't ready waits for its image.
+- name: image_pull_failing
+  version: "1"
+  description: An image can't be pulled
+  reads: [pod_states]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    failing: >-
+      stuck.map(p,
+        p.containers
+          .filter(c, c.state != null && c.state.status == "waiting" &&
+            c.state.reason in ["ErrImagePull", "ImagePullBackOff", "InvalidImageName", "ErrImageNeverPull"])
+          .map(c, p.name + "/" + c.name + " (" + c.image + ") is waiting with " + c.state.reason)
+      ).flatten()
+  answers:
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(failing) > 0
+      answer: true
+      reason: ${failing[0]}
+      cite: [ids.pod_states]
+    - answer: false
+      reason: no container of the ${size(stuck)} pod(s) that aren't ready is waiting for its image
+      cite: [ids.pod_states]
+
+# Events about a pod that isn't ready say a volume can't be bound, attached or
+# mounted. Events about the claim itself aren't read: the claim's own state
+# isn't evidence Themis collects.
+- name: volume_not_bound
+  version: "1"
+  description: A volume can't be bound or mounted
+  reads: [pod_states, target_events]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    names: stuck.map(p, "Pod/" + p.name)
+    trouble: >-
+      target_events.events.filter(e, e.object in names && (
+        e.reason in ["FailedMount", "FailedAttachVolume"] ||
+        (e.reason == "FailedScheduling" && e.message.lowerAscii().contains("volume"))))
+  answers:
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(trouble) > 0
+      answer: true
+      reason: "${trouble[0].object}, ${trouble[0].reason}: ${trouble[0].message}"
+      cite: [ids.pod_states, ids.target_events]
+    - answer: false
+      reason: no event says a volume of the ${size(stuck)} pod(s) that aren't ready can't be bound or mounted
+      cite: [ids.pod_states, ids.target_events]
+
+# An init container of a pod that isn't ready failed, or has run for more than
+# five minutes without finishing, holding the pod's other containers back.
+- name: init_container_stuck
+  version: "1"
+  description: An init container fails or never finishes
+  reads: [pod_states]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    failed: >-
+      stuck.map(p,
+        p.containers
+          .filter(c, c.init && (
+            (c.state != null && c.state.reason == "CrashLoopBackOff") ||
+            [c.state, c.lastTermination].exists(s, s != null && s.status == "terminated" && s.reason != "Completed")))
+          .map(c, p.name + "/" + c.name)
+      ).flatten()
+    # Each as [pod/container, when it started].
+    running: >-
+      stuck.map(p,
+        p.containers
+          .filter(c, c.init && c.state != null && c.state.status == "running" && c.state.startedAt != null &&
+            now - c.state.startedAt > duration("5m"))
+          .map(c, [p.name + "/" + c.name, c.state.startedAt])
+      ).flatten()
+  answers:
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(failed) > 0
+      answer: true
+      reason: init container ${failed[0]} failed
+      cite: [ids.pod_states]
+    - when: size(running) > 0
+      answer: true
+      reason: init container ${running[0][0]} has run for ${now - running[0][1]} without finishing
+      cite: [ids.pod_states]
+    - answer: false
+      reason: no init container of the ${size(stuck)} pod(s) that aren't ready failed or ran longer than ${duration("5m")}
+      cite: [ids.pod_states]
+
+# A container can't be created because a ConfigMap, Secret or key it reads is
+# missing, or a ConfigMap the pods need doesn't exist. Secrets are never
+# read, so only the container's state shows one missing.
+- name: config_error_on_start
+  version: "1"
+  description: A container can't start because its configuration is missing
+  reads: [pod_states, referenced_config]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    blocked: >-
+      stuck.map(p,
+        p.containers
+          .filter(c, c.state != null && c.state.reason == "CreateContainerConfigError")
+          .map(c, p.name + "/" + c.name)
+      ).flatten()
+    absent: referenced_config.refs.filter(r, r.kind == "ConfigMap" && r.missing && !r.optional)
+    secrets: size(referenced_config.refs.filter(r, r.kind == "Secret"))
+  answers:
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(blocked) > 0
+      answer: true
+      reason: ${blocked[0]} can't be created with its configuration (CreateContainerConfigError)
+      cite: [ids.pod_states]
+    - when: size(absent) > 0
+      answer: true
+      reason: ConfigMap ${absent[0].name} is referenced but doesn't exist
+      cite: [ids.referenced_config]
+    - answer: false
+      reason: >-
+        no container waits for its configuration, and every ConfigMap the pods
+        need exists${secrets > 0 ? "; " + string(secrets) + " referenced Secret(s) can't be checked" : ""}
+      cite: [ids.pod_states, ids.referenced_config]
+
+# A ReplicaSet couldn't create a pod because a namespace quota refused it. Such
+# a pod never exists, so only its ReplicaSet's events show it.
+- name: quota_exceeded
+  version: "1"
+  description: A namespace quota refuses new pods
+  reads: [target_events]
+  let:
+    refused: target_events.events.filter(e, e.reason == "FailedCreate" && e.message.contains("exceeded quota"))
+  answers:
+    - when: size(refused) > 0
+      answer: true
+      reason: "${refused[0].object} can't create pods: ${refused[0].message}"
+      cite: [ids.target_events]
+    - answer: false
+      reason: no event says a quota refused a pod
+      cite: [ids.target_events]
+
+# Every pod that isn't ready is of the current revision, and the revision
+# before it runs ready pods: the new version may be what's broken, which is
+# the rollout-regression pack's case, where a rollback can be right.
+- name: stuck_pods_new_revision_only
+  version: "1"
+  description: Only the new version's pods are stuck, and the version before it runs
+  reads: [rollout_history, pod_states]
+  let:
+    stuck: pod_states.pods.filter(p, !p.ready)
+    older: stuck.filter(p, p.revision != current.revision)
+    ready: pod_states.pods.filter(p, p.ready && p.revision == prior.revision)
+  answers:
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: size(stuck) == 0
+      answer: false
+      reason: every pod is ready
+      cite: [ids.pod_states]
+    - when: size(older) > 0
+      answer: false
+      reason: pod ${older[0].name} of revision ${older[0].revision} isn't ready either
+      cite: [ids.rollout_history, ids.pod_states]
+    - when: prior == null
+      answer: false
+      reason: revision ${current.revision} is the only one
+      cite: [ids.rollout_history]
+    - when: size(ready) == 0
+      answer: unknown
+      reason: revision ${prior.revision} has no ready pods to compare with
+      cite: [ids.rollout_history, ids.pod_states]
+    - answer: true
+      reason: the ${size(stuck)} pod(s) that aren't ready are all of revision ${current.revision}, and ${size(ready)} pod(s) of revision ${prior.revision} are ready
+      cite: [ids.rollout_history, ids.pod_states]
