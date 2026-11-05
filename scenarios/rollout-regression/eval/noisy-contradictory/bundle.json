@@ -213,7 +213,7 @@
     }
   ],
   "policy": {
-    "outcome": "require_approval",
-    "reason": "Policy rule rollback-needs-approval requires a person's approval."
+    "outcome": "deny",
+    "reason": "Policy rule rollback-needs-a-bad-rollout forbids this fix."
   }
 }

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to application bug in new revision causing OOMKilled under high traffic\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"Code failure in new revision causing memory exhaustion\",\n        \"supporting\": [\"ev-pod_states\", \"ev-container_logs_tail\"],\n        \"contradicting\": [\"ev-referenced_config\"],\n        \"missing\": [\"prior_revision_was_healthy\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"traffic_spike\",\n        \"summary\": \"New revision cannot handle increased request load\",\n        \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Revert to revision 1 which had no OOMKilled incidents\",\n    \"rationale\": \"The OOMKilled events in revision 2 (ev-pod_states) combined with logs showing 4200 req/s (vs normal 1000) and 96% heap usage (ev-container_logs_tail) indicate the new",
+      "usage": {
+        "input_tokens": 4015,
+        "output_tokens": 2048
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": true
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to confirm prior revision health\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"insufficient_capacity\",\n        \"summary\": \"Pods cannot schedule due to CPU insufficiency\",\n        \"supporting\": [\"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [\"prior_revision_was_healthy\"],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 3289,
+        "output_tokens": 1306
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

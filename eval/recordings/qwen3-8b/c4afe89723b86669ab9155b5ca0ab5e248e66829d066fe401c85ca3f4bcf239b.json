@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 due to image pull failure in new revision\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"image_pull_failure\",\n        \"summary\": \"The new revision's image 'example/checkout:2.4.O' cannot be pulled, as evidenced by ImagePullBackOff errors in pod_states and target_events.\",\n        \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"configuration_change\",\n        \"summary\": \"No ConfigMap changes detected between rollout and failure, as per referenced_config and rollout_history.\",\n        \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Revert to revision 1's working image 'example/checkout:2.3.1' and resolve the image pull failure.\",\n    \"rationale\": \"The new revision's image is unavailable, and the prior revision is healthy. Rolling back is justified as the failure onset occurred after the rollout, and no config changes were detected before the failure.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 2770,
+        "output_tokens": 1035
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

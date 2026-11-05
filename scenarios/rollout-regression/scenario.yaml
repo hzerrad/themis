@@ -82,6 +82,7 @@ profile:
           (predicates.rollout_recent != "true" ||
            predicates.failure_onset_after_rollout != "true" ||
            predicates.config_changed_before_failure != "false" ||
+           predicates.prior_revision_was_healthy == "false" ||
            (predicates.oom_killed_new_revision != "true" &&
             predicates.prior_revision_was_healthy != "true"))
         decision: deny
