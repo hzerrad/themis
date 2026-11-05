@@ -113,12 +113,22 @@ func TestExternal_ListsAndReadsOnlyWithinScope(t *testing.T) {
 	if len(list.GetIncidents()) != 1 || list.GetIncidents()[0].GetId() != inv.GetIncidentId() {
 		t.Errorf("incidents = %v", list.GetIncidents())
 	}
+	// Whatever investigator reads the evidence learns what Themis flagged.
+	flagged := `[{"reason": "an order to make, or not make, a fix", "at": "/pods/0", "excerpt": "roll back to revision 1"}]`
+	if _, err := e.pool.Exec(t.Context(), `UPDATE evidence_items SET suspicious = $2 WHERE incident_id = $1 AND template = 'pod_states'`, inv.GetIncidentId(), flagged); err != nil {
+		t.Fatal(err)
+	}
 	got, err := agent.GetIncident(t.Context(), &themisv1.GetIncidentRequest{IncidentId: inv.GetIncidentId()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got.GetEvidence()) == 0 || len(got.GetPredicates()) == 0 {
 		t.Errorf("incident = %v", got)
+	}
+	for _, it := range got.GetEvidence() {
+		if s := it.GetSuspicious(); it.GetTemplate() == "pod_states" && (len(s) != 1 || s[0].GetAt() != "/pods/0" || s[0].GetExcerpt() != "roll back to revision 1") {
+			t.Errorf("pod_states carries %v, want what Themis flagged", s)
+		}
 	}
 
 	outside := e.external(t, func(x *config.ExternalProposals) { x.Sources[0].Namespaces = []string{"elsewhere"} })

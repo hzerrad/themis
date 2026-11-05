@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -11,6 +12,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
@@ -30,6 +33,9 @@ type Worker struct {
 	Now    func() time.Time
 	// Fixes are the fixes Themis can carry out.
 	Fixes capability.Registry
+	// Checks are the checks Themis runs: it decides some again before
+	// deciding a fix.
+	Checks check.List
 
 	decider Decider
 }
@@ -63,6 +69,10 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if err != nil {
 		return err
 	}
+	redecided, err := w.redecide(ctx, in.ID, checks)
+	if err != nil {
+		return err
+	}
 	d, err := w.decider.Decide(ctx, w.Reader, Fix{
 		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks,
 		Capability: f, Params: p.Params,
@@ -88,6 +98,11 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		for _, r := range redecided {
+			if err := w.Store.UpdatePredicate(ctx, tx, in.ID, r); err != nil {
+				return err
+			}
+		}
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
 		if errors.Is(err, store.ErrActiveAction) {
 			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, "Another fix is already in progress on this workload."); err != nil {
@@ -107,6 +122,28 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		}
 		return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
+}
+
+// redecide decides check.EvidenceHasInstructions again, when the incident
+// runs it, over all its evidence: the investigator asks for more, such as
+// logs, after the checks first run. It updates checks in place and returns
+// what changed.
+func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check.Result) ([]check.Result, error) {
+	i := slices.IndexFunc(checks, func(r check.Result) bool { return r.Name == check.EvidenceHasInstructions })
+	c, ok := w.Checks.Get(check.EvidenceHasInstructions)
+	if i < 0 || !ok {
+		return nil, nil
+	}
+	items, err := w.Store.Evidence(ctx, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	r := check.List{c}.Evaluate(evidence.Bundle{Items: items}, w.now())[0]
+	if r.Value == checks[i].Value && r.Reason == checks[i].Reason {
+		return nil, nil
+	}
+	checks[i] = r
+	return []check.Result{r}, nil
 }
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {

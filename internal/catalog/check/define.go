@@ -157,6 +157,7 @@ func newEnv(templates []string) (*cel.Env, error) {
 		cel.Variable(varCurrentRevision, cel.StringType),
 		cel.Variable(varFailures, cel.ListType(cel.DynType)),
 		cel.Variable(varFirstFailure, cel.DynType),
+		cel.Variable(varSuspicious, cel.ListType(cel.DynType)),
 		ext.Lists(),
 		ext.Strings(),
 	}
@@ -241,7 +242,7 @@ func compile(env *cel.Env, d Definition, templates []string) (*Check, error) {
 
 func isVariable(name string, templates []string) bool {
 	return slices.Contains(templates, name) || slices.Contains([]string{
-		varNow, varIDs, varCurrent, varPrior, varRolloutAt, varCurrentRevision, varFailures, varFirstFailure,
+		varNow, varIDs, varCurrent, varPrior, varRolloutAt, varCurrentRevision, varFailures, varFirstFailure, varSuspicious,
 	}, name)
 }
 

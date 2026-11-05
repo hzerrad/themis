@@ -38,6 +38,10 @@ _Avoid_: page, alert
 A fact Themis read about a target, such as its pods' states, its events or its recent logs, kept with the incident so a decision can cite it.
 _Avoid_: data, context, signals
 
+**Suspicious evidence**:
+Evidence holding text that looks written for the investigator rather than by the workload, such as instructions, forged tool output or an order to make a fix. Themis flags it and warns whoever approves a fix; the text stays in the evidence.
+_Avoid_: injection, poisoned evidence
+
 **Evidence template**:
 A named, read-only question about a target whose answer is evidence.
 _Avoid_: collector, query, tool

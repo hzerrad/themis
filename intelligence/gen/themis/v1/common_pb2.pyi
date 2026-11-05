@@ -76,7 +76,7 @@ class PredicateResult(_message.Message):
     def __init__(self, name: _Optional[str] = ..., value: _Optional[_Union[Truth, str]] = ..., reason: _Optional[str] = ..., evidence_ids: _Optional[_Iterable[str]] = ..., predicate_version: _Optional[str] = ..., description: _Optional[str] = ...) -> None: ...
 
 class EvidenceItem(_message.Message):
-    __slots__ = ("id", "template", "target", "content_type", "data", "truncated", "original_bytes", "redactions", "collected_at", "classification", "template_version", "attributes", "window_start", "window_end", "content_digest")
+    __slots__ = ("id", "template", "target", "content_type", "data", "truncated", "original_bytes", "redactions", "collected_at", "classification", "template_version", "attributes", "window_start", "window_end", "content_digest", "suspicious")
     class AttributesEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -99,6 +99,7 @@ class EvidenceItem(_message.Message):
     WINDOW_START_FIELD_NUMBER: _ClassVar[int]
     WINDOW_END_FIELD_NUMBER: _ClassVar[int]
     CONTENT_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    SUSPICIOUS_FIELD_NUMBER: _ClassVar[int]
     id: str
     template: str
     target: TargetRef
@@ -114,7 +115,18 @@ class EvidenceItem(_message.Message):
     window_start: _timestamp_pb2.Timestamp
     window_end: _timestamp_pb2.Timestamp
     content_digest: str
-    def __init__(self, id: _Optional[str] = ..., template: _Optional[str] = ..., target: _Optional[_Union[TargetRef, _Mapping]] = ..., content_type: _Optional[str] = ..., data: _Optional[bytes] = ..., truncated: _Optional[bool] = ..., original_bytes: _Optional[int] = ..., redactions: _Optional[int] = ..., collected_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., classification: _Optional[_Union[DataClassification, str]] = ..., template_version: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., window_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., window_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., content_digest: _Optional[str] = ...) -> None: ...
+    suspicious: _containers.RepeatedCompositeFieldContainer[SuspiciousText]
+    def __init__(self, id: _Optional[str] = ..., template: _Optional[str] = ..., target: _Optional[_Union[TargetRef, _Mapping]] = ..., content_type: _Optional[str] = ..., data: _Optional[bytes] = ..., truncated: _Optional[bool] = ..., original_bytes: _Optional[int] = ..., redactions: _Optional[int] = ..., collected_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., classification: _Optional[_Union[DataClassification, str]] = ..., template_version: _Optional[str] = ..., attributes: _Optional[_Mapping[str, str]] = ..., window_start: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., window_end: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., content_digest: _Optional[str] = ..., suspicious: _Optional[_Iterable[_Union[SuspiciousText, _Mapping]]] = ...) -> None: ...
+
+class SuspiciousText(_message.Message):
+    __slots__ = ("reason", "at", "excerpt")
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    AT_FIELD_NUMBER: _ClassVar[int]
+    EXCERPT_FIELD_NUMBER: _ClassVar[int]
+    reason: str
+    at: str
+    excerpt: str
+    def __init__(self, reason: _Optional[str] = ..., at: _Optional[str] = ..., excerpt: _Optional[str] = ...) -> None: ...
 
 class Budget(_message.Message):
     __slots__ = ("max_steps", "max_input_tokens", "max_output_tokens", "deadline")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/riverqueue/river"
 
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/token"
@@ -56,6 +57,9 @@ type incidentView struct {
 	URL      string     `json:"url,omitempty"`
 	// Missing says what Themis couldn't see, why, and how to let it.
 	Missing []string `json:"missing,omitempty"`
+	// EvidenceWarning says which evidence looks like instructions or forged
+	// tool output; what it says stays in Themis, for responders.
+	EvidenceWarning string `json:"evidenceWarning,omitempty"`
 }
 
 type targetView struct {
@@ -95,6 +99,11 @@ func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.Escalat
 		return err
 	}
 	p.Incident.Missing = w.Remedy.Messages(in, gaps)
+	items, err := w.Store.Evidence(ctx, in.ID)
+	if err != nil {
+		return err
+	}
+	p.Incident.EvidenceWarning = evidence.Warning(items, false)
 	if base := w.Config.ExternalURL; base != "" {
 		p.Incident.URL = strings.TrimRight(base, "/") + "/#/incidents/" + in.ID
 	}

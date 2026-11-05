@@ -29,6 +29,10 @@ func itemToProto(it evidence.Item) *themisv1.EvidenceItem {
 	if !ok {
 		c = themisv1.DataClassification_DATA_CLASSIFICATION_SENSITIVE
 	}
+	var suspicious []*themisv1.SuspiciousText
+	for _, s := range it.Suspicious {
+		suspicious = append(suspicious, &themisv1.SuspiciousText{Reason: s.Reason, At: s.At, Excerpt: s.Excerpt})
+	}
 	return &themisv1.EvidenceItem{
 		Id:             it.ID,
 		Template:       it.Template,
@@ -40,6 +44,7 @@ func itemToProto(it evidence.Item) *themisv1.EvidenceItem {
 		Redactions:     int32(it.Redactions), //nolint:gosec // bounded by the item size
 		CollectedAt:    timestamppb.New(it.CollectedAt),
 		Classification: c,
+		Suspicious:     suspicious,
 	}
 }
 
