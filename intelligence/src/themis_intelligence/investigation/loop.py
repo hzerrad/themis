@@ -429,7 +429,11 @@ async def investigate(
                     invalid += 1
                     tell("A propose decision needs a proposal.")
                     continue
-                if offered and decision.proposal.capability not in offered:
+                if not offered:
+                    invalid += 1
+                    tell("No fix is allowed for this incident: name the cause and conclude.")
+                    continue
+                if decision.proposal.capability not in offered:
                     invalid += 1
                     tell(
                         f"{fence(repr(decision.proposal.capability))} is not an allowed fix. "

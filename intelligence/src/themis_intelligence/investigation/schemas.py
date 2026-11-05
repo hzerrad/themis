@@ -73,6 +73,10 @@ def reply_schema(job: investigation_pb2.Investigation) -> dict[str, Any]:
     if cited := checks(job):
         proposal["cited_predicates"]["items"]["enum"] = cited
     names = [c.name for c in job.capabilities]
+    if not names and not job.candidate_capabilities:
+        # No fix is on offer, so proposing isn't a choice the model has.
+        kind = schema["properties"]["kind"]
+        kind["enum"] = [k for k in kind["enum"] if k != "propose"]
     if names:
         proposal["capability"] = {
             "type": "string",
