@@ -1,0 +1,275 @@
+# Revision 5 has run for a week. Its containers restart every few minutes,
+# killed with exit code 137, but nothing says they ran out of memory: no
+# OOMKilled reason and no metrics source. Raising the memory limit would be
+# a guess.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  creationTimestamp: '2026-06-01T09:00:00Z'
+  labels:
+    app: ledger
+  annotations:
+    deployment.kubernetes.io/revision: '5'
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ledger
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ledger
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:2.9.3
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 768Mi
+status:
+  observedGeneration: 5
+  replicas: 2
+  updatedReplicas: 2
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-06-01T09:00:00Z'
+    lastTransitionTime: '2026-06-01T09:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-28T09:00:00Z'
+    lastTransitionTime: '2026-10-28T09:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ledger-7c1e5b9d3
+  creationTimestamp: '2026-09-01T09:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 7c1e5b9d3
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: ledger
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: ledger
+      pod-template-hash: 7c1e5b9d3
+  template:
+    metadata:
+      labels:
+        app: ledger
+        pod-template-hash: 7c1e5b9d3
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:2.9.2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 768Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ledger-2d6f0a4c8
+  creationTimestamp: '2026-10-28T09:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 2d6f0a4c8
+  annotations:
+    deployment.kubernetes.io/revision: '5'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: ledger
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ledger
+      pod-template-hash: 2d6f0a4c8
+  template:
+    metadata:
+      labels:
+        app: ledger
+        pod-template-hash: 2d6f0a4c8
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:2.9.3
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 768Mi
+status:
+  replicas: 2
+  fullyLabeledReplicas: 2
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-2d6f0a4c8-f1g2h
+  creationTimestamp: '2026-10-28T09:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 2d6f0a4c8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-2d6f0a4c8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:2.9.3
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 768Mi
+status:
+  phase: Running
+  startTime: '2026-10-28T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-28T09:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/ledger:2.9.3
+    imageID: example/ledger@sha256:5555555555555555555555555555555555555555555555555555555555555555
+    ready: false
+    started: false
+    restartCount: 11
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=ledger-2d6f0a4c8-f1g2h
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-04T13:49:00Z'
+        finishedAt: '2026-11-04T13:52:00Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-2d6f0a4c8-j3k4l
+  creationTimestamp: '2026-10-28T09:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 2d6f0a4c8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-2d6f0a4c8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:2.9.3
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 768Mi
+status:
+  phase: Running
+  startTime: '2026-10-28T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-28T09:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/ledger:2.9.3
+    imageID: example/ledger@sha256:5555555555555555555555555555555555555555555555555555555555555555
+    ready: false
+    started: false
+    restartCount: 10
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=ledger-2d6f0a4c8-j3k4l
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-04T13:50:30Z'
+        finishedAt: '2026-11-04T13:53:30Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-2d6f0a4c8-f1g2h.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-2d6f0a4c8-f1g2h
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod ledger-2d6f0a4c8-f1g2h'
+source:
+  component: kubelet
+count: 30
+firstTimestamp: '2026-11-04T12:10:00Z'
+lastTimestamp: '2026-11-04T13:58:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-2d6f0a4c8-j3k4l.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-2d6f0a4c8-j3k4l
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod ledger-2d6f0a4c8-j3k4l'
+source:
+  component: kubelet
+count: 28
+firstTimestamp: '2026-11-04T12:12:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'

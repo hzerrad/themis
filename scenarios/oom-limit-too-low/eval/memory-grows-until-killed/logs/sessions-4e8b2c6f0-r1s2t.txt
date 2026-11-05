@@ -1,0 +1,6 @@
+2026-11-04T13:10:00Z INFO gc: heap in use after collection 612MB, sessions cached 10k
+2026-11-04T13:18:00Z INFO gc: heap in use after collection 655MB, sessions cached 11k
+2026-11-04T13:26:00Z INFO gc: heap in use after collection 701MB, sessions cached 12k
+2026-11-04T13:34:00Z INFO gc: heap in use after collection 748MB, sessions cached 13k
+2026-11-04T13:42:00Z INFO gc: heap in use after collection 790MB, sessions cached 14k
+2026-11-04T13:50:00Z INFO gc: heap in use after collection 836MB, sessions cached 15k

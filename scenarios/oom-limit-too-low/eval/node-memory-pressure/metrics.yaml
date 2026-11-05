@@ -1,0 +1,7 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  search-3b7e1c9d5-b2c3d:
+    app:
+      memory: 360Mi
+      peakMemory: 430Mi

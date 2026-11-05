@@ -1,0 +1,163 @@
+# The checks of the oom-limit-too-low pack, in the order Themis reports them.
+# They read the pod states, the rollout history, the events, and
+# container_memory, what the install's metrics source says of the current
+# revision's containers. docs/checks.md says what each field means and what the
+# expressions see.
+
+# A container of the current revision was killed for running out of memory.
+- name: oom_killed_current_revision
+  version: "1"
+  description: A container of the current version was OOMKilled
+  reads: [pod_states]
+  let:
+    pods: pod_states.pods.filter(p, p.revision == current_revision)
+    killed: >-
+      pods.map(p,
+        p.containers
+          .filter(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled"))
+          .map(c, p.name + "/" + c.name)
+      ).flatten()
+  answers:
+    - when: size(killed) > 0
+      answer: true
+      reason: ${killed[0]} of revision ${current_revision} was OOMKilled
+      cite: [ids.pod_states]
+    - when: size(pods) == 0
+      answer: unknown
+      reason: no pods of the current revision
+    - answer: false
+      reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
+      cite: [ids.pod_states]
+
+# The current revision is OOMKilled and rolled out more than 6 hours ago: it
+# ran before the kills, so a rollout didn't bring them, or not obviously.
+- name: oom_without_recent_rollout
+  version: "1"
+  description: The current version is OOMKilled, and it rolled out more than 6 hours ago
+  reads: [pod_states, rollout_history]
+  let:
+    pods: pod_states.pods.filter(p, p.revision == current_revision)
+    killed: >-
+      pods.filter(p, p.containers.exists(c,
+        [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled")))
+  answers:
+    - when: size(pods) == 0
+      answer: unknown
+      reason: no pods of the current revision
+    - when: size(killed) == 0
+      answer: false
+      reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
+      cite: [ids.pod_states]
+    - when: rollout_at == null
+      answer: unknown
+      reason: the current revision or its rollout time is unknown
+    - when: now - rollout_at <= duration("6h")
+      answer: false
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, within ${duration("6h")}, and its pods are OOMKilled
+      cite: [ids.rollout_history, ids.pod_states]
+    - answer: true
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, and its pod ${killed[0].name} was OOMKilled
+      cite: [ids.rollout_history, ids.pod_states]
+
+# A metrics source says how much memory the containers used at their peak.
+# Only a source with history, such as Prometheus, can; the Kubernetes metrics
+# API knows only the present.
+- name: memory_data_available
+  version: "1"
+  description: A metrics source says how much memory the containers used at their peak
+  reads: [container_memory]
+  answers:
+    - when: container_memory.peak.unavailable != ""
+      answer: false
+      reason: "no peak memory figures: ${container_memory.peak.unavailable}"
+      cite: [ids.container_memory]
+    - answer: true
+      reason: ${container_memory.peak.source} says each container's peak memory over ${container_memory.window}
+      cite: [ids.container_memory]
+
+# A container with a memory limit used 90% or more of it at its peak. A
+# container the kernel kills for its limit got there; one that never came
+# close was killed for something else, such as its node running short.
+- name: memory_at_limit_before_kill
+  version: "1"
+  description: A container's memory reached its limit at its peak
+  reads: [container_memory]
+  let:
+    limited: container_memory.containers.filter(c, c.limitBytes != null)
+    measured: limited.filter(c, c.peakOfLimit != null)
+    near: >-
+      measured.filter(c, c.peakOfLimit >= 0.9).map(c,
+        c.name + " peaked at " + string(int(c.peakOfLimit * 100.0 + 0.5)) + "% of its memory limit of " +
+        string(c.limitBytes / 1048576) + "Mi over " + container_memory.window)
+  answers:
+    - when: size(limited) == 0
+      answer: false
+      reason: no container has a memory limit
+      cite: [ids.container_memory]
+    - when: container_memory.peak.unavailable != ""
+      answer: unknown
+      reason: "no peak memory figures: ${container_memory.peak.unavailable}"
+      cite: [ids.container_memory]
+    - when: size(near) > 0
+      answer: true
+      reason: ${near[0]}
+      cite: [ids.container_memory]
+    - when: size(measured) == 0
+      answer: unknown
+      reason: no peak memory figure for the ${size(limited)} container(s) with a memory limit
+      cite: [ids.container_memory]
+    - answer: false
+      reason: none of the ${size(measured)} container(s) with a memory limit peaked at 90% or more of it over ${container_memory.window}
+      cite: [ids.container_memory]
+
+# Every OOM kill of the current revision that says when the container started
+# came after it had run an hour or more. Kills soon after start mean the
+# container needs more than its limit to run at all; kills after hours mean
+# its memory grew while it ran.
+- name: oom_after_long_run
+  version: "1"
+  description: Its containers ran an hour or more before each OOM kill
+  reads: [pod_states]
+  let:
+    kills: >-
+      pod_states.pods.filter(p, p.revision == current_revision).map(p,
+        p.containers.map(c,
+          [c.state, c.lastTermination].filter(s, s != null && s.reason == "OOMKilled")
+        ).flatten()
+      ).flatten()
+    timed: kills.filter(s, s.startedAt != null && s.finishedAt != null)
+    runs: timed.map(s, s.finishedAt - s.startedAt).sort()
+  answers:
+    - when: size(kills) == 0
+      answer: false
+      reason: no container of revision ${current_revision} was OOMKilled
+      cite: [ids.pod_states]
+    - when: size(timed) == 0
+      answer: unknown
+      reason: no OOM kill says how long the container had run
+      cite: [ids.pod_states]
+    - when: runs[0] < duration("1h")
+      answer: false
+      reason: a container of revision ${current_revision} was OOMKilled after running ${runs[0]}
+      cite: [ids.pod_states]
+    - answer: true
+      reason: the shortest run before an OOM kill of revision ${current_revision} lasted ${runs[0]}
+      cite: [ids.pod_states]
+
+# A pod of the target was evicted because its node was short of memory: the
+# node, not the container's limit, ran out.
+- name: evicted_for_node_memory
+  version: "1"
+  description: Its pods were evicted because their node was short of memory
+  reads: [target_events]
+  let:
+    evicted: >-
+      target_events.events.filter(e, e.reason == "Evicted" && e.message.contains("low on resource: memory"))
+  answers:
+    - when: size(evicted) > 0
+      answer: true
+      reason: "${evicted[0].object} was evicted: ${evicted[0].message}"
+      cite: [ids.target_events]
+    - answer: false
+      reason: no pod was evicted for its node's memory
+      cite: [ids.target_events]
