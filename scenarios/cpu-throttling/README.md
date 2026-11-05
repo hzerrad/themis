@@ -25,23 +25,22 @@ Throttling can only be seen from a metrics source with history, such as Promethe
 | `throttling_data_available` | The metrics source says how often the containers were throttled. False with only the Kubernetes metrics API, which keeps no history |
 | `cpu_throttled_at_limit` | A container with a CPU limit was throttled in 25% or more of its CPU periods over the window, the alert's own threshold. Unknown without throttling figures |
 | `cpu_usage_near_limit` | A container with a CPU limit uses 80% or more of it now |
-| `rollout_recent` | From rollout-regression: the current version rolled out within 6 hours |
-| `gitops_managed` | From rollout-regression: GitOps owns the Deployment, and would undo a change |
+| `rollout_recent` | Themis's own: the current version rolled out within 6 hours |
+| `gitops_managed` | Themis's own: GitOps owns the Deployment, and would undo a change |
 
 ## Fix
 
 `deployment.set-resources`, raising the CPU limit of the throttled container. The investigator decides by how much, from the evidence; 1.5 times the current limit is the starting point its guidance suggests. Themis checks the values are valid and that the cluster can run them, never how big they are.
 
-The policy enforces, whoever suggests the fix:
+Themis never changes a Deployment GitOps manages, or may manage: GitOps would put the old limit back, so Themis only recommends the raise. Beyond that, the policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
-| `gitops-owns-the-target` | deny | GitOps would put the old limit back |
 | `raise-needs-throttling` | deny | Unless `cpu_throttled_at_limit` is true and `rollout_recent` is false: without throttling figures there is nothing to act on, and right after a rollout the new version may be what uses more CPU, which is a rollback's question |
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
 
-There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`. Putting back what Themis changed, after a raise that didn't help, lowers the limit again: only `gitops-owns-the-target` applies to it.
+There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`. Putting back what Themis changed, after a raise that didn't help, lowers the limit again: none of these rules applies to it, only the GitOps protection.
 
 ## Cases
 

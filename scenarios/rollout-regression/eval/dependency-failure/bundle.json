@@ -8,7 +8,7 @@
       "dependency_failure"
     ],
     "decision": "abstain",
-    "rollback_is_harmful": true,
+    "harmful": true,
     "predicates": {
       "config_changed_before_failure": "false",
       "failure_onset_after_rollout": "true",

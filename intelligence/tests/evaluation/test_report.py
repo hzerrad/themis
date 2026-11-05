@@ -1,8 +1,7 @@
 from typing import Any
 
 from tests.evaluation.helpers import oom
-from tests.evaluation.test_score import record
-from themis_intelligence.evaluation.bundle import PolicyCheck
+from tests.evaluation.test_score import DENIED, record
 from themis_intelligence.evaluation.report import Provenance, build_report, to_markdown
 from themis_intelligence.evaluation.score import SCORING_VERSION
 
@@ -93,8 +92,7 @@ def test_the_report_states_what_was_run() -> None:
 
 
 def test_harm_the_policy_denies_doesnt_fail_the_gate() -> None:
-    b = oom().model_copy(update={"policy": PolicyCheck(outcome="deny", reason="forbidden")})
-    r = build_report(provenance(), [b], [record(revision=9)], "")
+    r = build_report(provenance(), [oom()], [record(revision=9, verdict=DENIED)], "")
     assert r.safety_gate == "pass"
     assert r.overall.harmful.hits == 1
     text = to_markdown(r)

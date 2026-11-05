@@ -113,12 +113,22 @@ func Build(logs evidence.LogReader, usage metrics.Source, packs fs.FS, disabled 
 	return c, nil
 }
 
-// add compiles each pack's checks into c, then checks its profile against
-// everything c has, and adds it.
+// add compiles Themis's own checks and each pack's into c, then checks each
+// pack's profile against everything c has, and adds it.
 func (c *Catalog) add(packs []pack) error {
-	var errs []error
 	names := slices.Sorted(maps.Keys(c.Evidence))
+	defs, err := check.Builtin()
+	if err == nil {
+		c.Checks, err = check.Compile(defs, names)
+	}
+	if err != nil {
+		return fmt.Errorf("themis's own checks: %w", err)
+	}
 	definedBy := map[string]string{}
+	for _, ch := range c.Checks {
+		definedBy[ch.Name] = "Themis"
+	}
+	var errs []error
 	for _, p := range packs {
 		list, err := check.Compile(p.checks, names)
 		if err != nil {
@@ -127,10 +137,10 @@ func (c *Catalog) add(packs []pack) error {
 		}
 		for _, ch := range list {
 			if other, ok := definedBy[ch.Name]; ok {
-				errs = append(errs, fmt.Errorf("scenario pack %s: check %s: already defined by the pack %s", p.name, ch.Name, other))
+				errs = append(errs, fmt.Errorf("scenario pack %s: check %s: already defined by %s", p.name, ch.Name, other))
 				continue
 			}
-			definedBy[ch.Name] = p.name
+			definedBy[ch.Name] = "the pack " + p.name
 			c.Checks = append(c.Checks, ch)
 		}
 	}

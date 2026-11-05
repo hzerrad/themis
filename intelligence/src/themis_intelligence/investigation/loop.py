@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from themis.v1 import common_pb2, evidence_pb2, investigation_pb2, proposal_pb2
 from themis_intelligence import telemetry
 from themis_intelligence.investigation.schemas import (
+    MAX_HYPOTHESES,
     SCHEMA_VERSION,
     HypothesisOut,
     ProposalOut,
@@ -34,7 +35,9 @@ from themis_intelligence.platform.contract import (
 
 PROMPT_VERSION = "investigate_v1"
 LOGS_TEMPLATE = "container_logs_tail"
-MAX_OUTPUT_TOKENS = 2048
+# Room for a reply, which the schema bounds, and for a reasoning model's
+# thinking, which counts toward the limit though it isn't part of the reply.
+MAX_OUTPUT_TOKENS = 4096
 STEP_DEADLINE_S = 120.0
 
 FailureReason = Literal[
@@ -154,6 +157,7 @@ def system_prompt(job: investigation_pb2.Investigation, max_steps: int) -> str:
         .replace("{templates}", templates)
         .replace("{capabilities}", capabilities(job))
         .replace("{cited_example}", f", such as {cited[0]}" if cited else "")
+        .replace("{max_hypotheses}", str(MAX_HYPOTHESES))
         .replace("{max_steps}", str(max_steps))
         # Last, so nothing in the pack's text is taken for a placeholder.
         .replace("{guidance}", job.guidance.strip())

@@ -8,7 +8,7 @@
       "insufficient_evidence"
     ],
     "decision": "abstain",
-    "rollback_is_harmful": true,
+    "harmful": true,
     "predicates": {
       "config_changed_before_failure": "unknown",
       "failure_onset_after_rollout": "unknown",

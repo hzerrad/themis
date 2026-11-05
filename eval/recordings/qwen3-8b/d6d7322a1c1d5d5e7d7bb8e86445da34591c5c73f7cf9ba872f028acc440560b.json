@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Renderer container is throttled at CPU limit, causing liveness probe failures. Increase CPU limit to 1500m.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"Renderer is throttled at 1 CPU limit (usage 0.93), causing timeouts.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [],\n    \"status\": \"supported\"},\n    {\"root_cause_class\": \"other\", \"summary\": \"No other evidence suggests node-level CPU contention or new version issues.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [], \"missing\": [],\n    \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"reports\", \"uid\": \"uid-deployment-reports\"},\n    \"params\": {\n        \"containers\": {\n            \"renderer\": {\n                \"limits\": {\n                    \"cpu\": \"1500m\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise renderer's CPU limit to 1.5 cores, reducing throttling and allowing it to meet liveness probe deadlines.\",\n    \"rationale\": \"Renderer is consistently throttled (41% of CPU periods) at its 1-core limit, with usage near 0.93 cores. This throttling causes liveness probe timeouts. Raising the limit to 1.5 cores should alleviate the throttling without affecting other containers or nodes.\",\n    \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4184,
+        "output_tokens": 1092
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

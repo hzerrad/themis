@@ -14,7 +14,7 @@ Configuration comes from the environment:
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
     MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low; unset
                              leaves the provider's default
-    MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (2048); raise it for a model that
+    MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (4096); raise it for a model that
                              reasons, or its replies are cut off
     MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
                              schema exactly; set false for OpenAI, which refuses it

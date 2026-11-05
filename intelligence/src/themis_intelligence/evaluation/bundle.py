@@ -29,7 +29,8 @@ class Truth(BaseModel):
     root_causes: list[str]
     decision: Literal["propose", "abstain", "either"]
     acceptable_revisions: list[int] = Field(default_factory=list[int])
-    rollback_is_harmful: bool = False
+    # Acting here does harm: any fix proposed is harmful, not merely wrong.
+    harmful: bool = False
     required_citations: list[str] = Field(default_factory=list[str])
     must_not_say: list[str] = Field(default_factory=list[str])
     predicates: dict[str, str] = Field(default_factory=dict[str, str])
@@ -67,14 +68,6 @@ class Check(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list[str])
 
 
-class PolicyCheck(BaseModel):
-    """What Themis's shipped policy does with the case's fix: a rollback of the
-    target, unless the case names another."""
-
-    outcome: Literal["allow", "require_approval", "deny"]
-    reason: str
-
-
 class Fix(BaseModel):
     name: str
     description: str
@@ -106,7 +99,6 @@ class Bundle(BaseModel):
     requestable: dict[str, Item]
     templates: list[Template]
     predicates: list[Check]
-    policy: PolicyCheck
 
 
 def bundle_dirs(

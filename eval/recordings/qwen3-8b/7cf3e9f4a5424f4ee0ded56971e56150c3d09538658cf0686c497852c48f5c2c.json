@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Increase CPU limit for api container to 750m to resolve throttling and readiness probe failures.\",\"hypotheses\":[{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"Container is throttled at 0.5 CPU limit with 0.498 usage, and readiness probes fail.\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Recent rollout (4.3.0) may have increased CPU usage, but limit remains at 0.5.\",\"supporting\":[\"ev-rollout_history\",\"ev-container_cpu\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"api\":{\"limits\":{\"cpu\":\"750m\"}}}},\"expected_effect\":\"Raises CPU limit to 750m, clearing throttling and allowing the container to meet its CPU demand without hitting the limit.\",\"rationale\":\"Throttling data confirms sustained CPU limit hitting (58% throttled), and readiness probe failures align with CPU starvation. The recent rollout may have increased usage, but the limit is already near the current usage. Raising it to 1.5x the current limit (750m) addresses the throttling without requiring rollback or node-level changes.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-target_events\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"rollout_recent\"]}}",
+      "usage": {
+        "input_tokens": 4035,
+        "output_tokens": 903
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

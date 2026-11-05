@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Pod cannot be scheduled due to unbound PVC\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"volume_unavailable\",\n    \"summary\": \"Pod/ledger-84d6c9f7b-h2j3k failed scheduling due to unbound PVC (ev-pod_states, ev-target_events).\",\n    \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"evidence of PVC existence or binding status\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No evidence confirms PVC binding failure or volume availability.\",\n    \"supporting\": [\"ev-referenced_config\"],\n    \"contradicting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"missing\": [\"PVC definition details\", \"volume provisioning logs\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 1999,
+        "output_tokens": 578
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

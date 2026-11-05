@@ -56,7 +56,7 @@ func shippedProfile(t *testing.T) config.Profile {
 func facts(onset check.Truth) []check.Result {
 	return []check.Result{
 		{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
-		{Name: governance.ManagedCheck, Version: "1", Value: check.False, Reason: "x"},
+		{Name: check.GitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
 		{Name: "failure_onset_after_rollout", Version: "1", Value: onset, Reason: "x"},
 		{Name: "config_changed_before_failure", Version: "1", Value: check.False, Reason: "x"},
 		{Name: "rollout_recent", Version: "1", Value: check.True, Reason: "x"},
@@ -114,6 +114,7 @@ func TestDecide(t *testing.T) {
 
 		want    policy.Outcome
 		rule    string
+		reason  string
 		refusal string
 	}{
 		// The control: a bad rollout, with every fact known, waits for approval.
@@ -134,10 +135,17 @@ func TestDecide(t *testing.T) {
 		// No memory kill and no healthy version to go back to.
 		{name: "no sign of a bad revision", checks: set(set(facts(check.True), 0, check.False), 5, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		{name: "prior revision's health unknown", checks: set(set(facts(check.True), 0, check.False), 5, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		// GitOps ownership is read live: a stale check does not hide it.
-		{name: "GitOps owns the target", checks: facts(check.True), gitOps: true, want: policy.Deny, rule: "gitops-owns-the-target"},
-		// Putting a fix back needs no approval, whatever the checks say of a fix.
+		// Themis never changes a workload GitOps manages, or may manage, before
+		// any profile's policy, which here would ask for approval: it only
+		// recommends the fix. Ownership is read live too, so a stale check
+		// doesn't hide it.
+		{name: "GitOps owns the target", checks: facts(check.True), gitOps: true, want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD manages this workload, so Themis only recommends the change: apply it in Git."},
+		{name: "the check says GitOps owns it", checks: set(facts(check.True), 1, check.True), want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD or Flux manages this workload, so Themis only recommends the change: apply it in Git."},
+		{name: "GitOps may own it", checks: set(facts(check.True), 1, check.Unknown), want: policy.Deny, rule: governance.GitOpsRule, reason: "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change."},
+		// Putting a fix back needs no approval, whatever the checks say of a fix,
+		// unless GitOps owns the workload: then Themis changes nothing.
 		{name: "putting a fix back", checks: facts(check.False), restores: "the-fix", want: policy.Allow},
+		{name: "putting a fix back GitOps owns", checks: facts(check.False), restores: "the-fix", gitOps: true, want: policy.Deny, rule: governance.GitOpsRule},
 		// Rules see who suggested the fix.
 		{name: "unproven outsider", profile: outsiders, checks: facts(check.True), by: governance.Suggester{Source: "serviceaccount:agents/triage", External: true}, want: policy.Deny, rule: "no-unproven-outsiders"},
 		// Another profile's rules govern only its own fixes.
@@ -182,6 +190,9 @@ func TestDecide(t *testing.T) {
 			}
 			if d.Decision.Outcome != tt.want || d.Decision.PolicyID != tt.rule {
 				t.Errorf("decision = %s by %q (%s), want %s by %q", d.Decision.Outcome, d.Decision.PolicyID, d.Decision.Reason, tt.want, tt.rule)
+			}
+			if tt.reason != "" && d.Decision.Reason != tt.reason {
+				t.Errorf("reason = %q, want %q", d.Decision.Reason, tt.reason)
 			}
 			// With several profiles, the reason says whose policy decided.
 			if len(tt.also) > 0 && !strings.HasSuffix(d.Decision.Reason, " profile's policy.") {
@@ -250,7 +261,7 @@ func TestDecide_WhatTheChangeIs(t *testing.T) {
 		}
 		var decider governance.Decider
 		d, err := decider.Decide(t.Context(), k8s, governance.Fix{
-			Incident: "incident-1", Target: target, Profiles: config.Matched{p},
+			Incident: "incident-1", Target: target, Profiles: config.Matched{p}, Checks: facts(check.True),
 			Capability: resources.Capability{}, Params: double, By: investigator,
 		})
 		if tc.refusal != "" {

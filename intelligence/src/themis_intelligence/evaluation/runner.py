@@ -2,13 +2,16 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
+from google.protobuf import json_format
 from pydantic import ValidationError
 
 from themis.v1 import investigation_pb2, proposal_pb2
 from themis_intelligence.evaluation.bundle import Bundle, job_of
 from themis_intelligence.evaluation.replay import ModelUse, RecordingModel, ReplayCore
 from themis_intelligence.evaluation.score import (
+    ROLLBACK,
     Conclusion,
     HypothesisSeen,
     ProposalSeen,
@@ -88,7 +91,10 @@ def _record(
     proposal = None
     if core.proposals:
         p = core.proposals[0]
+        capability, params = fix_of(p)
         proposal = ProposalSeen(
+            capability=capability,
+            params=params,
             target=TargetSeen(
                 group=p.target.group,
                 kind=p.target.kind,
@@ -96,7 +102,7 @@ def _record(
                 name=p.target.name,
                 uid=p.target.uid,
             ),
-            revision=revision_of(p),
+            revision=int(params.get("revision", 0)) if capability == ROLLBACK else 0,
             cited_evidence_ids=list(p.cited_evidence_ids),
             cited_predicates=list(p.cited_predicates),
             expected_effect=p.expected_effect,
@@ -221,9 +227,8 @@ async def run_all(
     return out
 
 
-def revision_of(p: proposal_pb2.SubmitProposalRequest) -> int:
-    """The revision a rollback names, in either form; 0 for any other fix."""
+def fix_of(p: proposal_pb2.SubmitProposalRequest) -> tuple[str, dict[str, Any]]:
+    """The fix a proposal names and its params, in either form."""
     if p.HasField("rollback_to_revision"):
-        return p.rollback_to_revision.revision
-    revision = p.params.fields.get("revision")
-    return int(revision.number_value) if revision is not None else 0
+        return ROLLBACK, {"revision": p.rollback_to_revision.revision}
+    return p.capability_name, json_format.MessageToDict(p.params)

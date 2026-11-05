@@ -232,7 +232,7 @@ When several profiles match, such as two scenario packs that both answer `KubePo
 
 The investigator decides which fix the evidence supports. Each fix is then decided only by the profiles that offer it: a profile's policy governs its own fixes, never another profile's. When several profiles offer the same fix, each one's policy decides it, mode and all, and the strictest outcome wins: `deny` over `require_approval` over `allow`. The shortest `approvalTimeout` and the longest `verification` among them apply. A fix none of the incident's profiles offers is refused, whoever suggests it.
 
-So a rule that protects a workload, such as refusing to change one owned by GitOps, belongs in every profile that offers a fix. An incident that matched one profile is decided exactly as before.
+So a rule that protects a workload belongs in every profile that offers a fix. Themis's own protections, such as [never changing a workload GitOps owns](#gitops), apply to every fix before any profile's policy. An incident that matched one profile is decided exactly as before.
 
 ### Evidence templates
 
@@ -252,18 +252,25 @@ No template returns pod specs, where environment variables often hold literal se
 
 ### Predicates
 
-Deterministic facts, decided from the evidence by the checks the scenario packs bring ([how a check is written](checks.md)). Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
+Deterministic facts, decided from the evidence by checks ([how a check is written](checks.md)): Themis's own, which every profile may run, and those the scenario packs bring. Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
 
-A profile runs every check unless its `checks` lists the ones to run. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused.
+A profile runs every check unless its `checks` lists the ones to run, in the order it lists them. Whenever an incident's profiles offer a fix, Themis also runs `gitops_managed`, and reads `rollout_history` for it, whether or not a profile names them: [whether Themis may change the workload at all](#gitops) depends on it. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused.
+
+Themis's own checks, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml):
 
 | Predicate | True when |
 |---|---|
 | `rollout_recent` | The current revision rolled out within the last 6 hours |
+| `gitops_managed` | The target carries Argo CD or Flux markers, or is written by their controllers. Governance also checks this live. |
+
+The `rollout-regression` pack's:
+
+| Predicate | True when |
+|---|---|
 | `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`, and so do missing events: an earlier failure could be among them. A pod failure from before the rollout still makes it `false`. |
 | `prior_revision_was_healthy` | Pods of the previous revision are ready and never failed |
 | `oom_killed_new_revision` | A container of the current revision was OOMKilled |
 | `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. `unknown` when a required ConfigMap is missing or doesn't say when it changed. Secrets are never read, so a change to one can't be seen. |
-| `gitops_managed` | The target carries Argo CD or Flux markers, or is written by their controllers. Governance also checks this live. |
 
 ### Capabilities
 
@@ -316,9 +323,6 @@ policy:
   mode: guarded            # guarded (default) or observe
   approvalTimeout: 30m
   rules:
-    - name: gitops-owns-the-target
-      when: predicates.gitops_managed != "false"
-      decision: deny
     - name: rollback-needs-a-bad-rollout
       when: >-
         action.restore != "true" &&
@@ -333,7 +337,7 @@ policy:
       decision: require_approval
 ```
 
-A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
+A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. Anything allowed still needs a person's approval. A workload owned by GitOps is never changed either, but no rule says so: [Themis does that itself](#gitops).
 
 - Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. `deployment.set-resources` sets `change.containers`, the containers it changes, comma-separated; `change.memory` and `change.cpu`, each `increase`, `decrease` or `mixed`; `change["memory.ratio"]` and `change["cpu.ratio"]`, the largest new value over its old one; and for each value it changes, `change["<container>.<memory|cpu>.<request|limit>"]`, `increase`, `decrease` or `set` (where there was none), with `.before`, `.after` and `.ratio` beside it, such as `change["app.memory.limit.ratio"] == "2"`. The shipped policies set no size limits. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
@@ -343,6 +347,20 @@ A profile's rules decide only the fixes it offers in `capabilities`: on an incid
 - An approval not given within `approvalTimeout` expires, and the incident is escalated.
 
 Every rule is compiled at startup; a rule that does not compile to a boolean stops Themis from starting.
+
+### Core protections
+
+Some protections hold for every fix and every profile, whoever suggested the fix, and no policy can loosen them. Themis applies them before any profile's policy.
+
+#### GitOps
+
+Themis never changes a workload that Argo CD or Flux manages: the GitOps controller would undo the change, or fight it. It only recommends the fix. The fix is recorded as denied by `gitops-owns-the-target`, the incident closes without a change, and the incident page shows it as the recommended fix, with the reason:
+
+- "Argo CD manages this workload, so Themis only recommends the change: apply it in Git." when Themis reads the markers or field managers on the live workload as it decides (`Flux` for Flux's).
+- "Argo CD or Flux manages this workload, so Themis only recommends the change: apply it in Git." when `gitops_managed` was true from the evidence.
+- "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
+
+This holds for putting a fix back too. A rule of your own that reads `predicates.gitops_managed` or `target.managed_by` still works, but is never needed for this.
 
 ### Verification
 

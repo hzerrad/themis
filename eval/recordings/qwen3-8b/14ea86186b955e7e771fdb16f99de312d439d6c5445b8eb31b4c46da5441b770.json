@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"CPU usage is 40% of limit (0.2/0.5), throttled 11% of periods, but not at limit. No signs of throttling harm.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\", \"target_events\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"transient_cpu_burst\",\n    \"summary\": \"Short bursts may exist but don't hit 80% usage threshold. No harm observed.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [\"cpu_usage_near_limit\"],\n    \"missing\": [],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"No metrics show sustained throttling or harm. No rollout issues detected.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 2931,
+        "output_tokens": 708
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

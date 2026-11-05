@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes failing but CPU isn't throttled at limit. No evidence of CPU limit being the root cause.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"CPU usage (34% of limit) and throttling (6%) don't meet thresholds for raising limits. Readiness failures may stem from other factors.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 3201,
+        "output_tokens": 953
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

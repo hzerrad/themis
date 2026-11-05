@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -10,7 +10,7 @@ from themis_intelligence.investigation.loop import (
     investigate,
     system_prompt,
 )
-from themis_intelligence.investigation.schemas import reply_schema
+from themis_intelligence.investigation.schemas import MAX_HYPOTHESES, reply_schema
 
 HYPOTHESIS: dict[str, Any] = {
     "root_cause_class": "memory_limit_regression",
@@ -284,6 +284,30 @@ def test_the_model_is_offered_what_the_core_sent() -> None:
     assert cause["enum"] == ["memory_limit_regression", "other"]
     cited = schema["ProposalOut"]["properties"]["cited_predicates"]["items"]
     assert cited["enum"] == ["oom_killed_new_revision"]
+
+
+# A model that repeats itself is stopped by the reply schema, not the output
+# limit: every list and string it writes is bounded. The fix's parameters are
+# the core's own schema.
+def test_every_list_and_string_in_a_reply_is_bounded() -> None:
+    def unbounded(node: object, path: str) -> list[str]:
+        if isinstance(node, list):
+            items = cast(list[object], node)
+            return [p for i, n in enumerate(items) for p in unbounded(n, f"{path}[{i}]")]
+        if not isinstance(node, dict):
+            return []
+        d = cast(dict[str, object], node)
+        found: list[str] = []
+        if d.get("type") == "array" and "maxItems" not in d:
+            found.append(path)
+        if d.get("type") == "string" and not {"maxLength", "enum", "const"} & d.keys():
+            found.append(path)
+        return found + [p for k, v in d.items() for p in unbounded(v, f"{path}.{k}")]
+
+    schema = reply_schema(job())
+    schema["$defs"]["ProposalOut"]["properties"]["params"] = {"type": "object"}
+    assert unbounded(schema, "") == []
+    assert f"at most {MAX_HYPOTHESES} hypotheses," in system_prompt(job(), 6)
 
 
 # A profile may offer no fix: the model can then only diagnose. The prompt
