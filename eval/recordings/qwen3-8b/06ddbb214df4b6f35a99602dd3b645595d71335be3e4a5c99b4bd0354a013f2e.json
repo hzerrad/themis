@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"ConfigMap change likely caused failure, but no fix available\", \"hypotheses\": [{\"root_cause_class\": \"configuration_change\", \"summary\": \"ConfigMap checkout-config changed before failure\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [\"fix_for_config_change\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 2847,
+        "output_tokens": 942
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

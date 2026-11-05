@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Roll back to revision 1 due to image pull failure in new revision\", \"hypotheses\": [{\"root_cause_class\": \"image_pull_failure\", \"summary\": \"New revision's image cannot be pulled\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore working revision 1 pods, resolve image pull failure\", \"rationale\": \"New revision 2's image 'example/checkout:2.4.O' is not found, causing ImagePullBackOff. Prior revision 1 is healthy, so rollback is justified.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 2803,
+        "output_tokens": 581
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

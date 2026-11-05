@@ -69,4 +69,6 @@ At each step reply with exactly one JSON decision:
 {end}
 
 Hypotheses list the evidence IDs that support and contradict them, and what is
-missing. You have at most {max_steps} steps.
+missing. Keep your reasoning and each reply short: at most {max_hypotheses} hypotheses,
+a sentence or two for each summary and rationale, and only the evidence IDs
+that matter. You have at most {max_steps} steps.

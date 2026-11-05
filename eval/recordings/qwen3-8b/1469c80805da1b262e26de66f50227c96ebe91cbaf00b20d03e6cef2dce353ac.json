@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"Roll back to revision 1 to resolve dependency failure causing readiness probe failures.\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Logs show checkout app cannot reach orders-db, causing readiness failures.\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"No config changes detected, but new revision's dependencies might be misconfigured.\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Pods are running but not ready, possibly due to resource constraints.\",\"supporting\":[\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"node_problem\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore previous version which may resolve dependency issues.\",\"rationale\":\"Logs indicate new revision cannot reach orders-db, suggesting dependency failure. Rolling back to revision 1 (prior healthy revision) would revert to working state.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-rollout_history\"],\"cited_predicates\":[\"rollout_recent\",\"failure_onset_after_rollout\"]}}",
+      "usage": {
+        "input_tokens": 3415,
+        "output_tokens": 824
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
