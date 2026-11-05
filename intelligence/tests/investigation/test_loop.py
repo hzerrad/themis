@@ -286,6 +286,19 @@ def test_the_model_is_offered_what_the_core_sent() -> None:
     assert cited["enum"] == ["oom_killed_new_revision"]
 
 
+# A profile may offer no fix: the model can then only diagnose. The schema
+# leaves proposing out, and a proposal sent anyway is refused.
+async def test_with_no_fix_on_offer_the_model_cannot_propose() -> None:
+    diagnose_only = job()
+    del diagnose_only.capabilities[:]
+    del diagnose_only.candidate_capabilities[:]
+    kinds = reply_schema(diagnose_only)["properties"]["kind"]["enum"]
+    assert kinds == ["request_evidence", "conclude_inconclusive"]
+    model = ScriptedModel(propose(), {"kind": "conclude_inconclusive"})
+    await investigate(diagnose_only, FakeCore(), model, max_steps=6)
+    assert "No fix is allowed for this incident" in model.requests[1].messages[-1].content
+
+
 # Logs can carry orders. The rule against following them is repeated right
 # after every piece of evidence, where the orders are.
 async def test_every_piece_of_evidence_is_followed_by_the_rule() -> None:
