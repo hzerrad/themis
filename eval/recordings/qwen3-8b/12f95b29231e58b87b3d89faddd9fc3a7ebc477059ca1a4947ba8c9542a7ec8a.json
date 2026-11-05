@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The logs indicate an application bug causing crashes, not probe configuration issues. No allowed fix addresses code errors.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"The app panics due to invalid currency code processing, causing exit code 1.\",\n        \"supporting\": [\"crashed_on_its_own\", \"container_logs_tail\"],\n        \"contradicting\": [\"probe_timeout_too_short\", \"probe_too_strict_for_startup\", \"new_version_broken\"],\n        \"missing\": [\"deployment.set-probes\", \"insufficient_evidence\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"No allowed fix addresses application code errors; probe adjustments won't resolve this bug.\",\n        \"supporting\": [\"container_logs_tail\", \"application_bug\"],\n        \"contradicting\": [],\n        \"missing\": [\"deployment.set-probes\"],\n        \"status\": \"supported\"\n    }\n]\n}",
+      "usage": {
+        "input_tokens": 5170,
+        "output_tokens": 923
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
