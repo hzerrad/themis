@@ -2,10 +2,8 @@ package governance
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,9 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
-	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
@@ -23,13 +19,8 @@ import (
 
 const actor = "governance"
 
-// ManagedCheck is the check governance overrides with what it reads live:
-// whether GitOps owns the target. A scenario pack's check of this name is
-// overridden.
-const ManagedCheck = "gitops_managed"
-
-// Worker works govern jobs: it derives an action from live state, decides it
-// by policy, and stores it with the incident's next state.
+// Worker works govern jobs: it decides an accepted suggestion's fix, and
+// stores its action with the incident's next state.
 type Worker struct {
 	river.WorkerDefaults[GovernArgs]
 
@@ -40,27 +31,7 @@ type Worker struct {
 	// Fixes are the fixes Themis can carry out.
 	Fixes capability.Registry
 
-	// policies holds compiled policies by digest of their source: profiles
-	// can change while Themis runs.
-	policies sync.Map
-}
-
-// policy returns p's compiled policy.
-func (w *Worker) policy(p config.Profile) (*policy.Policy, error) {
-	pol := p.EffectivePolicy()
-	key, err := json.Marshal(pol)
-	if err != nil {
-		return nil, err
-	}
-	if c, ok := w.policies.Load(string(key)); ok {
-		return c.(*policy.Policy), nil //nolint:forcetypeassert // only *policy.Policy is stored
-	}
-	compiled, err := policy.Compile(pol)
-	if err != nil {
-		return nil, err
-	}
-	w.policies.Store(string(key), compiled)
-	return compiled, nil
+	decider Decider
 }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
@@ -88,7 +59,15 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if !ok {
 		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
-	plan, err := f.Plan(ctx, w.Reader, in.Target, p.Params)
+	checks, err := w.Store.Predicates(ctx, in.ID)
+	if err != nil {
+		return err
+	}
+	d, err := w.decider.Decide(ctx, w.Reader, Fix{
+		Incident: in.ID, Target: in.Target, Profile: profile, Checks: checks,
+		Capability: f, Params: p.Params,
+		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
+	})
 	if errors.Is(err, capability.ErrInvalidParams) {
 		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
 	}
@@ -99,31 +78,12 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		return err
 	}
 
-	results, err := w.Store.Predicates(ctx, in.ID)
-	if err != nil {
-		return err
-	}
-	predicates := map[string]string{}
-	for _, r := range results {
-		predicates[r.Name] = r.Value.String()
-	}
-	// Live ownership wins over what the evidence said.
-	if plan.ManagedBy != "" {
-		predicates[ManagedCheck] = check.True.String()
-	}
-	pol, err := w.policy(profile)
-	if err != nil {
-		return err
-	}
-	decision := pol.Evaluate(policy.Input{
-		Capability: f.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
-		ManagedBy: plan.ManagedBy, Predicates: predicates,
-		Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == "",
-	})
-
-	a, err := w.action(in, p, f, plan, decision, profile.EffectivePolicy())
-	if err != nil {
-		return err
+	// Every fix waits for a person, unless policy forbids it.
+	a := d.Action
+	a.ProposalID, a.State = p.ID, store.ActionDenied
+	if d.Decision.Outcome != policy.Deny {
+		expires := w.now().Add(profile.EffectivePolicy().ApprovalTimeout.Duration)
+		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
@@ -136,38 +96,15 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		if err != nil {
 			return err
 		}
-		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(decision)).Inc)
-		if decision.Outcome == policy.Deny && plan.ManagedBy != "" {
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(d.Decision)).Inc)
+		if d.Decision.Outcome == policy.Deny && d.ManagedBy != "" {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
-		if decision.Outcome == policy.Deny {
-			return w.Store.TransitionPath(ctx, tx, in.ID, decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
+		if d.Decision.Outcome == policy.Deny {
+			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
-		return w.Store.TransitionPath(ctx, tx, in.ID, decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
+		return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
-}
-
-func (w *Worker) action(in store.Incident, p store.Proposal, f capability.Capability, plan capability.Plan, d policy.Decision, pol config.Policy) (store.Action, error) {
-	fields := capability.Fields(in.ID, f, plan, "", d.PolicyID, d.PolicyDigest)
-	dg, err := digest.Compute(fields)
-	if err != nil {
-		return store.Action{}, err
-	}
-	a := store.Action{
-		IncidentID: in.ID, ProposalID: p.ID,
-		Capability: fields.Capability, CapabilityVersion: fields.CapabilityVersion,
-		Target: fields.Target, Params: fields.Params, Constraints: fields.Constraints,
-		PreState: plan.Before, Desired: plan.After,
-		BlastRadius: plan.BlastRadius,
-		Risk:        plan.Risk,
-		Decision:    string(d.Outcome), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
-		Digest: dg, Mark: plan.Mark, State: store.ActionDenied,
-	}
-	if d.Outcome != policy.Deny {
-		expires := w.now().Add(pol.ApprovalTimeout.Duration)
-		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
-	}
-	return a, nil
 }
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {

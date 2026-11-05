@@ -18,7 +18,6 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
-	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -97,11 +96,11 @@ func TestRestore_PutsBackWhatTheFixReplaced(t *testing.T) {
 		t.Fatalf("%d actions, want the fix and its restore", len(actions))
 	}
 	r := actions[1]
-	if r.Params["restores"] != fix.ID || fmt.Sprint(r.Params["revision"]) != "2" {
-		t.Errorf("restore params = %v, want revision 2, undoing %s", r.Params, fix.ID)
+	if restores, _ := r.Restores(); restores != fix.ID || fmt.Sprint(r.Params["revision"]) != "2" || r.ProposalID != fix.ProposalID {
+		t.Errorf("restore = %v of %s, want revision 2, undoing %s", r.Params, r.ProposalID, fix.ID)
 	}
-	if r.State != store.ActionAuthorized || r.Decision != string(policy.Allow) || r.ExpiresAt != nil {
-		t.Errorf("restore = %s, %s; want authorized by policy, with nothing to approve", r.State, r.Decision)
+	if r.State != store.ActionAuthorized || r.ExpiresAt != nil {
+		t.Errorf("restore = %s, want authorized, with nothing to approve", r.State)
 	}
 	if got := e.state(t, id); got != incident.Restoring {
 		t.Errorf("state = %s, want restoring until it is applied", got)
