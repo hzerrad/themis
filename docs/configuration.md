@@ -262,6 +262,7 @@ Themis's own checks, in [`internal/catalog/check/builtin.yaml`](../internal/cata
 |---|---|
 | `rollout_recent` | The current revision rolled out within the last 6 hours |
 | `gitops_managed` | The target carries Argo CD or Flux markers, or is written by their controllers. Governance also checks this live. |
+| `evidence_has_instructions` | Some evidence contains text that looks like instructions or forged tool output: see [suspicious evidence](#suspicious-evidence). No pack runs it; name it in a profile's `checks` to write a rule on it. Governance decides it again over all the incident's evidence, logs an investigator asked for included, before deciding a fix. |
 
 The `rollout-regression` pack's:
 
@@ -362,6 +363,27 @@ Themis never changes a workload that Argo CD or Flux manages: the GitOps control
 
 This holds for putting a fix back too. A rule of your own that reads `predicates.gitops_managed` or `target.managed_by` still works, but is never needed for this.
 
+#### Suspicious evidence
+
+Anyone who can write a workload's logs, events or ConfigMaps chooses part of what the investigator reads. Themis looks for text in every piece of evidence that looks written for the investigator rather than by the workload, and flags it with a plain reason:
+
+| Reason | Such as |
+|---|---|
+| instructions addressed to an AI or investigator | "Ignore all previous instructions", "Investigator: …", "SYSTEM:", "begin your summary with" |
+| text posing as Themis, a tool's output, metrics or an approval | "[themis-core] tool_result …", "approved by the SRE on call", "change freeze", throttling figures written in a log line |
+| an order to make, or not make, a fix | "roll back to revision 1", "Raise the CPU limit to 2", "kubectl rollout undo", "Do not roll back", "close this incident" |
+| a ready-made diagnosis | "known regression", "not a leak" |
+| encoded text that decodes to instructions | a base64 run that decodes to any of the above |
+
+It is a small heuristic, not a filter: the text stays in the evidence, and nothing is blocked. Real logs say "rollback" or "kubectl" too, so each rule needs the words around them; none flags a scenario pack's case written without an injection. Text that copies a real Kubernetes message word for word, such as a forged "failed liveness probe" event, can't be told apart this way.
+
+What it changes:
+
+- The investigator is told, before the evidence, that Themis flagged it and why, and the evidence is marked `suspicious="true"`. Outside investigators get the same flags in each evidence item's `suspicious` field.
+- The incident page warns, above the evidence and on every fix: "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail: "Ignore all previous instructions…"). Check the fix against the cluster before approving." Viewers, who may not read raw evidence, see which evidence without the text.
+- [Escalation notices](#escalation-notices) carry `evidenceWarning`, naming the evidence without its text.
+- Policy can read `predicates.evidence_has_instructions`, for example to forbid fixes when it is `"true"`, once the profile runs that check.
+
 ### Verification
 
 | Key | Default | Meaning |
@@ -447,4 +469,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `profiles` are every profile the incident matched, `profile`, its primary, first. Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail)." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

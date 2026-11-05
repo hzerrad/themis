@@ -1,6 +1,6 @@
 # Writing a check
 
-A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`, and `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads. Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
+A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; and `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence). Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
 
 This is one of them:
 
@@ -57,5 +57,6 @@ This is one of them:
 | `current_revision` | The current revision's number: from `rollout_history`, or without it the newest revision among the pods |
 | `failures` | Signs of trouble, in order: warning events about pods, then containers that died other than `Completed`. Each has `at` (`null` when unknown), `what` and `id` |
 | `first_failure` | The earliest failure, or `null` when there is none or one has no time, and so could be earlier still |
+| `suspicious_evidence` | Text in any evidence that looks written for the investigator, such as instructions or forged tool output, in collection order. Each has `id` and `template`, the evidence it is in, `reason` and `at`, where in it |
 
 `current`, `prior` and `rollout_at` come from `rollout_history`, so an answer that uses them needs it. Besides standard CEL, the [lists](https://pkg.go.dev/github.com/google/cel-go/ext#Lists) and [strings](https://pkg.go.dev/github.com/google/cel-go/ext#Strings) extensions are there, such as `flatten()` and `sort()`. Each expression has a cost limit; one that goes over it, or fails, makes the check `unknown` with the error as its reason.

@@ -543,7 +543,13 @@ function observed(o) {
   return `${o.ReadyReplicas} of ${o.DesiredReplicas} pods ready · ${o.RestartDelta} restarts · ${o.NewOOMKills} out-of-memory kills`;
 }
 
-function actionPanel(a, reload) {
+// suspicious warns that evidence holds text that looks written for the
+// investigator, such as instructions or forged tool output, with what to do.
+function suspicious(warning, advice) {
+  return warning ? h("div", { class: "callout" }, h("p", { class: "lead" }, `${warning} ${advice}`)) : null;
+}
+
+function actionPanel(a, reload, warning) {
   const error = h("div", { class: "error" });
   const reason = h("input", { type: "text", placeholder: "Why you deny it (optional)" });
   // The approval carries the digest shown here, never the server's current one.
@@ -563,6 +569,7 @@ function actionPanel(a, reload) {
   const t = a.Target;
   return h("div", { class: "panel" },
     h("h3", {}, "The change Themis would make, read from the cluster"),
+    suspicious(warning, "Check the fix against the cluster before approving."),
     h("dl", {},
       h("dt", {}, "State"), h("dd", {}, state(a.State)),
       h("dt", {}, "Policy"), h("dd", {}, label(DECISION_LABEL, a.Decision), h("div", { class: "muted" }, a.DecisionReason)),
@@ -744,7 +751,7 @@ async function detail(id) {
 
     actions.map((a) => {
       const p = proposals.find((x) => x.ID === a.ProposalID);
-      return h("div", { class: "grid" }, p ? proposalPanel(p, d) : h("div"), actionPanel(a, reload));
+      return h("div", { class: "grid" }, p ? proposalPanel(p, d) : h("div"), actionPanel(a, reload, d.EvidenceWarning));
     }),
     rejectedAttempts(proposals.filter((p) => !actions.some((a) => a.ProposalID === p.ID)), d),
     SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(inc, d.Evidence || [], reload) : null,
@@ -775,10 +782,14 @@ async function detail(id) {
       h("div", {}, t.Reason))))),
 
     h("h2", {}, "Evidence"),
+    suspicious(d.EvidenceWarning, "Check what it claims against the cluster."),
     h("div", { class: "panel" }, (d.Evidence || []).map((e) => h("details", {},
       h("summary", {}, h("span", { class: "mono" }, short(e.ID)), ` ${label(EVIDENCE_LABEL, e.Template)} · ${time(e.CollectedAt)}`,
         e.Classification === "sensitive" ? " · may contain sensitive data" : "",
-        e.Truncated ? " · shortened" : "", e.Redactions ? ` · ${e.Redactions} secrets hidden` : ""),
+        e.Truncated ? " · shortened" : "", e.Redactions ? ` · ${e.Redactions} secrets hidden` : "",
+        e.Suspicious ? " · looks like instructions" : ""),
+      e.Suspicious ? h("ul", {}, e.Suspicious.map((s) => h("li", {},
+        `Holds ${s.reason}, at ${s.at || "the top"}`, s.excerpt ? [": ", h("span", { class: "mono" }, s.excerpt)] : null))) : null,
       e.Data === undefined
         ? h("p", { class: "muted" }, "Only responders can read this evidence.")
         : h("pre", {}, JSON.stringify(e.Data, null, 2))))));

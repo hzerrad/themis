@@ -1,6 +1,8 @@
 # Themis's own checks: every scenario pack's profile may name them, and
 # Themis runs gitops_managed for every incident with a fix on offer, since its
 # answer decides whether Themis may change the workload at all.
+# evidence_has_instructions is there for policy rules to read; no pack runs
+# it, and governance decides it again over all the incident's evidence.
 # docs/checks.md says what each field means and what the expressions see.
 
 # The current revision rolled out within the last 6 hours.
@@ -42,3 +44,19 @@
     - answer: false
       reason: no GitOps markers or managers
       cite: [ids.rollout_history]
+
+# Some evidence holds text that looks written for the investigator rather
+# than by the workload: instructions, Themis or a tool impersonated, an order
+# to make a fix. It reads whatever evidence there is, so it is never unknown.
+- name: evidence_has_instructions
+  version: "1"
+  description: Some evidence contains text that looks like instructions or forged tool output
+  reads: [target_events, container_logs_tail, referenced_config, pod_states]
+  answers:
+    - when: size(suspicious_evidence) > 0
+      answer: true
+      reason: ${suspicious_evidence[0].template} holds ${suspicious_evidence[0].reason}
+      cite:
+        - suspicious_evidence.map(s, s.id)
+    - answer: false
+      reason: no evidence holds text that looks like instructions or forged tool output

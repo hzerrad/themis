@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -45,15 +46,23 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	// Raw evidence, such as logs, is for responders.
+	// Raw evidence, such as logs, is for responders: others learn that some
+	// looks like instructions, and where, but not what it says.
 	who, _ := identity.From(ctx)
+	raw := who.Can(config.RoleResponder)
 	for _, it := range items {
 		v := evidenceView{Item: it}
-		if who.Can(config.RoleResponder) {
+		if raw {
 			v.Data = it.Data
+		} else {
+			v.Suspicious = nil
+			for _, s := range it.Suspicious {
+				v.Suspicious = append(v.Suspicious, evidence.Suspicion{Reason: s.Reason, At: s.At})
+			}
 		}
 		d.Evidence = append(d.Evidence, v)
 	}
+	d.EvidenceWarning = evidence.Warning(items, raw)
 	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
 		a.fail(w, r, err)
 		return

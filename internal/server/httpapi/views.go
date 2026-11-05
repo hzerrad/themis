@@ -87,6 +87,9 @@ type detailView struct {
 	// Missing says, in plain words, what Themis couldn't see, why, and how
 	// to let it see next time.
 	Missing []string `json:",omitempty"`
+	// EvidenceWarning says that some evidence looks like instructions or
+	// forged tool output, for whoever approves a fix.
+	EvidenceWarning string `json:",omitempty"`
 }
 
 func viewAction(a store.Action, fixes capability.Registry) actionView {

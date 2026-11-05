@@ -135,7 +135,8 @@ func TestPeople_ChangesNeedTheRequestHeader(t *testing.T) {
 }
 
 // Raw evidence, such as logs, is for responders and above, who get its data
-// as JSON; a viewer is only told it exists.
+// as JSON; a viewer is only told it exists. Everyone is warned when some looks
+// like instructions, but only responders read what it says.
 func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 	e := signedIn(t)
 	a := e.awaiting(t)
@@ -143,6 +144,7 @@ func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 		return e.store.InsertEvidence(t.Context(), tx, a.IncidentID, "", nil, evidence.Item{
 			ID: "0192f0c1-0000-7000-8000-00000000000b", Template: evidence.ContainerLogsTail, Data: []byte(`{"logs":"canary-line"}`),
 			CollectedAt: now, Classification: evidence.ClassificationSensitive,
+			Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonInstructions, At: "/logs", Excerpt: "canary-line"}},
 		})
 	})
 	if err != nil {
@@ -158,6 +160,10 @@ func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 		}
 		if !strings.Contains(rec.Body.String(), evidence.ContainerLogsTail) {
 			t.Errorf("%s isn't told the evidence exists", who)
+		}
+		var warned struct{ EvidenceWarning string }
+		if err := json.Unmarshal(rec.Body.Bytes(), &warned); err != nil || !strings.HasPrefix(warned.EvidenceWarning, "Some evidence contains text that looks like instructions") {
+			t.Errorf("%s: warning = %q (%v)", who, warned.EvidenceWarning, err)
 		}
 		if sees {
 			var detail struct {
