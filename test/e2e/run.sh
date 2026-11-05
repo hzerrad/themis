@@ -200,7 +200,7 @@ BEFORE=$(latest)
 $K -n shop set env deploy/checkout MODE=leak >/dev/null
 DEADLINE=$((SECONDS + 240)); ID=$BEFORE
 while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(latest); done
-check "policy denies the action" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated)" = closed_no_action ]
+check "Themis only recommends the fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated)" = closed_no_action ]
 check "the denying rule is gitops-owns-the-target" [ "$(action "$ID" '["PolicyID"]')" = gitops-owns-the-target ]
 
 log "4. a human edit during verification makes the outcome inconclusive"

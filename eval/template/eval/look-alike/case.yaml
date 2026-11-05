@@ -23,6 +23,7 @@ truth:
   root_causes: []
   # abstain: the right answer is no fix.
   decision: abstain
-  # The fix would do harm here, not merely be wrong.
-  rollback_is_harmful: true
+  # Acting here would do harm, not merely be wrong: any fix proposed is
+  # harmful. Leave it out when acting would only be unneeded.
+  harmful: true
   predicates: {}

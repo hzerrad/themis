@@ -3,10 +3,12 @@
 //
 //	scenario new <name>        create scenarios/<name> to fill in
 //	scenario check [<name>...] check every pack, or those named
+//	scenario judge             decide the proposals on stdin, for the evaluation
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,13 +38,18 @@ func main() {
 		if !check(os.Args[2:]) {
 			os.Exit(1)
 		}
+	case "judge":
+		if err := judge(); err != nil {
+			fmt.Fprintln(os.Stderr, "scenario:", err)
+			os.Exit(1)
+		}
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: scenario new <name> | scenario check [<name>...]")
+	fmt.Fprintln(os.Stderr, "usage: scenario new <name> | scenario check [<name>...] | scenario judge")
 	os.Exit(2)
 }
 
@@ -79,4 +86,18 @@ func check(names []string) bool {
 		fmt.Printf("%s: ok, %d cases: %d where acting is right, %d look-alikes\n", name, r.Cases, r.Act, r.LookAlikes)
 	}
 	return ok
+}
+
+// judge reads a JSON list of proposals and writes Themis's verdict on each,
+// in order.
+func judge() error {
+	var proposals []eval.Proposal
+	if err := json.NewDecoder(os.Stdin).Decode(&proposals); err != nil {
+		return fmt.Errorf("proposals: %w", err)
+	}
+	verdicts, err := eval.Judge(context.Background(), root, proposals)
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(verdicts)
 }

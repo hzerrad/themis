@@ -8,7 +8,7 @@
       "startup_config_error"
     ],
     "decision": "abstain",
-    "rollback_is_harmful": true,
+    "harmful": true,
     "required_citations": [
       "pod_states"
     ],

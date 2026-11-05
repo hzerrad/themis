@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"CPU insufficiency prevents pod scheduling, but prior revision health is unknown. No valid fix available.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Pods pending due to CPU insufficiency\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"prior_revision_was_healthy\"],\"status\":\"open\"},{\"root_cause_class\":\"other\",\"summary\":\"No applicable fix available\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[\"fix_options\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3368,
+        "output_tokens": 640
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

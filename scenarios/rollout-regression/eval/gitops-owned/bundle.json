@@ -8,7 +8,7 @@
       "memory_limit_regression"
     ],
     "decision": "abstain",
-    "rollback_is_harmful": true,
+    "harmful": true,
     "predicates": {
       "config_changed_before_failure": "false",
       "failure_onset_after_rollout": "true",
@@ -213,6 +213,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Policy rule gitops-owns-the-target forbids this fix."
+    "reason": "Argo CD manages this workload, so Themis only recommends the change: apply it in Git."
   }
 }

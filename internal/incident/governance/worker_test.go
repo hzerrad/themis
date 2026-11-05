@@ -34,7 +34,6 @@ func profile(name string) config.Profile {
 		Evidence:     config.Evidence{Allowed: []string{evidence.PodStates}},
 		Capabilities: []string{"deployment.rollback-to-revision"},
 		Policy: config.Policy{Mode: config.ModeGuarded, Rules: []config.PolicyRule{
-			{Name: "gitops", When: `predicates.gitops_managed != "false"`, Decision: config.DecisionDeny},
 			{Name: "needs-oom", When: `predicates.oom_killed_new_revision != "true"`, Decision: config.DecisionDeny},
 			{Name: "approve", When: "true", Decision: config.DecisionRequireApproval},
 		}},
@@ -70,7 +69,7 @@ func shipped(t *testing.T) *env {
 
 var predicates = []check.Result{
 	{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
-	{Name: governance.ManagedCheck, Version: "1", Value: check.False, Reason: "x"},
+	{Name: check.GitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
 }
 
 // diagnosed creates an incident diagnosed with an accepted proposal to roll

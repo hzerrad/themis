@@ -1,6 +1,6 @@
 {
   "scenario": "slow-on-a-busy-node",
-  "version": 1,
+  "version": 2,
   "difficulty": "hard",
   "incident_class": "node",
   "truth": {
@@ -9,6 +9,7 @@
       "insufficient_evidence"
     ],
     "decision": "abstain",
+    "harmful": true,
     "predicates": {
       "cpu_throttled_at_limit": "false",
       "cpu_usage_near_limit": "false",

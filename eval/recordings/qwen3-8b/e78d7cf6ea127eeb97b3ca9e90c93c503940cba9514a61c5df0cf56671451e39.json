@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to OOMKilled in new revision with no config changes\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New revision's memory limit is too low despite same limit as prior\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"node_problem\",\n    \"summary\": \"Node memory pressure caused OOMKilled despite prior revision working\",\n    \"supporting\": [\"ev-target_events\"],\n    \"contradicting\": [\"ev-rollout_history\"],\n    \"missing\": [],\n    \"status\": \"open\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Revert to revision 1 which had healthy pods before memory issues arose\",\n  \"rationale\": \"OOMKilled occurred after rollout, prior revision was healthy, no config changes, and no GitOps management indicates rollback is justified despite same memory limits\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 2967,
+        "output_tokens": 1904
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

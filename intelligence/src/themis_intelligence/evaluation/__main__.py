@@ -16,6 +16,7 @@ import httpx
 
 from themis_intelligence.__main__ import read_secret
 from themis_intelligence.evaluation.bundle import Bundle, bundle_dirs
+from themis_intelligence.evaluation.judge import JudgeError, judge
 from themis_intelligence.evaluation.recordings import (
     MissingRecordingError,
     RecordingAdapter,
@@ -188,6 +189,10 @@ async def main() -> None:
             "the evidence changed. Record new replies with `make eval-record`, and review the new "
             "numbers before committing them."
         ) from None
+    try:
+        judge(args.scenarios, outcome.records)
+    except JudgeError as e:
+        raise SystemExit(f"Themis couldn't judge the proposals: {e}") from None
     commit, dirty = git_state()
     provenance = Provenance(
         dataset=dataset_hash(dirs),

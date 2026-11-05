@@ -44,7 +44,7 @@ Every transition is stored with its time, reason and actor, together with the jo
 | The cluster changing between approval and write | The executor rereads the target and recomputes the digest; any difference makes the action `stale` and nothing is written. The write uses the fresh `resourceVersion` as a precondition, after a server-side dry run. |
 | A write whose outcome is unknown | A timeout after the request was sent is recorded as `ambiguous` and escalated, never retried blindly. |
 | Declaring success that is not one | Verification watches the outcome for a window. A change by someone else during it makes the outcome `inconclusive`. |
-| Fighting GitOps | Ownership is checked live, from Argo CD and Flux markers and field managers, and the default policy denies changing a managed target. |
+| Fighting GitOps | Ownership is checked from the evidence and again live, from Argo CD and Flux markers and field managers. Before any policy, governance refuses to change a target that is managed, or may be, and only recommends the fix. |
 | Acting on a stale picture | Every 30 seconds Themis compares open incidents' targets with the template they were investigated against. A fix made elsewhere closes the incident; a change that does not help supersedes it with a new one. |
 | Secrets reaching the model or the UI | Evidence never includes pod specs, and every item is redacted. The UI shows what an action changes, hiding values that look secret by name or content. |
 | Evidence posing as instructions | Evidence reaches the model fenced as untrusted data, with any tag-like text escaped. |

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 due to memory limit regression causing OOM kills\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"prior_revision_was_healthy\"],\"status\": \"supported\"},\n  {\"root_cause_class\": \"application_bug\", \"summary\": \"Code in new revision has memory leak\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"},\n  {\"root_cause_class\": \"insufficient_capacity\", \"summary\": \"Cluster lacks memory for new revision\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [\"ev-target_events\"], \"missing\": [\"node_problem\"], \"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Revert to revision 1 which had healthy pods before memory limit regression\",\n  \"rationale\": \"OOMKilled pods in revision 2 with same memory limit as revision 1 suggests regression in memory usage, and prior revision had no failures. Rolling back to revision 1 would resolve the memory issue until proper limits are adjusted for the new revision.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"oom_killed_new_revision\", \"failure_onset_after_rollout\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3484,
+        "output_tokens": 843
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -88,6 +88,10 @@ _Avoid_: operation, job, change request
 The rules that decide, for each action, whether it is forbidden or needs a person's approval.
 _Avoid_: permissions, RBAC
 
+**Core protection**:
+A rule Themis applies to every action before any policy, whichever profile offers the fix and whoever suggested it, and that no policy can loosen: Themis never changes a workload GitOps manages, or may manage, and only recommends the fix, for a person to apply in Git.
+_Avoid_: default policy, built-in rule
+
 **Approval**:
 A person's yes to one action, valid only for that action as it was when approved and only for a while.
 _Avoid_: sign-off, consent

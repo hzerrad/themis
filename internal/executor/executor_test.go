@@ -76,7 +76,7 @@ func approved(t *testing.T) (*env, store.Action) {
 				return err
 			}
 		}
-		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: governance.ManagedCheck, Version: "1", Value: check.False}}); err != nil {
+		if _, err := s.CreateInvestigation(ctx, tx, incidentID, nil, []check.Result{{Name: check.GitOpsManaged, Version: "1", Value: check.False}}); err != nil {
 			return err
 		}
 		p, _, err := s.InsertProposal(ctx, tx, store.Proposal{

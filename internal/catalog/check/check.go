@@ -88,11 +88,18 @@ func (l List) Get(name string) (*Check, bool) {
 	return l[i], true
 }
 
-// For is the checks a profile runs: those it names, in l's order, or all of
-// l when it names none. Names l doesn't have are left out.
+// For is the checks a profile runs: those it names, in the order named, or
+// all of l when it names none. Names l doesn't have are left out, and a name
+// given twice runs once.
 func (l List) For(names []string) List {
 	if len(names) == 0 {
 		return l
 	}
-	return slices.DeleteFunc(slices.Clone(l), func(c *Check) bool { return !slices.Contains(names, c.Name) })
+	var out List
+	for _, name := range names {
+		if c, ok := l.Get(name); ok && !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }

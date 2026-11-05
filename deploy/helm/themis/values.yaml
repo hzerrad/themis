@@ -58,7 +58,7 @@ model:
   # How hard a reasoning model thinks before answering, for example none or
   # low. Empty leaves the provider's default.
   reasoningEffort: ""
-  # Each reply's output limit. Empty: 2048. A model that reasons needs more,
+  # Each reply's output limit. Empty: 4096. A model that reasons needs more,
   # or its replies are cut off.
   maxOutputTokens: ""
   # Ask the provider to follow the reply schema exactly. OpenAI refuses

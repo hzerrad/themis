@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Init container failure due to missing migration service\",\"hypotheses\":[{\"root_cause_class\":\"init_container_failure\",\"summary\":\"Init container 'wait-for-migrations' timed out waiting for migration service (container_logs_tail), preventing pod from proceeding.\",\"supporting\":[\"ev-pod_states\",\"container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"other\",\"summary\":\"No further evidence needed to confirm init container failure\",\"supporting\":[\"ev-pod_states\",\"container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 2815,
+        "output_tokens": 512
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

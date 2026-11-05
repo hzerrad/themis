@@ -42,21 +42,33 @@ type Gap struct {
 type Diagnosis struct {
 	Items []evidence.Item
 	Gaps  []Gap
-	// Results are the profiles' checks, in the catalog's order. Each unknown
-	// one carries the gaps in the evidence it reads, and is blind when Themis
-	// couldn't see.
+	// Results are the profiles' checks, in the order they name them. Each
+	// unknown one carries the gaps in the evidence it reads, and is blind
+	// when Themis couldn't see.
 	Results []check.Result
 }
 
 // Diagnose reads w's initial evidence under the profiles m with c, all any of
 // them collects first, and decides every check any of them runs from it, as
-// of at.Now, so each profile's rules can read its checks. Evidence it can't
-// read is a gap with its cause, not a failure: the checks that needed it are
-// unknown and say why. So are the target's first events, when its alert
+// of at.Now, so each profile's rules can read its checks. When they offer a
+// fix, it also decides check.GitOpsManaged, from the evidence it reads:
+// governance needs it to tell whether Themis may change w at all. Evidence it
+// can't read is a gap with its cause, not a failure: the checks that needed it
+// are unknown and say why. So are the target's first events, when its alert
 // started longer ago than Kubernetes keeps events.
 func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Workload, m config.Matched, at Moment) Diagnosis {
 	var d Diagnosis
-	initial := m.Evidence().Initial
+	initial, names := m.Evidence().Initial, m.Checks()
+	if gitOps, ok := cat.Checks.Get(check.GitOpsManaged); ok && len(m.Capabilities()) > 0 {
+		for _, t := range gitOps.Reads {
+			if !slices.Contains(initial, t) {
+				initial = append(initial, t)
+			}
+		}
+		if len(names) > 0 && !slices.Contains(names, gitOps.Name) {
+			names = append(names, gitOps.Name)
+		}
+	}
 	for _, name := range initial {
 		item, err := cat.Evidence.Collect(ctx, c, name, w, nil, at.Now)
 		if err != nil {
@@ -68,7 +80,7 @@ func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Wo
 	if g, ok := expiredEvents(initial, at); ok {
 		d.Gaps = append(d.Gaps, g)
 	}
-	checks := cat.Checks.For(m.Checks())
+	checks := cat.Checks.For(names)
 	gaps := make([]check.Gap, 0, len(d.Gaps))
 	for _, g := range d.Gaps {
 		gaps = append(gaps, check.Gap{Template: g.Template, Cause: g.Cause})

@@ -13,7 +13,7 @@ evidence:
 truth:
   root_causes: [traffic_spike]
   decision: abstain
-  rollback_is_harmful: true
+  harmful: true
   predicates:
     rollout_recent: "false"
     failure_onset_after_rollout: "true"

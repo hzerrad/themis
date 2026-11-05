@@ -1,21 +1,6 @@
-# The checks of the rollout-regression pack, in the order Themis reports them.
+# The checks of the rollout-regression pack. rollout_recent and gitops_managed,
+# which its profile runs too, are Themis's own.
 # docs/checks.md says what each field means and what the expressions see.
-
-- name: rollout_recent
-  version: "1"
-  description: A rollout happened recently
-  reads: [rollout_history]
-  answers:
-    - when: rollout_at == null
-      answer: unknown
-      reason: the current revision or its rollout time is unknown
-    - when: now - rollout_at <= duration("6h")
-      answer: true
-      reason: revision ${current.revision} rolled out ${now - rollout_at} ago
-      cite: [ids.rollout_history]
-    - answer: false
-      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, beyond ${duration("6h")}
-      cite: [ids.rollout_history]
 
 # A failure without a time could be earlier than the rollout.
 - name: failure_onset_after_rollout
@@ -106,29 +91,6 @@
     - answer: false
       reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
       cite: [ids.pod_states]
-
-# The target carries GitOps markers or is written by a GitOps controller.
-- name: gitops_managed
-  version: "1"
-  description: Managed by GitOps (Argo CD or Flux)
-  reads: [rollout_history]
-  let:
-    markers: rollout_history.deployment.ownershipMarkers.map(k, k).sort()
-    managers: >-
-      rollout_history.deployment.fieldManagers.filter(m, m in
-        ["argocd-controller", "argocd-application-controller", "kustomize-controller", "helm-controller"])
-  answers:
-    - when: size(markers) > 0
-      answer: true
-      reason: the target carries ${markers[0]}
-      cite: [ids.rollout_history]
-    - when: size(managers) > 0
-      answer: true
-      reason: the target is managed by ${managers[0]}
-      cite: [ids.rollout_history]
-    - answer: false
-      reason: no GitOps markers or managers
-      cite: [ids.rollout_history]
 
 # A ConfigMap the target refers to changed after the current revision rolled
 # out and no later than the first failure, so rolling back the revision might

@@ -8,7 +8,7 @@
       "still_starting"
     ],
     "decision": "abstain",
-    "rollback_is_harmful": true,
+    "harmful": true,
     "predicates": {
       "config_error_on_start": "false",
       "image_pull_failing": "false",

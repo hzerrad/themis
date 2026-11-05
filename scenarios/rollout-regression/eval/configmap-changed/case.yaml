@@ -13,7 +13,7 @@ evidence:
 truth:
   root_causes: [configuration_change]
   decision: abstain
-  rollback_is_harmful: true
+  harmful: true
   predicates:
     rollout_recent: "true"
     failure_onset_after_rollout: "true"
