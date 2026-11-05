@@ -77,7 +77,7 @@ func (referencedConfig) Collect(ctx context.Context, c client.Reader, w *workloa
 			view.Refs[i].ChangedAt = lastWrite(&cm)
 		}
 	}
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}
