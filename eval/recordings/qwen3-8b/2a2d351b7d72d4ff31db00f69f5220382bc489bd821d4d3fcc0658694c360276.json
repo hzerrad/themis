@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient evidence to determine root cause. Missing container CPU metrics and logs to assess throttling or usage patterns.\",\"hypotheses\":[{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"Readiness probe failures may indicate insufficient CPU resources.\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"container_cpu\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No container CPU metrics or logs available to diagnose the issue.\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"container_cpu\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3519,
+        "output_tokens": 572
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

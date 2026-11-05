@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The container's CPU limit is too low, causing high usage and readiness probe failures. Increasing the CPU limit to 750m should alleviate the issue.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The container's CPU usage is near its limit (0.495/0.5), and readiness probes are failing, indicating the limit is too low.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"throttling_data_available\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"The increased CPU limit should prevent the container from being throttled, allowing it to meet readiness probe requirements.\",\n  \"rationale\": \"The container is using 99% of its CPU limit (0.495/0.5), and readiness probes are failing. Raising the limit to 750m (1.5x current) should clear the throttling and resolve the timeouts.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"],\n  \"cited_predicates\": [\"cpu_usage_near_limit\", \"rollout_recent\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3206,
+        "output_tokens": 1125
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

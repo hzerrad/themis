@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause. Missing container CPU metrics and throttling data.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Pods have readiness probe failures, but no container CPU metrics to confirm throttling.\",\n    \"supporting\": [\"ev-target_events\", \"ev-pod_states\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"container_cpu\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No container CPU metrics available to assess throttling or usage patterns.\",\n    \"supporting\": [\"throttling_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_cpu\"],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 3028,
+        "output_tokens": 1266
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
