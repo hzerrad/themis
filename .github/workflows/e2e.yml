@@ -1,33 +1,26 @@
 name: End-to-end
 
 on:
+  # After every merge, and nightly, so nothing escapes it for long.
   push:
     branches: [main]
-  # Only when something the cluster runs changes. Not a required check, so
-  # skipping it never blocks a merge; it always runs on main.
+  schedule:
+    - cron: "0 3 * * *"
+  # On a PR only where a mistake hurts most: what writes to workloads, decides
+  # whether it may, or grants the permissions to. It takes about 25 minutes,
+  # so it isn't a required check; a red main is fixed before anything else.
   pull_request:
     paths:
-      - "api/**"
       - "cmd/**"
-      - "internal/**"
-      - "scenarios/*.go"
-      - "scenarios/*/scenario.yaml"
-      - "scenarios/*/checks.yaml"
-      - "intelligence/src/**"
-      - "intelligence/pyproject.toml"
-      - "intelligence/uv.lock"
-      - "deploy/**"
-      - "test/e2e/**"
-      - "test/fixtures/**"
-      - "scripts/**"
-      - "go.mod"
-      - "go.sum"
-      - "Makefile"
+      - "internal/executor/**"
+      - "internal/incident/governance/**"
+      - "internal/catalog/capability/**"
+      - "internal/workload/**"
+      - "deploy/helm/**"
       - "build/**"
+      - "test/e2e/**"
       - ".github/workflows/e2e.yml"
-      # Tests and docs alone change nothing the cluster runs.
       - "!**/*_test.go"
-      - "!**/testdata/**"
       - "!**/*.md"
   workflow_dispatch:
 
