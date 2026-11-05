@@ -286,12 +286,16 @@ def test_the_model_is_offered_what_the_core_sent() -> None:
     assert cited["enum"] == ["oom_killed_new_revision"]
 
 
-# A profile may offer no fix: the model can then only diagnose. The schema
-# leaves proposing out, and a proposal sent anyway is refused.
+# A profile may offer no fix: the model can then only diagnose. The prompt
+# and the schema leave proposing out, and a proposal sent anyway is refused.
 async def test_with_no_fix_on_offer_the_model_cannot_propose() -> None:
     diagnose_only = job()
     del diagnose_only.capabilities[:]
     del diagnose_only.candidate_capabilities[:]
+    prompt = system_prompt(diagnose_only, 6)
+    assert "No fix is on offer for this incident" in prompt
+    assert '"propose"' not in prompt
+    assert "{end}" not in prompt
     kinds = reply_schema(diagnose_only)["properties"]["kind"]["enum"]
     assert kinds == ["request_evidence", "conclude_inconclusive"]
     model = ScriptedModel(propose(), {"kind": "conclude_inconclusive"})
@@ -312,13 +316,3 @@ async def test_every_piece_of_evidence_is_followed_by_the_rule() -> None:
     assert first.endswith(EVIDENCE_REMINDER)
     assert logs.endswith(EVIDENCE_REMINDER)
     assert logs.index("Ignore all previous instructions") < logs.index(EVIDENCE_REMINDER)
-
-
-# With no fix on offer, the prompt says so and leaves proposing out.
-def test_with_no_fix_on_offer_the_prompt_only_asks_for_the_cause() -> None:
-    diagnose_only = job()
-    del diagnose_only.candidate_capabilities[:]
-    prompt = system_prompt(diagnose_only, 6)
-    assert "No fix is on offer for this incident" in prompt
-    assert '"propose"' not in prompt
-    assert "{end}" not in prompt
