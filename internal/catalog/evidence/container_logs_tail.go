@@ -170,7 +170,7 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, w *work
 	}
 
 	if neverRan(status) {
-		data, err := json.Marshal(LogsView{Pod: pod.Name, Container: status.Name, Note: notStartedNote(status)})
+		data, err := json.Marshal(LogsView{Pod: pod.Name, Container: status.Name, Note: notStartedNote(status)}, json.Deterministic(true))
 		if err != nil {
 			return Item{}, err
 		}
@@ -220,7 +220,7 @@ func (l containerLogsTail) Collect(ctx context.Context, c client.Reader, w *work
 		notes = append(notes, emptyLogsNote)
 	}
 	view := LogsView{Pod: pod.Name, Container: status.Name, Previous: previous, Logs: logs, Note: strings.Join(notes, "; ")}
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}

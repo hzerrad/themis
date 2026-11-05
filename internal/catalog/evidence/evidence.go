@@ -56,7 +56,9 @@ type Item struct {
 
 // Template is a named, read-only question about a workload. Collect fills in
 // the answer; the registry fills in the metadata. The workload is already
-// read and checked to be the incident's, and c reads anything else.
+// read and checked to be the incident's, and c reads anything else. The same
+// cluster must give the same answer byte for byte: the investigator's replies
+// are recorded against it.
 type Template interface {
 	Name() string
 	// Description says what the template reads, for investigators; Params

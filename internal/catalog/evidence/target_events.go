@@ -92,7 +92,7 @@ func (targetEvents) Collect(ctx context.Context, c client.Reader, w *workload.Wo
 		view.Events = view.Events[:maxEvents]
 	}
 
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}
