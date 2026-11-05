@@ -40,7 +40,7 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
   --wait
 ```
 
-Leave out `model.apiKeySecret` if the model needs no key. `model.strictOutput=false` is for OpenAI, which refuses Themis's reply schema in strict mode; leave it out for Ollama and vLLM. The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one.
+Leave out `model.apiKeySecret` if the model needs no key. `model.strictOutput=false` is for OpenAI, which refuses Themis's reply schema in strict mode; leave it out for Ollama and vLLM. OpenAI's newer models also need `--set model.outputLimitField=max_completion_tokens --set model.temperature=default`. The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one.
 
 To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODEL_NAME=...` builds the images, loads them into kind, and installs the chart.
 

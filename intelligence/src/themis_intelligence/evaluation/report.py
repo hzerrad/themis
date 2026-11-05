@@ -39,6 +39,8 @@ class Provenance(BaseModel):
     # None: the provider's own, as Claude models take no other.
     temperature: float | None
     max_output_tokens: int
+    # The field the output limit was sent in.
+    output_limit_field: str = "max_tokens"
     # Empty means the provider's default.
     reasoning_effort: str = ""
     strict_output: bool = True
@@ -350,10 +352,10 @@ def to_markdown(r: Report) -> str:
         f"- Prompt: {p.prompt_version} (`{p.prompt_sha256[:12]}`), schema {p.schema_version}",
         f"- Model: {p.model}, served by {p.served_by or 'unknown'} at {p.endpoint_host}"
         f" ({p.provider})",
-        f"- Temperature {'the default' if p.temperature is None else p.temperature}, "
+        f"- Temperature {'the default' if p.temperature is None else f'{p.temperature:g}'}, "
         f"reasoning {p.reasoning_effort or 'the default'}, "
         f"{'strict' if p.strict_output else 'best-effort'} structured output, "
-        f"up to {p.max_output_tokens} output tokens, "
+        f"up to {p.max_output_tokens} output tokens (as {p.output_limit_field}), "
         f"context {context}, ceiling {p.ceiling}, {p.step_deadline_s:.0f}s per step",
         f"- {p.runs_per_scenario} runs per scenario",
         f"- Commit: `{p.commit}`{dirty}",

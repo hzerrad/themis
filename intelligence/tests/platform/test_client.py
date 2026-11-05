@@ -143,31 +143,40 @@ def test_budget_settles_to_actual_usage() -> None:
     budget.reserve(70)
 
 
+# What the endpoint's settings put in the request: Ollama and vLLM get
+# max_tokens and temperature 0; OpenAI's newer models refuse both.
 @respx.mock
-async def test_reasoning_effort_and_output_limit_reach_the_model_only_when_set() -> None:
+@pytest.mark.parametrize(
+    ("settings", "sent", "absent"),
+    [
+        ({}, {"max_tokens": 100, "temperature": 0}, {"reasoning_effort"}),
+        (
+            {"reasoning_effort": "none", "max_output_tokens": 4096, "temperature": 0.5},
+            {"reasoning_effort": "none", "max_tokens": 4096, "temperature": 0.5},
+            set[str](),
+        ),
+        (
+            {"output_limit_field": "max_completion_tokens", "temperature": None},
+            {"max_completion_tokens": 100},
+            {"max_tokens", "temperature"},
+        ),
+    ],
+)
+async def test_the_request_body_follows_the_endpoint_settings(
+    settings: dict[str, object], sent: dict[str, object], absent: set[str]
+) -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
         return_value=reply('{"verdict": "x", "confidence": 1}')
     )
-    await client().complete(request(), Answer)
-    body = json.loads(route.calls.last.request.content)
-    assert "reasoning_effort" not in body
-    assert body["max_tokens"] == 100
-
     tuned = ModelClient(
         adapter=OpenAICompatAdapter(base_url=BASE),
-        endpoint=Endpoint(
-            name="ollama",
-            model="qwen3",
-            ceiling="sensitive",
-            reasoning_effort="none",
-            max_output_tokens=4096,
-        ),
+        endpoint=Endpoint(name="ollama", model="qwen3", ceiling="sensitive", **settings),  # type: ignore[arg-type]
         budget=Budget(max_tokens=10_000),
     )
     await tuned.complete(request(), Answer)
     body = json.loads(route.calls.last.request.content)
-    assert body["reasoning_effort"] == "none"
-    assert body["max_tokens"] == 4096
+    assert {k: body.get(k) for k in sent} == sent
+    assert not absent & set(body)
 
 
 # A model that spends its output limit thinking replies with nothing: that is

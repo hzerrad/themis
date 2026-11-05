@@ -22,6 +22,11 @@ Configuration comes from the environment:
                              reasons, or its replies are cut off
     MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
                              schema exactly; set false for OpenAI, which refuses it
+    MODEL_OUTPUT_LIMIT_FIELD max_tokens (the default) or max_completion_tokens: the
+                             field the output limit is sent in; OpenAI's newer models
+                             need max_completion_tokens
+    MODEL_TEMPERATURE        a number (0), or default to send none and leave the
+                             model's own, as OpenAI's newer models require
     MODEL_PRICE_INPUT_USD_PER_MTOK, MODEL_PRICE_OUTPUT_USD_PER_MTOK
                              the route's price in US dollars per million tokens, both
                              or neither; without one, no cost is reported
@@ -39,8 +44,12 @@ from themis_intelligence import telemetry, tracing
 from themis_intelligence.model_source import Installed, ModelSource
 from themis_intelligence.platform.adapters import PROVIDERS, Provider
 from themis_intelligence.platform.budget import Budget
-from themis_intelligence.platform.client import Endpoint, ModelClient, Price
-from themis_intelligence.platform.contract import CLASSIFICATION_RANK
+from themis_intelligence.platform.client import Endpoint, ModelClient, Price, read_temperature
+from themis_intelligence.platform.contract import (
+    CLASSIFICATION_RANK,
+    OUTPUT_LIMIT_FIELDS,
+    OutputLimitField,
+)
 from themis_intelligence.rpc.core_client import CoreClient
 from themis_intelligence.worker import Worker
 
@@ -87,6 +96,22 @@ def read_provider() -> Provider:
     return cast(Provider, value)
 
 
+def read_sampling() -> tuple[OutputLimitField, float | None]:
+    """How an OpenAI-compatible API is asked for its reply: the field the output
+    limit goes in, and the temperature, None to send none."""
+    env = os.environ.get
+    field = env("MODEL_OUTPUT_LIMIT_FIELD", "").strip() or "max_tokens"
+    if field not in OUTPUT_LIMIT_FIELDS:
+        raise SystemExit(
+            f"MODEL_OUTPUT_LIMIT_FIELD must be one of {', '.join(OUTPUT_LIMIT_FIELDS)}."
+        )
+    try:
+        temperature = read_temperature(env("MODEL_TEMPERATURE", "").strip() or "0")
+    except ValueError:
+        raise SystemExit('MODEL_TEMPERATURE must be a number, or "default".') from None
+    return cast(OutputLimitField, field), temperature
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="themis_intelligence")
     p.add_argument("--metrics-port", type=int, default=8082, help="port of /metrics; 0 disables it")
@@ -116,12 +141,15 @@ async def main() -> None:
         provider=read_provider(),
     )
     max_output = env("MODEL_MAX_OUTPUT_TOKENS")
+    output_limit_field, temperature = read_sampling()
     endpoint = Endpoint(
         name=env("MODEL_ENDPOINT", "default"),
         model="",
         ceiling=ceiling,
         reasoning_effort=env("MODEL_REASONING_EFFORT") or None,
         max_output_tokens=int(max_output) if max_output else None,
+        output_limit_field=output_limit_field,
+        temperature=temperature,
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()

@@ -32,8 +32,14 @@ from themis_intelligence.investigation.schemas import SCHEMA_VERSION
 from themis_intelligence.platform.adapters import PROVIDERS, connect
 from themis_intelligence.platform.adapters.anthropic_messages import PRICES
 from themis_intelligence.platform.budget import Budget
-from themis_intelligence.platform.client import Adapter, Endpoint, ModelClient, Price
-from themis_intelligence.platform.contract import CLASSIFICATION_RANK
+from themis_intelligence.platform.client import (
+    Adapter,
+    Endpoint,
+    ModelClient,
+    Price,
+    read_temperature,
+)
+from themis_intelligence.platform.contract import CLASSIFICATION_RANK, OUTPUT_LIMIT_FIELDS
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 ROUTE = "evaluation"
@@ -117,6 +123,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="strict_output",
         action="store_false",
         help="don't ask the provider to follow the schema exactly; for OpenAI",
+    )
+    p.add_argument(
+        "--output-limit-field",
+        choices=OUTPUT_LIMIT_FIELDS,
+        default="max_tokens",
+        help="for openai, the field the output limit is sent in; OpenAI's newer models "
+        "need max_completion_tokens",
+    )
+    p.add_argument(
+        "--temperature",
+        type=read_temperature,
+        default=0.0,
+        help='for openai, a number (0), or "default" to send none, as OpenAI\'s newer '
+        "models require",
     )
     p.add_argument("--price-input", type=float, help="US dollars per million input tokens")
     p.add_argument("--price-output", type=float, help="US dollars per million output tokens")
@@ -221,6 +241,8 @@ async def main() -> None:
         reasoning_effort=args.reasoning_effort,
         max_output_tokens=args.max_output_tokens,
         strict_output=args.strict_output,
+        output_limit_field=args.output_limit_field,
+        temperature=args.temperature,
     )
     caps = Caps(max_tokens=args.max_tokens, max_usd=args.max_usd, price=price)
     started = datetime.now(UTC).isoformat(timespec="seconds")
@@ -262,8 +284,9 @@ async def main() -> None:
         endpoint_host=endpoint_host(args),
         ceiling=args.ceiling,
         # Claude models take only their own sampling settings, so none is sent.
-        temperature=0 if args.provider == "openai" else None,
+        temperature=args.temperature if args.provider == "openai" else None,
         max_output_tokens=args.max_output_tokens,
+        output_limit_field=args.output_limit_field if args.provider == "openai" else "max_tokens",
         reasoning_effort=args.reasoning_effort or "",
         strict_output=args.strict_output,
         step_deadline_s=args.step_deadline,

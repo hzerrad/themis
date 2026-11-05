@@ -51,8 +51,8 @@ class OpenAICompatAdapter:
         body: dict[str, Any] = {
             "model": req.model,
             "messages": [m.model_dump() for m in req.messages],
-            "max_tokens": req.max_output_tokens,
-            "temperature": 0,
+            req.output_limit_field: req.max_output_tokens,
+            **({"temperature": req.temperature} if req.temperature is not None else {}),
             **({"reasoning_effort": req.reasoning_effort} if req.reasoning_effort else {}),
             "response_format": {
                 "type": "json_schema",

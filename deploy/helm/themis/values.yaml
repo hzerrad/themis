@@ -69,6 +69,13 @@ model:
   # Themis's schema in strict mode: set false there. Replies are still
   # checked either way.
   strictOutput: true
+  # The field the output limit is sent in: max_tokens or max_completion_tokens.
+  # Empty: max_tokens, as Ollama and vLLM read it. OpenAI's newer models need
+  # max_completion_tokens.
+  outputLimitField: ""
+  # The temperature sent: a number, or default to send none and leave the
+  # model's own, as OpenAI's newer models require. Empty: 0.
+  temperature: ""
   # The endpoint's price in US dollars per million tokens, so the investigator
   # reports themis_model_cost_usd_total; for example
   # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is reported.

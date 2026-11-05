@@ -1,10 +1,16 @@
 """The contract between investigation code and models, whatever the provider."""
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field
 
 Classification = Literal["public", "internal", "sensitive"]
+
+# The field an OpenAI-compatible API reads the output limit from: max_tokens,
+# as Ollama and vLLM read it, or max_completion_tokens, which OpenAI's newer
+# models require instead.
+OutputLimitField = Literal["max_tokens", "max_completion_tokens"]
+OUTPUT_LIMIT_FIELDS: tuple[str, ...] = get_args(OutputLimitField)
 
 CLASSIFICATION_RANK: dict[Classification, int] = {"public": 0, "internal": 1, "sensitive": 2}
 
@@ -81,6 +87,9 @@ class ProviderRequest(BaseModel):
     # Strict structured output: the provider must follow the schema exactly.
     # Some, such as OpenAI's, refuse Themis's schema in strict mode.
     strict: bool = True
+    output_limit_field: OutputLimitField = "max_tokens"
+    # None sends no temperature, leaving the model's own: some take no other.
+    temperature: float | None = 0
 
 
 class ProviderResponse(BaseModel):
