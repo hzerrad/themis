@@ -122,7 +122,7 @@ profiles:
   - name: rollout-regression
     priority: 100
     match:
-      alertNames: [KubePodCrashLooping]
+      alertNames: [ThemisSmokeTest]
       targetKinds: [Deployment.apps]
     evidence:
       initial: [rollout_history, pod_states]
@@ -255,7 +255,7 @@ api:
 
 	payload := fmt.Sprintf(`{"version":"4","status":"firing","receiver":"themis","alerts":[{
 		"status":"firing","fingerprint":"fp-1",
-		"labels":{"alertname":"KubePodCrashLooping","namespace":%q,"pod":%q},
+		"labels":{"alertname":"ThemisSmokeTest","namespace":%q,"pod":%q},
 		"startsAt":"2026-10-26T09:00:00Z","endsAt":"0001-01-01T00:00:00Z"}]}`, ns, pod.Name)
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
 		"http://"+o.HTTPAddr+"/v1/intake/alertmanager", bytes.NewBufferString(payload))
