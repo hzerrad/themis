@@ -1,0 +1,103 @@
+# A Deployment's container held back by its CPU limit: Themis may suggest
+# raising the limit, with a person's approval. README.md says what it covers;
+# docs/scenarios.md says what each field means.
+
+name: cpu-throttling
+description: A Deployment's container is throttled at its CPU limit; Themis may suggest raising the limit, which a person approves.
+
+# What the investigator may name as the root cause, most likely first, and
+# what each means.
+rootCauses:
+  - name: cpu_limit_too_low
+    description: its steady CPU demand is above its CPU limit, which holds it back
+  - name: new_version_uses_more_cpu
+    description: a recent rollout made it use more CPU than before
+  - name: transient_cpu_burst
+    description: a short burst of CPU use that has passed or rarely hits the limit
+  - name: node_cpu_contention
+    description: its node is short of CPU, slowing it below its limit
+  - name: insufficient_evidence
+    description: the evidence can't tell
+  - name: other
+    description: "none of these: say what in the summary"
+
+# The profile Themis uses for these incidents. Throttling is only visible from
+# a metrics source with history, such as Prometheus: without one, the checks
+# are unknown and the policy refuses any raise.
+profile:
+  priority: 75
+  match:
+    alertNames: [CPUThrottlingHigh]
+    targetKinds: [Deployment.apps]
+  # container_cpu is read first: a missing metrics source is a gap the
+  # investigator sees, never evidence to ask for.
+  evidence:
+    initial: [container_cpu, pod_states, rollout_history, target_events]
+    allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+  checks:
+    - throttling_data_available
+    - cpu_throttled_at_limit
+    - cpu_usage_near_limit
+    - rollout_recent
+    - gitops_managed
+  capabilities: [deployment.set-resources]
+  # What the investigator is told about these incidents: when raising the CPU
+  # limit is right and when it is wrong. It names checks, never root causes,
+  # and gives a starting size as guidance only: the checks and the policy
+  # below decide.
+  guidance: |
+    Raising a container's CPU limit is right when the container is throttled
+    at its limit for a sustained time and it hurts: cpu_throttled_at_limit is
+    true, cpu_usage_near_limit is true, and the pods are slow, fail readiness
+    probes or time out. Raise the CPU limit of the throttled container only,
+    by enough to clear the throttling; 1.5 times the current limit is a
+    reasonable start. Cite container_cpu, and the pod states or events that
+    show the harm. Never lower a value, never touch memory, and never remove
+    a limit.
+
+    Don't raise it, and say what you found instead, when:
+    - throttling_data_available is not true: without throttling figures from
+      the metrics source, throttling can't be seen. Don't infer it from CPU
+      use, latency or the alert alone; say the figures are missing.
+    - cpu_throttled_at_limit is false: the container is rarely held back, so
+      the limit isn't what slows it.
+    - cpu_usage_near_limit is false while throttling is high: the container
+      sits well below its limit and only bursts hit it; say so and leave the
+      call to a person.
+    - rollout_recent is true: a new version may use more CPU than the one
+      before. Whether to roll it back is another kind of incident's call, not
+      a raise here.
+    - the pods are slow but not throttled, and events point at their node:
+      more limit won't give them CPU the node doesn't have.
+  policy:
+    mode: guarded
+    approvalTimeout: 30m
+    rules:
+      - name: gitops-owns-the-target
+        when: predicates.gitops_managed != "false"
+        decision: deny
+      # Only set-resources is offered here; anything else is another pack's.
+      - name: only-set-resources
+        when: action.capability != "deployment.set-resources"
+        decision: deny
+      # Throttling is the only reason this pack changes CPU: a raise without
+      # throttling figures that show it, or with a recent rollout that may
+      # have caused it, is refused. A restore puts back what Themis changed.
+      - name: raise-needs-throttling
+        when: >-
+          action.restore != "true" &&
+          (predicates.cpu_throttled_at_limit != "true" || predicates.rollout_recent != "false")
+        decision: deny
+      # The fix here raises a CPU limit that exists, and nothing else: no
+      # memory, no lower value, no new limit where there was none, which
+      # would throttle a container that wasn't.
+      - name: raise-a-cpu-limit-only
+        when: >-
+          action.capability == "deployment.set-resources" && action.restore != "true" &&
+          ("memory" in change || !("cpu" in change) || change.cpu != "increase" ||
+           change.exists(k, k.endsWith(".cpu.limit") && change[k] == "set") ||
+           !change.exists(k, k.endsWith(".cpu.limit") && change[k] == "increase"))
+        decision: deny
+      - name: raise-needs-approval
+        when: action.restore != "true"
+        decision: require_approval

@@ -1,0 +1,29 @@
+name: throttling-unseen-no-metrics
+version: 1
+description: Readiness probes time out, but the install has no metrics source, so throttling can't be seen.
+tags: [cpu, throttling, missing-evidence]
+source: synthetic
+difficulty: medium
+incident_class: cpu_throttling
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      api:
+        limits:
+          cpu: 750m
+truth:
+  root_causes: [insufficient_evidence]
+  decision: abstain
+  predicates:
+    throttling_data_available: unknown
+    cpu_throttled_at_limit: unknown
+    cpu_usage_near_limit: unknown
+    rollout_recent: 'false'
+    gitops_managed: 'false'
+  policy: deny

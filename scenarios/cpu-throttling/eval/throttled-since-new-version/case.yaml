@@ -1,0 +1,30 @@
+name: throttled-since-new-version
+version: 1
+description: A version rolled out 40 minutes ago uses more CPU, and is throttled at the same 500m limit the version before
+  ran within.
+tags: [cpu, throttling, rollout]
+source: synthetic
+difficulty: hard
+incident_class: rollout_regression
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      api:
+        limits:
+          cpu: 750m
+truth:
+  root_causes: [new_version_uses_more_cpu]
+  decision: abstain
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    rollout_recent: 'true'
+    gitops_managed: 'false'
+  policy: deny
