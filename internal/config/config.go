@@ -63,6 +63,10 @@ type Config struct {
 	// profile.
 	Scenarios Scenarios `json:"scenarios,omitzero"`
 
+	// Metrics says where Themis reads how much memory and CPU containers
+	// use.
+	Metrics Metrics `json:"metrics,omitzero"`
+
 	// Profiles classify alerts into incident classes; the highest priority match
 	// wins. One named like a scenario pack's profile replaces it.
 	Profiles []Profile `json:"profiles,omitempty"`

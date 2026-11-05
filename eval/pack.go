@@ -58,7 +58,7 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 	}
 
 	packs := os.DirFS(root)
-	cat, err := catalog.Build(nil, packs, nil)
+	cat, err := catalog.Build(nil, nil, packs, nil)
 	if err != nil {
 		return r, errors.Join(append(errs, err)...)
 	}

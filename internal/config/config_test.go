@@ -114,6 +114,10 @@ func TestValidate_Errors(t *testing.T) {
 		{"webhook without url", func(c *config.Config) { c.Notifications.Webhook = &config.Webhook{} }, "notifications.webhook"},
 		{"bad external URL", func(c *config.Config) { c.Notifications.ExternalURL = "themis.local" }, "notifications.externalURL"},
 		{"executor without address", func(c *config.Config) { c.Executor = &config.Executor{BearerTokenFile: "/t"} }, "executor.address"},
+		{"prometheus not http", func(c *config.Config) { c.Metrics.Prometheus = &config.Prometheus{Address: "prometheus:9090"} }, "metrics.prometheus.address"},
+		{"client certificate without key", func(c *config.Config) {
+			c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus", TLS: config.TLS{CertFile: "/c"}}
+		}, "metrics.prometheus.tls"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"no investigator token file", func(c *config.Config) { c.Investigators.BearerTokenFile = "" }, "investigators.bearerTokenFile"},
 		{"invalid profile name", func(c *config.Config) { c.Profiles[0].Name = "Rollout Regression" }, "profiles[0].name"},

@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -26,6 +27,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
+	containermetrics "github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/resources"
 	"github.com/hzerrad/themis/internal/config/settings"
@@ -111,9 +113,17 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return fmt.Errorf("create clientset: %w", err)
 	}
+	metricsAPI, err := metricsclient.NewForConfig(o.Kubernetes)
+	if err != nil {
+		return fmt.Errorf("create metrics API client: %w", err)
+	}
+	usage, err := containermetrics.FromConfig(cfg.Metrics, metricsAPI)
+	if err != nil {
+		return err
+	}
 	// Everything Themis can read, check and change. Each part goes to the
 	// code that uses it.
-	cat, err := catalog.Build(evidence.ClientsetLogs{Clientset: clientset}, scenarios.FS, cfg.Scenarios.Disabled)
+	cat, err := catalog.Build(evidence.ClientsetLogs{Clientset: clientset}, usage, scenarios.FS, cfg.Scenarios.Disabled)
 	if err != nil {
 		return err
 	}
@@ -239,7 +249,7 @@ func Run(ctx context.Context, o Options) error {
 	mux := http.NewServeMux()
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
 	api.Sessions, api.Accounts = s, s
-	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled}
+	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled, Metrics: usage}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
 	}

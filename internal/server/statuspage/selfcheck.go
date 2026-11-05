@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/store"
@@ -71,6 +73,11 @@ type Checker struct {
 	Model interface {
 		View(ctx context.Context) (settings.ModelView, error)
 	}
+	// Metrics are the sources Themis reads containers' memory and CPU use
+	// from. Nil means none is set up.
+	Metrics interface {
+		Health(ctx context.Context) []metrics.Health
+	}
 	// Dial reaches the executor; nil dials TCP.
 	Dial func(ctx context.Context, addr string) error
 	Now  func() time.Time
@@ -99,6 +106,7 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 		c.model(ctx),
 		c.alerts(ctx),
 		c.namespaces(ctx),
+		c.metrics(ctx),
 		c.executor(ctx),
 		c.signIn(ctx),
 	}
@@ -282,6 +290,70 @@ func (c *Checker) namespaces(ctx context.Context) Check {
 		ch.State, ch.Summary = OK, fmt.Sprintf("Themis can read %s.", join(enrolled, "and"))
 	}
 	return ch
+}
+
+// metrics says which sources say how much memory and CPU containers use,
+// and what Themis can't see without one that keeps history.
+func (c *Checker) metrics(ctx context.Context) Check {
+	ch := Check{Name: "Metrics"}
+	var health []metrics.Health
+	if c.Metrics != nil {
+		mctx, cancel := context.WithTimeout(ctx, checkTimeout)
+		health = c.Metrics.Health(mctx)
+		cancel()
+	}
+	if len(health) == 0 {
+		ch.State, ch.Summary = Off, "No metrics source is set up, so investigations can't see how much memory and CPU containers use."
+		ch.Fix = "Set a Prometheus address (metrics.prometheus.address), or turn the Kubernetes metrics API back on (metrics.kubernetes)."
+		return ch
+	}
+	var using, broken []string
+	history, promBroken := false, false
+	for _, h := range health {
+		if h.Err != nil {
+			broken = append(broken, upper(strings.TrimSuffix(h.Err.Error(), "."))+".")
+			promBroken = promBroken || h.History
+			continue
+		}
+		using = append(using, c.sourceText(h.Source))
+		history = history || h.History
+	}
+	var says []string
+	if len(using) > 0 {
+		says = append(says, fmt.Sprintf("Memory and CPU use come from %s.", join(using, "and")))
+		if !history {
+			says = append(says, "No peak memory or CPU throttling data: the Kubernetes metrics API keeps no history. Set a Prometheus address (metrics.prometheus.address) to see them.")
+		}
+	}
+	says = append(says, broken...)
+	ch.Summary = strings.Join(says, " ")
+	switch {
+	case promBroken:
+		ch.State = Problem
+		ch.Fix = "Check metrics.prometheus.address, its token and TLS settings, and that Themis's pod may reach it."
+	case len(using) == 0:
+		ch.State = Warn
+		ch.Fix = "Install metrics-server, or set a Prometheus address (metrics.prometheus.address)."
+	default:
+		ch.State = OK
+	}
+	return ch
+}
+
+// sourceText names a metrics source for people.
+func (c *Checker) sourceText(name string) string {
+	switch name {
+	case metrics.Kubernetes:
+		return "the Kubernetes metrics API"
+	case metrics.Prometheus:
+		if p := c.Config.Current().Metrics.Prometheus; p != nil {
+			if u, err := url.Parse(p.Address); err == nil {
+				return "Prometheus at " + u.Redacted()
+			}
+		}
+		return "Prometheus"
+	}
+	return name
 }
 
 func (c *Checker) executor(ctx context.Context) Check {

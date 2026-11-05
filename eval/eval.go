@@ -273,14 +273,14 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, packs, nil)
+	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, nil, packs, nil)
 	if err != nil {
 		return Bundle{}, err
 	}
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
-		Truth: s.Truth, Target: target, Capabilities: cat.Fixes.Names(), Fixes: bundleFixes(cat.Fixes),
+		Truth: s.Truth, Target: target, Capabilities: profile.Capabilities, Fixes: bundleFixes(cat.Fixes, profile.Capabilities),
 		RootCauses: cat.RootCauses.For(profile.Name), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
@@ -458,10 +458,16 @@ type BundleFix struct {
 	ParamsSchema string `json:"params_schema"`
 }
 
-func bundleFixes(fixes capability.Registry) []BundleFix {
+// bundleFixes describes the fixes the profile allows: the investigator is
+// offered those and no others, so a fix added to Themis changes no pack's
+// bundles until its profile allows it.
+func bundleFixes(fixes capability.Registry, allowed []string) []BundleFix {
 	var out []BundleFix
-	for _, name := range fixes.Names() {
-		f := fixes[name]
+	for _, name := range allowed {
+		f, ok := fixes[name]
+		if !ok {
+			continue
+		}
 		out = append(out, BundleFix{Name: f.Name(), Description: f.Description(), ParamsSchema: string(f.Schema())})
 	}
 	return out
