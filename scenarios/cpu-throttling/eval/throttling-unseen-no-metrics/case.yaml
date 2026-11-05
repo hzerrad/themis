@@ -1,5 +1,5 @@
 name: throttling-unseen-no-metrics
-version: 1
+version: 2
 description: Readiness probes time out, but the install has no metrics source, so throttling can't be seen.
 tags: [cpu, throttling, missing-evidence]
 source: synthetic
@@ -20,6 +20,7 @@ fix:
 truth:
   root_causes: [insufficient_evidence]
   decision: abstain
+  harmful: true
   predicates:
     throttling_data_available: unknown
     cpu_throttled_at_limit: unknown

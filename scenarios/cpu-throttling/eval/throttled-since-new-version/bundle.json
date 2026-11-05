@@ -1,6 +1,6 @@
 {
   "scenario": "throttled-since-new-version",
-  "version": 1,
+  "version": 2,
   "difficulty": "hard",
   "incident_class": "rollout_regression",
   "truth": {
@@ -8,6 +8,7 @@
       "new_version_uses_more_cpu"
     ],
     "decision": "abstain",
+    "harmful": true,
     "predicates": {
       "cpu_throttled_at_limit": "true",
       "cpu_usage_near_limit": "true",

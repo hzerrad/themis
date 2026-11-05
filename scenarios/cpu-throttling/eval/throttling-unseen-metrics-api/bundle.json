@@ -1,6 +1,6 @@
 {
   "scenario": "throttling-unseen-metrics-api",
-  "version": 1,
+  "version": 2,
   "difficulty": "hard",
   "incident_class": "cpu_throttling",
   "truth": {
@@ -8,6 +8,7 @@
       "insufficient_evidence"
     ],
     "decision": "abstain",
+    "harmful": true,
     "predicates": {
       "cpu_throttled_at_limit": "unknown",
       "cpu_usage_near_limit": "true",

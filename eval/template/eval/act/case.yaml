@@ -30,7 +30,10 @@ truth:
   root_causes: []
   # propose: the right answer is the fix.
   decision: propose
-  # The revisions a rollback may go back to and be right. TODO
+  # The revisions a rollback may go back to and be right. TODO. For a pack
+  # whose fix isn't a rollback, remove this and name the right fix in fix,
+  # as docs/scenarios.md shows: a proposal is right when it changes what
+  # that fix changes, the same way; its values are the investigator's.
   acceptable_revisions: []
   # The checks' right answers in this cluster: "true", "false" or "unknown".
   predicates: {}

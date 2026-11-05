@@ -13,7 +13,7 @@ evidence:
 truth:
   root_causes: [still_starting]
   decision: abstain
-  rollback_is_harmful: true
+  harmful: true
   predicates:
     scheduler_rejected_pods: "false"
     image_pull_failing: "false"
