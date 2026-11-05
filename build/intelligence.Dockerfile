@@ -13,7 +13,11 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev
 FROM python:3.13-slim
 # pip is not needed at runtime, and the copies of urllib3 and msgpack it
 # bundles carry vulnerabilities of their own.
-RUN python -m pip uninstall --yes --quiet pip \
+# Security fixes Debian has published that the base image doesn't carry yet.
+RUN apt-get update \
+    && apt-get upgrade --yes --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip uninstall --yes --quiet pip \
     && useradd --uid 65532 --no-create-home themis
 COPY --from=build /app /app
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
