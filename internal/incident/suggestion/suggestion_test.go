@@ -17,6 +17,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
@@ -69,7 +70,7 @@ func newEnv(t *testing.T, fixes []string) *env {
 	}
 	e := &env{
 		inbox: &suggestion.Inbox{
-			Store: s, Fixes: registry, Checks: cat.Checks, Now: func() time.Time { return now },
+			Store: s, Fixes: registry, Now: func() time.Time { return now },
 			Config: config.Config{Profiles: []config.Profile{{Name: "diagnosis"}, {Name: profileName, Capabilities: fixes}}},
 		},
 		store: s, pool: pool, evidence: uuid.NewString(),
@@ -85,7 +86,8 @@ func newEnv(t *testing.T, fixes []string) *env {
 			return err
 		}
 		item := evidence.Item{ID: e.evidence, Template: evidence.PodStates, Target: e.target, Data: []byte(`{}`), CollectedAt: now, Classification: evidence.ClassificationInternal}
-		if _, err := s.CreateInvestigation(t.Context(), tx, e.incident, []evidence.Item{item}, nil); err != nil {
+		ran := []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x", EvidenceIDs: []string{e.evidence}}}
+		if _, err := s.CreateInvestigation(t.Context(), tx, e.incident, []evidence.Item{item}, ran); err != nil {
 			return err
 		}
 		inv, _, err := s.LeaseInvestigation(t.Context(), tx, "w", now, time.Minute)
@@ -231,10 +233,12 @@ func TestSubmit_Rejected(t *testing.T) {
 		},
 		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, says: "It cites evidence Themis never collected: 0192f0c1-0000-7000-8000-0000000000ee.", safety: "unknown_evidence",
 	}, {
-		name: "a check that doesn't exist", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
-			r.CitedPredicates = []string{"cluster_is_fine"}
+		// A check is cited for what it answered for this incident: one Themis
+		// has, but didn't run for it, answered nothing.
+		name: "a check the incident didn't run", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
+			r.CitedPredicates = []string{"rollout_recent"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, says: "It cites a check that doesn't exist: cluster_is_fine.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, says: "It cites a check Themis didn't run for this incident: rollout_recent.",
 	}, {
 		name: "a fix the source may not suggest",
 		from: func(e *env) suggestion.Suggester {

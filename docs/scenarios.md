@@ -55,6 +55,8 @@ profile:
     allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
   checks: [rollout_recent, failure_onset_after_rollout, oom_killed_new_revision, gitops_managed]
   capabilities: [deployment.rollback-to-revision]
+  justifiedBy:
+    deployment.rollback-to-revision: [failure_onset_after_rollout]
   guidance: |
     A rollback is right when the current revision introduced the failure and
     a prior revision was healthy. ...
@@ -76,6 +78,8 @@ Two packs may answer the same alert: on an OOM kill, one may offer a rollback an
 A pack's rules govern only its own fixes. The fixes another pack offers are decided by that pack's rules, so a pack's policy can't refuse, or let through, another pack's fix. Write every protection a fix needs into the policy of each pack that offers a fix. Themis's [core protections](configuration.md#core-protections), such as never changing a workload GitOps owns, apply to every pack's fixes: a pack doesn't repeat them. When two packs offer the same fix, each one's policy decides it and the strictest outcome wins.
 
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
+
+`justifiedBy` names, for each fix the pack offers, the checks that justify it: Themis refuses the fix unless one of them is true, whoever suggests it, and hands the incident to a person when they are true and the investigator suggested nothing. Name the checks that show the fix addresses what is wrong, such as `probe_kills` for a probe change, and write a policy rule only for what else must hold, such as no recent rollout. See [justifying checks](configuration.md#justifying-checks).
 
 `guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
 

@@ -43,6 +43,10 @@ profile:
     - oom_after_long_run
     - evicted_for_node_memory
   capabilities: [deployment.set-resources]
+  # A raise is refused unless a container of the current version was
+  # OOMKilled.
+  justifiedBy:
+    deployment.set-resources: [oom_killed_current_revision]
   # What the investigator is told about these incidents: when raising the
   # memory limit is right and when it is wrong. It names checks, never root
   # causes, and gives a starting size as guidance only: the checks and the
@@ -83,16 +87,15 @@ profile:
     mode: guarded
     approvalTimeout: 30m
     rules:
-      # OOM kills on a version that has run are the only reason this pack
-      # raises memory. A raise without them, right after a rollout, when the
-      # containers never reached their limit, or when the node ran short of
-      # memory, or may have, is refused. A restore puts back what Themis
-      # changed.
+      # OOM kills are the only reason this pack raises memory, and
+      # justifiedBy asks for them. They must be on a version that has run: a
+      # raise right after a rollout, when the containers never reached their
+      # limit, or when the node ran short of memory, or may have, is refused.
+      # A restore puts back what Themis changed.
       - name: raise-needs-oom-kills-on-a-version-that-has-run
         when: >-
           action.restore != "true" &&
-          (predicates.oom_killed_current_revision != "true" ||
-           predicates.oom_without_recent_rollout != "true" ||
+          (predicates.oom_without_recent_rollout != "true" ||
            predicates.memory_at_limit_before_kill == "false" ||
            predicates.evicted_for_node_memory != "false")
         decision: deny

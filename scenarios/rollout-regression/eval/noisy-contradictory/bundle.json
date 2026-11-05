@@ -202,13 +202,13 @@
     },
     {
       "name": "config_changed_before_failure",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no referenced ConfigMap changed between the rollout and the first failure",
       "evidence_ids": [
         "ev-referenced_config",
         "ev-rollout_history",
-        "ev-target_events"
+        "ev-pod_states"
       ]
     }
   ],

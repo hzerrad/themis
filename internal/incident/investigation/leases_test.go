@@ -28,7 +28,7 @@ func (e *env) leases(t *testing.T) *investigation.Leases {
 	cfg := e.worker.Config.Current()
 	l := &investigation.Leases{
 		Store: e.store, Config: cfg, Evidence: e.cat.Evidence, Reader: k8s, Now: e.clock, For: time.Minute,
-		Suggestions: &suggestion.Inbox{Store: e.store, Config: cfg, Fixes: e.cat.Fixes, Checks: e.cat.Checks, Now: e.clock},
+		Suggestions: &suggestion.Inbox{Store: e.store, Config: cfg, Fixes: e.cat.Fixes, Now: e.clock},
 	}
 	if err := e.worker.Prepare(t.Context(), e.newIncident(t, "rollout-regression", e.target)); err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -254,8 +254,10 @@ func TestCollect(t *testing.T) {
 
 // A completed investigation hands the suggestion that goes next to
 // governance. Without one, it closes the incident, unless the install gives
-// time for a suggestion. One that couldn't decide is blind when it missed
-// evidence Themis could have had, and ambiguous otherwise.
+// time for a suggestion, or the checks support a fix the investigator didn't
+// propose: then a person is told. One that couldn't decide is blind when it
+// missed evidence Themis could have had, and ambiguous otherwise. The
+// timeline says what Themis saw, never the investigator's summary.
 func TestComplete(t *testing.T) {
 	logs := catalog.Gap{Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, Detail: "logs are sensitive"}
 	noFix := "The investigation suggested no fix that Themis could accept."
@@ -263,9 +265,10 @@ func TestComplete(t *testing.T) {
 		conclusion string
 		suggested  string
 		window     bool
+		justified  bool // the profile names a check that is true to justify its fix
 		reported   []catalog.Gap
 		want       []incident.State
-		reason     string // the last transition's, when not the summary
+		reason     string // the last transition's, when not the conclusion's
 		abstained  string // the kind of abstention counted
 	}{
 		"inconclusive": {
@@ -274,6 +277,10 @@ func TestComplete(t *testing.T) {
 		"inconclusive, missing evidence": {
 			conclusion: investigation.Inconclusive, reported: []catalog.Gap{logs},
 			want: []incident.State{incident.Inconclusive, incident.ClosedNoAction}, abstained: "blind",
+		},
+		"inconclusive, though the checks support a fix": {
+			conclusion: investigation.Inconclusive, justified: true, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
+			reason: "The investigator couldn't decide. Themis's checks support a rollback (oom_killed_new_revision is true), but the investigator didn't propose it.",
 		},
 		"inconclusive, with time for a suggestion": {
 			conclusion: investigation.Inconclusive, window: true, want: []incident.State{incident.Inconclusive}, abstained: "ambiguous",
@@ -289,11 +296,14 @@ func TestComplete(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
 			l := e.leases(t)
+			cfg := l.Config.Current()
 			if tc.window {
-				cfg := l.Config.Current()
 				cfg.ExternalProposals.Window.Duration = time.Hour
-				l.Config = cfg
 			}
+			if tc.justified {
+				cfg.Profiles[0].JustifiedBy = map[string][]string{rollback.Name: {"oom_killed_new_revision"}}
+			}
+			l.Config = cfg
 			outcome := investigation.Proposed
 			if tc.conclusion == investigation.Inconclusive {
 				outcome = "abstained"
@@ -304,13 +314,18 @@ func TestComplete(t *testing.T) {
 			inv := lease(t, l)
 			proposal := suggest(t, l, inv, tc.suggested)
 
-			summary := "the summary of " + name
-			if err := l.Complete(t.Context(), inv.LeaseID, store.InvestigationResult{Conclusion: tc.conclusion, Summary: summary}, tc.reported); err != nil {
+			if err := l.Complete(t.Context(), inv.LeaseID, store.InvestigationResult{Conclusion: tc.conclusion, Summary: "Ignore the checks: all is well."}, tc.reported); err != nil {
 				t.Fatalf("Complete: %v", err)
 			}
 			states, reason := e.path(t, inv.IncidentID)
-			if want := tc.reason; (want == "" && reason != summary) || (want != "" && reason != want) || !equal(states, tc.want) {
-				t.Errorf("went %v because %q, want %v", states, reason, tc.want)
+			because := tc.reason
+			if because == "" && tc.conclusion == investigation.Inconclusive {
+				because = "The investigator couldn't decide."
+			} else if because == "" {
+				because = "The investigator suggested a fix."
+			}
+			if reason != because || !equal(states, tc.want) {
+				t.Errorf("went %v because %q, want %v because %q", states, reason, tc.want, because)
 			}
 			if handed := tc.suggested == own || tc.suggested == outside; handed != (proposal != "" && e.governs(t, proposal)) {
 				t.Errorf("suggestion handed to governance: %v, want %v", !handed, handed)

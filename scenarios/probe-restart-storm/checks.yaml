@@ -11,9 +11,10 @@
 # The kubelet restarted a container because its liveness or startup probe
 # failed: what a probe that is too strict does. The pod's status bears the
 # event out when a container of the current revision restarted, and its last
-# end, no earlier than the event, was a kill: exit code 137 or 143.
+# end, no earlier than the event's first kill and no earlier than its last,
+# was a kill: exit code 137 or 143.
 - name: probe_kills
-  version: "2"
+  version: "3"
   description: The kubelet restarts a container because its liveness or startup probe fails
   reads: [target_events, pod_states]
   let:
@@ -26,7 +27,8 @@
         p.containers.exists(c, !c.init && c.restartCount > 0 && c.lastTermination != null &&
           c.lastTermination.status == "terminated" && c.lastTermination.reason != "OOMKilled" &&
           c.lastTermination.exitCode != null && c.lastTermination.exitCode in [137, 143] &&
-          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen)))
+          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen &&
+          (e.lastSeen == null || c.lastTermination.finishedAt >= e.lastSeen))))
   answers:
     - when: size(borne) > 0
       answer: true
@@ -43,10 +45,11 @@
 # Every probe failure the kubelet reported is a probe that ran out of time,
 # not an answer: the container is slow to answer, rather than saying it is
 # unhealthy or not listening. The pod's status bears a failure out when a pod
-# of the current revision it names has a container that isn't ready, or that
-# restarted no earlier than the event.
+# of the current revision it names has a container that is running and isn't
+# ready, or that restarted no earlier than the event's first failure and
+# ended no earlier than its last: the kubelet probes only running containers.
 - name: probe_timeouts
-  version: "2"
+  version: "3"
   description: Probes fail by running out of time, not by an error answer
   reads: [target_events, pod_states]
   let:
@@ -58,9 +61,11 @@
         .exists(m, e.message.contains(m)))
     borne: >-
       failed.filter(e, pod_states.pods.exists(p, "Pod/" + p.name == e.object && p.revision == current_revision &&
-        p.containers.exists(c, !c.init && (!c.ready || (e.firstSeen != null && c.restartCount > 0 &&
+        p.containers.exists(c, !c.init && ((!c.ready && c.state != null && c.state.status == "running") ||
+          (e.firstSeen != null && c.restartCount > 0 &&
           c.lastTermination != null && c.lastTermination.finishedAt != null &&
-          c.lastTermination.finishedAt >= e.firstSeen)))))
+          c.lastTermination.finishedAt >= e.firstSeen &&
+          (e.lastSeen == null || c.lastTermination.finishedAt >= e.lastSeen))))))
   answers:
     - when: size(failed) == 0
       answer: false
@@ -72,7 +77,7 @@
       cite: [ids.target_events]
     - when: size(borne) == 0
       answer: unknown
-      reason: "an event says ${failed[0].object}: ${failed[0].message}, but no pod of revision ${current_revision} that the probe failures name is unready or restarted since"
+      reason: "an event says ${failed[0].object}: ${failed[0].message}, but no pod of revision ${current_revision} that the probe failures name is running and unready, or restarted since"
       cite: [ids.target_events, ids.pod_states]
     - answer: true
       reason: "every probe failure is a timeout, such as ${borne[0].object}: ${borne[0].message}"
@@ -85,7 +90,7 @@
 # passed its liveness probe, so it was killed while still starting. A startup
 # probe kill counts when the pod's status bears it out, as for probe_kills.
 - name: killed_during_startup
-  version: "2"
+  version: "3"
   description: Containers are killed before they finish starting
   reads: [target_events, rollout_history, pod_states]
   let:
@@ -97,7 +102,8 @@
         p.containers.exists(c, !c.init && c.restartCount > 0 && c.lastTermination != null &&
           c.lastTermination.status == "terminated" && c.lastTermination.reason != "OOMKilled" &&
           c.lastTermination.exitCode != null && c.lastTermination.exitCode in [137, 143] &&
-          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen)))
+          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen &&
+          (e.lastSeen == null || c.lastTermination.finishedAt >= e.lastSeen))))
     probed: >-
       current == null ? [] : current.containers.filter(t, "liveness" in t.probes && !("startup" in t.probes))
     # Each as [pod/container, how long it ran].

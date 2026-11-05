@@ -294,31 +294,46 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 		return evidence.ConfigRefView{Kind: evidence.ConfigKindConfigMap, Name: "settings", ChangedAt: at}
 	}
 	failedAt := rolloutAt.Add(10 * time.Minute)
-	crashed := evidence.PodStatesView{Pods: []evidence.PodView{{Name: "p", Revision: "2", Containers: []evidence.ContainerView{
-		{Name: "app", LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: failedAt}},
-	}}}}
+	crashed := func(restarts int32) evidence.PodStatesView {
+		return evidence.PodStatesView{Pods: []evidence.PodView{{Name: "p", Revision: "2", StartedAt: rolloutAt, Containers: []evidence.ContainerView{
+			{Name: "app", RestartCount: restarts, LastTermination: &evidence.StateView{Reason: "Error", FinishedAt: failedAt}},
+		}}}}
+	}
+	// A warning event about the pod, three minutes after the rollout.
+	early := []evidence.EventView{{Object: "Pod/p", Type: "Warning", Reason: "BackOff", FirstSeen: rolloutAt.Add(3 * time.Minute)}}
 	tests := []struct {
 		name   string
 		refs   []evidence.ConfigRefView
 		want   check.Truth
 		reason string
+		// restarts are the container's; events, what target_events says.
+		restarts int32
+		events   []evidence.EventView
 	}{
-		{"nothing referenced", nil, check.False, ""},
-		{"changed before the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(-time.Hour))}, check.False, ""},
-		{"written with the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(30 * time.Second))}, check.False, ""},
-		{"changed between the rollout and the failure", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.True, ""},
-		{"changed after the failure", []evidence.ConfigRefView{cm(failedAt.Add(time.Minute))}, check.False, ""},
-		{"doesn't say when", []evidence.ConfigRefView{cm(time.Time{})}, check.Unknown, ""},
-		{"required and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true}}, check.Unknown, ""},
-		{"optional and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true, Optional: true}}, check.False, ""},
-		{"a Secret can't be checked", []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}, check.False, "1 referenced Secret(s) can't be checked"},
+		{"nothing referenced", nil, check.False, "", 0, nil},
+		{"changed before the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(-time.Hour))}, check.False, "", 0, nil},
+		{"written with the rollout", []evidence.ConfigRefView{cm(rolloutAt.Add(30 * time.Second))}, check.False, "", 0, nil},
+		{"changed between the rollout and the failure", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.True, "", 0, nil},
+		{"changed after the failure", []evidence.ConfigRefView{cm(failedAt.Add(time.Minute))}, check.False, "", 0, nil},
+		{"doesn't say when", []evidence.ConfigRefView{cm(time.Time{})}, check.Unknown, "", 0, nil},
+		{"required and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true}}, check.Unknown, "", 0, nil},
+		{"optional and missing", []evidence.ConfigRefView{{Kind: evidence.ConfigKindConfigMap, Name: "gone", Missing: true, Optional: true}}, check.False, "", 0, nil},
+		{"a Secret can't be checked", []evidence.ConfigRefView{{Kind: evidence.ConfigKindSecret, Name: "db"}}, check.False, "1 referenced Secret(s) can't be checked", 0, nil},
+		// The status dates a container's only failure: an event anyone could
+		// write can't move it earlier.
+		{"an earlier event the status dates otherwise", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.True, "", 1, early},
+		// A container that restarted many times failed first before its last
+		// end: an event about its pod, since it started, dates that.
+		{"restarted many times, dated by an event", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.False, "", 7, early},
+		{"restarted many times, no event", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.Unknown, "no failure with a known time", 7, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := evidence.Bundle{Items: []evidence.Item{
 				item(t, "cfg", evidence.ReferencedConfig, evidence.ReferencedConfigView{Refs: tt.refs}),
 				item(t, "h", evidence.RolloutHistory, history()),
-				item(t, "p", evidence.PodStates, crashed),
+				item(t, "p", evidence.PodStates, crashed(tt.restarts)),
+				item(t, "e", evidence.TargetEvents, events(tt.events...)),
 			}}
 			got := run("config_changed_before_failure", b)
 			if got.Value != tt.want {

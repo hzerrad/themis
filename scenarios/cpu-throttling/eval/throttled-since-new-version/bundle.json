@@ -189,6 +189,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule raise-needs-throttling forbids this fix."
+    "reason": "Policy rule no-raise-after-a-rollout forbids this fix."
   }
 }

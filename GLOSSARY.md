@@ -92,8 +92,12 @@ _Avoid_: operation, job, change request
 The rules that decide, for each action, whether it is forbidden or needs a person's approval.
 _Avoid_: permissions, RBAC
 
+**Justifying check**:
+A check a profile names for one of its fixes: Themis refuses the fix unless one of them is true, whoever suggests it, since evidence anyone can write may suggest a fix but never justify one.
+_Avoid_: precondition, guard
+
 **Core protection**:
-A rule Themis applies to every action before any policy, whichever profile offers the fix and whoever suggested it, and that no policy can loosen: Themis never changes a workload GitOps manages, or may manage, and only recommends the fix, for a person to apply in Git.
+A rule Themis applies to every action before any policy, whichever profile offers the fix and whoever suggested it, and that no policy can loosen: Themis refuses a fix none of its justifying checks supports, and never changes a workload GitOps manages, or may manage, only recommending the fix, for a person to apply in Git.
 _Avoid_: default policy, built-in rule
 
 **Approval**:

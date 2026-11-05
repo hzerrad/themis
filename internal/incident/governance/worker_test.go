@@ -34,6 +34,7 @@ func profile(name string) config.Profile {
 		Name: name, Priority: 100,
 		Evidence:     config.Evidence{Allowed: []string{evidence.PodStates}},
 		Capabilities: []string{"deployment.rollback-to-revision"},
+		JustifiedBy:  map[string][]string{"deployment.rollback-to-revision": {"oom_killed_new_revision"}},
 		Policy: config.Policy{Mode: config.ModeGuarded, Rules: []config.PolicyRule{
 			{Name: "needs-oom", When: `predicates.oom_killed_new_revision != "true"`, Decision: config.DecisionDeny},
 			{Name: "no-instructions", When: `"evidence_has_instructions" in predicates && predicates.evidence_has_instructions == "true"`, Decision: config.DecisionDeny},

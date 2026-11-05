@@ -195,13 +195,13 @@
     },
     {
       "name": "config_changed_before_failure",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "no failure with a known time"
     }
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Policy rule rollback-needs-a-bad-rollout forbids this fix."
+    "reason": "The check that justifies a rollback isn't true: failure_onset_after_rollout is unknown."
   }
 }

@@ -52,6 +52,9 @@ profile:
     - gitops_managed
     - config_changed_before_failure
   capabilities: [deployment.rollback-to-revision]
+  # A rollback is refused unless the failures started after the rollout.
+  justifiedBy:
+    deployment.rollback-to-revision: [failure_onset_after_rollout]
   # What the investigator is told about these incidents: when a rollback is
   # right and when it is wrong. Guidance only: the checks and the policy
   # below decide.
@@ -75,11 +78,14 @@ profile:
     # Themis never changes a workload GitOps manages, or may manage, whatever
     # these rules say: it only recommends the fix.
     rules:
+      # justifiedBy asks that the failures started after the rollout. The
+      # rollout must also be recent, no config changed before the failures,
+      # and the version before it must have been healthy, or the new one run
+      # out of memory.
       - name: rollback-needs-a-bad-rollout
         when: >-
           action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
           (predicates.rollout_recent != "true" ||
-           predicates.failure_onset_after_rollout != "true" ||
            predicates.config_changed_before_failure != "false" ||
            predicates.prior_revision_was_healthy == "false" ||
            (predicates.oom_killed_new_revision != "true" &&

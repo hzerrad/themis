@@ -178,6 +178,8 @@ profile:
     allowed: [pod_states]
   checks: [gitops_managed]
   capabilities: [deployment.set-resources]
+  justifiedBy:
+    deployment.set-resources: [gitops_managed]
 `)
 	cat, err := catalog.Build(nil, nil, os.DirFS(root), nil)
 	if err != nil {

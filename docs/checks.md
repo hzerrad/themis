@@ -46,14 +46,15 @@ This is one of them:
 
 | Check | The event | What has to show it too |
 |---|---|---|
-| `probe_kills` | `Killing`: failed liveness or startup probe | A container of that pod, of the current revision, restarted, and its last end, no earlier than the event, was a kill: exit code 137 or 143, not `OOMKilled` |
+| `probe_kills` | `Killing`: failed liveness or startup probe | A container of that pod, of the current revision, restarted, and its last end, no earlier than the event's first and last kill, was a kill: exit code 137 or 143, not `OOMKilled` |
 | `killed_during_startup` | `Killing`: failed startup probe | The same as `probe_kills`. Its other answer reads only the pod's status |
-| `probe_timeouts` | `Unhealthy`: a probe timed out | A pod of the current revision that a failure names has a container that isn't ready, or that restarted no earlier than the event |
+| `probe_timeouts` | `Unhealthy`: a probe timed out | A pod of the current revision that a failure names has a container that is running and isn't ready, or that restarted, ending no earlier than the event's first and last failure: the kubelet probes only running containers |
 | `evicted_for_node_memory` | `Evicted`: the node was low on memory | The pod is still there and has failed |
 | `scheduler_rejected_pods` | `FailedScheduling` | The pod is pending with no container statuses: no node took it |
 | `volume_not_bound` | `FailedMount`, `FailedAttachVolume`, or `FailedScheduling` naming a volume | The pod is pending, with no container running |
 | `quota_refused_pods` | `FailedCreate`: exceeded quota | The Deployment's `ReplicaFailure` condition is true, for `FailedCreate`, and names the quota |
 | `failure_onset_after_rollout` | Any warning event, through `failures` | A pod of the current revision isn't ready, or a container of one restarted |
+| `config_changed_before_failure` | Any warning event, through `first_failure` | The pod it names shows a failure in its status, and started no later than the event |
 
 **Missing evidence needs no answer.** When a template an answer reads has no evidence, the check stops there as `unknown`, with a reason such as "no pod states", and the gap that explains it is attached, as for every check.
 
@@ -69,7 +70,7 @@ This is one of them:
 | `rollout_at` | When `current` rolled out: its ReplicaSet's creation, or a later template change that reused it. `null` when unknown |
 | `current_revision` | The current revision's number: from `rollout_history`, or without it the newest revision among the pods |
 | `failures` | Signs of trouble, in order: warning events about pods, then containers that died other than `Completed`. Each has `at` (`null` when unknown), `what` and `id` |
-| `first_failure` | The earliest failure, or `null` when there is none or one has no time, and so could be earlier still |
+| `first_failure` | The earliest failure, dated by the pods' status: a container's last termination, or for one that restarted more than once, a warning event about its pod that the status agrees with, one about a pod that shows a failure, dated no earlier than the pod started. Other events are left out. `null` when there is none, or one can't be dated and so could be earlier still |
 | `suspicious_evidence` | Text in any evidence that looks written for the investigator, such as instructions or forged tool output, in collection order. Each has `id` and `template`, the evidence it is in, `reason` and `at`, where in it |
 
 `current`, `prior` and `rollout_at` come from `rollout_history`, so an answer that uses them needs it. Besides standard CEL, the [lists](https://pkg.go.dev/github.com/google/cel-go/ext#Lists) and [strings](https://pkg.go.dev/github.com/google/cel-go/ext#Strings) extensions are there, such as `flatten()` and `sort()`. Each expression has a cost limit; one that goes over it, or fails, makes the check `unknown` with the error as its reason.

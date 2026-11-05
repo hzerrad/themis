@@ -126,7 +126,7 @@ func newEnvWith(t *testing.T, p config.Profile) *env {
 		Store: s, Config: cfg, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Now: now,
 		Logger: telemetry.NewLogger(e.logs, "core", slog.LevelDebug),
 	}
-	gs.Suggestions = &suggestion.Inbox{Store: s, Config: cfg, Fixes: cat.Fixes, Checks: cat.Checks, Logger: gs.Logger, Now: now}
+	gs.Suggestions = &suggestion.Inbox{Store: s, Config: cfg, Fixes: cat.Fixes, Logger: gs.Logger, Now: now}
 	gs.Investigations = &investigation.Leases{Store: s, Config: cfg, Evidence: cat.Evidence, Reader: k8s, Suggestions: gs.Suggestions, Logger: gs.Logger, Now: now}
 	tokenFile := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(tokenFile, []byte(investigatorToken), 0o600); err != nil {

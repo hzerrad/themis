@@ -232,5 +232,6 @@
     },
     "outcome": "require_approval",
     "reason": "Policy rule raise-needs-approval requires a person's approval."
-  }
+  },
+  "unproposed": "Themis's checks support a memory or CPU change (oom_killed_current_revision is true), but the investigator didn't propose it."
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"slices"
 	"strings"
@@ -171,6 +172,18 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 	for j, name := range p.Evidence.Initial {
 		if !p.AllowsTemplate(name) {
 			add(fmt.Sprintf("evidence.initial[%d]", j), "template %q is not in evidence.allowed", name)
+		}
+	}
+	// A fix is suggested from evidence anyone may write into: only a check
+	// that is true says it is right.
+	for _, fix := range p.Capabilities {
+		if len(p.JustifiedBy[fix]) == 0 {
+			add("justifiedBy", "name the checks that justify %s, which the profile offers", fix)
+		}
+	}
+	for _, fix := range slices.Sorted(maps.Keys(p.JustifiedBy)) {
+		if !slices.Contains(p.Capabilities, fix) {
+			add("justifiedBy", "%s is not in capabilities", fix)
 		}
 	}
 	if n := utf8.RuneCountInString(p.Guidance); n > MaxGuidance {

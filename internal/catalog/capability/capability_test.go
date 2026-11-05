@@ -19,6 +19,7 @@ type named string
 func (n named) Name() string                                    { return string(n) }
 func (named) Version() string                                   { return "1" }
 func (named) Description() string                               { return "" }
+func (named) Noun() string                                      { return "" }
 func (named) Schema() json.RawMessage                           { return nil }
 func (named) Validate(p map[string]any) (map[string]any, error) { return p, nil }
 func (named) Plan(context.Context, client.Reader, incident.TargetRef, map[string]any) (capability.Plan, error) {

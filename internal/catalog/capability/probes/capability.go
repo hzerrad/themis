@@ -23,6 +23,7 @@ var _ capability.Capability = Capability{}
 
 func (Capability) Name() string    { return Name }
 func (Capability) Version() string { return Version }
+func (Capability) Noun() string    { return "a probe change" }
 
 func (Capability) Description() string {
 	return "Change the timing of a container's existing liveness, readiness or startup probes: " +

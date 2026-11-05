@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
@@ -31,6 +32,17 @@ func (b *Inbox) handOver(ctx context.Context, tx pgx.Tx, incidentID, proposalID,
 		return err
 	}
 	return b.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: proposalID, IncidentID: incidentID})
+}
+
+// Unproposed says which fixes the incident's checks support, among those its
+// profiles offer, that no policy of theirs forbids whatever they change, for
+// an investigation that suggested none. It is empty when there is none.
+func (b *Inbox) Unproposed(ctx context.Context, incidentID string, profiles config.Matched, namespace string) (string, error) {
+	checks, err := b.Store.Predicates(ctx, incidentID)
+	if err != nil {
+		return "", err
+	}
+	return b.decider.Unproposed(profiles, b.Fixes, checks, namespace)
 }
 
 // next picks the accepted suggestion to govern: the lease's own first, then

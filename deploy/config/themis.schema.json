@@ -480,6 +480,16 @@
             "uniqueItems": true,
             "description": "Capabilities are the remediations proposals may name; none means\ndiagnosis only."
           },
+          "justifiedBy": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "description": "JustifiedBy names, for each fix in Capabilities, the checks that\njustify it: Themis refuses the fix unless one of them is true for the\nincident, whoever suggests it. Each must be a check the profile runs."
+          },
           "guidance": {
             "type": "string",
             "maxLength": 4000,

@@ -29,6 +29,9 @@ type Capability interface {
 	// is the JSON Schema of its parameters.
 	Description() string
 	Schema() json.RawMessage
+	// Noun is the fix in a few plain words, such as "a rollback", for what
+	// operators read.
+	Noun() string
 
 	// Validate checks params without reading the cluster, and returns them
 	// as the fix stores them: JSON numbers decode as float64, for one.

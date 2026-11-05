@@ -192,6 +192,15 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 			errs = append(errs, fmt.Errorf("unknown capability %q", name))
 		}
 	}
+	// A check that doesn't run is never true, so the fix it justifies would
+	// always be refused.
+	for _, fix := range slices.Sorted(maps.Keys(p.JustifiedBy)) {
+		for _, name := range p.JustifiedBy[fix] {
+			if err := c.runs(p, name); err != nil {
+				errs = append(errs, fmt.Errorf("justifiedBy %s names the check %q, %w", fix, name, err))
+			}
+		}
+	}
 	compiled, err := policy.Compile(p.EffectivePolicy())
 	if err != nil {
 		return errors.Join(append(errs, err)...)
@@ -199,13 +208,22 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 	// A rule reading a check that doesn't run can't be evaluated, and a rule
 	// that can't be evaluated denies: every fix would be refused.
 	for _, r := range compiled.Reads() {
-		if _, ok := c.Checks.Get(r.Check); !ok {
-			errs = append(errs, fmt.Errorf("rule %s reads the check %q, which doesn't exist", r.Rule, r.Check))
-		} else if len(p.Checks) > 0 && !slices.Contains(p.Checks, r.Check) {
-			errs = append(errs, fmt.Errorf("rule %s reads the check %q, which the profile doesn't run", r.Rule, r.Check))
+		if err := c.runs(p, r.Check); err != nil {
+			errs = append(errs, fmt.Errorf("rule %s reads the check %q, %w", r.Rule, r.Check, err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// runs says why p doesn't run the check named, if it doesn't.
+func (c Catalog) runs(p config.Profile, name string) error {
+	if _, ok := c.Checks.Get(name); !ok {
+		return errors.New("which doesn't exist")
+	}
+	if len(p.Checks) > 0 && !slices.Contains(p.Checks, name) {
+		return errors.New("which the profile doesn't run")
+	}
+	return nil
 }
 
 // CheckSources says which fixes outside agents are allowed that this catalog

@@ -274,6 +274,11 @@ type Bundle struct {
 	// current one. A harmful proposal the policy denies never reaches anyone;
 	// one it lets through reaches a person to approve.
 	Policy PolicyCheck `json:"policy"`
+
+	// Unproposed is what Themis tells the person it hands the incident to
+	// when the investigator suggests no fix but the checks support one that
+	// no policy forbids; empty when it would close or wait instead.
+	Unproposed string `json:"unproposed,omitempty"`
 }
 
 // PolicyCheck is a policy's verdict on the case's fix.
@@ -385,6 +390,10 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 			out.Gaps = append(out.Gaps, Gap{Template: g.Template, Cause: string(g.Cause)})
 		}
 		b.Predicates = append(b.Predicates, out)
+	}
+	var decider governance.Decider
+	if b.Unproposed, err = decider.Unproposed(f.matched, f.cat.Fixes, f.d.Results, f.target.Namespace); err != nil {
+		return Bundle{}, err
 	}
 	fix, err := f.caseFix(ctx, s)
 	switch {

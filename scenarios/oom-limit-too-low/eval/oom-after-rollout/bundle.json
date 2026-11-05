@@ -237,7 +237,7 @@
     },
     {
       "name": "config_changed_before_failure",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "no referenced ConfigMap changed between the rollout and the first failure",
       "evidence_ids": [
@@ -317,5 +317,6 @@
     },
     "outcome": "deny",
     "reason": "Policy rule raise-needs-oom-kills-on-a-version-that-has-run forbids this fix. It is the oom-limit-too-low profile's policy."
-  }
+  },
+  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it."
 }

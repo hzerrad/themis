@@ -45,6 +45,10 @@ profile:
     - crashed_on_its_own
     - rollout_recent
   capabilities: [deployment.set-probes]
+  # A probe change is refused unless one of these is true: probes restart the
+  # container, or they time out.
+  justifiedBy:
+    deployment.set-probes: [probe_kills, probe_timeouts]
   # What the investigator is told about these incidents: when changing a
   # probe's timing is right and when it is wrong. It names checks, never root
   # causes. The checks and the policy below decide.
@@ -85,13 +89,6 @@ profile:
     # Themis itself refuses any fix on a Deployment GitOps owns, for every
     # pack, so no rule here repeats it.
     rules:
-      # A probe change needs evidence that probes are what fail the
-      # container: they restart it, or they time out.
-      - name: probe-change-needs-probe-failures
-        when: >-
-          action.capability == "deployment.set-probes" && action.restore != "true" &&
-          predicates.probe_kills != "true" && predicates.probe_timeouts != "true"
-        decision: deny
       # A container that exits with an error or runs out of memory fails by
       # itself: no probe timing fixes that.
       - name: probe-change-cannot-fix-a-crash

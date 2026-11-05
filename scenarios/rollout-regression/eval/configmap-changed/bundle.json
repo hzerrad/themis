@@ -201,7 +201,7 @@
     },
     {
       "name": "config_changed_before_failure",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "ConfigMap checkout-config changed at 2026-10-27T09:05:00Z, after revision 2 and before BackOff on Pod/checkout-7d9f8b6c4-x2kqp",
       "evidence_ids": [
