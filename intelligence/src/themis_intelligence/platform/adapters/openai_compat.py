@@ -43,6 +43,9 @@ class OpenAICompatAdapter:
         self.api_key = api_key
         self.client = client or httpx.AsyncClient(timeout=TIMEOUT)
 
+    async def aclose(self) -> None:
+        await self.client.aclose()
+
     async def send(self, req: ProviderRequest) -> ProviderResponse:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         body: dict[str, Any] = {

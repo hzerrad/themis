@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -91,18 +92,24 @@ async def test_a_request_asked_more_often_than_recorded_misses(tmp_path: Path) -
         await run_all([oom()], replaying(tmp_path), 2, CAPS)
 
 
-class Truncating(ScriptedAdapter):
-    """Cuts off its first reply, as a model that thinks too long would be."""
+class Stopping(ScriptedAdapter):
+    """Stops its first reply short: cut off, as a model that thinks too long
+    would be, or refused."""
+
+    def __init__(self, how: str, *steps: Any) -> None:
+        super().__init__(*steps)
+        self.how = how
 
     async def send(self, req: ProviderRequest) -> ProviderResponse:
         resp = await super().send(req)
         if self.calls == 1:
-            return resp.model_copy(update={"content": "", "truncated": True})
+            return resp.model_copy(update={"content": "", self.how: True})
         return resp
 
 
-async def test_a_cut_off_reply_replays_as_cut_off(tmp_path: Path) -> None:
-    live = Truncating(LOGS, LOGS, propose())
+@pytest.mark.parametrize("how", ["truncated", "refused"])
+async def test_a_reply_stopped_short_replays_as_stopped(tmp_path: Path, how: str) -> None:
+    live = Stopping(how, LOGS, LOGS, propose())
     recorded = await run_all([oom()], recording(live, tmp_path), 1, CAPS)
     replayed = await run_all([oom()], replaying(tmp_path), 1, CAPS)
     a, b = recorded.records[0], replayed.records[0]

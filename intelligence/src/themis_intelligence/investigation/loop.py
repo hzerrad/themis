@@ -419,7 +419,7 @@ async def investigate(
         provenance.model, provenance.route = result.model, result.route
         if result.error is not None:
             match result.error.kind:
-                case "validation_failed" | "truncated":
+                case "validation_failed" | "truncated" | "refused":
                     invalid += 1
                     invalid_in_a_row += 1
                     if invalid_in_a_row >= 2:

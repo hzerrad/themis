@@ -44,6 +44,7 @@ class Usage(BaseModel):
 ErrorKind = Literal[
     "validation_failed",
     "truncated",
+    "refused",
     "budget_exceeded",
     "ineligible",
     "deadline_exceeded",
@@ -88,3 +89,9 @@ class ProviderResponse(BaseModel):
     model: str
     # The reply stopped at the output limit, so its content is incomplete.
     truncated: bool = False
+    # The model declined to answer, so its content needn't match the schema.
+    refused: bool = False
+
+
+class ProviderError(Exception):
+    """The provider couldn't answer: it was unreachable, or refused the request."""

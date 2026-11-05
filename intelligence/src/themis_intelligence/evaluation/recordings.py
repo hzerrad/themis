@@ -32,6 +32,8 @@ class Reply(BaseModel):
     # A reply cut off at the output limit replays as cut off, so the client
     # treats it as it did when it was recorded.
     truncated: bool = False
+    # A refusal replays as a refusal.
+    refused: bool = False
 
 
 class Recording(BaseModel):
@@ -70,7 +72,11 @@ class RecordingAdapter:
         )
         saved.replies.append(
             Reply(
-                content=resp.content, usage=resp.usage, model=resp.model, truncated=resp.truncated
+                content=resp.content,
+                usage=resp.usage,
+                model=resp.model,
+                truncated=resp.truncated,
+                refused=resp.refused,
             )
         )
         path.write_text(saved.model_dump_json(indent=2) + "\n")
@@ -98,5 +104,9 @@ class ReplayAdapter:
         self.used[k] = n + 1
         reply = saved.replies[n]
         return ProviderResponse(
-            content=reply.content, usage=reply.usage, model=reply.model, truncated=reply.truncated
+            content=reply.content,
+            usage=reply.usage,
+            model=reply.model,
+            truncated=reply.truncated,
+            refused=reply.refused,
         )

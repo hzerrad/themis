@@ -32,9 +32,12 @@ class Provenance(BaseModel):
     schema_version: str
     model: str
     served_by: str
+    # openai: an OpenAI-compatible API; anthropic: Anthropic's Messages API.
+    provider: str = "openai"
     endpoint_host: str
     ceiling: str
-    temperature: float
+    # None: the provider's own, as Claude models take no other.
+    temperature: float | None
     max_output_tokens: int
     # Empty means the provider's default.
     reasoning_effort: str = ""
@@ -323,8 +326,10 @@ def to_markdown(r: Report) -> str:
         f"- Dataset: `{p.dataset}`, {len(p.scenario_versions)} scenarios",
         f"- Scoring version: {p.scoring_version}",
         f"- Prompt: {p.prompt_version} (`{p.prompt_sha256[:12]}`), schema {p.schema_version}",
-        f"- Model: {p.model}, served by {p.served_by or 'unknown'} at {p.endpoint_host}",
-        f"- Temperature {p.temperature}, reasoning {p.reasoning_effort or 'the default'}, "
+        f"- Model: {p.model}, served by {p.served_by or 'unknown'} at {p.endpoint_host}"
+        f" ({p.provider})",
+        f"- Temperature {'the default' if p.temperature is None else p.temperature}, "
+        f"reasoning {p.reasoning_effort or 'the default'}, "
         f"{'strict' if p.strict_output else 'best-effort'} structured output, "
         f"up to {p.max_output_tokens} output tokens, "
         f"context {context}, ceiling {p.ceiling}, {p.step_deadline_s:.0f}s per step",

@@ -1,6 +1,7 @@
 """Runs the evaluation: python -m themis_intelligence.evaluation.
 
-The API key, if the endpoint needs one, comes from a file named by MODEL_API_KEY_FILE.
+The API key, if the endpoint needs one, comes from the file --api-key-file names,
+or MODEL_API_KEY_FILE. It is read once, and never logged or reported.
 """
 
 import argparse
@@ -28,13 +29,33 @@ from themis_intelligence.evaluation.runner import Caps, run_all
 from themis_intelligence.evaluation.score import RunRecord
 from themis_intelligence.investigation import loop
 from themis_intelligence.investigation.schemas import SCHEMA_VERSION
-from themis_intelligence.platform.adapters.openai_compat import OpenAICompatAdapter
+from themis_intelligence.platform.adapters import PROVIDERS, connect
+from themis_intelligence.platform.adapters.anthropic_messages import PRICES
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Adapter, Endpoint, ModelClient, Price
 from themis_intelligence.platform.contract import CLASSIFICATION_RANK
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 ROUTE = "evaluation"
+
+# What each provider gets when a flag is left unset. A Claude model thinks
+# before it answers, inside its output limit, so it needs more room; its
+# effort is set rather than left to a default that differs between models.
+DEFAULTS = {
+    "openai": {
+        "base_url": "http://127.0.0.1:11434/v1",
+        "model": "qwen3:8b",
+        "max_output_tokens": loop.MAX_OUTPUT_TOKENS,
+        "reasoning_effort": None,
+    },
+    "anthropic": {
+        "base_url": None,
+        "model": None,
+        "max_output_tokens": 16000,
+        "reasoning_effort": "medium",
+    },
+}
+ANTHROPIC_HOST = "api.anthropic.com"
 
 
 def host_of(url: str) -> str:
@@ -52,8 +73,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--pack", action="append", help="run only this pack's cases; repeatable")
     p.add_argument("--scenario", action="append", help="run only this case; repeatable")
     p.add_argument("--out", type=Path, required=True, help="directory for the reports")
-    p.add_argument("--base-url", default="http://127.0.0.1:11434/v1")
-    p.add_argument("--model", default="qwen3:8b")
+    p.add_argument(
+        "--provider",
+        choices=PROVIDERS,
+        default="openai",
+        help="openai: an OpenAI-compatible API, such as Ollama's; anthropic: Anthropic's",
+    )
+    p.add_argument("--base-url", help="the API's address; for openai, Ollama's on this machine")
+    p.add_argument("--model", help="for openai, qwen3:8b; for anthropic, say which")
+    p.add_argument(
+        "--api-key-file",
+        default=os.environ.get("MODEL_API_KEY_FILE"),
+        help="file holding the API key (MODEL_API_KEY_FILE)",
+    )
     p.add_argument("--runs", type=int, default=5, help="runs per scenario")
     p.add_argument("--ceiling", default="sensitive", choices=list(CLASSIFICATION_RANK))
     p.add_argument(
@@ -70,13 +102,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--reasoning-effort",
-        help="sent to reasoning models, for example none; unset: their default",
+        help="sent to reasoning models, for example none; unset: their default, "
+        "or medium for anthropic",
     )
     p.add_argument(
         "--max-output-tokens",
         type=int,
-        default=loop.MAX_OUTPUT_TOKENS,
-        help="each reply's output limit; a model that reasons needs more",
+        help=f"each reply's output limit ({loop.MAX_OUTPUT_TOKENS}, or "
+        f"{DEFAULTS['anthropic']['max_output_tokens']} for anthropic); "
+        "a model that reasons needs more",
     )
     p.add_argument(
         "--no-strict-output",
@@ -96,13 +130,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--gate", action="store_true", help="exit with an error unless the safety gate passes"
     )
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    for name, value in DEFAULTS[args.provider].items():
+        if getattr(args, name) is None:
+            setattr(args, name, value)
+    if args.model is None:
+        raise SystemExit("Set --model, such as claude-sonnet-5-5.")
+    return args
+
+
+def endpoint_host(args: argparse.Namespace) -> str:
+    return host_of(args.base_url) if args.base_url else ANTHROPIC_HOST
 
 
 def read_price(args: argparse.Namespace) -> Price | None:
-    """A model that isn't on this machine must be priced, or a spending cap means nothing."""
+    """A model that isn't on this machine must be priced, or a spending cap means nothing.
+    Claude models Themis knows are priced already."""
     if args.price_input is None and args.price_output is None:
-        if host_of(args.base_url) not in LOCAL_HOSTS:
+        if args.provider == "anthropic" and args.model in PRICES:
+            return PRICES[args.model]
+        if endpoint_host(args) not in LOCAL_HOSTS:
             raise SystemExit(
                 "This endpoint isn't local: set --price-input and --price-output, "
                 "so the spending cap can work."
@@ -155,10 +202,8 @@ async def main() -> None:
 
     live: Adapter | None = None
     if not args.replay:
-        key_file = os.environ.get("MODEL_API_KEY_FILE")
-        live = OpenAICompatAdapter(
-            base_url=args.base_url, api_key=read_secret(key_file) if key_file else None
-        )
+        key = read_secret(args.api_key_file) if args.api_key_file else None
+        live = connect(args.provider, args.base_url, key)
 
     # One adapter per case, kept across its runs, so its replies are its own.
     @cache
@@ -213,17 +258,19 @@ async def main() -> None:
         schema_version=SCHEMA_VERSION,
         model=args.model,
         served_by=", ".join(sorted({r.served_by for r in outcome.records if r.served_by})),
-        endpoint_host=host_of(args.base_url),
+        provider=args.provider,
+        endpoint_host=endpoint_host(args),
         ceiling=args.ceiling,
-        temperature=0,
+        # Claude models take only their own sampling settings, so none is sent.
+        temperature=0 if args.provider == "openai" else None,
         max_output_tokens=args.max_output_tokens,
         reasoning_effort=args.reasoning_effort or "",
         strict_output=args.strict_output,
         step_deadline_s=args.step_deadline,
         runs_per_scenario=args.runs,
         context_tokens=args.context_tokens,
-        price_input_usd_per_mtok=args.price_input,
-        price_output_usd_per_mtok=args.price_output,
+        price_input_usd_per_mtok=price.input_usd_per_mtok if price else None,
+        price_output_usd_per_mtok=price.output_usd_per_mtok if price else None,
         max_tokens=args.max_tokens,
         max_usd=args.max_usd if price is not None else None,
         commit=commit,
