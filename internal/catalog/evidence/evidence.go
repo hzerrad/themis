@@ -49,6 +49,9 @@ type Item struct {
 	Truncated     bool
 	OriginalBytes int
 	Redactions    int
+	// Suspicious is text in Data that looks written for the investigator,
+	// such as instructions or forged tool output.
+	Suspicious []Suspicion `json:",omitempty"`
 
 	CollectedAt    time.Time
 	Classification Classification
@@ -98,6 +101,7 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, w *
 	var n int
 	item.Data, n = redact.Apply(item.Data, redact.DefaultRules)
 	item.Redactions += n
+	item.Suspicious = Suspicions(item.Data)
 	item.ID = id.String()
 	item.Template = name
 	item.Target = w.Target

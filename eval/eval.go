@@ -272,6 +272,8 @@ type Item struct {
 	OriginalBytes  int    `json:"original_bytes,omitempty"`
 	Redactions     int    `json:"redactions,omitempty"`
 	Classification string `json:"classification"`
+	// Suspicious is text the core flags as written for the investigator.
+	Suspicious []evidence.Suspicion `json:"suspicious,omitempty"`
 }
 
 // Check is one check's answer. An unknown one carries the gaps in the
@@ -297,6 +299,7 @@ func bundleItem(item evidence.Item) Item {
 	return Item{
 		ID: item.ID, Template: item.Template, Data: string(item.Data), Truncated: item.Truncated,
 		OriginalBytes: item.OriginalBytes, Redactions: item.Redactions, Classification: string(item.Classification),
+		Suspicious: item.Suspicious,
 	}
 }
 

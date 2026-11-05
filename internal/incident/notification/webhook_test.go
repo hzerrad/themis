@@ -149,11 +149,18 @@ func TestWebhook_ErrorsDoNotRevealTheURL(t *testing.T) {
 	}
 }
 
-// The receiver can show what Themis couldn't see, and how to let it.
+// The receiver can show what Themis couldn't see, and how to let it, and
+// which evidence looks like instructions, without what it says.
 func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	s, _ := pgtest.NewStore(t)
 	notice := escalated(t, s)
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
+		if err := s.InsertEvidence(t.Context(), tx, notice.IncidentID, "", nil, evidence.Item{
+			ID: "0192f0c1-0000-7000-8000-00000000000b", Template: evidence.TargetEvents, Data: []byte(`{}`), CollectedAt: notice.At,
+			Classification: evidence.ClassificationInternal, Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonFixOrder, Excerpt: "canary-line"}},
+		}); err != nil {
+			return err
+		}
 		return s.InsertEvidenceGap(t.Context(), tx, store.EvidenceGap{IncidentID: notice.IncidentID, Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, At: notice.At})
 	})
 	if err != nil {
@@ -168,5 +175,8 @@ func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	missing, _ := inc["missing"].([]any)
 	if len(missing) != 1 || !strings.Contains(missing[0].(string), "set model.ceiling to sensitive") {
 		t.Errorf("missing = %v", missing)
+	}
+	if w, _ := inc["evidenceWarning"].(string); !strings.Contains(w, "(target_events)") || strings.Contains(w, "canary-line") {
+		t.Errorf("evidenceWarning = %q, want target_events named and nothing it says", w)
 	}
 }

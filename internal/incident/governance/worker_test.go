@@ -3,6 +3,7 @@ package governance_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ func profile(name string) config.Profile {
 		Capabilities: []string{"deployment.rollback-to-revision"},
 		Policy: config.Policy{Mode: config.ModeGuarded, Rules: []config.PolicyRule{
 			{Name: "needs-oom", When: `predicates.oom_killed_new_revision != "true"`, Decision: config.DecisionDeny},
+			{Name: "no-instructions", When: `"evidence_has_instructions" in predicates && predicates.evidence_has_instructions == "true"`, Decision: config.DecisionDeny},
 			{Name: "approve", When: "true", Decision: config.DecisionRequireApproval},
 		}},
 	}
@@ -52,7 +54,11 @@ func newEnv(t *testing.T) *env {
 	s, pool := pgtest.NewStore(t)
 	target := cluster(t)
 	cfg := config.Config{EnrolledNamespaces: []string{target.Namespace}, Profiles: []config.Profile{profile("rollout-regression"), profile("other")}}
-	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes()}
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes(), Checks: cat.Checks}
 	w.Now = func() time.Time { return now }
 	return &env{worker: w, store: s, pool: pool, target: target}
 }
@@ -105,6 +111,15 @@ func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []
 		t.Fatal(err)
 	}
 	return incidentID, proposalID
+}
+
+// collectedLater records item for the incident id, as evidence an
+// investigator asked for after the checks ran.
+func (e *env) collectedLater(t *testing.T, id string, item evidence.Item) {
+	t.Helper()
+	if err := e.store.InTx(t.Context(), func(tx pgx.Tx) error { return e.store.InsertEvidence(t.Context(), tx, id, "", nil, item) }); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // govern runs the govern job once, as River would.
@@ -162,10 +177,14 @@ func TestGovern_Denied(t *testing.T) {
 		name     string
 		checks   []check.Result
 		gitOps   bool
+		flagged  bool
 		refusals float64
 	}{
-		{"GitOps owns the target", predicates, true, 1},
-		{"forbidden by a rule", []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}, false, 0},
+		{"GitOps owns the target", predicates, true, false, 1},
+		{"forbidden by a rule", []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}, false, false, 0},
+		// The check is decided again over evidence the investigator asked for
+		// after it first ran.
+		{"evidence holds instructions", append(slices.Clone(predicates), check.Result{Name: check.EvidenceHasInstructions, Version: "1", Value: check.False, Reason: "x"}), false, true, 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t)
@@ -175,8 +194,20 @@ func TestGovern_Denied(t *testing.T) {
 			deny := decisions(t, "deny")
 			refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
 			id, p := e.diagnosed(t, "rollout-regression", 1, tt.checks)
+			if tt.flagged {
+				e.collectedLater(t, id, evidence.Item{
+					ID: "0192f0c1-0000-7000-8000-00000000000b", Template: evidence.ContainerLogsTail, Data: []byte(`{}`), CollectedAt: now,
+					Classification: evidence.ClassificationSensitive, Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonFixOrder, At: "/logs"}},
+				})
+			}
 			e.govern(t, p)
 
+			if tt.flagged {
+				results, err := e.store.Predicates(t.Context(), id)
+				if err != nil || results[len(results)-1].Value != check.True {
+					t.Errorf("predicates = %+v (%v), want %s true", results, err, check.EvidenceHasInstructions)
+				}
+			}
 			if a := e.action(t, id); a.State != store.ActionDenied || a.ExpiresAt != nil {
 				t.Errorf("action = %s, want denied", a.State)
 			}

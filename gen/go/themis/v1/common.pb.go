@@ -359,8 +359,12 @@ type EvidenceItem struct {
 	WindowStart     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=window_start,json=windowStart,proto3" json:"window_start,omitempty"`
 	WindowEnd       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=window_end,json=windowEnd,proto3" json:"window_end,omitempty"`
 	ContentDigest   string                 `protobuf:"bytes,15,opt,name=content_digest,json=contentDigest,proto3" json:"content_digest,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Text in data that looks written for the investigator, such as
+	// instructions or forged tool output. The core found it; data still holds
+	// it.
+	Suspicious    []*SuspiciousText `protobuf:"bytes,16,rep,name=suspicious,proto3" json:"suspicious,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EvidenceItem) Reset() {
@@ -498,6 +502,76 @@ func (x *EvidenceItem) GetContentDigest() string {
 	return ""
 }
 
+func (x *EvidenceItem) GetSuspicious() []*SuspiciousText {
+	if x != nil {
+		return x.Suspicious
+	}
+	return nil
+}
+
+type SuspiciousText struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the text looks like, in plain words.
+	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Where in data, as a JSON pointer.
+	At string `protobuf:"bytes,2,opt,name=at,proto3" json:"at,omitempty"`
+	// The text, cut short.
+	Excerpt       string `protobuf:"bytes,3,opt,name=excerpt,proto3" json:"excerpt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuspiciousText) Reset() {
+	*x = SuspiciousText{}
+	mi := &file_themis_v1_common_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuspiciousText) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuspiciousText) ProtoMessage() {}
+
+func (x *SuspiciousText) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_common_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuspiciousText.ProtoReflect.Descriptor instead.
+func (*SuspiciousText) Descriptor() ([]byte, []int) {
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SuspiciousText) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *SuspiciousText) GetAt() string {
+	if x != nil {
+		return x.At
+	}
+	return ""
+}
+
+func (x *SuspiciousText) GetExcerpt() string {
+	if x != nil {
+		return x.Excerpt
+	}
+	return ""
+}
+
 type Budget struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	MaxSteps        int32                  `protobuf:"varint,1,opt,name=max_steps,json=maxSteps,proto3" json:"max_steps,omitempty"`
@@ -510,7 +584,7 @@ type Budget struct {
 
 func (x *Budget) Reset() {
 	*x = Budget{}
-	mi := &file_themis_v1_common_proto_msgTypes[3]
+	mi := &file_themis_v1_common_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -522,7 +596,7 @@ func (x *Budget) String() string {
 func (*Budget) ProtoMessage() {}
 
 func (x *Budget) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[3]
+	mi := &file_themis_v1_common_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -535,7 +609,7 @@ func (x *Budget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Budget.ProtoReflect.Descriptor instead.
 func (*Budget) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Budget) GetMaxSteps() int32 {
@@ -581,7 +655,7 @@ type Capability struct {
 
 func (x *Capability) Reset() {
 	*x = Capability{}
-	mi := &file_themis_v1_common_proto_msgTypes[4]
+	mi := &file_themis_v1_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -593,7 +667,7 @@ func (x *Capability) String() string {
 func (*Capability) ProtoMessage() {}
 
 func (x *Capability) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[4]
+	mi := &file_themis_v1_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -606,7 +680,7 @@ func (x *Capability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Capability.ProtoReflect.Descriptor instead.
 func (*Capability) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Capability) GetName() string {
@@ -643,7 +717,7 @@ type RootCause struct {
 
 func (x *RootCause) Reset() {
 	*x = RootCause{}
-	mi := &file_themis_v1_common_proto_msgTypes[5]
+	mi := &file_themis_v1_common_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -655,7 +729,7 @@ func (x *RootCause) String() string {
 func (*RootCause) ProtoMessage() {}
 
 func (x *RootCause) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[5]
+	mi := &file_themis_v1_common_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -668,7 +742,7 @@ func (x *RootCause) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RootCause.ProtoReflect.Descriptor instead.
 func (*RootCause) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RootCause) GetName() string {
@@ -697,7 +771,7 @@ type Provenance struct {
 
 func (x *Provenance) Reset() {
 	*x = Provenance{}
-	mi := &file_themis_v1_common_proto_msgTypes[6]
+	mi := &file_themis_v1_common_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +783,7 @@ func (x *Provenance) String() string {
 func (*Provenance) ProtoMessage() {}
 
 func (x *Provenance) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[6]
+	mi := &file_themis_v1_common_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +796,7 @@ func (x *Provenance) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Provenance.ProtoReflect.Descriptor instead.
 func (*Provenance) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{6}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Provenance) GetSource() string {
@@ -764,7 +838,7 @@ type CollectionFailure struct {
 
 func (x *CollectionFailure) Reset() {
 	*x = CollectionFailure{}
-	mi := &file_themis_v1_common_proto_msgTypes[7]
+	mi := &file_themis_v1_common_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -776,7 +850,7 @@ func (x *CollectionFailure) String() string {
 func (*CollectionFailure) ProtoMessage() {}
 
 func (x *CollectionFailure) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_common_proto_msgTypes[7]
+	mi := &file_themis_v1_common_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -789,7 +863,7 @@ func (x *CollectionFailure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollectionFailure.ProtoReflect.Descriptor instead.
 func (*CollectionFailure) Descriptor() ([]byte, []int) {
-	return file_themis_v1_common_proto_rawDescGZIP(), []int{7}
+	return file_themis_v1_common_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CollectionFailure) GetTarget() *TargetRef {
@@ -830,7 +904,7 @@ const file_themis_v1_common_proto_rawDesc = "" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12!\n" +
 	"\fevidence_ids\x18\x04 \x03(\tR\vevidenceIds\x12+\n" +
 	"\x11predicate_version\x18\x05 \x01(\tR\x10predicateVersion\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xde\x05\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\x99\x06\n" +
 	"\fEvidenceItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\btemplate\x18\x02 \x01(\tR\btemplate\x12,\n" +
@@ -852,10 +926,17 @@ const file_themis_v1_common_proto_rawDesc = "" +
 	"\fwindow_start\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\vwindowStart\x129\n" +
 	"\n" +
 	"window_end\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\twindowEnd\x12%\n" +
-	"\x0econtent_digest\x18\x0f \x01(\tR\rcontentDigest\x1a=\n" +
+	"\x0econtent_digest\x18\x0f \x01(\tR\rcontentDigest\x129\n" +
+	"\n" +
+	"suspicious\x18\x10 \x03(\v2\x19.themis.v1.SuspiciousTextR\n" +
+	"suspicious\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb3\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"R\n" +
+	"\x0eSuspiciousText\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x0e\n" +
+	"\x02at\x18\x02 \x01(\tR\x02at\x12\x18\n" +
+	"\aexcerpt\x18\x03 \x01(\tR\aexcerpt\"\xb3\x01\n" +
 	"\x06Budget\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x12(\n" +
 	"\x10max_input_tokens\x18\x02 \x01(\x03R\x0emaxInputTokens\x12*\n" +
@@ -912,7 +993,7 @@ func file_themis_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_themis_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_themis_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_themis_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_themis_v1_common_proto_goTypes = []any{
 	(Truth)(0),                    // 0: themis.v1.Truth
 	(DataClassification)(0),       // 1: themis.v1.DataClassification
@@ -920,30 +1001,32 @@ var file_themis_v1_common_proto_goTypes = []any{
 	(*TargetRef)(nil),             // 3: themis.v1.TargetRef
 	(*PredicateResult)(nil),       // 4: themis.v1.PredicateResult
 	(*EvidenceItem)(nil),          // 5: themis.v1.EvidenceItem
-	(*Budget)(nil),                // 6: themis.v1.Budget
-	(*Capability)(nil),            // 7: themis.v1.Capability
-	(*RootCause)(nil),             // 8: themis.v1.RootCause
-	(*Provenance)(nil),            // 9: themis.v1.Provenance
-	(*CollectionFailure)(nil),     // 10: themis.v1.CollectionFailure
-	nil,                           // 11: themis.v1.EvidenceItem.AttributesEntry
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*SuspiciousText)(nil),        // 6: themis.v1.SuspiciousText
+	(*Budget)(nil),                // 7: themis.v1.Budget
+	(*Capability)(nil),            // 8: themis.v1.Capability
+	(*RootCause)(nil),             // 9: themis.v1.RootCause
+	(*Provenance)(nil),            // 10: themis.v1.Provenance
+	(*CollectionFailure)(nil),     // 11: themis.v1.CollectionFailure
+	nil,                           // 12: themis.v1.EvidenceItem.AttributesEntry
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_themis_v1_common_proto_depIdxs = []int32{
 	0,  // 0: themis.v1.PredicateResult.value:type_name -> themis.v1.Truth
 	3,  // 1: themis.v1.EvidenceItem.target:type_name -> themis.v1.TargetRef
-	12, // 2: themis.v1.EvidenceItem.collected_at:type_name -> google.protobuf.Timestamp
+	13, // 2: themis.v1.EvidenceItem.collected_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: themis.v1.EvidenceItem.classification:type_name -> themis.v1.DataClassification
-	11, // 4: themis.v1.EvidenceItem.attributes:type_name -> themis.v1.EvidenceItem.AttributesEntry
-	12, // 5: themis.v1.EvidenceItem.window_start:type_name -> google.protobuf.Timestamp
-	12, // 6: themis.v1.EvidenceItem.window_end:type_name -> google.protobuf.Timestamp
-	12, // 7: themis.v1.Budget.deadline:type_name -> google.protobuf.Timestamp
-	3,  // 8: themis.v1.CollectionFailure.target:type_name -> themis.v1.TargetRef
-	2,  // 9: themis.v1.CollectionFailure.reason:type_name -> themis.v1.CollectionFailureReason
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	12, // 4: themis.v1.EvidenceItem.attributes:type_name -> themis.v1.EvidenceItem.AttributesEntry
+	13, // 5: themis.v1.EvidenceItem.window_start:type_name -> google.protobuf.Timestamp
+	13, // 6: themis.v1.EvidenceItem.window_end:type_name -> google.protobuf.Timestamp
+	6,  // 7: themis.v1.EvidenceItem.suspicious:type_name -> themis.v1.SuspiciousText
+	13, // 8: themis.v1.Budget.deadline:type_name -> google.protobuf.Timestamp
+	3,  // 9: themis.v1.CollectionFailure.target:type_name -> themis.v1.TargetRef
+	2,  // 10: themis.v1.CollectionFailure.reason:type_name -> themis.v1.CollectionFailureReason
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_themis_v1_common_proto_init() }
@@ -957,7 +1040,7 @@ func file_themis_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_themis_v1_common_proto_rawDesc), len(file_themis_v1_common_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

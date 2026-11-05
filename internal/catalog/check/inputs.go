@@ -35,6 +35,11 @@ const (
 	// varFirstFailure is the earliest failure, or null when there is none or
 	// one has no time and so could be earlier still.
 	varFirstFailure = "first_failure"
+
+	// varSuspicious is text in any evidence that looks written for the
+	// investigator, in collection order. Each has id and template, the item
+	// it is in, reason and at.
+	varSuspicious = "suspicious_evidence"
 )
 
 // fromHistory are the variables read from rollout history.
@@ -108,6 +113,14 @@ func newInputs(b evidence.Bundle, now time.Time) inputs {
 	if first, ok := firstFailure(fs); ok {
 		in.vars[varFirstFailure] = first.value()
 	}
+
+	suspicious := []any{}
+	for _, it := range b.Items {
+		for _, s := range it.Suspicious {
+			suspicious = append(suspicious, map[string]any{"id": it.ID, "template": it.Template, "reason": s.Reason, "at": s.At})
+		}
+	}
+	in.vars[varSuspicious] = suspicious
 	return in
 }
 

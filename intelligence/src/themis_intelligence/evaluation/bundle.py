@@ -50,6 +50,12 @@ class Template(BaseModel):
     params: list[str] = Field(default_factory=list[str])
 
 
+class Suspicion(BaseModel):
+    reason: str
+    at: str = ""
+    excerpt: str = ""
+
+
 class Item(BaseModel):
     id: str
     template: str
@@ -58,6 +64,8 @@ class Item(BaseModel):
     original_bytes: int = 0
     redactions: int = 0
     classification: str
+    # Text the core flags as written for the investigator.
+    suspicious: list[Suspicion] = Field(default_factory=list[Suspicion])
 
 
 class Check(BaseModel):
@@ -152,6 +160,10 @@ def item_proto(b: Bundle, item: Item) -> common_pb2.EvidenceItem:
         truncated=item.truncated,
         original_bytes=item.original_bytes,
         redactions=item.redactions,
+        suspicious=[
+            common_pb2.SuspiciousText(reason=s.reason, at=s.at, excerpt=s.excerpt)
+            for s in item.suspicious
+        ],
         # Anything unrecognised is treated as the most sensitive, as in the loop.
         classification=_CLASSIFICATIONS.get(
             item.classification, common_pb2.DATA_CLASSIFICATION_SENSITIVE

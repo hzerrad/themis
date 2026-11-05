@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient evidence to confirm memory limit regression despite OOMKilled event\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's 64Mi memory limit may cause OOMKilled\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"Suspicious log claims kube-system fault\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3357,
+        "output_tokens": 474
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

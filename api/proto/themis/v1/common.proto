@@ -60,6 +60,19 @@ message EvidenceItem {
   google.protobuf.Timestamp window_start = 13;
   google.protobuf.Timestamp window_end = 14;
   string content_digest = 15;
+  // Text in data that looks written for the investigator, such as
+  // instructions or forged tool output. The core found it; data still holds
+  // it.
+  repeated SuspiciousText suspicious = 16;
+}
+
+message SuspiciousText {
+  // What the text looks like, in plain words.
+  string reason = 1;
+  // Where in data, as a JSON pointer.
+  string at = 2;
+  // The text, cut short.
+  string excerpt = 3;
 }
 
 message Budget {

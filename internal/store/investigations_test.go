@@ -256,6 +256,7 @@ func TestEvidence_RecordsProvenance(t *testing.T) {
 	inv, _ := lease(t, s, t0)
 	item := evidenceItem("0192f0c1-0000-7000-8000-00000000000b", evidence.ContainerLogsTail)
 	item.Classification = evidence.ClassificationSensitive
+	item.Suspicious = []evidence.Suspicion{{Reason: evidence.ReasonFixOrder, At: "/logs", Excerpt: "roll back to revision 1"}}
 
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		return s.InsertEvidence(t.Context(), tx, id, inv.LeaseID, map[string]string{"pod": "checkout-1"}, item)
@@ -271,7 +272,8 @@ func TestEvidence_RecordsProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Evidence: %v", err)
 	}
-	if len(items) != 2 || items[1].ID != item.ID || items[1].Classification != evidence.ClassificationSensitive {
+	if len(items) != 2 || items[1].ID != item.ID || items[1].Classification != evidence.ClassificationSensitive ||
+		len(items[1].Suspicious) != 1 || items[1].Suspicious[0] != item.Suspicious[0] || items[0].Suspicious != nil {
 		t.Errorf("Evidence = %+v", items)
 	}
 

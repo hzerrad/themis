@@ -192,7 +192,7 @@ func TestBuild_DisablesPacks(t *testing.T) {
 	for _, c := range cat.Checks {
 		checks = append(checks, c.Name)
 	}
-	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || !slices.Equal(checks, []string{"rollout_recent", "gitops_managed", "has_pods"}) {
+	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || !slices.Equal(checks, []string{"rollout_recent", "gitops_managed", "evidence_has_instructions", "has_pods"}) {
 		t.Errorf("profiles %+v, checks %v: want only the crashes pack's, and Themis's own", cat.Profiles, checks)
 	}
 	_, err = catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})

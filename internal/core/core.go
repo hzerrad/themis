@@ -198,7 +198,7 @@ func Run(ctx context.Context, o Options) error {
 		Catalog: cat,
 		Logger:  log,
 	})
-	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes}
+	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes, Checks: cat.Checks}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &governance.ExpireWorker{Store: s})

@@ -276,14 +276,22 @@ func (s *Store) InsertEvidence(ctx context.Context, tx pgx.Tx, incidentID, lease
 	if err != nil {
 		return err
 	}
+	suspicious := item.Suspicious
+	if suspicious == nil {
+		suspicious = []evidence.Suspicion{}
+	}
+	sus, err := json.Marshal(suspicious)
+	if err != nil {
+		return err
+	}
 	var lease *string
 	if leaseID != "" {
 		lease = &leaseID
 	}
 	_, err = tx.Exec(ctx, `
-	INSERT INTO evidence_items (id, incident_id, lease_id, template, params, data, truncated, original_bytes, redactions, classification, collected_at)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-`, item.ID, incidentID, lease, item.Template, p, item.Data, item.Truncated, item.OriginalBytes, item.Redactions, item.Classification, item.CollectedAt)
+	INSERT INTO evidence_items (id, incident_id, lease_id, template, params, data, truncated, original_bytes, redactions, classification, collected_at, suspicious)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`, item.ID, incidentID, lease, item.Template, p, item.Data, item.Truncated, item.OriginalBytes, item.Redactions, item.Classification, item.CollectedAt, sus)
 	if err != nil {
 		return fmt.Errorf("record evidence %s: %w", item.ID, err)
 	}
@@ -293,7 +301,7 @@ func (s *Store) InsertEvidence(ctx context.Context, tx pgx.Tx, incidentID, lease
 // Evidence returns an incident's evidence in collection order.
 func (s *Store) Evidence(ctx context.Context, incidentID string) ([]evidence.Item, error) {
 	rows, err := s.pool.Query(ctx, `
-	SELECT e.id::text, e.template, e.data, e.truncated, e.original_bytes, e.redactions, e.classification, e.collected_at,
+	SELECT e.id::text, e.template, e.data, e.truncated, e.original_bytes, e.redactions, e.classification, e.collected_at, e.suspicious,
 	       i.target_group, i.target_kind, i.target_namespace, i.target_name, i.target_uid
 	FROM evidence_items e JOIN incidents i ON i.id = e.incident_id
 	WHERE e.incident_id = $1
@@ -303,11 +311,23 @@ func (s *Store) Evidence(ctx context.Context, incidentID string) ([]evidence.Ite
 		return nil, fmt.Errorf("evidence of incident %s: %w", incidentID, err)
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (evidence.Item, error) {
-		var it evidence.Item
+		var (
+			it  evidence.Item
+			sus []byte
+		)
 		t := &it.Target
-		err := row.Scan(&it.ID, &it.Template, &it.Data, &it.Truncated, &it.OriginalBytes, &it.Redactions, &it.Classification, &it.CollectedAt,
+		err := row.Scan(&it.ID, &it.Template, &it.Data, &it.Truncated, &it.OriginalBytes, &it.Redactions, &it.Classification, &it.CollectedAt, &sus,
 			&t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID)
-		return it, err
+		if err != nil {
+			return it, err
+		}
+		if err := json.Unmarshal(sus, &it.Suspicious); err != nil {
+			return it, err
+		}
+		if len(it.Suspicious) == 0 {
+			it.Suspicious = nil
+		}
+		return it, nil
 	})
 }
 
@@ -342,6 +362,22 @@ func (s *Store) MissingEvidence(ctx context.Context, tx pgx.Tx, incidentID strin
 		return nil, fmt.Errorf("check evidence of incident %s: %w", incidentID, err)
 	}
 	return append(missing, unknown...), nil
+}
+
+// UpdatePredicate replaces the answer of an incident's check r names.
+func (s *Store) UpdatePredicate(ctx context.Context, tx pgx.Tx, incidentID string, r check.Result) error {
+	ids := r.EvidenceIDs
+	if ids == nil {
+		ids = []string{}
+	}
+	_, err := tx.Exec(ctx, `
+	UPDATE predicate_results SET version = $3, value = $4, reason = $5, evidence_ids = $6
+	WHERE incident_id = $1 AND name = $2
+`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids)
+	if err != nil {
+		return fmt.Errorf("update predicate %s: %w", r.Name, err)
+	}
+	return nil
 }
 
 // Predicates returns an incident's predicate results.
