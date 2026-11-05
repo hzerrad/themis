@@ -18,6 +18,16 @@ HAS_PROTO := $(shell find api/proto -name '*.proto' -print -quit 2>/dev/null)
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
+# Dependencies
+
+.PHONY: deps
+deps: ## Download the Go modules of Themis and its tools, retrying when the module proxy fails
+	@for i in 1 2 3 4 5; do \
+		go mod download && go mod download -modfile=tools/go.mod && exit 0; \
+		echo "deps: module download failed (attempt $$i of 5)" >&2; \
+		[ $$i -lt 5 ] && sleep $$((i * 10)); \
+	done; exit 1
+
 # Quality
 
 .PHONY: lint lint-go lint-python lint-proto

@@ -30,6 +30,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      - run: make deps
       - run: make test-go-next
         env:
           NEXT_K8S_VERSION: ${{ inputs.version }}

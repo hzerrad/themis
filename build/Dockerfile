@@ -4,7 +4,13 @@ ARG BIN=themis-core
 WORKDIR /src
 COPY go.mod go.sum ./
 # Caches keep modules and builds between runs, so a rebuild fetches nothing.
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
+# The module proxy sometimes fails for a moment: retry before failing the build.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    for i in 1 2 3 4 5; do \
+      go mod download && exit 0; \
+      echo "module download failed (attempt $i of 5)" >&2; \
+      [ $i -lt 5 ] && sleep $((i * 10)); \
+    done; exit 1
 COPY cmd cmd
 COPY gen gen
 COPY internal internal

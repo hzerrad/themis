@@ -46,6 +46,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             tools/go.sum
+      - run: make deps
       - run: make e2e
       - name: Component logs
         if: failure()
