@@ -8,6 +8,15 @@
       },
       "model": "qwen3:8b-16k",
       "truncated": false
+    },
+    {
+      "content": "{\"kind\":\"request_evidence\",\"template\":\"container_logs_tail\",\"params\":{\"pod\":\"search-3b7e1c9d5-b2c3d\",\"container\":\"app\",\"previous\":\"\"}}",
+      "usage": {
+        "input_tokens": 3761,
+        "output_tokens": 488
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
     }
   ]
 }

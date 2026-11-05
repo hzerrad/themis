@@ -8,6 +8,15 @@
       },
       "model": "qwen3:8b-16k",
       "truncated": false
+    },
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe is too strict, killing pods during startup. Increase initialDelaySeconds to allow app to start.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"Pods are killed during startup due to liveness probe failing before the app is ready.\",\n        \"supporting\": [\"killed_during_startup\", \"probe_kills\", \"ev-rollout_history\", \"ev-pod_states\"],\n        \"contradicting\": [\"crashed_on_its_own\", \"probe_timeouts\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"No logs to confirm app behavior during startup, but probe timing seems mismatched.\",\n        \"supporting\": [\"ev-target_events\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"finance\",\n        \"name\": \"ledger\",\n        \"uid\": \"uid-deployment-ledger\"\n    },\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"initialDelaySeconds\": 30,\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Allow the app more time to start before liveness probe checks, reducing premature restarts.\",\n    \"rationale\": \"Pods are killed during startup (killed_during_startup=true) with liveness probe failures. The current liveness probe has initialDelaySeconds=10 and timeoutSeconds=1, which is too short for an app that takes 32s to start. Increasing initialDelaySeconds to 30 and timeoutSeconds to 5 aligns with the observed startup time and prevents premature kills.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"killed_during_startup\", \"probe_kills\", \"crashed_on_its_own\", \"probe_timeouts\"],\n    \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\", \"crashed_on_its_own\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5073,
+        "output_tokens": 2206
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
     }
   ]
 }

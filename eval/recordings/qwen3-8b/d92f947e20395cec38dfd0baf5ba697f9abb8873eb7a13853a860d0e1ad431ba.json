@@ -8,6 +8,15 @@
       },
       "model": "qwen3:8b-16k",
       "truncated": false
+    },
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"OOMKilled due to memory limit being reached. Increase memory limit to prevent future OOM kills.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"Current revision's memory limit is too low, causing OOMKilled.\",\n        \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"],\n        \"contradicting\": [],\n        \"missing\": [\"prior_revision_was_healthy\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"Container's memory usage peaked at 100% of its limit, requiring higher limit.\",\n        \"supporting\": [\"memory_at_limit_before_kill\", \"memory_data_available\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"catalog\",\n        \"uid\": \"uid-deployment-catalog\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"640Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise memory limit to 640Mi for the app container to prevent OOMKilled events.\",\n    \"rationale\": \"The container's memory usage peaked at 100% of its 512Mi limit, causing OOMKilled. Increasing the limit by 25% (to 640Mi) provides buffer without requiring rollback, as prior revision's health is unknown and rollout is not recent.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"oom_without_recent_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4192,
+        "output_tokens": 1071
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
     }
   ]
 }
