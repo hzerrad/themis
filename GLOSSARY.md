@@ -42,6 +42,10 @@ _Avoid_: data, context, signals
 A named, read-only question about a target whose answer is evidence.
 _Avoid_: collector, query, tool
 
+**Metrics source**:
+Where Themis reads how much memory and CPU a target's containers use: the Kubernetes metrics API, which knows only the present, or a server answering Prometheus queries, which also knows peaks and throttling.
+_Avoid_: datasource, backend, provider
+
 **Gap**:
 Evidence an investigation needed and couldn't have, with why: not allowed, gone, too old, or there was nothing to find.
 _Avoid_: missing data, error

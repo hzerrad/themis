@@ -64,6 +64,36 @@ Whether the setup port is on. A missing key means on, as above.
 {{- end }}
 
 {{/*
+Whether the core reads the Kubernetes metrics API. A missing key means on, as
+above.
+*/}}
+{{- define "themis.metricsAPIEnabled" -}}
+{{- $api := (.Values.metrics | default dict).kubernetes | default dict -}}
+{{- if not (and (hasKey $api "enabled") (eq (toString $api.enabled) "false")) }}true{{ end -}}
+{{- end }}
+
+{{/*
+The Secrets the core reads Prometheus with, projected into one volume: its
+token, its CA and a client certificate, each when set. Empty without any, or
+without an address.
+*/}}
+{{- define "themis.prometheusSecrets" -}}
+{{- $prom := (.Values.metrics | default dict).prometheus | default dict -}}
+{{- $tls := $prom.tls | default dict -}}
+{{- if $prom.address }}
+{{- with $prom.tokenSecret }}
+- secret: {name: {{ . }}, items: [{key: token, path: token}]}
+{{- end }}
+{{- with $tls.caSecret }}
+- secret: {name: {{ . }}, items: [{key: ca.crt, path: ca.crt}]}
+{{- end }}
+{{- with $tls.clientCertSecret }}
+- secret: {name: {{ . }}, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 The Secret holding Themis's tokens and settings key: the one the chart
 generates, or one the install provides, as GitOps tools need.
 */}}

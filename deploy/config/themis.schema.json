@@ -328,6 +328,64 @@
       "type": "object",
       "description": "Scenarios are the scenario packs Themis ships, each with its own\nprofile."
     },
+    "metrics": {
+      "properties": {
+        "kubernetes": {
+          "properties": {
+            "disabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Kubernetes is the Kubernetes metrics API (metrics.k8s.io), which\nmetrics-server serves: what containers use now, with no history. On\nunless disabled; where the cluster doesn't serve it, the status page\nsays so."
+        },
+        "prometheus": {
+          "properties": {
+            "address": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Address is the server's base URL, under which /api/v1/query is\nserved, for example http://prometheus-operated.monitoring:9090."
+            },
+            "bearerTokenFile": {
+              "type": "string",
+              "description": "BearerTokenFile holds a token sent as a bearer token, if the server\nneeds one. Read on every query, so rotation needs no restart."
+            },
+            "tls": {
+              "properties": {
+                "caFile": {
+                  "type": "string",
+                  "description": "CAFile holds the certificates that sign the server's, when the system's\ndon't."
+                },
+                "certFile": {
+                  "type": "string",
+                  "description": "CertFile and KeyFile are a client certificate, for a server that asks\nfor one. Set both or neither."
+                },
+                "keyFile": {
+                  "type": "string"
+                },
+                "insecureSkipVerify": {
+                  "type": "boolean",
+                  "description": "InsecureSkipVerify accepts any certificate. Only for trying Themis."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "TLS configures an https address."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "address"
+          ],
+          "description": "Prometheus is a server answering Prometheus queries: Prometheus,\nThanos, Mimir, VictoriaMetrics or Grafana Cloud. It has history, so\nit also answers peak memory and CPU throttling."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Metrics says where Themis reads how much memory and CPU containers\nuse."
+    },
     "profiles": {
       "items": {
         "properties": {

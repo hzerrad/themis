@@ -25,6 +25,7 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `notifications.externalURL` | no | Where people reach the UI, used for links in notices. |
 | `externalProposals` | no | Who outside Themis may suggest fixes; see [below](#fixes-suggested-from-outside). |
 | `resources.namespace` | no | Read profiles and global settings from custom resources, with this as Themis's own namespace. The chart sets it. |
+| `metrics` | no | Where Themis reads how much memory and CPU containers use; see [Metrics](#metrics). The Kubernetes metrics API is on by default. |
 | `scenarios.disabled` | no | [Scenario packs](scenarios.md) to turn off, by name. Every pack is on otherwise, each bringing its profile and checks. A name no pack has stops Themis from starting. |
 | `profiles` | no | Incident classes of your own, below, on top of the scenario packs'. Set either this or `resources`, not both. |
 
@@ -224,6 +225,8 @@ The investigator cannot query the cluster: it can only ask for a template by nam
 | `target_events` | Recent events of the Deployment, its ReplicaSets and its pods |
 | `referenced_config` | The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only. Secrets are listed by name and never read. |
 | `container_logs_tail` | The end of one container's logs, the pod needing attention most by default. Classified `sensitive`. |
+| `container_memory` | For each container of the current revision: its memory request and limit, the memory it uses now and at its peak over a window (`window`, 1h by default), each the highest among the revision's pods and as a share of the limit, and which [metrics source](#metrics) said so |
+| `container_cpu` | For each container of the current revision: its CPU request and limit, the cores it uses now, and the share of its CPU periods throttled over a window (`window`, 1h by default), and which [metrics source](#metrics) said so |
 
 No template returns pod specs, where environment variables often hold literal secrets. Every item is redacted before it is stored or sent: bearer and basic credentials, JWTs, private keys, cloud and API keys, `password=`-style pairs, and credentials in URLs.
 
@@ -300,6 +303,39 @@ Every rule is compiled at startup; a rule that does not compile to a boolean sto
 | `stability` | 2m | How long every replica must stay ready with no new restarts or OOMKills |
 
 The outcome is `resolved` (healthy and stable), `contained` (a complete rollout, but not stable), `unchanged`, `worsened` (fewer ready replicas than before), or `inconclusive`: the template was changed by someone else during the window. Anything but `resolved` escalates the incident.
+
+## Metrics
+
+`container_memory` and `container_cpu` read how much memory and CPU containers use from a metrics source. There are two, and Themis asks them in this order, so the second fills in what the first can't answer:
+
+| Source | Turned on by | Can see | Can't see |
+|---|---|---|---|
+| A server answering Prometheus queries: Prometheus, Thanos, Mimir, VictoriaMetrics, Grafana Cloud | `metrics.prometheus.address` | Current memory and CPU use, peak memory over a window, and CPU throttling, from the kubelet's cAdvisor metrics (`container_memory_working_set_bytes`, `container_cpu_usage_seconds_total`, `container_cpu_cfs_throttled_periods_total` and `container_cpu_cfs_periods_total`) | Anything it doesn't scrape |
+| The Kubernetes metrics API (`metrics.k8s.io`), served by metrics-server | on by default; `metrics.kubernetes.disabled: true` turns it off | Current memory and CPU use | Peaks and throttling: it keeps no history |
+
+```yaml
+metrics:
+  kubernetes: {disabled: false}
+  prometheus:
+    address: http://prometheus-operated.monitoring:9090
+    bearerTokenFile: /var/run/secrets/themis-prometheus/token   # optional
+    tls:                                                       # optional
+      caFile: /var/run/secrets/themis-prometheus/ca.crt
+      certFile: /var/run/secrets/themis-prometheus/tls.crt     # with keyFile, for a client certificate
+      keyFile: /var/run/secrets/themis-prometheus/tls.key
+      insecureSkipVerify: false
+```
+
+| Key | Meaning |
+|---|---|
+| `metrics.kubernetes.disabled` | Don't read the Kubernetes metrics API. With the chart, the core may read it in each enrolled namespace while it's on. |
+| `metrics.prometheus.address` | The server's base URL, under which `/api/v1/query` is served. Must be http or https. |
+| `metrics.prometheus.bearerTokenFile` | A token sent with each query, read every time, so rotation needs no restart. |
+| `metrics.prometheus.tls.caFile` | The CA that signs the server's certificate, when the system's don't. |
+| `metrics.prometheus.tls.certFile`, `.keyFile` | A client certificate, for a server that asks for one. Set both or neither. Read on every connection. |
+| `metrics.prometheus.tls.insecureSkipVerify` | Accept any certificate. Only for trying Themis. |
+
+A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "no peak memory or CPU throttling data: set a Prometheus address".
 
 ## Connecting your Alertmanager
 

@@ -15,7 +15,7 @@ Themis is three processes and a database. They are separated by what each may do
 
 | Component | May | May not |
 |---|---|---|
-| `themis-core` | Read enrolled workloads, pods, logs and events; run governance, approvals, verification; serve the API and UI | Read Secrets in workload namespaces; write to workloads |
+| `themis-core` | Read enrolled workloads, pods, logs and events, and their memory and CPU use from the metrics API or Prometheus; run governance, approvals, verification; serve the API and UI | Read Secrets in workload namespaces; write to workloads |
 | `themis-intelligence` | Call the model; ask the core for evidence by template name; submit proposals | Reach the cluster or the database: it has no service account token, and a NetworkPolicy allows only the core and the model |
 | `themis-executor` | Get and patch Deployments in enrolled namespaces | Anything else; it acts only on an action ID, and rechecks everything itself |
 
@@ -91,7 +91,8 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/catalog/capability` | **What Themis can change.** The interface every fix implements, and the registry |
 | `internal/catalog/capability/rollback` | `deployment.rollback-to-revision` |
 | `internal/catalog/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. The checks themselves are in the scenario packs; see [checks.md](checks.md) |
-| `internal/catalog/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
+| `internal/catalog/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history, memory and CPU use |
+| `internal/catalog/evidence/metrics` | How much memory and CPU a workload's containers use, asked the same way of any metrics source: the Kubernetes metrics API, or a server answering Prometheus queries. A new source is one more adapter here; nothing that reads evidence changes |
 | `internal/catalog/evidence/hint` | Plain advice when Themis couldn't see something it needed |
 | `scenarios/` | **The incidents Themis handles**, one scenario pack per folder: its profile, its checks and the evaluation cases that prove it, built into the binary; see [scenarios.md](scenarios.md) |
 | `internal/incident` | An incident and its states |

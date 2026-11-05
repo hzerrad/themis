@@ -25,6 +25,16 @@ api:
   #   - {role: admin, users: [alice@example.com]}
   #   - {role: approver, groups: [sre]}
 
+# Where Themis reads how much memory and CPU containers use. The Kubernetes
+# metrics API (metrics-server) is on by default: current use only. A server
+# answering Prometheus queries adds peak memory and CPU throttling.
+# metrics:
+#   kubernetes: {disabled: false}
+#   prometheus:
+#     address: http://prometheus-operated.monitoring:9090
+#     bearerTokenFile: /var/run/secrets/themis-prometheus/token
+#     tls: {caFile: /var/run/secrets/themis-prometheus/ca.crt}
+
 # Profiles come from the scenario packs Themis ships, one each, such as
 # rollout-regression in scenarios/rollout-regression/scenario.yaml. Every pack
 # is on unless disabled here.

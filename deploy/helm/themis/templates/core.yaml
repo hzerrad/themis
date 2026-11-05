@@ -68,7 +68,15 @@ spec:
             {{- if .Values.oidc.issuerURL }}
             - {name: oidc, mountPath: /var/run/secrets/themis-oidc, readOnly: true}
             {{- end }}
+            {{- if include "themis.prometheusSecrets" . | trim }}
+            - {name: prometheus, mountPath: /var/run/secrets/themis-prometheus, readOnly: true}
+            {{- end }}
       volumes:
+        {{- with include "themis.prometheusSecrets" . | trim }}
+        - name: prometheus
+          projected:
+            sources: {{- . | nindent 14 }}
+        {{- end }}
         {{- if .Values.notifications.webhookSecret }}
         - name: webhook
           secret: {secretName: {{ .Values.notifications.webhookSecret }}}
@@ -132,8 +140,8 @@ subjects:
     namespace: {{ .Release.Namespace }}
 {{- range .Values.enrolledNamespaces }}
 ---
-# Read-only: workloads, pods, their logs and events, and when the ConfigMaps
-# they refer to changed. Never Secrets.
+# Read-only: workloads, pods, their logs, events and memory and CPU use, and
+# when the ConfigMaps they refer to changed. Never Secrets.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -154,6 +162,11 @@ rules:
   - apiGroups: [""]
     resources: [resourcequotas, limitranges]
     verbs: [list]
+  {{- if include "themis.metricsAPIEnabled" $ }}
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

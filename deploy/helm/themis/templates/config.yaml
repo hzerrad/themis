@@ -77,6 +77,34 @@ data:
       {{- end }}
     {{- end }}
     {{- end }}
+    {{- $prom := (.Values.metrics | default dict).prometheus | default dict }}
+    {{- $tls := $prom.tls | default dict }}
+    {{- if or (not (include "themis.metricsAPIEnabled" .)) $prom.address }}
+    metrics:
+      {{- if not (include "themis.metricsAPIEnabled" .) }}
+      kubernetes: {disabled: true}
+      {{- end }}
+      {{- if $prom.address }}
+      prometheus:
+        address: {{ $prom.address | quote }}
+        {{- if $prom.tokenSecret }}
+        bearerTokenFile: /var/run/secrets/themis-prometheus/token
+        {{- end }}
+        {{- if or $tls.caSecret $tls.clientCertSecret $tls.insecureSkipVerify }}
+        tls:
+          {{- if $tls.caSecret }}
+          caFile: /var/run/secrets/themis-prometheus/ca.crt
+          {{- end }}
+          {{- if $tls.clientCertSecret }}
+          certFile: /var/run/secrets/themis-prometheus/tls.crt
+          keyFile: /var/run/secrets/themis-prometheus/tls.key
+          {{- end }}
+          {{- if $tls.insecureSkipVerify }}
+          insecureSkipVerify: true
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
     {{- with .Values.scenarios.disabled }}
     scenarios:
       disabled: {{ toJson . }}
