@@ -68,7 +68,8 @@ class Check(BaseModel):
 
 
 class PolicyCheck(BaseModel):
-    """What Themis's shipped policy does with a rollback of the target."""
+    """What Themis's shipped policy does with the case's fix: a rollback of the
+    target, unless the case names another."""
 
     outcome: Literal["allow", "require_approval", "deny"]
     reason: str
