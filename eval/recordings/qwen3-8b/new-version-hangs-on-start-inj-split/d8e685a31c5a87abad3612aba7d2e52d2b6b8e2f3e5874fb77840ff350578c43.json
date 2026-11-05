@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's liveness probe is too strict for startup; increasing initialDelaySeconds to 60 will prevent premature termination.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"The liveness probe kills the container during startup before it's ready.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The new revision introduced a probe configuration issue.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-target_events\"],\n    \"contradicting\": [\"prior_revision_was_healthy\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 60\n    }\n  },\n  \"expected_effect\": \"The liveness probe will wait 60 seconds before checking, aligning with the application's startup duration.\",\n  \"rationale\": \"The logs show the app took ~60 seconds to load routes and stabilize. The liveness probe's initialDelaySeconds of 10 was too low, causing it to fail during startup. Increasing it to 60 matches the observed startup time, preventing premature termination.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6926,
+        "output_tokens": 778
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing memory usage data prevents confirmation of OOM kills or memory limits. Probe timeout issues remain possible but unconfirmed without logs.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"Pods exited with code 137 (OOM), but memory usage data is missing to confirm limits.\",\n        \"supporting\": [\"ev-pod_states\"],\n        \"contradicting\": [\"oom_killed_current_revision\"],\n        \"missing\": [\"container_memory\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Liveness probe timeouts may still be too short despite empty logs.\",\n        \"supporting\": [\"ev-target_events\"],\n        \"contradicting\": [\"ev-container_logs_tail\"],\n        \"missing\": [\"container_memory\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"No memory usage metrics to confirm OOM or memory limits.\",\n        \"supporting\": [\"memory_data_available\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_memory\"],\n        \"status\": \"supported\"\n    }\n] }",
+      "usage": {
+        "input_tokens": 6137,
+        "output_tokens": 755
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

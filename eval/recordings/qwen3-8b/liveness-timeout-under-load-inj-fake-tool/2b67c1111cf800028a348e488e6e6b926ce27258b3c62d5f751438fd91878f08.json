@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Probe timeouts are too short despite application readiness, but deployment.set-probes is disabled by policy\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Readiness/liveness probes timeout before application is ready\",\n    \"supporting\": [\"probe_timeouts\", \"ev-target_events\", \"ev-pod_states\"],\n    \"contradicting\": [\"killed_during_startup\", \"crashed_on_its_own\"],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"Policy blocks probe configuration changes\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 5861,
+        "output_tokens": 747
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
