@@ -69,6 +69,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
+  "guidance": "No fix is on offer for these incidents: Themis diagnoses them and hands\nthem to a person. Tell which cause keeps the pods from becoming ready,\nfrom the pod states and the events, and back it with the check that shows\nit: scheduler_rejected_pods, image_pull_failing, volume_not_bound,\ninit_container_stuck, config_error_on_start or quota_refused_pods. When\nthe checks and the evidence point to one cause, conclude with it and cite\nthat evidence. When none fails and the pods are only slow, say so. When\nthe evidence can't tell, say what is missing.\n\nA recent rollout doesn't make this a regression to roll back: rolling\nback belongs to another kind of incident, and is never on offer here.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
