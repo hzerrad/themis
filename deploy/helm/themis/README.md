@@ -156,6 +156,12 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
+| `metrics.kubernetes.enabled` | `true` | Read containers' current memory and CPU use from the Kubernetes metrics API (metrics-server), and let the core read it in each enrolled namespace |
+| `metrics.prometheus.address` | `""` | A server answering Prometheus queries, for peak memory and CPU throttling too; see [Metrics](../../../docs/configuration.md#metrics). Empty: not used |
+| `metrics.prometheus.tokenSecret` | `""` | A Secret with a `token` key, sent as a bearer token |
+| `metrics.prometheus.tls.caSecret` | `""` | A Secret with a `ca.crt` key: the CA that signs the server's certificate |
+| `metrics.prometheus.tls.clientCertSecret` | `""` | A `kubernetes.io/tls` Secret, for a server that asks for a client certificate |
+| `metrics.prometheus.tls.insecureSkipVerify` | `false` | Accept any certificate. Only for trying Themis |
 | `scenarios.disabled` | `[]` | [Scenario packs](../../../docs/scenarios.md) to turn off, by name; every pack is on otherwise. A name no pack has stops Themis from starting |
 | `profiles` | `[]` | Incident classes of your own, installed as `IncidentProfile` resources. One named like a scenario pack's profile replaces it; see [Configuration](../../../docs/configuration.md#configuration-resources) |
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |

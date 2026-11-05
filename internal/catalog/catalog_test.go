@@ -151,7 +151,7 @@ func TestBuild_LoadsPacks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cat, err := catalog.Build(nil, packs(t, tt.edit), nil)
+			cat, err := catalog.Build(nil, nil, packs(t, tt.edit), nil)
 			if tt.want != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.want) {
 					t.Fatalf("error = %v, want %q", err, tt.want)
@@ -176,14 +176,14 @@ func TestBuild_LoadsPacks(t *testing.T) {
 // A disabled pack brings neither its profile nor its checks, and disabling a
 // pack Themis doesn't have stops it.
 func TestBuild_DisablesPacks(t *testing.T) {
-	cat, err := catalog.Build(nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regression"})
+	cat, err := catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regression"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || len(cat.Checks) != 1 {
 		t.Errorf("profiles %+v, %d checks: want only the crashes pack's", cat.Profiles, len(cat.Checks))
 	}
-	_, err = catalog.Build(nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})
+	_, err = catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})
 	if want := `scenarios.disabled: no scenario pack is named "rollout-regresion"`; errText(err) != want {
 		t.Errorf("error = %v, want %q", err, want)
 	}

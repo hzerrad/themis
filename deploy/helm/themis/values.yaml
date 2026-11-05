@@ -168,6 +168,33 @@ crds:
 #   externalProposals: who outside Themis may suggest fixes; see the docs
 themisConfig: {}
 
+# Where Themis reads how much memory and CPU containers use, for the
+# container_memory and container_cpu evidence. Prometheus is asked first when
+# it has an address; the Kubernetes metrics API answers what it can't.
+metrics:
+  kubernetes:
+    # The Kubernetes metrics API, which metrics-server serves: current use
+    # only, no peaks or throttling. On, the core may read it in each enrolled
+    # namespace.
+    enabled: true
+  prometheus:
+    # A server answering Prometheus queries, such as Prometheus, Thanos,
+    # Mimir, VictoriaMetrics or Grafana Cloud, for example
+    # http://prometheus-operated.monitoring:9090. Empty: not used.
+    address: ""
+    # A Secret in the release namespace with a token key, sent as a bearer
+    # token, if the server needs one.
+    tokenSecret: ""
+    tls:
+      # A Secret with a ca.crt key: the CA that signs the server's
+      # certificate, when the system's don't.
+      caSecret: ""
+      # A kubernetes.io/tls Secret, for a server that asks for a client
+      # certificate.
+      clientCertSecret: ""
+      # Accept any certificate. Only for trying Themis.
+      insecureSkipVerify: false
+
 # Scenario packs Themis ships, each with its own profile: every one is on
 # unless named here, such as [rollout-regression]. See docs/scenarios.md.
 scenarios:

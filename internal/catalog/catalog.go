@@ -15,6 +15,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/scenarios"
@@ -64,25 +65,29 @@ func (r RootCauses) For(profile string) []RootCause {
 	return out
 }
 
-// Themis is what Themis ships with, every scenario pack on. logs reads
-// containers' logs for the container-logs template.
+// Themis is what Themis ships with, every scenario pack on, and no metrics
+// source. logs reads containers' logs for the container-logs template.
 func Themis(logs evidence.LogReader) (Catalog, error) {
-	return Build(logs, scenarios.FS, nil)
+	return Build(logs, nil, scenarios.FS, nil)
 }
 
 // Build is Themis's evidence templates and fixes, with the scenario packs in
-// packs, one folder each, except those disabled names.
+// packs, one folder each, except those disabled names. logs reads
+// containers' logs, and usage what they use, for the templates that need
+// them.
 //
 // Every pack's checks are compiled and its profile checked here, so a broken
 // pack stops Themis from starting, with a message naming it. So does a
 // disabled name no pack has.
-func Build(logs evidence.LogReader, packs fs.FS, disabled []string) (Catalog, error) {
+func Build(logs evidence.LogReader, usage metrics.Source, packs fs.FS, disabled []string) (Catalog, error) {
 	templates := evidence.NewRegistry(
 		evidence.NewRolloutHistory(),
 		evidence.NewPodStates(),
 		evidence.NewTargetEvents(),
 		evidence.NewReferencedConfig(),
 		evidence.NewContainerLogsTail(logs),
+		evidence.NewContainerMemory(usage),
+		evidence.NewContainerCPU(usage),
 	)
 	found, err := readPacks(packs)
 	if err != nil {
