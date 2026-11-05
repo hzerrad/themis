@@ -1,7 +1,7 @@
 image:
   # Images are named <repository>/themis-{core,executor,intelligence}:<tag>.
-  # They're published on every merge to main: main is the latest, and
-  # sha-<commit> pins an exact build.
+  # main is the edge build, published on every merge; sha-<commit> pins one.
+  # A released chart (docs/releasing.md) sets this to its own version.
   repository: ghcr.io/hzerrad
   tag: main
   # main moves, so it's pulled every time. Pin a sha- tag to pull once.
