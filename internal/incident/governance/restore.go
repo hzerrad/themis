@@ -9,8 +9,6 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
-	"github.com/hzerrad/themis/internal/catalog/check"
-	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
@@ -81,7 +79,14 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if !ok {
 		return w.escalate(ctx, in.ID, "Themis doesn't know how to put this fix back, so it left its change in place.")
 	}
-	plan, err := undo.Plan(ctx, w.Reader, in.Target, params)
+	checks, err := w.Store.Predicates(ctx, in.ID)
+	if err != nil {
+		return err
+	}
+	d, err := w.decider.Decide(ctx, w.Reader, Fix{
+		Incident: in.ID, Target: in.Target, Profile: profile, Checks: checks,
+		Capability: undo, Params: params, Restores: applied.ID,
+	})
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		if refusal.NoOp {
 			return w.escalate(ctx, in.ID, "The workload is already back as it was before Themis acted.")
@@ -102,37 +107,17 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		return w.escalate(ctx, in.ID, "The workload changed after Themis's fix, so Themis left it as it is. A person needs to take over.")
 	}
 
-	results, err := w.Store.Predicates(ctx, in.ID)
-	if err != nil {
-		return err
-	}
-	predicates := map[string]string{}
-	for _, r := range results {
-		predicates[r.Name] = r.Value.String()
-	}
-	if plan.ManagedBy != "" {
-		predicates[ManagedCheck] = check.True.String()
-	}
-	pol, err := w.policy(profile)
-	if err != nil {
-		return err
-	}
-	decision := pol.Evaluate(policy.Input{
-		Capability: undo.Name(), Risk: plan.Risk, Namespace: in.Target.Namespace,
-		ManagedBy: plan.ManagedBy, Predicates: predicates, Restore: true,
-	})
-	switch decision.Outcome {
+	switch d.Decision.Outcome {
 	case policy.Deny:
-		return w.escalateDecided(ctx, in.ID, decision, decision.Reason+" Themis left its change in place.")
+		return w.escalateDecided(ctx, in.ID, d.Decision, d.Decision.Reason+" Themis left its change in place.")
 	case policy.RequireApproval:
-		return w.escalateDecided(ctx, in.ID, decision, decision.Reason+" Putting the workload back needs a person, so Themis left its change in place.")
+		return w.escalateDecided(ctx, in.ID, d.Decision, d.Decision.Reason+" Putting the workload back needs a person, so Themis left its change in place.")
 	case policy.Allow:
 	}
 
-	a, err := w.restoreAction(in, applied, undo, plan, decision)
-	if err != nil {
-		return err
-	}
+	// Policy alone authorizes it: it needs no approval.
+	a := d.Action
+	a.ProposalID, a.State = applied.ProposalID, store.ActionAuthorized
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
 		if errors.Is(err, store.ErrActiveAction) {
@@ -141,28 +126,9 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		if err != nil {
 			return err
 		}
-		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(decision)).Inc)
+		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(d.Decision)).Inc)
 		return w.Store.EnqueueTx(ctx, tx, ExecuteArgs{ActionID: a.ID, IncidentID: in.ID})
 	})
-}
-
-// restoreAction is authorized by policy alone: it needs no approval.
-func (w *Worker) restoreAction(in store.Incident, applied store.Action, undo capability.Capability, plan capability.Plan, d policy.Decision) (store.Action, error) {
-	fields := capability.Fields(in.ID, undo, plan, applied.ID, d.PolicyID, d.PolicyDigest)
-	dg, err := digest.Compute(fields)
-	if err != nil {
-		return store.Action{}, err
-	}
-	return store.Action{
-		IncidentID: in.ID, ProposalID: applied.ProposalID,
-		Capability: fields.Capability, CapabilityVersion: fields.CapabilityVersion,
-		Target: fields.Target, Params: fields.Params, Constraints: fields.Constraints,
-		PreState: plan.Before, Desired: plan.After,
-		BlastRadius: plan.BlastRadius,
-		Risk:        plan.Risk,
-		Decision:    string(policy.Allow), DecisionReason: d.Reason, PolicyID: d.PolicyID, PolicyDigest: d.PolicyDigest,
-		Digest: dg, Mark: plan.Mark, State: store.ActionAuthorized,
-	}, nil
 }
 
 func (w *Worker) escalateAction(ctx context.Context, actionID, reason string) error {

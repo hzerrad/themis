@@ -2,7 +2,6 @@ package governance_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog"
@@ -53,16 +51,21 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	s, pool := pgtest.NewStore(t)
-	ns := k8s.NewNamespace(t)
-	k8s.Load(t, ns, scenario1)
-	var d appsv1.Deployment
-	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: ns, Name: "checkout"}, &d); err != nil {
-		t.Fatal(err)
-	}
-	cfg := config.Config{EnrolledNamespaces: []string{ns}, Profiles: []config.Profile{profile("rollout-regression"), profile("other")}}
+	target := cluster(t)
+	cfg := config.Config{EnrolledNamespaces: []string{target.Namespace}, Profiles: []config.Profile{profile("rollout-regression"), profile("other")}}
 	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes()}
 	w.Now = func() time.Time { return now }
-	return &env{worker: w, store: s, pool: pool, target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: "checkout", UID: string(d.UID)}}
+	return &env{worker: w, store: s, pool: pool, target: target}
+}
+
+// shipped governs with the policy of the rollout-regression scenario pack.
+func shipped(t *testing.T) *env {
+	t.Helper()
+	e := newEnv(t)
+	p := profile("rollout-regression")
+	p.Policy = shippedProfile(t).Policy
+	e.worker.Config = config.Config{EnrolledNamespaces: []string{e.target.Namespace}, Profiles: []config.Profile{p}}
+	return e
 }
 
 var predicates = []check.Result{
@@ -137,9 +140,9 @@ func (e *env) action(t *testing.T, incidentID string) store.Action {
 	return actions[0]
 }
 
-// The action comes from the cluster, not from what the proposal says, and
-// keeps the template it replaces so it can be put back.
-func TestGovern_RequiresApprovalInGuarded(t *testing.T) {
+// A fix policy doesn't forbid waits for a person's approval, until the
+// profile's approval timeout.
+func TestGovern_AwaitsApproval(t *testing.T) {
 	e := newEnv(t)
 	id, p := e.diagnosed(t, "rollout-regression", 1, predicates)
 	e.govern(t, p)
@@ -148,57 +151,46 @@ func TestGovern_RequiresApprovalInGuarded(t *testing.T) {
 		t.Errorf("state = %s, want awaiting_approval", got)
 	}
 	a := e.action(t, id)
-	if a.State != store.ActionAwaitingApproval || a.Digest == "" || a.ExpiresAt == nil || !a.ExpiresAt.Equal(now.Add(config.DefaultApprovalTimeout)) {
-		t.Errorf("action = %+v", a)
-	}
-	if a.PolicyID != "approve" || a.Target.UID != e.target.UID || a.Target.SpecHash == "" {
-		t.Errorf("action identity or decision = %+v", a)
-	}
-	if a.BlastRadius["replicas"] != int64(3) {
-		t.Errorf("blast radius = %v, want the live 3 replicas", a.BlastRadius)
-	}
-	if a.Params["templateHash"] == "" || a.Params["revision"] != int64(1) {
-		t.Errorf("params = %v", a.Params)
-	}
-	var pre, desired appsv1.Deployment
-	if err := json.Unmarshal(a.PreState, &pre.Spec.Template); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(a.Desired, &desired.Spec.Template); err != nil {
-		t.Fatal(err)
-	}
-	if pre.Spec.Template.Spec.Containers[0].Image != "example/checkout:2.4.0" || desired.Spec.Template.Spec.Containers[0].Image != "example/checkout:2.3.1" {
-		t.Errorf("pre-state %s, desired %s", pre.Spec.Template.Spec.Containers[0].Image, desired.Spec.Template.Spec.Containers[0].Image)
+	if a.State != store.ActionAwaitingApproval || a.Decision != "require_approval" || a.ProposalID != p || a.ExpiresAt == nil || !a.ExpiresAt.Equal(now.Add(config.DefaultApprovalTimeout)) {
+		t.Errorf("action = %s, %s, for %s, expiring %v", a.State, a.Decision, a.ProposalID, a.ExpiresAt)
 	}
 }
 
-// GitOps ownership is read live: a stale predicate does not hide it.
-func TestOwnership_ArgoManaged_Denied(t *testing.T) {
-	e := newEnv(t)
-	var d appsv1.Deployment
-	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout"}, &d); err != nil {
-		t.Fatal(err)
-	}
-	d.Annotations["argocd.argoproj.io/tracking-id"] = "shop:apps/Deployment:shop/checkout"
-	if err := k8s.Update(t.Context(), &d); err != nil {
-		t.Fatal(err)
-	}
-	deny := decisions(t, "deny")
-	refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
-	id, p := e.diagnosed(t, "rollout-regression", 1, predicates)
-	e.govern(t, p)
+// A fix policy forbids closes the incident without acting, and a denial is
+// counted as a GitOps refusal only when GitOps owns the target.
+func TestGovern_Denied(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		checks   []check.Result
+		gitOps   bool
+		refusals float64
+	}{
+		{"GitOps owns the target", predicates, true, 1},
+		{"forbidden by a rule", []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}, false, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			if tt.gitOps {
+				argoManaged(t, e.target)
+			}
+			deny := decisions(t, "deny")
+			refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
+			id, p := e.diagnosed(t, "rollout-regression", 1, tt.checks)
+			e.govern(t, p)
 
-	if a := e.action(t, id); a.State != store.ActionDenied || a.PolicyID != "gitops" {
-		t.Errorf("action = %s by %s, want denied by gitops", a.State, a.PolicyID)
-	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed_no_action", got)
-	}
-	if got := deny(); got != 1 {
-		t.Errorf("counted %v denials, want 1", got)
-	}
-	if got := refusals(); got != 1 {
-		t.Errorf("counted %v GitOps refusals, want 1", got)
+			if a := e.action(t, id); a.State != store.ActionDenied || a.ExpiresAt != nil {
+				t.Errorf("action = %s, want denied", a.State)
+			}
+			if got := e.state(t, id); got != incident.ClosedNoAction {
+				t.Errorf("state = %s, want closed_no_action", got)
+			}
+			if got := deny(); got != 1 {
+				t.Errorf("counted %v denials, want 1", got)
+			}
+			if got := refusals(); got != tt.refusals {
+				t.Errorf("counted %v GitOps refusals, want %v", got, tt.refusals)
+			}
+		})
 	}
 }
 

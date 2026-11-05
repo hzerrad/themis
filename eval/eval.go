@@ -29,9 +29,11 @@ import (
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/workload"
 )
@@ -206,8 +208,8 @@ type Bundle struct {
 
 	Predicates []Check `json:"predicates"`
 
-	// Policy is what the pack's policy does with a rollback of the target,
-	// given these checks. A harmful proposal the policy denies never reaches
+	// Policy is what governance decides for a rollback of the target to the
+	// revision before the current one, given these checks. A harmful proposal the policy denies never reaches
 	// anyone; one it lets through reaches a person to approve.
 	Policy PolicyCheck `json:"policy"`
 }
@@ -264,18 +266,14 @@ func bundleItem(item evidence.Item) Item {
 }
 
 // Build reads the case in dir with the real templates and the checks of
-// profile, a scenario pack's from packs, and asks the profile's policy what it
-// would do with a rollback.
+// profile, a scenario pack's from packs, and decides a rollback as governance
+// would.
 func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.Profile) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
 		return Bundle{}, err
 	}
 	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, packs, nil)
-	if err != nil {
-		return Bundle{}, err
-	}
-	pol, err := policy.Compile(profile.EffectivePolicy())
 	if err != nil {
 		return Bundle{}, err
 	}
@@ -320,7 +318,6 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 		item.ID = "ev-" + name
 		b.Requestable[name] = bundleItem(item)
 	}
-	values := map[string]string{}
 	for _, r := range d.Results {
 		out := Check{Name: r.Name, Version: r.Version, Value: r.Value.String(), Reason: r.Reason, Blind: r.Blind}
 		for _, id := range r.EvidenceIDs {
@@ -330,16 +327,44 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 			out.Gaps = append(out.Gaps, Gap{Template: g.Template, Cause: string(g.Cause)})
 		}
 		b.Predicates = append(b.Predicates, out)
-		values[r.Name] = r.Value.String()
 	}
-	// As the worker asks for the investigator's proposal. Rules reading
-	// target.managed_by see it empty: no shipped rule does.
-	verdict := pol.Evaluate(policy.Input{
-		Capability: rollback.Name, Risk: "medium", Namespace: target.Namespace,
-		Predicates: values, Source: "themis-intelligence", Authenticated: true,
-	})
-	b.Policy = PolicyCheck{Outcome: string(verdict.Outcome), Reason: verdict.Reason}
+	b.Policy, err = decide(ctx, c, w, profile, d.Results, cat.Fixes[rollback.Name])
+	if err != nil {
+		return Bundle{}, err
+	}
 	return b, nil
+}
+
+// decide decides, as governance decides the investigator's suggestion, a
+// rollback of w to the revision before its current one. A rollback that
+// can't go ahead reaches nobody, as a denied one doesn't.
+func decide(ctx context.Context, c client.Reader, w *workload.Workload, profile config.Profile, checks []check.Result, fix capability.Capability) (PolicyCheck, error) {
+	revisions, err := w.Revisions(ctx)
+	if err != nil {
+		return PolicyCheck{}, err
+	}
+	var previous int64
+	for _, r := range revisions {
+		if r.Number < w.Revision && r.Number > previous {
+			previous = r.Number
+		}
+	}
+	if previous == 0 {
+		return PolicyCheck{Outcome: string(policy.Deny), Reason: "The workload has no earlier revision to roll back to."}, nil
+	}
+	var decider governance.Decider
+	decided, err := decider.Decide(ctx, c, governance.Fix{
+		Target: w.Target, Profile: profile, Checks: checks,
+		Capability: fix, Params: map[string]any{"revision": previous},
+		By: governance.Suggester{Source: "themis-intelligence", Authenticated: true},
+	})
+	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
+		return PolicyCheck{Outcome: string(policy.Deny), Reason: refusal.Reason}, nil
+	}
+	if err != nil {
+		return PolicyCheck{}, err
+	}
+	return PolicyCheck{Outcome: string(decided.Decision.Outcome), Reason: decided.Decision.Reason}, nil
 }
 
 // loadCluster reads a cluster the way the controllers and kubelet left it.

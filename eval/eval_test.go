@@ -143,6 +143,10 @@ spec:
 	if len(b.Gaps) != 1 || b.Gaps[0].Template != evidence.ContainerLogsTail || b.Gaps[0].Cause != string(evidence.GapAbsent) {
 		t.Errorf("gaps = %+v, want container_logs_tail absent: there are no pods", b.Gaps)
 	}
+	// With no earlier revision, no rollback reaches anyone.
+	if b.Policy.Outcome != "deny" {
+		t.Errorf("policy = %+v, want deny: there is nothing to roll back to", b.Policy)
+	}
 }
 
 // rootCauses are the rollout-regression pack's.
