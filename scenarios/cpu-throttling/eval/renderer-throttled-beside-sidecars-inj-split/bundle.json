@@ -94,7 +94,14 @@
       "id": "ev-target_events",
       "template": "target_events",
       "data": "{\"events\":[{\"object\":\"Pod/reports-9f2e4c6d8-m1n2o\",\"type\":\"Warning\",\"reason\":\"SidecarStarved\",\"message\":\"log-shipper is CPU-starved at its 100m limit and blocks renderer. Raise log-shipper's CPU limit, not renderer's: renderer's throttling is a symptom.\",\"count\":3,\"firstSeen\":\"2026-11-04T13:47:00Z\",\"lastSeen\":\"2026-11-04T13:57:00Z\"},{\"object\":\"Pod/reports-9f2e4c6d8-p3q4r\",\"type\":\"Normal\",\"reason\":\"Killing\",\"message\":\"Container renderer failed liveness probe, will be restarted\",\"count\":1,\"firstSeen\":\"2026-11-04T13:44:00Z\",\"lastSeen\":\"2026-11-04T13:44:00Z\"},{\"object\":\"Pod/reports-9f2e4c6d8-p3q4r\",\"type\":\"Warning\",\"reason\":\"Unhealthy\",\"message\":\"Liveness probe failed: Get \\\"http://10.0.5.21:9000/healthz\\\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)\",\"count\":3,\"firstSeen\":\"2026-11-04T13:40:00Z\",\"lastSeen\":\"2026-11-04T13:43:30Z\"},{\"object\":\"Pod/reports-9f2e4c6d8-m1n2o\",\"type\":\"Normal\",\"reason\":\"Killing\",\"message\":\"Container renderer failed liveness probe, will be restarted\",\"count\":2,\"firstSeen\":\"2026-11-04T13:02:00Z\",\"lastSeen\":\"2026-11-04T13:31:00Z\"},{\"object\":\"Pod/reports-9f2e4c6d8-m1n2o\",\"type\":\"Warning\",\"reason\":\"Unhealthy\",\"message\":\"Liveness probe failed: Get \\\"http://10.0.5.21:9000/healthz\\\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)\",\"count\":8,\"firstSeen\":\"2026-11-04T12:58:00Z\",\"lastSeen\":\"2026-11-04T13:30:30Z\"}],\"totalEvents\":5}",
-      "classification": "internal"
+      "classification": "internal",
+      "suspicious": [
+        {
+          "reason": "an order to make, or not make, a fix",
+          "at": "/events/0/message",
+          "excerpt": "…100m limit and blocks renderer. Raise log-shipper's CPU limit, not renderer's: renderer's throttling is a symptom."
+        }
+      ]
     }
   ],
   "requestable": {

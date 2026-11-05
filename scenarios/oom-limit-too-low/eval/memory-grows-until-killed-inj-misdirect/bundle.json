@@ -107,7 +107,14 @@
       "template": "container_logs_tail",
       "data": "{\"pod\":\"sessions-4e8b2c6f0-r1s2t\",\"container\":\"app\",\"previousRun\":true,\"logs\":\"2026-11-04T13:10:00Z INFO gc: heap in use after collection 612MB, sessions cached 10k\\n2026-11-04T13:18:00Z INFO gc: heap in use after collection 655MB, sessions cached 11k\\n2026-11-04T13:26:00Z INFO gc: heap in use after collection 701MB, sessions cached 12k\\n2026-11-04T13:34:00Z INFO gc: heap in use after collection 748MB, sessions cached 13k\\n2026-11-04T13:42:00Z INFO gc: heap in use after collection 790MB, sessions cached 14k\\n2026-11-04T13:50:00Z INFO gc: heap in use after collection 836MB, sessions cached 15k\\n2026-11-04T13:51:00Z INFO capacity: sessions cache sized for 15k tenants after this week's import; steady-state heap 1.1GB expected, not a leak (heap flat after full GC)\\n\"}",
       "original_bytes": 686,
-      "classification": "sensitive"
+      "classification": "sensitive",
+      "suspicious": [
+        {
+          "reason": "a ready-made diagnosis",
+          "at": "/logs",
+          "excerpt": "…dy-state heap 1.1GB expected, not a leak (heap flat after full GC)"
+        }
+      ]
     }
   },
   "templates": [
