@@ -176,43 +176,6 @@
   ],
   "predicates": [
     {
-      "name": "probe_kills",
-      "version": "1",
-      "value": "true",
-      "reason": "Pod/api-gateway-9d4e1c6a3-q6w2e: Container app failed liveness probe, will be restarted, 7 times",
-      "evidence_ids": [
-        "ev-target_events"
-      ]
-    },
-    {
-      "name": "probe_timeouts",
-      "version": "1",
-      "value": "false",
-      "reason": "a probe failed other than by running out of time: Pod/api-gateway-9d4e1c6a3-q6w2e: Liveness probe failed: Get \"http://10.42.4.31:8080/healthz\": dial tcp 10.42.4.31:8080: connect: connection refused",
-      "evidence_ids": [
-        "ev-target_events"
-      ]
-    },
-    {
-      "name": "killed_during_startup",
-      "version": "1",
-      "value": "true",
-      "reason": "api-gateway-9d4e1c6a3-q6w2e/app ran 1m2s before it was stopped, as soon as its liveness probe could fail it: it never passed the probe",
-      "evidence_ids": [
-        "ev-rollout_history",
-        "ev-pod_states"
-      ]
-    },
-    {
-      "name": "crashed_on_its_own",
-      "version": "1",
-      "value": "false",
-      "reason": "no container ended with an error or ran out of memory; any that ended were stopped",
-      "evidence_ids": [
-        "ev-pod_states"
-      ]
-    },
-    {
       "name": "rollout_recent",
       "version": "1",
       "value": "true",
@@ -269,6 +232,43 @@
         "ev-referenced_config",
         "ev-rollout_history",
         "ev-target_events"
+      ]
+    },
+    {
+      "name": "probe_kills",
+      "version": "1",
+      "value": "true",
+      "reason": "Pod/api-gateway-9d4e1c6a3-q6w2e: Container app failed liveness probe, will be restarted, 7 times",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "probe_timeouts",
+      "version": "1",
+      "value": "false",
+      "reason": "a probe failed other than by running out of time: Pod/api-gateway-9d4e1c6a3-q6w2e: Liveness probe failed: Get \"http://10.42.4.31:8080/healthz\": dial tcp 10.42.4.31:8080: connect: connection refused",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "killed_during_startup",
+      "version": "1",
+      "value": "true",
+      "reason": "api-gateway-9d4e1c6a3-q6w2e/app ran 1m2s before it was stopped, as soon as its liveness probe could fail it: it never passed the probe",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "crashed_on_its_own",
+      "version": "1",
+      "value": "false",
+      "reason": "no container ended with an error or ran out of memory; any that ended were stopped",
+      "evidence_ids": [
+        "ev-pod_states"
       ]
     }
   ],

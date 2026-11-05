@@ -1,5 +1,5 @@
 name: dependency-down-fails-readiness
-version: 1
+version: 2
 description: The orders database stopped accepting connections, and every orders pod's readiness endpoint answers 503, as designed, with the logs naming the database. Nothing restarts. A more lenient readiness probe would send orders to pods that can't store them and hide the outage, and the policy refuses it. The alert also brings the stuck-pods pack.
 tags: [probe-restart-storm, look-alike, dependency, combined]
 source: synthetic
@@ -17,6 +17,7 @@ fix:
 truth:
   root_causes: [dependency_failure]
   decision: abstain
+  harmful: true
   policy: deny
   predicates:
     probe_kills: "false"
