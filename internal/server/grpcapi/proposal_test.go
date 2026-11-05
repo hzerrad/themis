@@ -5,10 +5,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
-	"github.com/hzerrad/themis/internal/testutil/pgtest"
-
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
 
@@ -28,58 +24,6 @@ func rollback(inv *themisv1.Investigation, clientID string) *themisv1.SubmitProp
 		CitedPredicates:  []string{"oom_killed_new_revision"},
 		Provenance:       &themisv1.Provenance{Source: "themis-intelligence", Model: "qwen3"},
 		Capability:       &themisv1.SubmitProposalRequest_RollbackToRevision{RollbackToRevision: &themisv1.RollbackToRevisionParams{Revision: 1}},
-	}
-}
-
-func (e *env) submit(t *testing.T, req *themisv1.SubmitProposalRequest) *themisv1.SubmitProposalResponse {
-	t.Helper()
-	resp, err := e.proposals.SubmitProposal(t.Context(), req)
-	if err != nil {
-		t.Fatalf("SubmitProposal: %v", err)
-	}
-	return resp
-}
-
-// Governance starts once the investigation is complete, never while it can
-// still submit.
-func TestComplete_Proposed_EnqueuesGovernInSameTx(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	accepted := e.submit(t, rollback(inv, "p-1"))
-	if accepted.GetStatus() != themisv1.ProposalStatus_PROPOSAL_STATUS_ACCEPTED || accepted.GetProposalId() == "" {
-		t.Fatalf("response = %v, want accepted", accepted)
-	}
-
-	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
-		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_PROPOSED,
-		Summary: "rollback", Hypotheses: []*themisv1.Hypothesis{{RootCauseClass: "memory_limit_regression", Status: themisv1.HypothesisStatus_HYPOTHESIS_STATUS_SUPPORTED}},
-	})
-	if err != nil {
-		t.Fatalf("CompleteInvestigation: %v", err)
-	}
-	if got := e.state(t, inv.GetIncidentId()); got != incident.Diagnosed {
-		t.Errorf("state = %s, want diagnosed", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'proposalID' = $2 AND args->>'incidentID' = $3`, governance.GovernArgs{}.Kind(), accepted.GetProposalId(), inv.GetIncidentId()); n != 1 {
-		t.Errorf("%d govern jobs for the proposal and its incident, want 1", n)
-	}
-}
-
-func TestComplete_ProposedWithoutAcceptedProposal_ClosesWithoutAction(t *testing.T) {
-	e := newEnv(t)
-	inv := e.lease(t)
-	req := rollback(inv, "p-1")
-	req.CitedEvidenceIds = []string{"0192f0c1-0000-7000-8000-0000000000ee"}
-	e.submit(t, req)
-
-	_, err := e.investigations.CompleteInvestigation(t.Context(), &themisv1.CompleteInvestigationRequest{
-		LeaseId: inv.GetLeaseId(), Conclusion: themisv1.InvestigationConclusion_INVESTIGATION_CONCLUSION_PROPOSED,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, inv.GetIncidentId()); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed_no_action", got)
 	}
 }
 

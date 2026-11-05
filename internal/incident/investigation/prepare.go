@@ -108,7 +108,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 			return err
 		}
 		for _, g := range gaps {
-			if err := w.Store.InsertEvidenceGap(ctx, tx, g); err != nil {
+			if _, err := recordGap(ctx, w.Store, tx, w.Catalog.Evidence, g); err != nil {
 				return err
 			}
 		}

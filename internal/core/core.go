@@ -228,8 +228,9 @@ func Run(ctx context.Context, o Options) error {
 		return &statuspage.Heartbeat{Store: s, Component: component, Logger: log}
 	}
 	suggestions := &suggestion.Inbox{Store: s, Config: current, Fixes: cat.Fixes, Checks: cat.Checks, Logger: log}
+	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
 	investigators := &grpcapi.Server{
-		Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Reader: mgr.GetAPIReader(), Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
+		Store: s, Config: current, Investigations: leases, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
 		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions,
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
