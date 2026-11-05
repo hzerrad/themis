@@ -71,6 +71,12 @@ profile:
 
 `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
 
+### When packs answer the same alert
+
+Two packs may answer the same alert: on an OOM kill, one may offer a rollback and another a higher memory limit. The incident then gets both packs combined: all their checks, all their fixes, and each pack's guidance, introduced by the pack's name and the fixes it offers. The investigator decides which fix the evidence supports. Priority only orders the packs: the highest is the one the incident is shown under, and its root causes come first. [Configuration](configuration.md#combined-profiles) has the details.
+
+A pack's rules govern only its own fixes. The fixes another pack offers are decided by that pack's rules, so a pack's policy can't refuse, or let through, another pack's fix. Write every protection a fix needs, such as refusing a workload GitOps owns, into the policy of each pack that offers a fix. When two packs offer the same fix, each one's policy decides it and the strictest outcome wins.
+
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
 
 `guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
@@ -104,6 +110,8 @@ truth:
     rollout_recent: "true"
     oom_killed_new_revision: "true"
 ```
+
+A case may also name the alert that raised it, as `alert: KubePodOOMKilled`. Its bundle then holds what Themis gives an incident from that alert: every pack whose profile matches the alert and the target, combined, so the case shows how the investigator chooses among their fixes. Without `alert`, the case gets its own pack's profile only.
 
 `cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `rootCauses`.
 
@@ -153,7 +161,7 @@ my-scenario: not ready
 
 A broken pack also stops Themis from starting, with a message naming the pack.
 
-The investigator learns everything a pack adds from Themis with each investigation: the checks its profile runs, with their answers, the pack's root causes, and its guidance. A pack adding a check or a root cause changes nothing outside its folder.
+The investigator learns everything a pack adds from Themis with each investigation: the checks its profile runs, with their answers, the pack's root causes, and its guidance, along with those of every other pack the incident matched. A pack adding a check or a root cause changes nothing outside its folder.
 
 ## For operators
 

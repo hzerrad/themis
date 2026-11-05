@@ -179,6 +179,32 @@ func checksRead(a *cel.Ast) []string {
 // Evaluate decides in rule order. Errors deny; observe mode denies; guarded
 // mode never allows without approval.
 func (p *Policy) Evaluate(in Input) Decision {
+	d, matched := p.Rule(in)
+	if !matched {
+		d = Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}
+		if in.Restore {
+			// Putting back what Themis changed needs no approval unless a
+			// rule asks for one: it returns the workload to how a person
+			// left it.
+			d = Decision{Outcome: Allow, Reason: "No policy rule matched, so Themis may put the workload back as it was.", PolicyDigest: p.digest}
+		}
+	}
+	if d.Failed {
+		return d
+	}
+	switch {
+	case p.mode == config.ModeObserve && d.Outcome != Deny:
+		d.Outcome, d.Reason = Deny, d.Reason+" Themis is in observe mode, so it never makes changes."
+	case p.mode == config.ModeGuarded && d.Outcome == Allow && !in.Restore:
+		d.Outcome, d.Reason = RequireApproval, d.Reason+" In guarded mode, a person must approve every fix."
+	}
+	return d
+}
+
+// Rule is the decision of the first rule that matches in, or of the first
+// that can't be evaluated, which denies; false when none matches. Neither the
+// mode nor what happens when no rule matches plays a part.
+func (p *Policy) Rule(in Input) (Decision, bool) {
 	change := in.Change
 	if change == nil {
 		change = map[string]string{}
@@ -191,30 +217,25 @@ func (p *Policy) Evaluate(in Input) Decision {
 		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
 		"mode":       p.mode,
 	}
-	d := Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}
-	if in.Restore {
-		// Putting back what Themis changed needs no approval unless a rule
-		// asks for one: it returns the workload to how a person left it.
-		d = Decision{Outcome: Allow, Reason: "No policy rule matched, so Themis may put the workload back as it was.", PolicyDigest: p.digest}
-	}
 	for _, r := range p.rules {
 		val, _, err := r.program.Eval(vars)
 		if err != nil {
 			return Decision{
 				Outcome: Deny, PolicyID: r.Name, PolicyDigest: p.digest, Failed: true,
 				Reason: fmt.Sprintf("Policy rule %s couldn't be evaluated (%v), so the fix is forbidden.", r.Name, err),
-			}
+			}, true
 		}
 		if matched, ok := val.Value().(bool); ok && matched {
-			d = Decision{Outcome: Outcome(r.Decision), Reason: fmt.Sprintf("Policy rule %s %s.", r.Name, ruleVerbs[Outcome(r.Decision)]), PolicyID: r.Name, PolicyDigest: p.digest}
-			break
+			return Decision{Outcome: Outcome(r.Decision), Reason: fmt.Sprintf("Policy rule %s %s.", r.Name, ruleVerbs[Outcome(r.Decision)]), PolicyID: r.Name, PolicyDigest: p.digest}, true
 		}
 	}
-	switch {
-	case p.mode == config.ModeObserve && d.Outcome != Deny:
-		d.Outcome, d.Reason = Deny, d.Reason+" Themis is in observe mode, so it never makes changes."
-	case p.mode == config.ModeGuarded && d.Outcome == Allow && !in.Restore:
-		d.Outcome, d.Reason = RequireApproval, d.Reason+" In guarded mode, a person must approve every fix."
-	}
-	return d
+	return Decision{}, false
 }
+
+// Stricter reports whether a holds back more than b: deny holds back more
+// than require_approval, which holds back more than allow.
+func Stricter(a, b Outcome) bool {
+	return strictness[a] > strictness[b]
+}
+
+var strictness = map[Outcome]int{Allow: 0, RequireApproval: 1, Deny: 2}

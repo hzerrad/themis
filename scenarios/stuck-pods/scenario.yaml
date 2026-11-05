@@ -28,8 +28,7 @@ rootCauses:
     description: "none of these: say what in the summary"
 
 # The profile Themis uses for these incidents. It answers only alerts the
-# rollout-regression pack doesn't, and its priority is below that pack's, so a
-# bad rollout, where a rollback is right, stays with rollout-regression.
+# rollout-regression pack doesn't, and its priority is below that pack's.
 profile:
   priority: 50
   # What the investigator is told about these incidents. It names checks, never
@@ -60,8 +59,10 @@ profile:
     - config_error_on_start
     - quota_refused_pods
     - stuck_pods_new_revision_only
-  # Diagnosis only: no fix is offered, and the rule below refuses any fix all
-  # the same, so the policy never lets one through, wherever it is asked.
+  # Diagnosis only: no fix is offered, so Themis refuses any fix suggested
+  # for an incident only this pack matched. The rule below says so to the
+  # evaluation, which decides a rollback anyway. A pack's rules govern only
+  # its own fixes, so it never holds back another pack's.
   policy:
     mode: guarded
     rules:

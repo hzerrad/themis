@@ -51,9 +51,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if in.State != incident.Diagnosed || p.Status != store.ProposalAccepted {
 		return nil
 	}
-	profile, ok := w.Config.Current().Profile(in.Profile)
-	if !ok {
-		return w.close(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis stopped working on this incident.", in.Profile))
+	matched := w.Config.Current().Matched(in.Profiles())
+	if len(matched) == 0 {
+		return w.close(ctx, in.ID, fmt.Sprintf("Themis no longer has %s this incident matched, so it stopped working on it.", config.Named(in.Profiles())))
 	}
 	f, ok := w.Fixes[p.Capability]
 	if !ok {
@@ -64,7 +64,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		return err
 	}
 	d, err := w.decider.Decide(ctx, w.Reader, Fix{
-		Incident: in.ID, Target: in.Target, Profile: profile, Checks: checks,
+		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks,
 		Capability: f, Params: p.Params,
 		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
 	})
@@ -82,7 +82,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	a := d.Action
 	a.ProposalID, a.State = p.ID, store.ActionDenied
 	if d.Decision.Outcome != policy.Deny {
-		expires := w.now().Add(profile.EffectivePolicy().ApprovalTimeout.Duration)
+		// The strictest of the profiles governing the fix sets how long a
+		// person has to approve it.
+		expires := w.now().Add(matched.Offering(f.Name()).ApprovalTimeout())
 		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {

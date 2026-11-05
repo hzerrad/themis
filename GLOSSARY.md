@@ -17,7 +17,7 @@ The Kubernetes object a target names, as Themis reads it: its pod template, the 
 _Avoid_: app, service, deployment (unless the kind is meant)
 
 **Profile**:
-A named set of rules for a group of workloads: which evidence Themis may read, which checks it runs, which capabilities it may suggest, and which policy decides. Each scenario pack brings one; an install can add its own, or replace a pack's with one of the same name.
+A named set of rules for a group of workloads: which evidence Themis may read, which checks it runs, which capabilities it may suggest, and which policy decides. Each scenario pack brings one; an install can add its own, or replace a pack's with one of the same name. An incident gets every profile its alert matches, combined; the highest-priority one is its primary profile, the one it is shown under.
 _Avoid_: config, ruleset
 
 **Scenario pack**:

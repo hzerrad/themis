@@ -3,10 +3,6 @@ package config
 import (
 	"slices"
 	"time"
-
-	"k8s.io/apimachinery/pkg/labels"
-
-	"github.com/hzerrad/themis/internal/incident"
 )
 
 // Scenarios configures the scenario packs. Every pack is on unless disabled.
@@ -25,8 +21,9 @@ type Profile struct {
 	// enrolled one. Only a resource in a team's namespace sets it.
 	Scope string `json:"-"`
 
-	// Priority orders profiles matching the same alert; higher wins. Unique,
-	// from 1.
+	// Priority orders the profiles matching the same alert, highest first:
+	// the first is the incident's primary profile. Every one that matches
+	// applies. Unique, from 1.
 	Priority int `json:"priority" jsonschema:"minimum=1"`
 
 	// Match decides which alerts belong to this profile.
@@ -143,36 +140,6 @@ type Match struct {
 
 	// TargetKinds lists the resolved target kinds that match, as Kind.group.
 	TargetKinds []string `json:"targetKinds" jsonschema:"minItems=1,uniqueItems=true"`
-}
-
-// MatchProfile returns the highest-priority profile matching the alert.
-func (c Config) MatchProfile(alertName string, lbls map[string]string, target incident.TargetRef) (Profile, bool) {
-	candidates := make([]Profile, 0, len(c.Profiles))
-
-	for _, profile := range c.Profiles {
-		if (profile.Scope == "" || profile.Scope == target.Namespace) &&
-			slices.Contains(profile.Match.AlertNames, alertName) &&
-			slices.Contains(profile.Match.TargetKinds, target.KindGroup()) &&
-			labels.SelectorFromSet(profile.Match.Labels).Matches(labels.Set(lbls)) {
-			candidates = append(candidates, profile)
-		}
-	}
-
-	if len(candidates) == 0 {
-		return Profile{}, false
-	}
-
-	// get the candidate with highest priority
-	highestCandidate := candidates[0]
-	for _, candidate := range candidates[1:] {
-		// On a tie, the team's own profile is the more specific.
-		if candidate.Priority > highestCandidate.Priority ||
-			(candidate.Priority == highestCandidate.Priority && candidate.Scope != "" && highestCandidate.Scope == "") {
-			highestCandidate = candidate
-		}
-	}
-
-	return highestCandidate, true
 }
 
 // Profile returns the profile named name.

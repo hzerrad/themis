@@ -23,7 +23,10 @@ var (
 
 type IncidentArgs struct {
 	Fingerprint string
+	// Profile is the highest-priority profile the alert matched, and
+	// AlsoMatched every other, highest priority first.
 	Profile     string
+	AlsoMatched []string
 	Target      incident.TargetRef
 	Payload     []byte
 }
@@ -43,8 +46,8 @@ func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in Incident
 	}
 
 	sql := `
-	INSERT INTO incidents (id, fingerprint, state, profile, target_group, target_kind, target_namespace, target_name, target_uid)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	INSERT INTO incidents (id, fingerprint, state, profile, target_group, target_kind, target_namespace, target_name, target_uid, other_profiles)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	ON CONFLICT (fingerprint) WHERE state NOT IN ('resolved', 'contained_escalated', 'escalated', 'closed_no_action', 'self_resolved', 'rejected', 'canceled')
 	DO UPDATE SET occurrence_count = incidents.occurrence_count + 1, updated_at = now()
 	RETURNING id::text
@@ -52,7 +55,7 @@ func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in Incident
 
 	row := tx.QueryRow(ctx, sql, newID, in.Fingerprint, incident.Received,
 		in.Profile, in.Target.Group, in.Target.Kind, in.Target.Namespace,
-		in.Target.Name, in.Target.UID,
+		in.Target.Name, in.Target.UID, append([]string{}, in.AlsoMatched...),
 	)
 
 	var id string
@@ -165,9 +168,12 @@ func (EscalationArgs) InsertOpts() river.InsertOpts { return river.InsertOpts{Ma
 var ErrNotFound = errors.New("not found")
 
 type Incident struct {
-	ID              string
-	State           incident.State
+	ID    string
+	State incident.State
+	// Profile is the incident's primary profile, the highest-priority one
+	// its alert matched, and AlsoMatched every other, highest priority first.
 	Profile         string
+	AlsoMatched     []string
 	Target          incident.TargetRef
 	OccurrenceCount int
 	CreatedAt       time.Time
@@ -181,15 +187,20 @@ type Incident struct {
 	SupersededBy string
 }
 
-const incidentColumns = `id::text, state, profile, target_group, target_kind, target_namespace, target_name, target_uid, occurrence_count, created_at, updated_at,
+const incidentColumns = `id::text, state, profile, other_profiles, target_group, target_kind, target_namespace, target_name, target_uid, occurrence_count, created_at, updated_at,
 	observed_spec_hash, coalesce(superseded_by::text, '')`
 
 func scanIncident(row pgx.Row) (Incident, error) {
 	var in Incident
 	t := &in.Target
-	err := row.Scan(&in.ID, &in.State, &in.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &in.OccurrenceCount, &in.CreatedAt, &in.UpdatedAt,
+	err := row.Scan(&in.ID, &in.State, &in.Profile, &in.AlsoMatched, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &in.OccurrenceCount, &in.CreatedAt, &in.UpdatedAt,
 		&in.ObservedSpecHash, &in.SupersededBy)
 	return in, err
+}
+
+// Profiles are every profile the incident matched, its primary first.
+func (in Incident) Profiles() []string {
+	return append([]string{in.Profile}, in.AlsoMatched...)
 }
 
 func (s *Store) Incident(ctx context.Context, id string) (Incident, error) {

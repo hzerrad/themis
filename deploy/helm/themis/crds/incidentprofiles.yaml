@@ -144,8 +144,9 @@ spec:
                 type: object
               priority:
                 description: |-
-                  Priority orders profiles matching the same alert; higher wins. Unique,
-                  from 1.
+                  Priority orders the profiles matching the same alert, highest first:
+                  the first is the incident's primary profile. Every one that matches
+                  applies. Unique, from 1.
                 minimum: 1
                 type: integer
               verification:

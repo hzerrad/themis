@@ -107,7 +107,7 @@ func TestCollectEvidence(t *testing.T) {
 			},
 		},
 		"not in the profile": {
-			template: evidence.ReferencedConfig, code: codes.PermissionDenied, msg: `template "referenced_config" is not allowed for profile rollout-regression`,
+			template: evidence.ReferencedConfig, code: codes.PermissionDenied, msg: `template "referenced_config" is not allowed for the rollout-regression profile`,
 		},
 		"past the budget": {
 			template: evidence.TargetEvents, code: codes.ResourceExhausted, msg: "the evidence budget is spent",
@@ -122,7 +122,7 @@ func TestCollectEvidence(t *testing.T) {
 		"bad parameters": {template: evidence.ContainerLogsTail, params: map[string]string{"bogus": "x"}, code: codes.InvalidArgument},
 		"a lost lease":   {template: evidence.TargetEvents, lease: otherLease, code: codes.FailedPrecondition, msg: "the lease is unknown, expired or superseded"},
 		"a profile no longer configured": {
-			template: evidence.TargetEvents, code: codes.FailedPrecondition, msg: `profile "rollout-regression" is no longer configured`,
+			template: evidence.TargetEvents, code: codes.FailedPrecondition, msg: `no profile of this incident is configured any more (rollout-regression)`,
 			before: func(_ *testing.T, e *env, _ *themisv1.Investigation) {
 				e.server.Investigations.Config = config.Config{}
 			},

@@ -213,9 +213,26 @@ profiles:
 
 ### Matching alerts
 
-An alert is resolved to the workload it is about: the object its labels name (`deployment`, `statefulset`, `daemonset`, `job_name`, `persistentvolumeclaim`, `pod`), followed up controller owner references to the top. A `themis_target=<Kind.group>/<name>` label overrides that. The highest-priority profile whose `alertNames`, `labels` and `targetKinds` all match wins; priorities must be unique among your profiles, and among the packs'. Alerts that match no profile are recorded as rejected, with the reason.
+An alert is resolved to the workload it is about: the object its labels name (`deployment`, `statefulset`, `daemonset`, `job_name`, `persistentvolumeclaim`, `pod`), followed up controller owner references to the top. A `themis_target=<Kind.group>/<name>` label overrides that. Every profile whose `alertNames`, `labels` and `targetKinds` all match applies to the incident. Priority only orders them: the highest-priority one is the incident's primary profile, the one it is shown and grouped under. Priorities must be unique among your profiles, and among the packs'. Alerts that match no profile are recorded as rejected, with the reason.
 
-Alerts with the same profile and target join one open incident.
+Alerts with the same primary profile and target join one open incident.
+
+### Combined profiles
+
+When several profiles match, such as two scenario packs that both answer `KubePodOOMKilled`, the incident gets all of them combined:
+
+| What | Combined |
+|---|---|
+| Checks | Every check any of them runs, each once |
+| Evidence | Every `initial` template any of them collects first, and every `allowed` one any of them allows |
+| Fixes | Every fix any of them offers |
+| Root causes | Each pack's, the primary's first, each name once |
+| Guidance | Each profile's, introduced by its name and the fixes it offers, so the investigator knows which part is about which fix |
+| Investigation | The largest `maxSteps`, `maxEvidenceRequests` and `timeout` among them |
+
+The investigator decides which fix the evidence supports. Each fix is then decided only by the profiles that offer it: a profile's policy governs its own fixes, never another profile's. When several profiles offer the same fix, each one's policy decides it, mode and all, and the strictest outcome wins: `deny` over `require_approval` over `allow`. The shortest `approvalTimeout` and the longest `verification` among them apply. A fix none of the incident's profiles offers is refused, whoever suggests it.
+
+So a rule that protects a workload, such as refusing to change one owned by GitOps, belongs in every profile that offers a fix. An incident that matched one profile is decided exactly as before.
 
 ### Evidence templates
 
@@ -316,7 +333,7 @@ policy:
       decision: require_approval
 ```
 
-These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
+A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
 
 - Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. `deployment.set-resources` sets `change.containers`, the containers it changes, comma-separated; `change.memory` and `change.cpu`, each `increase`, `decrease` or `mixed`; `change["memory.ratio"]` and `change["cpu.ratio"]`, the largest new value over its old one; and for each value it changes, `change["<container>.<memory|cpu>.<request|limit>"]`, `increase`, `decrease` or `set` (where there was none), with `.before`, `.after` and `.ratio` beside it, such as `change["app.memory.limit.ratio"] == "2"`. The shipped policies set no size limits. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
@@ -404,6 +421,7 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
     "id": "01a1837f-…", "state": "escalated", "from": "investigating",
     "reason": "investigation failed: INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE",
     "profile": "rollout-regression",
+    "profiles": ["rollout-regression"],
     "target": {"group": "apps", "kind": "Deployment", "namespace": "shop", "name": "checkout", "uid": "…"},
     "at": "2026-10-28T17:13:54Z",
     "url": "https://themis.example.com/#/incidents/01a1837f-…"
@@ -411,4 +429,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `profiles` are every profile the incident matched, `profile`, its primary, first. Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

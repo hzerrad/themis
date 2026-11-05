@@ -25,8 +25,10 @@ const ManagedCheck = "gitops_managed"
 type Fix struct {
 	Incident string
 	Target   incident.TargetRef
-	// Profile's policy decides.
-	Profile config.Profile
+	// Profiles are every profile the incident matched. Those offering the
+	// fix govern it: each one's policy decides, mode and all, and the
+	// strictest decision wins. A profile's rules govern only its own fixes.
+	Profiles config.Matched
 	// Checks are the incident's check results, as stored.
 	Checks []check.Result
 
@@ -37,6 +39,17 @@ type Fix struct {
 	By Suggester
 	// Restores is the action this fix puts back; empty for a fix of its own.
 	Restores string
+	// Undoes is the fix a restore puts back: the profiles offering it govern
+	// the restore.
+	Undoes string
+}
+
+// governs is the fix whose profiles govern this one.
+func (f Fix) governs() string {
+	if f.Undoes != "" {
+		return f.Undoes
+	}
+	return f.Capability.Name()
 }
 
 // Suggester is who suggested a fix, as policy sees it.
@@ -58,7 +71,7 @@ type Decided struct {
 	ManagedBy string
 }
 
-// Decider decides fixes by their profile's policy, the same way for every
+// Decider decides fixes by their profiles' policies, the same way for every
 // caller. The zero value is ready to use.
 type Decider struct {
 	// policies holds compiled policies by their source: profiles can change
@@ -80,10 +93,6 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 			return Decided{}, err
 		}
 	}
-	pol, err := d.policy(fix.Profile)
-	if err != nil {
-		return Decided{}, err
-	}
 	predicates := map[string]string{}
 	for _, c := range fix.Checks {
 		predicates[c.Name] = c.Value.String()
@@ -92,12 +101,15 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 	if plan.ManagedBy != "" {
 		predicates[ManagedCheck] = check.True.String()
 	}
-	decision := pol.Evaluate(policy.Input{
+	decision, err := d.decide(fix, policy.Input{
 		Capability: fix.Capability.Name(), Risk: plan.Risk, Namespace: fix.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates, Change: plan.Facts,
 		Source: fix.By.Source, Authenticated: fix.By.Authenticated, External: fix.By.External,
 		Restore: fix.Restores != "",
 	})
+	if err != nil {
+		return Decided{}, err
+	}
 
 	fields := capability.Fields(fix.Incident, fix.Capability, plan, fix.Restores, decision.PolicyID, decision.PolicyDigest)
 	dg, err := digest.Compute(fields)
@@ -119,6 +131,46 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 		},
 		ManagedBy: plan.ManagedBy,
 	}, nil
+}
+
+// decide is the strictest decision on in of the profiles offering fix, each
+// by its whole policy, mode and all. On a tie, the higher-priority profile's
+// decision stands.
+//
+// A fix no profile offers is forbidden. Judging refuses it before it gets
+// here; the evaluation, which skips judging, learns from the first profile
+// with a rule forbidding it which rule that is.
+func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
+	offering := fix.Profiles.Offering(fix.governs())
+	if len(offering) == 0 {
+		for _, p := range fix.Profiles {
+			pol, err := d.policy(p)
+			if err != nil {
+				return policy.Decision{}, err
+			}
+			if r, ok := pol.Rule(in); ok && r.Outcome == policy.Deny {
+				return r, nil
+			}
+		}
+		return policy.Decision{Outcome: policy.Deny, Reason: "None of this incident's profiles offers this fix, so it is forbidden."}, nil
+	}
+	var (
+		out  policy.Decision
+		from string
+	)
+	for _, p := range offering {
+		pol, err := d.policy(p)
+		if err != nil {
+			return policy.Decision{}, err
+		}
+		if got := pol.Evaluate(in); from == "" || policy.Stricter(got.Outcome, out.Outcome) {
+			out, from = got, p.Name
+		}
+	}
+	if len(fix.Profiles) > 1 {
+		out.Reason += " It is the " + from + " profile's policy."
+	}
+	return out, nil
 }
 
 // policy returns p's compiled policy.

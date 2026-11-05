@@ -38,7 +38,7 @@ Every transition is stored with its time, reason and actor, together with the jo
 
 | Risk | Guard |
 |---|---|
-| A model told by a log line to act on another workload | The core accepts proposals only for the incident's exact target (UID included), only for capabilities the profile allows, and only citing evidence it collected. Anything else is stored as rejected, and a wrong target is recorded as a safety event. |
+| A model told by a log line to act on another workload | The core accepts proposals only for the incident's exact target (UID included), only for capabilities one of its matching profiles offers, decided by those profiles' policies, and only citing evidence it collected. Anything else is stored as rejected, and a wrong target is recorded as a safety event. |
 | A proposal that misdescribes the change | The action is derived from the live cluster, never from the proposal's text. The UI shows both side by side, with every field the action changes. |
 | An approval reused, or for something that changed | An approval is bound to the action's digest, expires, and is consumed by the execution claim. The digest covers the target's UID, generation, a hash of its pod template, its field manager, and the exact template being restored, but not `resourceVersion`, which changes on every status update. |
 | The cluster changing between approval and write | The executor rereads the target and recomputes the digest; any difference makes the action `stale` and nothing is written. The write uses the fresh `resourceVersion` as a precondition, after a server-side dry run. |

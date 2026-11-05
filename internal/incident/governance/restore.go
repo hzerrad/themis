@@ -9,6 +9,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/store"
@@ -60,9 +61,9 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 			return nil
 		}
 	}
-	profile, ok := w.Config.Current().Profile(in.Profile)
-	if !ok {
-		return w.escalate(ctx, in.ID, fmt.Sprintf("The %s profile was removed from the configuration, so Themis left its change in place.", in.Profile))
+	matched := w.Config.Current().Matched(in.Profiles())
+	if len(matched) == 0 {
+		return w.escalate(ctx, in.ID, fmt.Sprintf("Themis no longer has %s this incident matched, so it left its change in place.", config.Named(in.Profiles())))
 	}
 	done, ok := w.Fixes[applied.Capability]
 	if !ok {
@@ -84,8 +85,8 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		return err
 	}
 	d, err := w.decider.Decide(ctx, w.Reader, Fix{
-		Incident: in.ID, Target: in.Target, Profile: profile, Checks: checks,
-		Capability: undo, Params: params, Restores: applied.ID,
+		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks,
+		Capability: undo, Params: params, Restores: applied.ID, Undoes: applied.Capability,
 	})
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		if refusal.NoOp {

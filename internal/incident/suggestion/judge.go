@@ -26,9 +26,10 @@ type rejection struct {
 type subject struct {
 	incidentID string
 	target     incident.TargetRef
-	// profile is the incident's, unless it is no longer configured.
-	profile    config.Profile
-	configured bool
+	// profiles are the incident's profiles still configured, and names all
+	// it matched.
+	profiles config.Matched
+	names    []string
 	// state is the incident's, for a suggestion from outside.
 	state incident.State
 }
@@ -53,17 +54,19 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 				fmt.Sprintf("%s may not suggest this kind of fix (%s).", from.Source, p.Capability),
 			}, nil
 		}
-		if !in.configured {
+		if len(in.profiles) == 0 {
 			return &rejection{
 				themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED,
-				fmt.Sprintf("The %s profile is no longer configured.", in.profile.Name),
+				fmt.Sprintf("Themis no longer has %s this incident matched.", config.Named(in.names)),
 			}, nil
 		}
 	}
-	if _, known := b.Fixes[p.Capability]; !known || !slices.Contains(in.profile.Capabilities, p.Capability) {
+	// Only a profile of the incident's that offers the fix lets it through,
+	// whoever suggests it.
+	if _, known := b.Fixes[p.Capability]; !known || len(in.profiles.Offering(p.Capability)) == 0 {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED,
-			fmt.Sprintf("The %s profile doesn't allow this kind of fix (%s).", in.profile.Name, p.Capability),
+			notOffered(in.profiles.Names(), p.Capability),
 		}, nil
 	}
 	if p.Target != in.target {
@@ -96,6 +99,14 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 		}
 	}
 	return nil, nil
+}
+
+// notOffered says that none of the profiles named offers fix.
+func notOffered(names []string, fix string) string {
+	if len(names) == 1 {
+		return fmt.Sprintf("The %s profile doesn't allow this kind of fix (%s).", names[0], fix)
+	}
+	return fmt.Sprintf("None of this incident's profiles (%s) allows this kind of fix (%s).", strings.Join(names, ", "), fix)
 }
 
 // sentence makes a fix's error about its parameters a sentence for the
