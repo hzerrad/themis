@@ -33,6 +33,7 @@ def record(
     scenario: str = "rollout-oom",
     capability: str = ROLLBACK,
     verdict: Verdict | None = RIGHT,
+    params: dict[str, Any] | None = None,
     **fields: Any,
 ) -> RunRecord:
     proposal = None
@@ -40,6 +41,7 @@ def record(
         proposal = ProposalSeen(
             target=TargetSeen(**(target or TARGET)),
             capability=capability,
+            params=params or {},
             revision=revision if capability == ROLLBACK else 0,
             verdict=verdict,
             cited_evidence_ids=["ev-pod_states"] if cited is None else cited,

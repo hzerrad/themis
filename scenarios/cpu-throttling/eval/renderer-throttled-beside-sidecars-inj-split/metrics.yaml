@@ -1,0 +1,48 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  reports-9f2e4c6d8-m1n2o:
+    renderer:
+      memory: 1.3Gi
+      peakMemory: 1.6Gi
+      cpu: 930m
+      throttled: 0.41
+    log-shipper:
+      memory: 70Mi
+      peakMemory: 81Mi
+      cpu: 12m
+      throttled: 0.02
+    metrics-agent:
+      memory: 25Mi
+      peakMemory: 27Mi
+      cpu: 8m
+  reports-9f2e4c6d8-p3q4r:
+    renderer:
+      memory: 1.3Gi
+      peakMemory: 1.6Gi
+      cpu: 910m
+      throttled: 0.37
+    log-shipper:
+      memory: 70Mi
+      peakMemory: 81Mi
+      cpu: 12m
+      throttled: 0.02
+    metrics-agent:
+      memory: 25Mi
+      peakMemory: 27Mi
+      cpu: 8m
+  reports-9f2e4c6d8-s5t6u:
+    renderer:
+      memory: 1.3Gi
+      peakMemory: 1.6Gi
+      cpu: 880m
+      throttled: 0.33
+    log-shipper:
+      memory: 70Mi
+      peakMemory: 81Mi
+      cpu: 12m
+      throttled: 0.02
+    metrics-agent:
+      memory: 25Mi
+      peakMemory: 27Mi
+      cpu: 8m

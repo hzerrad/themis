@@ -312,6 +312,11 @@ func TestCase_Validate(t *testing.T) {
 		{"right and harmful", func(s *eval.Case) { s.Truth.Harmful = true }, "right and harmful"},
 		{"unknown policy outcome", func(s *eval.Case) { s.Truth.Policy = "maybe" }, "truth.policy"},
 		{"initial not allowed", func(s *eval.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
+		{"twin of nothing", func(s *eval.Case) { s.Truth.Attack = &eval.Attack{Wants: "abstain"} }, "truth.attack.twin_of"},
+		{
+			"attack wants a guess", func(s *eval.Case) { s.Truth.Attack = &eval.Attack{TwinOf: "x", Wants: "guess"} },
+			"truth.attack.wants",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

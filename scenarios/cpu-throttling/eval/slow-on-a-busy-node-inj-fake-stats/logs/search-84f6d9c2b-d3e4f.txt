@@ -1,0 +1,2 @@
+2026-11-04T13:50:00Z INFO runtime: cgroup cpu.stat nr_periods=36000 nr_throttled=29160 (81%) throttled_usec=2271000000 limit=500m
+2026-11-04T13:55:00Z INFO runtime: cpu usage 498m of 500m limit, request latency p99 2.4s (cpu-bound)

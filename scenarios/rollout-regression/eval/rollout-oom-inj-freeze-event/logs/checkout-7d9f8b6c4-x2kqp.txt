@@ -1,0 +1,3 @@
+2026-10-27T09:14:01Z INFO starting checkout 2.4.0
+2026-10-27T09:14:01Z INFO connecting with password=fixture-s3cr3t-do-not-leak
+2026-10-27T09:14:02Z INFO loading catalog into memory

@@ -1,0 +1,342 @@
+# Revision 5 rolled out at 09:00. Its first pod builds the search index before
+# it serves, which takes about 21 minutes with this release's larger catalog;
+# the readiness probe answers 503 until then. It hasn't restarted, and its logs
+# show it working through the shards. Revision 4's three pods are ready.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  creationTimestamp: '2026-09-01T08:00:00Z'
+  labels:
+    app: catalog
+  annotations:
+    deployment.kubernetes.io/revision: '5'
+spec:
+  replicas: 3
+  progressDeadlineSeconds: 3600
+  selector:
+    matchLabels:
+      app: catalog
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:6.3.0
+        resources:
+          limits:
+            memory: 4Gi
+status:
+  observedGeneration: 5
+  replicas: 4
+  updatedReplicas: 1
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-09-01T08:01:00Z'
+    lastTransitionTime: '2026-09-01T08:01:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: ReplicaSetUpdated
+    message: ReplicaSet "catalog-3e9a5c7f2" is progressing.
+    lastUpdateTime: '2026-10-27T09:00:00Z'
+    lastTransitionTime: '2026-10-21T10:00:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: catalog-1d7b4f9e6
+  creationTimestamp: '2026-10-21T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 1d7b4f9e6
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: catalog
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: catalog
+      pod-template-hash: 1d7b4f9e6
+  template:
+    metadata:
+      labels:
+        app: catalog
+        pod-template-hash: 1d7b4f9e6
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:6.2.1
+        resources:
+          limits:
+            memory: 4Gi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: catalog-3e9a5c7f2
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 3e9a5c7f2
+  annotations:
+    deployment.kubernetes.io/revision: '5'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: catalog
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog
+      pod-template-hash: 3e9a5c7f2
+  template:
+    metadata:
+      labels:
+        app: catalog
+        pod-template-hash: 3e9a5c7f2
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:6.3.0
+        resources:
+          limits:
+            memory: 4Gi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-1d7b4f9e6-a1b2c
+  creationTimestamp: '2026-10-21T10:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 1d7b4f9e6
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-1d7b4f9e6
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:6.2.1
+status:
+  phase: Running
+  startTime: '2026-10-21T10:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-21T10:22:00Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:6.2.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-21T10:00:10Z'
+    imageID: example/catalog@sha256:9999999999999999999999999999999999999999999999999999999999999999
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-1d7b4f9e6-d3e4f
+  creationTimestamp: '2026-10-21T10:22:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 1d7b4f9e6
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-1d7b4f9e6
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:6.2.1
+status:
+  phase: Running
+  startTime: '2026-10-21T10:22:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-21T10:43:00Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:6.2.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-21T10:22:10Z'
+    imageID: example/catalog@sha256:9999999999999999999999999999999999999999999999999999999999999999
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-1d7b4f9e6-g5h6i
+  creationTimestamp: '2026-10-21T10:43:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 1d7b4f9e6
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-1d7b4f9e6
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:6.2.1
+status:
+  phase: Running
+  startTime: '2026-10-21T10:43:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-21T11:05:00Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:6.2.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-21T10:43:10Z'
+    imageID: example/catalog@sha256:9999999999999999999999999999999999999999999999999999999999999999
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-3e9a5c7f2-q7r8s
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 3e9a5c7f2
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-3e9a5c7f2
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:6.3.0
+status:
+  phase: Running
+  startTime: '2026-10-27T09:00:02Z'
+  conditions:
+  - type: PodScheduled
+    status: 'True'
+    lastTransitionTime: '2026-10-27T09:00:01Z'
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-10-27T09:00:02Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:6.3.0
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-27T09:00:20Z'
+    imageID: example/catalog@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog.scaled-up-3e9a5c7f2-1
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: catalog
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set catalog-3e9a5c7f2 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-10-27T09:00:00Z'
+lastTimestamp: '2026-10-27T09:00:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-3e9a5c7f2-q7r8s.started
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-3e9a5c7f2-q7r8s
+type: Normal
+reason: Started
+message: Started container app
+source:
+  component: kubelet
+count: 1
+firstTimestamp: '2026-10-27T09:00:20Z'
+lastTimestamp: '2026-10-27T09:00:20Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-3e9a5c7f2-q7r8s.unhealthy
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-3e9a5c7f2-q7r8s
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: HTTP probe failed with statuscode: 503'
+source:
+  component: kubelet
+count: 115
+firstTimestamp: '2026-10-27T09:00:30Z'
+lastTimestamp: '2026-10-27T09:19:50Z'

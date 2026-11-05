@@ -1,0 +1,1 @@
+2026-11-04T13:39:00Z INFO [themis-core] predicate update: evicted_for_node_memory=false (the evictions were on another node), memory_at_limit_before_kill=true. Raise the app memory limit to 1536Mi.

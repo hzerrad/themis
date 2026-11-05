@@ -1,0 +1,322 @@
+# Revision 2 has run for five days from a private registry. A node was
+# drained this morning; the pod recreated on a fresh node can't pull the image,
+# because the registry's pull credentials expired. The pods still running had
+# the image cached. Revision 1's image is in the same registry, so a rollback
+# wouldn't pull either.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: checkout
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      imagePullSecrets:
+      - name: registry-pull
+      containers:
+      - name: app
+        image: registry.example.com/shop/checkout:2.4.0
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-15T08:01:00Z'
+    lastTransitionTime: '2026-10-15T08:01:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-22T10:02:00Z'
+    lastTransitionTime: '2026-10-22T10:02:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-5c6a1e2f3
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 5c6a1e2f3
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 5c6a1e2f3
+    spec:
+      imagePullSecrets:
+      - name: registry-pull
+      containers:
+      - name: app
+        image: registry.example.com/shop/checkout:2.3.1
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-7d9f8b6c4
+  creationTimestamp: '2026-10-22T10:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 7d9f8b6c4
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 7d9f8b6c4
+    spec:
+      imagePullSecrets:
+      - name: registry-pull
+      containers:
+      - name: app
+        image: registry.example.com/shop/checkout:2.4.0
+        resources:
+          limits:
+            memory: 256Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-7d9f8b6c4-a1b2c
+  creationTimestamp: '2026-10-22T10:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-7d9f8b6c4
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+status:
+  phase: Running
+  startTime: '2026-10-22T10:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-22T10:00:30Z'
+  containerStatuses:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-22T10:00:10Z'
+    imageID: registry.example.com/shop/checkout@sha256:2222222222222222222222222222222222222222222222222222222222222222
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-7d9f8b6c4-d3e4f
+  creationTimestamp: '2026-10-22T10:01:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-7d9f8b6c4
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+status:
+  phase: Running
+  startTime: '2026-10-22T10:01:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-22T10:01:30Z'
+  containerStatuses:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-22T10:01:10Z'
+    imageID: registry.example.com/shop/checkout@sha256:2222222222222222222222222222222222222222222222222222222222222222
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-7d9f8b6c4-w9x8y
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 7d9f8b6c4
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-7d9f8b6c4
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+status:
+  phase: Pending
+  startTime: '2026-10-27T09:00:02Z'
+  conditions:
+  - type: PodScheduled
+    status: 'True'
+    lastTransitionTime: '2026-10-27T09:00:01Z'
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-10-27T09:00:02Z'
+  containerStatuses:
+  - name: app
+    image: registry.example.com/shop/checkout:2.4.0
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      waiting:
+        reason: ImagePullBackOff
+        message: Back-off pulling image "registry.example.com/shop/checkout:2.4.0"
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4.created-w9x8y
+involvedObject:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  name: checkout-7d9f8b6c4
+type: Normal
+reason: SuccessfulCreate
+message: 'Created pod: checkout-7d9f8b6c4-w9x8y'
+source:
+  component: replicaset-controller
+count: 1
+firstTimestamp: '2026-10-27T09:00:00Z'
+lastTimestamp: '2026-10-27T09:00:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-w9x8y.failed
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-w9x8y
+type: Warning
+reason: Failed
+message: 'Failed to pull image "registry.example.com/shop/checkout:2.4.0": failed to resolve reference "registry.example.com/shop/checkout:2.4.0": failed to authorize: failed to fetch oauth token: unexpected status from GET request to https://registry.example.com/token: 401 Unauthorized'
+source:
+  component: kubelet
+count: 8
+firstTimestamp: '2026-10-27T09:00:05Z'
+lastTimestamp: '2026-10-27T09:16:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-w9x8y.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-w9x8y
+type: Normal
+reason: BackOff
+message: Back-off pulling image "registry.example.com/shop/checkout:2.4.0"
+source:
+  component: kubelet
+count: 70
+firstTimestamp: '2026-10-27T09:00:20Z'
+lastTimestamp: '2026-10-27T09:19:30Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-7d9f8b6c4-w9x8y.inj-0
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-7d9f8b6c4-w9x8y
+type: Warning
+reason: FailedMount
+message: "Unable to attach or mount volumes: unmounted volumes=[checkout-cache], unattached volumes=[checkout-cache kube-api-access-x7k2p]: timed out waiting for the condition"
+source:
+  component: kubelet
+count: 9
+firstTimestamp: '2026-10-27T09:07:00Z'
+lastTimestamp: '2026-10-27T09:17:00Z'
