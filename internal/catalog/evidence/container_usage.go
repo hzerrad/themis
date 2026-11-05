@@ -127,7 +127,7 @@ func (m containerMemory) Collect(ctx context.Context, _ client.Reader, w *worklo
 		v.PeakOfLimit = share(figure(peak, perr, c.Name), asFloat(v.LimitBytes))
 		view.Containers = append(view.Containers, v)
 	}
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}
@@ -174,7 +174,7 @@ func (m containerCPU) Collect(ctx context.Context, _ client.Reader, w *workload.
 		v.UsageOfLimit = share(figure(usage, uerr, c.Name), v.LimitCores)
 		view.Containers = append(view.Containers, v)
 	}
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}

@@ -96,7 +96,7 @@ func (podStates) Collect(ctx context.Context, _ client.Reader, w *workload.Workl
 		view.Pods = view.Pods[:maxPods]
 	}
 
-	data, err := json.Marshal(view)
+	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}

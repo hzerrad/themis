@@ -167,6 +167,16 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef) (*Workload
 // its resourceVersion as precondition, or renders fields only it has.
 func (w *Workload) Object() *appsv1.Deployment { return w.deployment }
 
+// Identity is the workload as an action binds it: a change to any of it
+// since an approval makes the approval void.
+func (w *Workload) Identity() digest.TargetIdentity {
+	t := w.Target
+	return digest.TargetIdentity{
+		Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID,
+		Generation: w.Generation, SpecHash: w.TemplateHash, Manager: w.Writer,
+	}
+}
+
 // SetTemplate writes template as the workload's pod template, with the
 // resourceVersion it was read at as precondition, so a write since conflicts.
 // dryRun has the API server check the write without making it. It returns
