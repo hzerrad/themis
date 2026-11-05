@@ -41,6 +41,12 @@ profile:
   checks: []
   # The fixes Themis may suggest. None means it diagnoses and escalates. TODO
   capabilities: []
+  # What the investigator should know about these incidents, in plain words:
+  # when the fixes above are right and when they are wrong, which checks
+  # settle it, what evidence misleads. Don't name the root causes. Guidance
+  # only: the checks and policy decide.
+  guidance: |
+    TODO: say when the pack's fix is right, and when it is wrong.
   # Policy decides, for every fix, whether it is refused or needs a person's
   # approval. A rule's `when` is CEL over action.*, target.* and the checks'
   # answers as predicates.<check>. With no rule, a fix needs approval.

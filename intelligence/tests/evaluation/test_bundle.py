@@ -20,6 +20,8 @@ def test_job_matches_the_bundle() -> None:
     check = next(p for p in job.predicates if p.name == "oom_killed_new_revision")
     assert check.value == common_pb2.TRUTH_TRUE
     assert job.initial_evidence[0].classification == common_pb2.DATA_CLASSIFICATION_INTERNAL
+    # The pack's guidance, as the core sends it.
+    assert job.guidance.startswith("A rollback is right when")
 
 
 ALL = load_bundles(Path(__file__).parents[3] / "scenarios")

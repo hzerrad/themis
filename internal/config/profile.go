@@ -43,6 +43,11 @@ type Profile struct {
 	// diagnosis only.
 	Capabilities []string `json:"capabilities,omitempty" jsonschema:"uniqueItems=true"`
 
+	// Guidance tells the investigator, in plain words, when this profile's
+	// fixes are right and when they are wrong. It guides; checks and policy
+	// decide.
+	Guidance string `json:"guidance,omitempty" jsonschema:"maxLength=4000"`
+
 	// Investigation bounds each investigation; zero fields take defaults.
 	Investigation Investigation `json:"investigation,omitzero"`
 
@@ -95,6 +100,11 @@ type Investigation struct {
 	MaxEvidenceRequests int      `json:"maxEvidenceRequests,omitempty" jsonschema:"minimum=1"`
 	Timeout             Duration `json:"timeout,omitzero"`
 }
+
+// MaxGuidance is the most characters a profile's guidance may have: enough
+// for a few paragraphs, little enough to leave the investigator room for the
+// evidence.
+const MaxGuidance = 4000
 
 // Investigation defaults.
 const (

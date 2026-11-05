@@ -97,6 +97,8 @@ class Bundle(BaseModel):
     fixes: list[Fix] = []
     # The root causes the core sends for the case's pack.
     root_causes: list[RootCause]
+    # What the pack's profile tells the investigator.
+    guidance: str = ""
     max_steps: int
     max_evidence_requests: int
     initial: list[Item]
@@ -181,6 +183,7 @@ def job_of(b: Bundle) -> investigation_pb2.Investigation:
         root_causes=[
             common_pb2.RootCause(name=c.name, description=c.description) for c in b.root_causes
         ],
+        guidance=b.guidance,
         initial_evidence=[item_proto(b, i) for i in b.initial],
         predicates=[
             common_pb2.PredicateResult(
