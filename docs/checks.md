@@ -1,6 +1,6 @@
 # Writing a check
 
-A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
+A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`, and `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads. Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
 
 This is one of them:
 

@@ -213,6 +213,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Policy rule gitops-owns-the-target forbids this fix."
+    "reason": "Argo CD manages this workload, so Themis only recommends the change: apply it in Git."
   }
 }

@@ -20,11 +20,9 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
-	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/store"
-	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -139,27 +137,19 @@ func (e *env) state(t *testing.T, id string) incident.State {
 	return in.State
 }
 
-// approvals counts the answers to fixes awaiting approval with result.
-func approvals(t *testing.T, result string) func() float64 {
-	t.Helper()
-	return metrictest.Delta(t, "themis_approvals_total", map[string]string{"result": result})
-}
-
-func TestApprove_BindsDigest(t *testing.T) {
+// The API answers an approver with what became of their answer: what that
+// does to the incident is governance's, and tested there.
+func TestApprove_Status(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
-	mismatch, approved := approvals(t, "digest_mismatch"), approvals(t, "approved")
 	if rec := e.approve(t, a, "sha256:what-the-page-did-not-show"); rec.Code != http.StatusConflict {
-		t.Errorf("status = %d, want 409", rec.Code)
+		t.Errorf("another digest: status = %d, want 409", rec.Code)
 	}
-	if got := e.state(t, a.IncidentID); got != incident.AwaitingApproval {
-		t.Errorf("state = %s, want awaiting_approval", got)
+	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
 	}
-	if got := mismatch(); got != 1 {
-		t.Errorf("counted %v digest mismatches, want 1", got)
-	}
-	if got := approved(); got != 0 {
-		t.Errorf("counted %v approvals of a mismatched digest, want 0", got)
+	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
+		t.Errorf("second approval: status = %d, want 409", rec.Code)
 	}
 }
 
@@ -172,50 +162,17 @@ func TestApprove_Expired(t *testing.T) {
 	}
 }
 
-// An approval authorizes the fix and queues it once; approving again is
-// refused and counted as a replay.
-func TestApprove_TransitionsToAuthorizedAndEnqueuesExecute(t *testing.T) {
+func TestDeny_Status(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
-	approved, replayed := approvals(t, "approved"), approvals(t, "replayed")
-	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusOK {
-		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if got := e.state(t, a.IncidentID); got != incident.Authorized {
-		t.Errorf("state = %s, want authorized", got)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'actionID' = $2 AND args->>'incidentID' = $3`, governance.ExecuteArgs{}.Kind(), a.ID, a.IncidentID); n != 1 {
-		t.Errorf("%d execute jobs for the action and its incident, want 1", n)
-	}
-	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
-		t.Errorf("second approval: status = %d, want 409", rec.Code)
-	}
-	if got := approved(); got != 1 {
-		t.Errorf("counted %v approvals, want 1", got)
-	}
-	if got := replayed(); got != 1 {
-		t.Errorf("counted %v replays, want 1", got)
-	}
-}
-
-func TestDeny_ClosesWithoutAction(t *testing.T) {
-	e := newEnv(t)
-	a := e.awaiting(t)
-	denied := approvals(t, "denied")
 	if rec := e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/deny", token, map[string]string{"reason": "not during the sale"}); rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body)
-	}
-	if got := e.state(t, a.IncidentID); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed_no_action", got)
 	}
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusConflict {
 		t.Errorf("approval after denial: status = %d, want 409", rec.Code)
 	}
 	if rec := e.do(t, http.MethodPost, "/v1/actions/"+a.ID+"/deny", token, map[string]string{}); rec.Code != http.StatusConflict {
 		t.Errorf("second denial: status = %d, want 409", rec.Code)
-	}
-	if got := denied(); got != 1 {
-		t.Errorf("counted %v denials, want 1", got)
 	}
 }
 
