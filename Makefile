@@ -133,7 +133,7 @@ vuln-python: ## Report known vulnerabilities in the intelligence service's runti
 
 vuln-images: images ## Scan the images for fixable HIGH and CRITICAL vulnerabilities (needs trivy)
 	@status=0; for image in themis-core themis-executor themis-intelligence; do \
-		trivy image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 $$image:$(IMAGE_TAG) || status=1; \
+		trivy image --quiet --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 $$image:$(IMAGE_TAG) || status=1; \
 	done; exit $$status
 
 # Code generation
