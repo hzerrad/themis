@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The current revision's memory limit is too low, causing OOM kills. Increasing the memory limit to 1.25Gi should prevent this.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"The container hit its memory limit (1Gi) and was OOMKilled, with peak usage at 100% of the limit.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low compared to previous versions.\", \"supporting\": [\"oom_without_recent_rollout\", \"oom_killed_current_revision\"], \"contradicting\": [\"gitops_managed\"], \"missing\": [\"rollout_history_prev_revision\"], \"status\": \"supported\"},\n    {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No evidence of memory leaks or node memory pressure.\", \"supporting\": [\"evicted_for_node_memory\"], \"contradicting\": [\"memory_at_limit_before_kill\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"sessions\",\n        \"uid\": \"uid-deployment-sessions\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"1.25Gi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"The memory limit for the app container will be increased to 1.25Gi, preventing OOM kills by providing more memory before hitting the limit.\",\n    \"rationale\": \"The container was OOMKilled despite reaching its memory limit (1Gi), with peak usage at 100% of the limit. Increasing the limit by 25% (to 1.25Gi) should prevent future OOM kills without requiring a rollback or node-level changes.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\", \"ev-target_events\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\", \"oom_without_recent_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3484,
+        "output_tokens": 1236
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

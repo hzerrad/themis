@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust probe timeouts to accommodate application startup time\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Readiness and liveness probes timeout before application starts\",\n        \"supporting\": [\"probe_timeouts\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"open\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"Need logs to confirm application startup duration\",\n        \"supporting\": [\"container_logs_tail\"],\n        \"contradicting\": [],\n        \"missing\": [],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"search-api\",\n        \"uid\": \"uid-deployment-search-api\"\n    },\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 5\n        },\n        \"readiness\": {\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Reduce probe timeouts to match application startup duration\",\n    \"rationale\": \"Current liveness/readiness timeouts (1s) are too short for application startup. Increasing to 5s allows the app to respond before probes fail. No recent rollout (rollout_recent=false) suggests this is not a new version issue. Readiness probe failures (probe_timeouts=true) indicate the app is not responding fast enough to current timeouts. Liveness probe kills (probe_kills=true) confirm the app is not staying alive long enough to pass current checks. No OOM kills (crashed_on_its_own=false) suggest the app is not crashing itself, but rather taking longer than allowed to start. This aligns with '\",\"cited_evidence_ids\": [\"probe_timeouts\", \"probe_kills\", \"ev-rollout_history\", \"ev-target_events\", \"ev-pod_states\"],\n\n\"cited_predicates\": [\"probe_timeouts\", \"probe_kills\", \"rollout_recent\", \"crashed_on_its_own\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4780,
+        "output_tokens": 1217
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

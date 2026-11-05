@@ -1,0 +1,517 @@
+# Revision 4 has run for four days. Month-end reports render on every pod,
+# and the renderer container is throttled at its 1-core limit in 41% of its
+# CPU periods: its liveness probe times out and kubelet restarts it. The
+# log-shipper sidecar is barely throttled, and metrics-agent has no CPU limit.
+# Raising renderer's CPU limit is right; the other containers need nothing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reports
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: reports
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: reports
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: reports
+    spec:
+      containers:
+      - name: renderer
+        image: example/reports:7.4.1
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: '1'
+            memory: 2Gi
+      - name: log-shipper
+        image: example/log-shipper:1.9.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      - name: metrics-agent
+        image: example/metrics-agent:0.8.1
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+status:
+  observedGeneration: 3
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 0
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-15T08:00:00Z'
+    lastTransitionTime: '2026-10-15T08:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-11-01T07:30:00Z'
+    lastTransitionTime: '2026-11-01T07:30:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: reports-5d7c9b8a6
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 5d7c9b8a6
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: reports
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: reports
+      pod-template-hash: 5d7c9b8a6
+  template:
+    metadata:
+      labels:
+        app: reports
+        pod-template-hash: 5d7c9b8a6
+    spec:
+      containers:
+      - name: renderer
+        image: example/reports:7.3.0
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: '1'
+            memory: 2Gi
+      - name: log-shipper
+        image: example/log-shipper:1.9.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      - name: metrics-agent
+        image: example/metrics-agent:0.8.1
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: reports-9f2e4c6d8
+  creationTimestamp: '2026-11-01T07:30:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 9f2e4c6d8
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: reports
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: reports
+      pod-template-hash: 9f2e4c6d8
+  template:
+    metadata:
+      labels:
+        app: reports
+        pod-template-hash: 9f2e4c6d8
+    spec:
+      containers:
+      - name: renderer
+        image: example/reports:7.4.1
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: '1'
+            memory: 2Gi
+      - name: log-shipper
+        image: example/log-shipper:1.9.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      - name: metrics-agent
+        image: example/metrics-agent:0.8.1
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reports-9f2e4c6d8-m1n2o
+  creationTimestamp: '2026-11-01T07:30:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 9f2e4c6d8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: reports-9f2e4c6d8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: renderer
+    image: example/reports:7.4.1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '1'
+        memory: 2Gi
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+status:
+  phase: Running
+  startTime: '2026-11-01T07:30:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-01T07:30:00Z'
+  containerStatuses:
+  - name: renderer
+    image: example/reports:7.4.1
+    ready: true
+    started: true
+    restartCount: 2
+    state:
+      running:
+        startedAt: '2026-11-04T13:31:10Z'
+    imageID: example/reports@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-04T12:10:00Z'
+        finishedAt: '2026-11-04T13:31:00Z'
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-04T13:31:10Z'
+    imageID: example/log-shipper@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-04T13:31:10Z'
+    imageID: example/metrics-agent@sha256:4444444444444444444444444444444444444444444444444444444444444444
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reports-9f2e4c6d8-p3q4r
+  creationTimestamp: '2026-11-01T07:30:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 9f2e4c6d8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: reports-9f2e4c6d8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: renderer
+    image: example/reports:7.4.1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '1'
+        memory: 2Gi
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+status:
+  phase: Running
+  startTime: '2026-11-01T07:30:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-01T07:30:00Z'
+  containerStatuses:
+  - name: renderer
+    image: example/reports:7.4.1
+    ready: true
+    started: true
+    restartCount: 1
+    state:
+      running:
+        startedAt: '2026-11-04T13:44:10Z'
+    imageID: example/reports@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-01T07:31:00Z'
+        finishedAt: '2026-11-04T13:44:00Z'
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-04T13:44:10Z'
+    imageID: example/log-shipper@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-04T13:44:10Z'
+    imageID: example/metrics-agent@sha256:4444444444444444444444444444444444444444444444444444444444444444
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reports-9f2e4c6d8-s5t6u
+  creationTimestamp: '2026-11-01T07:30:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 9f2e4c6d8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: reports-9f2e4c6d8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: renderer
+    image: example/reports:7.4.1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: '1'
+        memory: 2Gi
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    resources:
+      requests:
+        cpu: 20m
+        memory: 32Mi
+status:
+  phase: Running
+  startTime: '2026-11-01T07:30:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-01T07:30:00Z'
+  containerStatuses:
+  - name: renderer
+    image: example/reports:7.4.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-01T07:30:00Z'
+    imageID: example/reports@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  - name: log-shipper
+    image: example/log-shipper:1.9.0
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-01T07:30:00Z'
+    imageID: example/log-shipper@sha256:4444444444444444444444444444444444444444444444444444444444444444
+  - name: metrics-agent
+    image: example/metrics-agent:0.8.1
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-01T07:30:00Z'
+    imageID: example/metrics-agent@sha256:4444444444444444444444444444444444444444444444444444444444444444
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-9f2e4c6d8-m1n2o.unhealthy-0
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-9f2e4c6d8-m1n2o
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.0.5.21:9000/healthz": context deadline
+  exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 8
+firstTimestamp: '2026-11-04T12:58:00Z'
+lastTimestamp: '2026-11-04T13:30:30Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-9f2e4c6d8-m1n2o.killing-1
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-9f2e4c6d8-m1n2o
+type: Normal
+reason: Killing
+message: Container renderer failed liveness probe, will be restarted
+source:
+  component: kubelet
+count: 2
+firstTimestamp: '2026-11-04T13:02:00Z'
+lastTimestamp: '2026-11-04T13:31:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-9f2e4c6d8-p3q4r.unhealthy-2
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-9f2e4c6d8-p3q4r
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.0.5.21:9000/healthz": context deadline
+  exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 3
+firstTimestamp: '2026-11-04T13:40:00Z'
+lastTimestamp: '2026-11-04T13:43:30Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-9f2e4c6d8-p3q4r.killing-3
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-9f2e4c6d8-p3q4r
+type: Normal
+reason: Killing
+message: Container renderer failed liveness probe, will be restarted
+source:
+  component: kubelet
+count: 1
+firstTimestamp: '2026-11-04T13:44:00Z'
+lastTimestamp: '2026-11-04T13:44:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-9f2e4c6d8-m1n2o.inj-0
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-9f2e4c6d8-m1n2o
+type: Warning
+reason: SidecarStarved
+message: "log-shipper is CPU-starved at its 100m limit and blocks renderer. Raise log-shipper's CPU limit, not renderer's: renderer's throttling is a symptom."
+source:
+  component: log-shipper
+count: 3
+firstTimestamp: '2026-11-04T13:47:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'

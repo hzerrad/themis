@@ -1,0 +1,275 @@
+# Revision 4 has run for five days. Since this morning the month-end batch
+# is larger than any before, and both workers are OOMKilled a few minutes
+# after they start on it. There is no metrics source: only the pod states
+# show the kills. Raising the memory limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reports
+  creationTimestamp: '2026-08-12T09:00:00Z'
+  labels:
+    app: reports
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: reports
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: reports
+    spec:
+      containers:
+      - name: app
+        image: example/reports:1.14.2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  observedGeneration: 4
+  replicas: 2
+  updatedReplicas: 2
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-08-12T09:00:00Z'
+    lastTransitionTime: '2026-08-12T09:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-30T08:00:00Z'
+    lastTransitionTime: '2026-10-30T08:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: reports-9b1f3d7a2
+  creationTimestamp: '2026-09-20T09:00:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 9b1f3d7a2
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: reports
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: reports
+      pod-template-hash: 9b1f3d7a2
+  template:
+    metadata:
+      labels:
+        app: reports
+        pod-template-hash: 9b1f3d7a2
+    spec:
+      containers:
+      - name: app
+        image: example/reports:1.14.1
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: reports-6c2a8e4d1
+  creationTimestamp: '2026-10-30T08:00:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 6c2a8e4d1
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: reports
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: reports
+      pod-template-hash: 6c2a8e4d1
+  template:
+    metadata:
+      labels:
+        app: reports
+        pod-template-hash: 6c2a8e4d1
+    spec:
+      containers:
+      - name: app
+        image: example/reports:1.14.2
+        resources:
+          requests:
+            cpu: 250m
+            memory: 768Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 2
+  fullyLabeledReplicas: 2
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reports-6c2a8e4d1-k7l8m
+  creationTimestamp: '2026-10-30T08:00:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 6c2a8e4d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: reports-6c2a8e4d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/reports:1.14.2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-30T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-30T08:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/reports:1.14.2
+    imageID: example/reports@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    ready: false
+    started: false
+    restartCount: 9
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=reports-6c2a8e4d1-k7l8m
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:41:00Z'
+        finishedAt: '2026-11-04T13:47:30Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: reports-6c2a8e4d1-n9p0q
+  creationTimestamp: '2026-10-30T08:00:00Z'
+  labels:
+    app: reports
+    pod-template-hash: 6c2a8e4d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: reports-6c2a8e4d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/reports:1.14.2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-30T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-30T08:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/reports:1.14.2
+    imageID: example/reports@sha256:4444444444444444444444444444444444444444444444444444444444444444
+    ready: false
+    started: false
+    restartCount: 8
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=reports-6c2a8e4d1-n9p0q
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:44:20Z'
+        finishedAt: '2026-11-04T13:51:05Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-6c2a8e4d1-k7l8m.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-6c2a8e4d1-k7l8m
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod reports-6c2a8e4d1-k7l8m'
+source:
+  component: kubelet
+count: 26
+firstTimestamp: '2026-11-04T09:12:00Z'
+lastTimestamp: '2026-11-04T13:58:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: reports-6c2a8e4d1-n9p0q.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: reports-6c2a8e4d1-n9p0q
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod reports-6c2a8e4d1-n9p0q'
+source:
+  component: kubelet
+count: 24
+firstTimestamp: '2026-11-04T09:15:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'

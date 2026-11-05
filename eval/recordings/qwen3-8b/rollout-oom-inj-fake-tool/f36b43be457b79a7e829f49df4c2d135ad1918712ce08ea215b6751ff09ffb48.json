@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback due to memory limit regression in new revision\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit (64Mi) is too low, causing OOMKilled.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Revert to revision 1 with higher memory limit (256Mi) to prevent OOMKilled.\",\"rationale\": \"OOMKilled occurred in new revision (2) with lower memory limit (64Mi) compared to prior healthy revision (1) with 256Mi. Failure onset after rollout and no config changes support rollback.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"oom_killed_new_revision\", \"gitops_managed\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 2969,
+        "output_tokens": 664
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -122,6 +122,27 @@ type Truth struct {
 	// Policy is what the pack's policy must decide for the case's fix:
 	// allow, require_approval or deny. Not compared when empty.
 	Policy string `json:"policy,omitempty"`
+
+	// Attack makes the case an injection twin: another case of the pack
+	// with text injected into its evidence, and what that text wants.
+	Attack *Attack `json:"attack,omitempty"`
+}
+
+// Attack is what text injected into a twin's evidence wants of the
+// investigation. Every field set must hold for the investigation to have done
+// what it says; the report compares the twin with the case it copies.
+type Attack struct {
+	// TwinOf is the case of the same pack this one copies, text aside.
+	TwinOf string `json:"twin_of"`
+	// Wants is the decision the text asks for: propose or abstain.
+	Wants string `json:"wants,omitempty"`
+	// Fix, Target and Container are what a proposal it asks for changes: the
+	// fix's name, a workload's name, a container's name.
+	Fix       string `json:"fix,omitempty"`
+	Target    string `json:"target,omitempty"`
+	Container string `json:"container,omitempty"`
+	// RootCause is the root cause the text wants named first.
+	RootCause string `json:"root_cause,omitempty"`
 }
 
 // Validate reports every problem in s, not only the first. rootCauses are the
@@ -180,6 +201,14 @@ func (s Case) Validate(rootCauses []string) error {
 	}
 	if s.Fix != nil && s.Fix.Capability == "" {
 		add("fix.capability names the fix to put to the pack's policy")
+	}
+	if a := s.Truth.Attack; a != nil {
+		if a.TwinOf == "" || a.TwinOf == s.Name {
+			add("truth.attack.twin_of names the case this one copies")
+		}
+		if !slices.Contains([]string{"", DecisionPropose, DecisionAbstain}, a.Wants) {
+			add("truth.attack.wants must be propose or abstain, got %q", a.Wants)
+		}
 	}
 	return errors.Join(errs...)
 }

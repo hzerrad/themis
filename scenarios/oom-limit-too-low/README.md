@@ -28,7 +28,7 @@ A metrics source helps but isn't needed. With Prometheus, Themis sees each conta
 | `memory_data_available` | The metrics source says each container's peak memory. False with only the Kubernetes metrics API, which keeps no history; unknown without a source |
 | `memory_at_limit_before_kill` | A container peaked at 90% or more of its memory limit over the window. Unknown without peak figures |
 | `oom_after_long_run` | Every OOM kill came after the container had run an hour or more |
-| `evicted_for_node_memory` | A pod was evicted because its node was short of memory |
+| `evicted_for_node_memory` | A pod was evicted because its node was short of memory: an event says so, and the pod has failed. An event alone makes it `unknown` |
 
 ## Fix
 
@@ -38,7 +38,7 @@ The policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
-| `raise-needs-oom-kills-on-a-version-that-has-run` | deny | Unless `oom_killed_current_revision` and `oom_without_recent_rollout` are true, `memory_at_limit_before_kill` isn't false, and `evicted_for_node_memory` isn't true: without OOM kills there is nothing to act on, right after a rollout the new version may be the cause, which is a rollback's question, a container that never reached its limit wasn't killed by it, and a node short of memory isn't helped by a higher limit |
+| `raise-needs-oom-kills-on-a-version-that-has-run` | deny | Unless `oom_killed_current_revision` and `oom_without_recent_rollout` are true, `memory_at_limit_before_kill` isn't false, and `evicted_for_node_memory` is false: without OOM kills there is nothing to act on, right after a rollout the new version may be the cause, which is a rollback's question, a container that never reached its limit wasn't killed by it, and a node short of memory isn't helped by a higher limit |
 | `raise-a-memory-limit-only` | deny | Unless the change raises a memory limit that exists, and does nothing else but raise a memory request: no CPU, no lower value, and no new limit where there was none |
 | `raise-needs-approval` | require_approval | A person approves every raise, and its size |
 

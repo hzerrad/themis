@@ -2,33 +2,53 @@
 # They read what the kubelet said about the target's pods, how its containers
 # last ended, and the probe timings of the current revision.
 # docs/checks.md says what each field means and what the expressions see.
+#
+# Anyone who may create events in the namespace can write one that reads like
+# the kubelet's, so an event never makes a check true by itself: the pod's
+# status, which only the kubelet writes, has to show what the event says. When
+# it doesn't, the check is unknown.
 
 # The kubelet restarted a container because its liveness or startup probe
-# failed: what a probe that is too strict does.
+# failed: what a probe that is too strict does. The pod's status bears the
+# event out when a container of the current revision restarted, and its last
+# end, no earlier than the event, was a kill: exit code 137 or 143.
 - name: probe_kills
-  version: "1"
+  version: "2"
   description: The kubelet restarts a container because its liveness or startup probe fails
-  reads: [target_events]
+  reads: [target_events, pod_states]
   let:
     kills: >-
       target_events.events.filter(e, e.reason == "Killing" && e.object.startsWith("Pod/") &&
         (e.message.contains("failed liveness probe") || e.message.contains("failed startup probe")))
+    borne: >-
+      kills.filter(e, e.firstSeen != null && pod_states.pods.exists(p,
+        "Pod/" + p.name == e.object && p.revision == current_revision &&
+        p.containers.exists(c, !c.init && c.restartCount > 0 && c.lastTermination != null &&
+          c.lastTermination.status == "terminated" && c.lastTermination.reason != "OOMKilled" &&
+          c.lastTermination.exitCode != null && c.lastTermination.exitCode in [137, 143] &&
+          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen)))
   answers:
-    - when: size(kills) > 0
+    - when: size(borne) > 0
       answer: true
-      reason: "${kills[0].object}: ${kills[0].message}${kills[0].count > 1 ? ', ' + string(kills[0].count) + ' times' : ''}"
-      cite: [ids.target_events]
+      reason: "${borne[0].object}: ${borne[0].message}${borne[0].count > 1 ? ', ' + string(borne[0].count) + ' times' : ''}"
+      cite: [ids.target_events, ids.pod_states]
+    - when: size(kills) > 0
+      answer: unknown
+      reason: "an event says ${kills[0].object}: ${kills[0].message}, but no container of that pod of revision ${current_revision} was killed and restarted since"
+      cite: [ids.target_events, ids.pod_states]
     - answer: false
       reason: no event says a container was restarted for failing its liveness or startup probe
       cite: [ids.target_events]
 
 # Every probe failure the kubelet reported is a probe that ran out of time,
 # not an answer: the container is slow to answer, rather than saying it is
-# unhealthy or not listening.
+# unhealthy or not listening. The pod's status bears a failure out when a pod
+# of the current revision it names has a container that isn't ready, or that
+# restarted no earlier than the event.
 - name: probe_timeouts
-  version: "1"
+  version: "2"
   description: Probes fail by running out of time, not by an error answer
-  reads: [target_events]
+  reads: [target_events, pod_states]
   let:
     failed: >-
       target_events.events.filter(e, e.reason == "Unhealthy" &&
@@ -36,6 +56,11 @@
     answered: >-
       failed.filter(e, !["context deadline exceeded", "Client.Timeout exceeded", "timed out", "i/o timeout"]
         .exists(m, e.message.contains(m)))
+    borne: >-
+      failed.filter(e, pod_states.pods.exists(p, "Pod/" + p.name == e.object && p.revision == current_revision &&
+        p.containers.exists(c, !c.init && (!c.ready || (e.firstSeen != null && c.restartCount > 0 &&
+          c.lastTermination != null && c.lastTermination.finishedAt != null &&
+          c.lastTermination.finishedAt >= e.firstSeen)))))
   answers:
     - when: size(failed) == 0
       answer: false
@@ -45,22 +70,34 @@
       answer: false
       reason: "a probe failed other than by running out of time: ${answered[0].object}: ${answered[0].message}"
       cite: [ids.target_events]
+    - when: size(borne) == 0
+      answer: unknown
+      reason: "an event says ${failed[0].object}: ${failed[0].message}, but no pod of revision ${current_revision} that the probe failures name is unready or restarted since"
+      cite: [ids.target_events, ids.pod_states]
     - answer: true
-      reason: "every probe failure is a timeout, such as ${failed[0].object}: ${failed[0].message}"
-      cite: [ids.target_events]
+      reason: "every probe failure is a timeout, such as ${borne[0].object}: ${borne[0].message}"
+      cite: [ids.target_events, ids.pod_states]
 
 # A container of the current revision was killed at the first moment it could
 # be: by its startup probe, or, without one, by its liveness probe no later
 # than its initial delay, its failures and one more period of slack allow,
 # plus the default 30 seconds to stop. A container killed that soon never
-# passed its liveness probe, so it was killed while still starting.
+# passed its liveness probe, so it was killed while still starting. A startup
+# probe kill counts when the pod's status bears it out, as for probe_kills.
 - name: killed_during_startup
-  version: "1"
+  version: "2"
   description: Containers are killed before they finish starting
   reads: [target_events, rollout_history, pod_states]
   let:
     startup: >-
       target_events.events.filter(e, e.reason == "Killing" && e.message.contains("failed startup probe"))
+    borne: >-
+      startup.filter(e, e.firstSeen != null && pod_states.pods.exists(p,
+        "Pod/" + p.name == e.object && p.revision == current_revision &&
+        p.containers.exists(c, !c.init && c.restartCount > 0 && c.lastTermination != null &&
+          c.lastTermination.status == "terminated" && c.lastTermination.reason != "OOMKilled" &&
+          c.lastTermination.exitCode != null && c.lastTermination.exitCode in [137, 143] &&
+          c.lastTermination.finishedAt != null && c.lastTermination.finishedAt >= e.firstSeen)))
     probed: >-
       current == null ? [] : current.containers.filter(t, "liveness" in t.probes && !("startup" in t.probes))
     # Each as [pod/container, how long it ran].
@@ -77,10 +114,10 @@
         .map(c, [p.name + "/" + c.name, c.lastTermination.finishedAt - c.lastTermination.startedAt])
       ).flatten()
   answers:
-    - when: size(startup) > 0
+    - when: size(borne) > 0
       answer: true
-      reason: "${startup[0].object}: ${startup[0].message}"
-      cite: [ids.target_events]
+      reason: "${borne[0].object}: ${borne[0].message}"
+      cite: [ids.target_events, ids.pod_states]
     - when: current == null
       answer: unknown
       reason: the current revision is unknown
@@ -90,6 +127,10 @@
         ${early[0][0]} ran ${early[0][1]} before it was stopped, as soon as its
         liveness probe could fail it: it never passed the probe
       cite: [ids.rollout_history, ids.pod_states]
+    - when: size(startup) > 0
+      answer: unknown
+      reason: "an event says ${startup[0].object}: ${startup[0].message}, but no container of that pod of revision ${current_revision} was killed and restarted since"
+      cite: [ids.target_events, ids.pod_states]
     - when: size(probed) == 0
       answer: false
       reason: no container of revision ${current_revision} has a liveness probe without a startup probe, and none failed a startup probe

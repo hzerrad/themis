@@ -1,0 +1,319 @@
+# Revision 2 has run for twenty days. Its node ran short of memory: the
+# kubelet evicted two pods, and the kernel killed a container of the third
+# while it used well under half of its 1Gi limit. The limit isn't what
+# killed them, and raising it is wrong.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  creationTimestamp: '2026-08-01T09:00:00Z'
+  labels:
+    app: search
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: search
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+      - name: app
+        image: example/search:6.1.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-08-01T09:00:00Z'
+    lastTransitionTime: '2026-08-01T09:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-15T09:00:00Z'
+    lastTransitionTime: '2026-10-15T09:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-1f5a9c3e7
+  creationTimestamp: '2026-08-01T09:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 1f5a9c3e7
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 1f5a9c3e7
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 1f5a9c3e7
+    spec:
+      containers:
+      - name: app
+        image: example/search:6.0.4
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-3b7e1c9d5
+  creationTimestamp: '2026-10-15T09:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 3b7e1c9d5
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 3b7e1c9d5
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 3b7e1c9d5
+    spec:
+      containers:
+      - name: app
+        image: example/search:6.1.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-3b7e1c9d5-b2c3d
+  creationTimestamp: '2026-10-15T09:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 3b7e1c9d5
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-3b7e1c9d5
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:6.1.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Running
+  startTime: '2026-10-15T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-15T09:00:00Z'
+  containerStatuses:
+  - name: app
+    image: example/search:6.1.0
+    imageID: example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ready: true
+    started: true
+    restartCount: 1
+    state:
+      running:
+        startedAt: '2026-11-04T13:41:00Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-10-15T09:00:10Z'
+        finishedAt: '2026-11-04T13:40:30Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-3b7e1c9d5-e4f5g
+  creationTimestamp: '2026-10-15T09:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 3b7e1c9d5
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-3b7e1c9d5
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:6.1.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Failed
+  reason: Evicted
+  message: 'The node was low on resource: memory. Threshold quantity: 100Mi, available: 64Mi.'
+  startTime: '2026-10-15T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-15T09:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/search:6.1.0
+    imageID: example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-10-15T09:00:10Z'
+        finishedAt: '2026-11-04T13:38:00Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-3b7e1c9d5-h6i7j
+  creationTimestamp: '2026-10-15T09:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 3b7e1c9d5
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-3b7e1c9d5
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:6.1.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+status:
+  phase: Failed
+  reason: Evicted
+  message: 'The node was low on resource: memory. Threshold quantity: 100Mi, available: 64Mi.'
+  startTime: '2026-10-15T09:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-10-15T09:00:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/search:6.1.0
+    imageID: example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-10-15T09:00:10Z'
+        finishedAt: '2026-11-04T13:38:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search-3b7e1c9d5-e4f5g.evicted
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: search-3b7e1c9d5-e4f5g
+type: Warning
+reason: Evicted
+message: 'The node was low on resource: memory. Threshold quantity: 100Mi, available: 64Mi. Container app was using 402Mi, request is 512Mi.'
+source:
+  component: kubelet
+count: 1
+firstTimestamp: '2026-11-04T13:37:50Z'
+lastTimestamp: '2026-11-04T13:37:50Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search-3b7e1c9d5-h6i7j.evicted
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: search-3b7e1c9d5-h6i7j
+type: Warning
+reason: Evicted
+message: 'The node was low on resource: memory. Threshold quantity: 100Mi, available: 64Mi. Container app was using 402Mi, request is 512Mi.'
+source:
+  component: kubelet
+count: 1
+firstTimestamp: '2026-11-04T13:38:05Z'
+lastTimestamp: '2026-11-04T13:38:05Z'

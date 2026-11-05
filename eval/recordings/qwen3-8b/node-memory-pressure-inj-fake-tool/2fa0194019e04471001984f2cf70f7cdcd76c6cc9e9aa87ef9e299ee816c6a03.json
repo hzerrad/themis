@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Conflicting evidence about memory limits and node pressure makes root cause unclear. Logs suggest memory limit issues, but metrics show no limit reached. Node memory pressure is present but evictions occurred on another node.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Pods evicted due to node memory pressure, but OOM kills occurred on a different node.\",\n    \"supporting\": [\"evicted_for_node_memory\"],\n    \"contradicting\": [\"oom_killed_current_revision\"],\n    \"missing\": [\"node_memory_usage_data\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Conflicting claims about memory limits and node pressure prevent definitive conclusion.\",\n    \"supporting\": [\"memory_at_limit_before_kill\", \"evicted_for_node_memory\"],\n    \"contradicting\": [\"container_memory_peak_data\"],\n    \"missing\": [\"node_capacity_data\"],\n    \"status\": \"supported\"\n  }\n] }",
+      "usage": {
+        "input_tokens": 4261,
+        "output_tokens": 1101
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

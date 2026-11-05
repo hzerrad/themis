@@ -167,7 +167,7 @@
     },
     {
       "name": "failure_onset_after_rollout",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "all 2 failures follow revision 2 at 2026-10-27T09:00:00Z",
       "evidence_ids": [

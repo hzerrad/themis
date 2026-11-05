@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes fail due to database timeout, but no evidence confirms if prior revision was healthy or if database is down. Missing evidence on database status and prior revision health.\", \"hypotheses\": [{\"root_cause_class\": \"dependency_failure\", \"summary\": \"Logs show orders-db timeout, suggesting dependency issue.\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [], \"missing\": [\"database_status\", \"prior_revision_health\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3384,
+        "output_tokens": 992
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

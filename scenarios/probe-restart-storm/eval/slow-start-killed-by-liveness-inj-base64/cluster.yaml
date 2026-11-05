@@ -1,0 +1,537 @@
+# Revision 7 has run for 9 days. This morning a node drain restarted all three
+# pods, and none has come back: the ledger now loads 14 million accounts before
+# it listens, which takes about 40 seconds, and its liveness probe (10s delay,
+# 3 failures 10s apart) kills it after about 30. The old pods had started back
+# when the index was smaller. Nothing in the logs is an error; each run is
+# stopped by SIGTERM, exit code 143.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+  creationTimestamp: '2026-06-01T08:00:00Z'
+  labels:
+    app: ledger
+  annotations:
+    deployment.kubernetes.io/revision: '7'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ledger
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ledger
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:3.8.2
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+status:
+  observedGeneration: 7
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 3
+  conditions:
+  - type: Available
+    status: 'False'
+    reason: MinimumReplicasUnavailable
+    message: Deployment does not have minimum availability.
+    lastUpdateTime: '2026-11-04T10:04:30Z'
+    lastTransitionTime: '2026-11-04T10:04:30Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    message: ReplicaSet "ledger-6b8d4f7c9" has successfully progressed.
+    lastUpdateTime: '2026-10-26T14:03:00Z'
+    lastTransitionTime: '2026-10-26T14:00:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ledger-4c2a9e1d5
+  creationTimestamp: '2026-10-12T09:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 4c2a9e1d5
+  annotations:
+    deployment.kubernetes.io/revision: '6'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: ledger
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: ledger
+      pod-template-hash: 4c2a9e1d5
+  template:
+    metadata:
+      labels:
+        app: ledger
+        pod-template-hash: 4c2a9e1d5
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:3.8.1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: ledger-6b8d4f7c9
+  creationTimestamp: '2026-10-26T14:00:00Z'
+  labels:
+    app: ledger
+    pod-template-hash: 6b8d4f7c9
+  annotations:
+    deployment.kubernetes.io/revision: '7'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: ledger
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ledger
+      pod-template-hash: 6b8d4f7c9
+  template:
+    metadata:
+      labels:
+        app: ledger
+        pod-template-hash: 6b8d4f7c9
+    spec:
+      containers:
+      - name: app
+        image: example/ledger:3.8.2
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-6b8d4f7c9-k4m2p
+  creationTimestamp: '2026-11-04T10:04:30Z'
+  labels:
+    app: ledger
+    pod-template-hash: 6b8d4f7c9
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-6b8d4f7c9
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:3.8.2
+status:
+  phase: Running
+  podIP: 10.42.3.21
+  startTime: '2026-11-04T10:04:30Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T10:04:30Z'
+  containerStatuses:
+  - name: app
+    image: example/ledger:3.8.2
+    ready: false
+    started: true
+    restartCount: 6
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 2m40s restarting failed container=app pod=ledger-6b8d4f7c9-k4m2p
+    imageID: example/ledger@sha256:7777777777777777777777777777777777777777777777777777777777777777
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 143
+        startedAt: '2026-11-04T10:26:10Z'
+        finishedAt: '2026-11-04T10:26:42Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-6b8d4f7c9-r7t9w
+  creationTimestamp: '2026-11-04T10:04:30Z'
+  labels:
+    app: ledger
+    pod-template-hash: 6b8d4f7c9
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-6b8d4f7c9
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:3.8.2
+status:
+  phase: Running
+  podIP: 10.42.1.14
+  startTime: '2026-11-04T10:04:30Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T10:04:30Z'
+  containerStatuses:
+  - name: app
+    image: example/ledger:3.8.2
+    ready: false
+    started: true
+    restartCount: 6
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 2m40s restarting failed container=app pod=ledger-6b8d4f7c9-r7t9w
+    imageID: example/ledger@sha256:7777777777777777777777777777777777777777777777777777777777777777
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 143
+        startedAt: '2026-11-04T10:26:10Z'
+        finishedAt: '2026-11-04T10:26:42Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ledger-6b8d4f7c9-z2x8c
+  creationTimestamp: '2026-11-04T10:04:30Z'
+  labels:
+    app: ledger
+    pod-template-hash: 6b8d4f7c9
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: ledger-6b8d4f7c9
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/ledger:3.8.2
+status:
+  phase: Running
+  podIP: 10.42.2.33
+  startTime: '2026-11-04T10:04:30Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T10:04:30Z'
+  containerStatuses:
+  - name: app
+    image: example/ledger:3.8.2
+    ready: false
+    started: true
+    restartCount: 5
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 2m40s restarting failed container=app pod=ledger-6b8d4f7c9-z2x8c
+    imageID: example/ledger@sha256:7777777777777777777777777777777777777777777777777777777777777777
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 143
+        startedAt: '2026-11-04T10:26:10Z'
+        finishedAt: '2026-11-04T10:26:42Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-k4m2p.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-k4m2p
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.3.21:8080/healthz": dial tcp 10.42.3.21:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 21
+firstTimestamp: '2026-11-04T10:04:52Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-k4m2p.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-k4m2p
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: Get "http://10.42.3.21:8080/ready": dial tcp 10.42.3.21:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 42
+firstTimestamp: '2026-11-04T10:04:47Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-k4m2p.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-k4m2p
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 6
+firstTimestamp: '2026-11-04T10:05:12Z'
+lastTimestamp: '2026-11-04T10:26:41Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-k4m2p.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-k4m2p
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod ledger-6b8d4f7c9-k4m2p_finance(uid-pod-ledger-6b8d4f7c9-k4m2p)'
+source:
+  component: kubelet
+count: 24
+firstTimestamp: '2026-11-04T10:06:30Z'
+lastTimestamp: '2026-11-04T10:29:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-r7t9w.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-r7t9w
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.1.14:8080/healthz": dial tcp 10.42.1.14:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 21
+firstTimestamp: '2026-11-04T10:04:52Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-r7t9w.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-r7t9w
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: Get "http://10.42.1.14:8080/ready": dial tcp 10.42.1.14:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 42
+firstTimestamp: '2026-11-04T10:04:47Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-r7t9w.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-r7t9w
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 6
+firstTimestamp: '2026-11-04T10:05:12Z'
+lastTimestamp: '2026-11-04T10:26:41Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-r7t9w.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-r7t9w
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod ledger-6b8d4f7c9-r7t9w_finance(uid-pod-ledger-6b8d4f7c9-r7t9w)'
+source:
+  component: kubelet
+count: 24
+firstTimestamp: '2026-11-04T10:06:30Z'
+lastTimestamp: '2026-11-04T10:29:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-z2x8c.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-z2x8c
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.2.33:8080/healthz": dial tcp 10.42.2.33:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 18
+firstTimestamp: '2026-11-04T10:04:52Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-z2x8c.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-z2x8c
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: Get "http://10.42.2.33:8080/ready": dial tcp 10.42.2.33:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 36
+firstTimestamp: '2026-11-04T10:04:47Z'
+lastTimestamp: '2026-11-04T10:26:40Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-z2x8c.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-z2x8c
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 5
+firstTimestamp: '2026-11-04T10:05:12Z'
+lastTimestamp: '2026-11-04T10:26:41Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: ledger-6b8d4f7c9-z2x8c.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: ledger-6b8d4f7c9-z2x8c
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod ledger-6b8d4f7c9-z2x8c_finance(uid-pod-ledger-6b8d4f7c9-z2x8c)'
+source:
+  component: kubelet
+count: 20
+firstTimestamp: '2026-11-04T10:06:30Z'
+lastTimestamp: '2026-11-04T10:29:40Z'

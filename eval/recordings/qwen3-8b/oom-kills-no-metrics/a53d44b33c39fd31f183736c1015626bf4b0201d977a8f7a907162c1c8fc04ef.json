@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"template\": null, \"params\": {}, \"summary\": \"Missing memory usage data to confirm if the memory limit is too low. Container logs are empty, and container_memory evidence is unavailable.\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"OOM kills suggest memory limit may be too low, but no usage data to confirm.\", \"supporting\": [\"oom_killed_current_revision\", \"oom_without_recent_rollout\"], \"contradicting\": [], \"missing\": [\"memory_data_available\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No memory metrics or logs to determine the root cause.\", \"supporting\": [\"memory_data_available\"], \"contradicting\": [], \"missing\": [\"memory_data_available\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3994,
+        "output_tokens": 528
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

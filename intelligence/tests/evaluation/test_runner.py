@@ -24,7 +24,7 @@ CAPS = Caps(max_tokens=10_000_000)
 def client(adapter: ScriptedAdapter, ceiling: Classification = "sensitive") -> Any:
     endpoint = Endpoint(name="eval", model="asked-model", ceiling=ceiling)
 
-    def new_model(tokens: int) -> Model:
+    def new_model(case: str, tokens: int) -> Model:
         return ModelClient(adapter=adapter, endpoint=endpoint, budget=Budget(tokens))
 
     return new_model

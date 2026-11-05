@@ -1,19 +1,27 @@
 # The checks of the stuck-pods pack, in the order Themis reports them. Each
 # looks at the pods that aren't ready, and names the first sign of one cause.
 # docs/checks.md says what each field means and what the expressions see.
+#
+# Anyone who may create events in the namespace can write one that reads like
+# the scheduler's or the kubelet's, so an event never makes a check true by
+# itself: the status the controllers write has to show what the event says.
+# When it doesn't, the check is unknown.
 
 # The scheduler said why it can't place a pod that isn't ready: it names the
-# resource, taint, affinity or volume no node satisfies.
+# resource, taint, affinity or volume no node satisfies. The pod's status
+# bears it out when the pod still waits for a node.
 - name: scheduler_rejected_pods
-  version: "1"
+  version: "2"
   description: No node can take a pod
   reads: [pod_states, target_events]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
     names: stuck.map(p, "Pod/" + p.name)
-    refused: target_events.events.filter(e, e.reason == "FailedScheduling" && e.object in names)
+    claimed: target_events.events.filter(e, e.reason == "FailedScheduling" && e.object in names)
     # A pod no node took has no container statuses yet.
     waiting: stuck.filter(p, p.phase == "Pending" && size(p.containers) == 0)
+    unplaced: waiting.map(p, "Pod/" + p.name)
+    refused: claimed.filter(e, e.object in unplaced)
   answers:
     - when: size(stuck) == 0
       answer: false
@@ -26,6 +34,10 @@
     - when: size(waiting) > 0
       answer: unknown
       reason: pod ${waiting[0].name} waits for a node, and no event says why
+      cite: [ids.pod_states, ids.target_events]
+    - when: size(claimed) > 0
+      answer: unknown
+      reason: an event says ${claimed[0].object} can't be scheduled, but it has been placed on a node
       cite: [ids.pod_states, ids.target_events]
     - answer: false
       reason: the ${size(stuck)} pod(s) that aren't ready were all scheduled
@@ -60,18 +72,24 @@
 
 # Events about a pod that isn't ready say a volume can't be bound, attached or
 # mounted. Events about the claim itself aren't read: the claim's own state
-# isn't evidence Themis collects.
+# isn't evidence Themis collects. The pod's status bears an event out when the
+# pod is still pending with none of its containers running, as a pod whose
+# volume isn't there is.
 - name: volume_not_bound
-  version: "1"
+  version: "2"
   description: A volume can't be bound or mounted
   reads: [pod_states, target_events]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
     names: stuck.map(p, "Pod/" + p.name)
-    trouble: >-
+    claimed: >-
       target_events.events.filter(e, e.object in names && (
         e.reason in ["FailedMount", "FailedAttachVolume"] ||
         (e.reason == "FailedScheduling" && e.message.lowerAscii().contains("volume"))))
+    held: >-
+      stuck.filter(p, p.phase == "Pending" &&
+        !p.containers.exists(c, c.state != null && c.state.status == "running")).map(p, "Pod/" + p.name)
+    trouble: claimed.filter(e, e.object in held)
   answers:
     - when: size(stuck) == 0
       answer: false
@@ -80,6 +98,10 @@
     - when: size(trouble) > 0
       answer: true
       reason: "${trouble[0].object}, ${trouble[0].reason}: ${trouble[0].message}"
+      cite: [ids.pod_states, ids.target_events]
+    - when: size(claimed) > 0
+      answer: unknown
+      reason: "an event says ${claimed[0].object}, ${claimed[0].reason}: ${claimed[0].message}, but the pod isn't waiting to start"
       cite: [ids.pod_states, ids.target_events]
     - answer: false
       reason: no event says a volume of the ${size(stuck)} pod(s) that aren't ready can't be bound or mounted
@@ -163,18 +185,27 @@
       cite: [ids.pod_states, ids.referenced_config]
 
 # A ReplicaSet couldn't create a pod because a namespace quota refused it. Such
-# a pod never exists, so only its ReplicaSet's events show it.
+# a pod never exists, so only its ReplicaSet's events show it. The
+# Deployment's status bears an event out: its controller sets the
+# ReplicaFailure condition when a ReplicaSet can't create pods.
 - name: quota_refused_pods
-  version: "1"
+  version: "2"
   description: A namespace quota refuses new pods
-  reads: [target_events]
+  reads: [target_events, rollout_history]
   let:
     refused: target_events.events.filter(e, e.reason == "FailedCreate" && e.message.contains("exceeded quota"))
+    failing: >-
+      has(rollout_history.deployment.conditions) && rollout_history.deployment.conditions.exists(c, c.type == "ReplicaFailure" && c.status == "True" &&
+        c.reason == "FailedCreate" && has(c.message) && c.message.contains("exceeded quota"))
   answers:
-    - when: size(refused) > 0
+    - when: size(refused) > 0 && failing
       answer: true
       reason: "${refused[0].object} can't create pods: ${refused[0].message}"
-      cite: [ids.target_events]
+      cite: [ids.target_events, ids.rollout_history]
+    - when: size(refused) > 0
+      answer: unknown
+      reason: "an event says ${refused[0].object} can't create pods for a quota, but the Deployment doesn't say it fails to create them"
+      cite: [ids.target_events, ids.rollout_history]
     - answer: false
       reason: no event says a quota refused a pod
       cite: [ids.target_events]

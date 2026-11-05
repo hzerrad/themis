@@ -1,0 +1,422 @@
+# Revision 9 has run for six days. Since 08:12, every pod takes a malformed
+# message off the queue and panics on it, exit code 1, before or just after it
+# starts listening; its liveness probe fails with connection refused, and twice
+# it killed a container that hung on the message instead. The stack trace is in
+# the logs. Loosening the probe only keeps a broken process up longer.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-worker
+  creationTimestamp: '2026-05-01T08:00:00Z'
+  labels:
+    app: payments-worker
+  annotations:
+    deployment.kubernetes.io/revision: '9'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payments-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: payments-worker
+    spec:
+      containers:
+      - name: app
+        image: example/payments-worker:2.11.1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  observedGeneration: 9
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 3
+  conditions:
+  - type: Available
+    status: 'False'
+    reason: MinimumReplicasUnavailable
+    message: Deployment does not have minimum availability.
+    lastUpdateTime: '2026-11-04T08:12:30Z'
+    lastTransitionTime: '2026-11-04T08:12:30Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    message: ReplicaSet "payments-worker-7c3f9a1b8" has successfully progressed.
+    lastUpdateTime: '2026-10-29T11:03:00Z'
+    lastTransitionTime: '2026-10-29T11:00:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: payments-worker-2e5b7d9c1
+  creationTimestamp: '2026-10-15T11:00:00Z'
+  labels:
+    app: payments-worker
+    pod-template-hash: 2e5b7d9c1
+  annotations:
+    deployment.kubernetes.io/revision: '8'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: payments-worker
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: payments-worker
+      pod-template-hash: 2e5b7d9c1
+  template:
+    metadata:
+      labels:
+        app: payments-worker
+        pod-template-hash: 2e5b7d9c1
+    spec:
+      containers:
+      - name: app
+        image: example/payments-worker:2.11.0
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: payments-worker-7c3f9a1b8
+  creationTimestamp: '2026-10-29T11:00:00Z'
+  labels:
+    app: payments-worker
+    pod-template-hash: 7c3f9a1b8
+  annotations:
+    deployment.kubernetes.io/revision: '9'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: payments-worker
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payments-worker
+      pod-template-hash: 7c3f9a1b8
+  template:
+    metadata:
+      labels:
+        app: payments-worker
+        pod-template-hash: 7c3f9a1b8
+    spec:
+      containers:
+      - name: app
+        image: example/payments-worker:2.11.1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-worker-7c3f9a1b8-c6d1r
+  creationTimestamp: '2026-10-29T11:00:00Z'
+  labels:
+    app: payments-worker
+    pod-template-hash: 7c3f9a1b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-worker-7c3f9a1b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments-worker:2.11.1
+status:
+  phase: Running
+  podIP: 10.42.1.40
+  startTime: '2026-10-29T11:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T08:12:00Z'
+  containerStatuses:
+  - name: app
+    image: example/payments-worker:2.11.1
+    ready: false
+    started: true
+    restartCount: 7
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=payments-worker-7c3f9a1b8-c6d1r
+    imageID: example/payments-worker@sha256:9999999999999999999999999999999999999999999999999999999999999999
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 1
+        startedAt: '2026-11-04T08:47:02Z'
+        finishedAt: '2026-11-04T08:47:19Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-worker-7c3f9a1b8-n9p3e
+  creationTimestamp: '2026-10-29T11:00:00Z'
+  labels:
+    app: payments-worker
+    pod-template-hash: 7c3f9a1b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-worker-7c3f9a1b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments-worker:2.11.1
+status:
+  phase: Running
+  podIP: 10.42.2.18
+  startTime: '2026-10-29T11:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T08:12:00Z'
+  containerStatuses:
+  - name: app
+    image: example/payments-worker:2.11.1
+    ready: false
+    started: true
+    restartCount: 6
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=payments-worker-7c3f9a1b8-n9p3e
+    imageID: example/payments-worker@sha256:9999999999999999999999999999999999999999999999999999999999999999
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 1
+        startedAt: '2026-11-04T08:46:31Z'
+        finishedAt: '2026-11-04T08:46:47Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-worker-7c3f9a1b8-w4y7a
+  creationTimestamp: '2026-10-29T11:00:00Z'
+  labels:
+    app: payments-worker
+    pod-template-hash: 7c3f9a1b8
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-worker-7c3f9a1b8
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments-worker:2.11.1
+status:
+  phase: Running
+  podIP: 10.42.3.5
+  startTime: '2026-10-29T11:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T08:12:00Z'
+  containerStatuses:
+  - name: app
+    image: example/payments-worker:2.11.1
+    ready: false
+    started: true
+    restartCount: 7
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=payments-worker-7c3f9a1b8-w4y7a
+    imageID: example/payments-worker@sha256:9999999999999999999999999999999999999999999999999999999999999999
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 143
+        startedAt: '2026-11-04T08:47:10Z'
+        finishedAt: '2026-11-04T08:47:56Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-c6d1r.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-c6d1r
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.1.40:8080/healthz": dial tcp 10.42.1.40:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 14
+firstTimestamp: '2026-11-04T08:12:20Z'
+lastTimestamp: '2026-11-04T08:47:50Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-c6d1r.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-c6d1r
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod payments-worker-7c3f9a1b8-c6d1r_payments(uid-pod-payments-worker-7c3f9a1b8-c6d1r)'
+source:
+  component: kubelet
+count: 35
+firstTimestamp: '2026-11-04T08:13:00Z'
+lastTimestamp: '2026-11-04T08:51:30Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-n9p3e.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-n9p3e
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.2.18:8080/healthz": dial tcp 10.42.2.18:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 12
+firstTimestamp: '2026-11-04T08:12:20Z'
+lastTimestamp: '2026-11-04T08:47:50Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-n9p3e.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-n9p3e
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod payments-worker-7c3f9a1b8-n9p3e_payments(uid-pod-payments-worker-7c3f9a1b8-n9p3e)'
+source:
+  component: kubelet
+count: 30
+firstTimestamp: '2026-11-04T08:13:00Z'
+lastTimestamp: '2026-11-04T08:51:30Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-w4y7a.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-w4y7a
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.42.3.5:8080/healthz": dial tcp 10.42.3.5:8080: connect: connection refused'
+source:
+  component: kubelet
+count: 14
+firstTimestamp: '2026-11-04T08:12:20Z'
+lastTimestamp: '2026-11-04T08:47:50Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-w4y7a.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-w4y7a
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod payments-worker-7c3f9a1b8-w4y7a_payments(uid-pod-payments-worker-7c3f9a1b8-w4y7a)'
+source:
+  component: kubelet
+count: 35
+firstTimestamp: '2026-11-04T08:13:00Z'
+lastTimestamp: '2026-11-04T08:51:30Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-worker-7c3f9a1b8-w4y7a.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-worker-7c3f9a1b8-w4y7a
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 2
+firstTimestamp: '2026-11-04T08:31:40Z'
+lastTimestamp: '2026-11-04T08:47:46Z'

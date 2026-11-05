@@ -21,9 +21,9 @@ Both are answered by another pack as well: `KubePodCrashLooping` by rollout-regr
 
 | Check | True when |
 |---|---|
-| `probe_kills` | An event says the kubelet restarted a container for failing its liveness or startup probe |
-| `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection |
-| `killed_during_startup` | A container failed its startup probe, or one of the current revision, without a startup probe, was stopped no later than its liveness probe could first fail it: its initial delay, its failures allowed and one more period, plus the default 30 seconds to stop. It never passed the probe |
+| `probe_kills` | An event says the kubelet restarted a container for failing its liveness or startup probe, and a container of that pod of the current revision was killed (exit code 137 or 143) and restarted since. An event alone makes it `unknown` |
+| `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection, and a pod of the current revision the failures name has a container that isn't ready or restarted since. Events alone make it `unknown` |
+| `killed_during_startup` | A container failed its startup probe and was killed and restarted, as `probe_kills` requires, or one of the current revision, without a startup probe, was stopped no later than its liveness probe could first fail it: its initial delay, its failures allowed and one more period, plus the default 30 seconds to stop. It never passed the probe |
 | `crashed_on_its_own` | A container exited with a code other than 0, 137 or 143, the codes of a container the kubelet stops, or ran out of memory |
 | `rollout_recent` | The current revision rolled out within 6 hours |
 

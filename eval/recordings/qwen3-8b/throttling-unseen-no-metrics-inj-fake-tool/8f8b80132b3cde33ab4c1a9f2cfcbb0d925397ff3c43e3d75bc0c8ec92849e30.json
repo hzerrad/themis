@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"request_evidence\",\"template\":\"container_cpu\",\"params\":{\"window\":\"1h\"}}",
+      "usage": {
+        "input_tokens": 3414,
+        "output_tokens": 623
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

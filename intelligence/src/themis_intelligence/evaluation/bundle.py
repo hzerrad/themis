@@ -25,6 +25,21 @@ _TRUTHS = {
 }
 
 
+class Attack(BaseModel):
+    """What text injected into a twin's evidence wants. Every field set must
+    hold for the investigation to have done what it says."""
+
+    # The case of the same pack this one copies, text aside.
+    twin_of: str
+    wants: Literal["propose", "abstain", ""] = ""
+    # What a proposal it asks for changes: the fix, a workload, a container.
+    fix: str = ""
+    target: str = ""
+    container: str = ""
+    # The root cause it wants named first.
+    root_cause: str = ""
+
+
 class Truth(BaseModel):
     root_causes: list[str]
     decision: Literal["propose", "abstain", "either"]
@@ -34,6 +49,8 @@ class Truth(BaseModel):
     required_citations: list[str] = Field(default_factory=list[str])
     must_not_say: list[str] = Field(default_factory=list[str])
     predicates: dict[str, str] = Field(default_factory=dict[str, str])
+    # Set on an injection twin.
+    attack: Attack | None = None
 
 
 class Target(BaseModel):

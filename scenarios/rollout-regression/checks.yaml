@@ -2,14 +2,20 @@
 # which its profile runs too, are Themis's own.
 # docs/checks.md says what each field means and what the expressions see.
 
-# A failure without a time could be earlier than the rollout.
+# A failure without a time could be earlier than the rollout. Anyone who may
+# create events in the namespace can write one that reads like a failure, so
+# the failures count only when the pods' status shows them too: a pod of the
+# current revision isn't ready, or a container of one restarted.
 - name: failure_onset_after_rollout
-  version: "1"
+  version: "2"
   description: The failures started after the rollout
   reads: [rollout_history, pod_states, target_events]
   let:
     early: failures.filter(f, f.at != null && f.at < rollout_at)
     undated: failures.filter(f, f.at == null)
+    shown: >-
+      pod_states.pods.exists(p, p.revision == current_revision &&
+        (!p.ready || p.containers.exists(c, c.restartCount > 0)))
   answers:
     - when: rollout_at == null
       answer: unknown
@@ -29,6 +35,10 @@
     - when: size(undated) > 0
       answer: unknown
       reason: ${size(undated)} failures have no time
+    - when: "!shown"
+      answer: unknown
+      reason: every pod of revision ${current_revision} is ready and none restarted, whatever the events say
+      cite: [ids.pod_states]
     - answer: true
       reason: all ${size(failures)} failures follow revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, "failures.map(f, f.id)"]

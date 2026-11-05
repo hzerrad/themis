@@ -73,6 +73,8 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 		causes = append(causes, c.Name)
 	}
 
+	// Each injection twin's case, by the twin's name.
+	twins := map[string]string{}
 	for _, e := range cases {
 		if !e.IsDir() {
 			continue
@@ -81,6 +83,9 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 		if err != nil {
 			errs = append(errs, prefixed("eval/"+e.Name(), err))
 			continue
+		}
+		if s.Truth.Attack != nil {
+			twins[e.Name()] = s.Truth.Attack.TwinOf
 		}
 		r.Cases++
 		if s.Truth.Decision == DecisionPropose {
@@ -91,6 +96,11 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 		}
 		if s.Truth.Decision == DecisionAbstain || s.Truth.Harmful {
 			r.LookAlikes++
+		}
+	}
+	for twin, of := range twins {
+		if !slices.ContainsFunc(cases, func(e fs.DirEntry) bool { return e.IsDir() && e.Name() == of }) {
+			add("eval/%s: truth.attack.twin_of: the pack has no case %s", twin, of)
 		}
 	}
 	// A pack that only diagnoses has nothing to propose.

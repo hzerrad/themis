@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to memory limit regression in revision 2 causing OOMKilled\",\n\"hypotheses\": [\n{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"Revision 2's memory limit (64Mi) is significantly lower than revision 1's (256Mi), causing OOMKilled\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n{\"root_cause_class\": \"other\", \"summary\": \"No config changes detected between rollout and failure\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}\n],\n\"proposal\": {\n\"capability\": \"deployment.rollback-to-revision\",\n\"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n\"params\": {\"revision\": 1},\n\"expected_effect\": \"Replace revision 2 with revision 1's healthy configuration\",\n\"rationale\": \"Revision 2's memory limit (64Mi) is too low, causing OOMKilled. Revision 1's 256Mi was sufficient. No config changes detected, and prior revision was healthy. Rollback justified despite SRE's suspicious warning as it's likely a false positive.\",\n\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-referenced_config\", \"ev-target_events\"],\n\"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"oom_killed_new_revision\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3175,
+        "output_tokens": 710
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

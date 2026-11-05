@@ -1,0 +1,15 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  sessions-4e8b2c6f0-r1s2t:
+    app:
+      memory: 880Mi
+      peakMemory: 1Gi
+  sessions-4e8b2c6f0-u3v4w:
+    app:
+      memory: 690Mi
+      peakMemory: 1Gi
+  sessions-4e8b2c6f0-x5y6z:
+    app:
+      memory: 380Mi
+      peakMemory: 1Gi

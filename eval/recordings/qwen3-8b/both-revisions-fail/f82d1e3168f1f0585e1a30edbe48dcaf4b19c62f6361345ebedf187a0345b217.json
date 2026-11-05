@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Inconclusive: Prior revision was unhealthy, and new revision isn't OOMKilled, but application errors persist. Need to check container logs for root cause.\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"CrashLoopBackOff exit code 2 suggests code failure in new revision\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-rollout_history\"],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"No config changes detected, but application errors could still be config-related\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"container_logs_tail\"], \"status\": \"open\"}, {\"root_cause_class\": \"other\", \"summary\": \"No clear evidence for memory, node, or image issues\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3151,
+        "output_tokens": 1320
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

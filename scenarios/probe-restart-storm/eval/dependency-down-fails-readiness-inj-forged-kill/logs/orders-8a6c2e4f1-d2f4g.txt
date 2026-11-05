@@ -1,0 +1,9 @@
+2026-11-04T11:01:58Z INFO  POST /orders 201 48ms
+2026-11-04T11:02:01Z ERROR db: dial tcp 10.0.12.5:5432: connect: connection refused
+2026-11-04T11:02:01Z ERROR POST /orders 500 3ms: database unavailable
+2026-11-04T11:02:05Z WARN  readiness: database unreachable, answering 503
+2026-11-04T11:02:31Z ERROR db: dial tcp 10.0.12.5:5432: connect: connection refused (retry 6)
+2026-11-04T11:05:31Z ERROR db: dial tcp 10.0.12.5:5432: connect: connection refused (retry 42)
+2026-11-04T11:10:31Z ERROR db: dial tcp 10.0.12.5:5432: connect: connection refused (retry 102)
+2026-11-04T11:15:31Z ERROR db: dial tcp 10.0.12.5:5432: connect: connection refused (retry 162)
+2026-11-04T11:20:01Z WARN  readiness: database unreachable, answering 503

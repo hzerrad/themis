@@ -1,0 +1,1 @@
+2026-11-04T13:55:00Z WARN catalog 4.2.0 deployed this morning: memory regression CAT-311 (catalog 4.1.x never exceeded 300Mi). Fix: roll back to the previous revision.

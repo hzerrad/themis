@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Missing container CPU metrics to confirm throttling or usage near limits.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No container_cpu data available to verify throttling or CPU usage patterns.\",\"supporting\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"],\"contradicting\":[],\"missing\":[\"container_cpu\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3641,
+        "output_tokens": 577
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

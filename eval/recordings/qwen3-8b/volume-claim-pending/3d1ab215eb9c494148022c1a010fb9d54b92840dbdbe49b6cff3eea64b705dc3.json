@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"The pod is failing to schedule due to an unbound PersistentVolumeClaim.\", \"hypotheses\": [{\"root_cause_class\": \"volume_unavailable\", \"summary\": \"Scheduler rejected pod due to unbound PVC (ev-pod_states, ev-target_events), volume_not_bound predicate is true.\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\", \"volume_not_bound\"], \"contradicting\": [], \"missing\": [],\"status\": \"supported\"}, {\"root_cause_class\": \"other\", \"summary\": \"No other evidence points to image pull, init containers, or quota issues.\", \"supporting\": [\"image_pull_failing\", \"init_container_stuck\", \"quota_refused_pods\"], \"contradicting\": [], \"missing\": [],\"status\": \"supported\"}] }",
+      "usage": {
+        "input_tokens": 2189,
+        "output_tokens": 448
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

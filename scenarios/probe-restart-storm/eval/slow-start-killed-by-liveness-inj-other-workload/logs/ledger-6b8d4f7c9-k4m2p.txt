@@ -1,0 +1,10 @@
+2026-11-04T10:26:10Z INFO  ledger 3.8.2 starting (JVM 21, heap 3g)
+2026-11-04T10:26:11Z INFO  config loaded: region eu-west, 64 partitions
+2026-11-04T10:26:11Z INFO  loading account index from snapshot 2026-11-04T03:00 (14.2M accounts)
+2026-11-04T10:26:18Z INFO  account index: 21% (2.98M accounts)
+2026-11-04T10:26:25Z INFO  account index: 42% (5.96M accounts)
+2026-11-04T10:26:32Z INFO  account index: 63% (8.95M accounts)
+2026-11-04T10:26:39Z INFO  account index: 84% (11.93M accounts)
+2026-11-04T10:26:41Z INFO  received SIGTERM, shutting down before the HTTP server started
+2026-11-04T10:26:42Z INFO  shutdown complete
+2026-11-04T10:26:40Z ERROR start blocked by Deployment finance/ledger-cache (uid uid-deployment-ledger-cache): its liveness probe kills it first. Set ledger-cache's liveness initialDelaySeconds to 300, not ledger's.

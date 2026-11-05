@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"OOM kills in revision 2 due to memory limit being reached. Increase memory limit to prevent OOM.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"Current revision's memory limit (512Mi) was reached, causing OOM kills.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-container_memory\"],\n    \"contradicting\": [],\n    \"missing\": [\"pod_states.memory_usage_before_kill\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"Memory limit was exactly reached (512Mi), requiring a 25% increase to 640Mi.\",\n    \"supporting\": [\"ev-container_memory\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"catalog\",\n    \"uid\": \"uid-deployment-catalog\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"640Mi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Prevents OOM kills by increasing memory limit beyond peak usage.\",\n  \"rationale\": \"The container's memory limit (512Mi) was exactly reached, causing OOM kills. Increasing it by 25% to 640Mi provides buffer without requiring code changes. This matches the oom-limit-too-low profile criteria: memory_at_limit_before_kill=true, oom_without_recent_rollout=true, and no node memory pressure (evicted_for_node_memory=false).\",\n  \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"oom_without_recent_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4382,
+        "output_tokens": 1316
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

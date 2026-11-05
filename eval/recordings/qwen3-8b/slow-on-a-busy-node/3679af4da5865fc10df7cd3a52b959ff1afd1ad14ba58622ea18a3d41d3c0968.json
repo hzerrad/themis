@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Readiness probe failures persist without clear resource limit evidence; missing memory usage data and application-specific logs.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No memory usage metrics or application logs to explain readiness failures despite CPU not being throttled.\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"],\"missing\":[\"container_memory\",\"application_logs\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3711,
+        "output_tokens": 504
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

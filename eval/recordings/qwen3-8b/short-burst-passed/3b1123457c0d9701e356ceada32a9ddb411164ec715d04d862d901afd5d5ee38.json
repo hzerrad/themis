@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"No evidence of CPU throttling or usage near limits. Current CPU limits may be sufficient.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling_data_available is true, but cpu_throttled_at_limit and cpu_usage_near_limit are false. No signs of sustained throttling or high usage.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3121,
+        "output_tokens": 640
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

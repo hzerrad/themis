@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Pods in revision 2 show CrashLoopBackOff but no logs\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-rollout_history\", \"ev-target_events\"], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"No config changes detected but no logs to confirm\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"container_logs_tail\"], \"status\": \"open\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No clear pattern in failure_onset_after_rollout and prior_revision_was_healthy\", \"supporting\": [\"ev-rollout_history\", \"ev-target_events\"], \"contradicting\": [\"ev-pod_states\"], \"missing\": [\"container_logs_tail\"], \"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3187,
+        "output_tokens": 981
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

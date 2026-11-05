@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Pod with revision 5 is not ready due to readiness probe failure (HTTP 503), but no direct evidence for root cause.\", \"hypotheses\": [{\"root_cause_class\": \"still_starting\", \"summary\": \"Pod is running but readiness probe fails\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [\"init_container_stuck\", \"config_error_on_start\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"other\", \"summary\": \"Unknown application-specific issue\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"image_pull_failing\", \"volume_not_bound\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No logs or metrics to determine application health\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"config_error_on_start\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 2812,
+        "output_tokens": 1049
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

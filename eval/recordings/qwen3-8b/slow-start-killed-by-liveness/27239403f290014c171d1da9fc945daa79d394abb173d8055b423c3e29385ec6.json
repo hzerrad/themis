@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short for the application's startup time\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"Liveness probe timeout (1s) is too short for the application's startup time (32s).\",\n        \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-rollout_history\"],\n        \"contradicting\": [\"probe_timeouts\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Liveness probe timeout (1s) is too short for the application's response time.\",\n        \"supporting\": [\"probe_kills\", \"ev-target_events\"],\n        \"contradicting\": [\"probe_timeouts\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"finance\", \"name\": \"ledger\", \"uid\": \"uid-deployment-ledger\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 30\n        }\n    },\n    \"expected_effect\": \"Extend liveness probe timeout to 30s to allow the application to start before being killed.\",\n    \"rationale\": \"The application takes 32s to start (killed_during_startup), but the liveness probe times out after 1s. Extending the timeout to 30s would allow the application to start before the probe fails. The readiness probe's timeout is also 1s, but the main issue is the liveness probe killing the container before it's ready. Adjusting the liveness probe's timeout to match the startup time would prevent premature termination. The evidence shows the probe is failing with connection refused, indicating the app isn't ready yet. The fix is to increase the liveness probe's timeout to accommodate the startup.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n    \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5268,
+        "output_tokens": 1070
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

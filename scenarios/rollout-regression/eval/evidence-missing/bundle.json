@@ -161,7 +161,7 @@
     },
     {
       "name": "failure_onset_after_rollout",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "no failure observed"
     },

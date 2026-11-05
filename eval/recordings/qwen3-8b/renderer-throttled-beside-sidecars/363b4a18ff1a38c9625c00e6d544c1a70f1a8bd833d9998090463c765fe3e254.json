@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Renderer container's CPU limit is too low, causing throttling and liveness probe failures. Increasing the CPU limit to 1500m should alleviate throttling.\",\"hypotheses\":[{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"Renderer is throttled at 1 CPU limit (93% usage), causing liveness probe timeouts.\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No logs to confirm OOM kills, but liveness failures align with CPU throttling.\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"reports\",\"uid\":\"uid-deployment-reports\"},\"params\":{\"containers\":{\"renderer\":{\"limits\":{\"cpu\":\"1500m\"}}}},\"expected_effect\":\"Raise CPU limit to 1.5x current value, clearing throttling and resolving probe timeouts.\",\"rationale\":\"Throttling_data_available is true, cpu_throttled_at_limit and cpu_usage_near_limit are true, and liveness probes fail due to timeouts. Raising the CPU limit addresses sustained throttling without affecting memory or other containers.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-target_events\",\"ev-rollout_history\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"rollout_recent\"]}}",
+      "usage": {
+        "input_tokens": 4869,
+        "output_tokens": 668
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Renderer container is throttled at its CPU limit, causing liveness probe failures. Increase its CPU limit to 1.5 cores.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Renderer is throttled at 1 CPU limit (usage 0.93), causing liveness probe timeouts.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"Log-shipper may be starved, but its CPU usage (0.012) is below its 0.1 limit.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [\"ev-container_logs_tail\"],\n    \"missing\": [\"node_cpu_usage\"],\n    \"status\": \"refuted\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No evidence of node CPU contention or new version impact.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"ev-container_cpu\"],\n    \"missing\": [\"node_cpu_usage\"],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"reports\",\n    \"uid\": \"uid-deployment-reports\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"renderer\": {\n        \"limits\": {\n          \"cpu\": \"1500m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise renderer's CPU limit to 1.5 cores to clear throttling and prevent liveness probe timeouts.\",\n  \"rationale\": \"Renderer is throttled at 1 CPU (usage 0.93) with 41% throttling ratio, causing liveness probe failures. Logs confirm renderer is waiting on log-shipper, but log-shipper's CPU usage (0.012) is below its 0.1 limit. Increasing renderer's limit to 1.5 cores should alleviate throttling without affecting other containers.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5123,
+        "output_tokens": 1582
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

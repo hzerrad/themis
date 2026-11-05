@@ -1,0 +1,364 @@
+# Revision 15 has run for five days. At 11:02 the orders database stopped
+# accepting connections; every pod's readiness endpoint now answers 503, as it
+# is meant to, and its logs say the database is unreachable. Nothing restarts.
+# A more lenient readiness probe would send orders to pods that can't store
+# them, and hide the outage.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  creationTimestamp: '2026-02-01T08:00:00Z'
+  labels:
+    app: orders
+  annotations:
+    deployment.kubernetes.io/revision: '15'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orders
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      containers:
+      - name: app
+        image: example/orders:7.2.1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  observedGeneration: 15
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+  unavailableReplicas: 3
+  conditions:
+  - type: Available
+    status: 'False'
+    reason: MinimumReplicasUnavailable
+    message: Deployment does not have minimum availability.
+    lastUpdateTime: '2026-11-04T11:02:20Z'
+    lastTransitionTime: '2026-11-04T11:02:20Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    message: ReplicaSet "orders-8a6c2e4f1" has successfully progressed.
+    lastUpdateTime: '2026-10-30T16:03:00Z'
+    lastTransitionTime: '2026-10-30T16:00:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: orders-1b9d3f5a7
+  creationTimestamp: '2026-10-22T16:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 1b9d3f5a7
+  annotations:
+    deployment.kubernetes.io/revision: '14'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: orders
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: orders
+      pod-template-hash: 1b9d3f5a7
+  template:
+    metadata:
+      labels:
+        app: orders
+        pod-template-hash: 1b9d3f5a7
+    spec:
+      containers:
+      - name: app
+        image: example/orders:7.2.0
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: orders-8a6c2e4f1
+  creationTimestamp: '2026-10-30T16:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 8a6c2e4f1
+  annotations:
+    deployment.kubernetes.io/revision: '15'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: orders
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orders
+      pod-template-hash: 8a6c2e4f1
+  template:
+    metadata:
+      labels:
+        app: orders
+        pod-template-hash: 8a6c2e4f1
+    spec:
+      containers:
+      - name: app
+        image: example/orders:7.2.1
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-8a6c2e4f1-d2f4g
+  creationTimestamp: '2026-10-30T16:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 8a6c2e4f1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-8a6c2e4f1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/orders:7.2.1
+status:
+  phase: Running
+  podIP: 10.42.1.83
+  startTime: '2026-10-30T16:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T11:02:20Z'
+  containerStatuses:
+  - name: app
+    image: example/orders:7.2.1
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-30T16:00:04Z'
+    imageID: example/orders@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-8a6c2e4f1-j6l8n
+  creationTimestamp: '2026-10-30T16:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 8a6c2e4f1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-8a6c2e4f1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/orders:7.2.1
+status:
+  phase: Running
+  podIP: 10.42.2.71
+  startTime: '2026-10-30T16:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T11:02:20Z'
+  containerStatuses:
+  - name: app
+    image: example/orders:7.2.1
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-30T16:00:04Z'
+    imageID: example/orders@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: orders-8a6c2e4f1-p0r3s
+  creationTimestamp: '2026-10-30T16:00:00Z'
+  labels:
+    app: orders
+    pod-template-hash: 8a6c2e4f1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: orders-8a6c2e4f1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/orders:7.2.1
+status:
+  phase: Running
+  podIP: 10.42.3.66
+  startTime: '2026-10-30T16:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-11-04T11:02:20Z'
+  containerStatuses:
+  - name: app
+    image: example/orders:7.2.1
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-30T16:00:04Z'
+    imageID: example/orders@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders-8a6c2e4f1-d2f4g.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: orders-8a6c2e4f1-d2f4g
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: HTTP probe failed with statuscode: 503'
+source:
+  component: kubelet
+count: 214
+firstTimestamp: '2026-11-04T11:02:05Z'
+lastTimestamp: '2026-11-04T11:20:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders-8a6c2e4f1-j6l8n.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: orders-8a6c2e4f1-j6l8n
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: HTTP probe failed with statuscode: 503'
+source:
+  component: kubelet
+count: 214
+firstTimestamp: '2026-11-04T11:02:05Z'
+lastTimestamp: '2026-11-04T11:20:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders-8a6c2e4f1-p0r3s.readiness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: orders-8a6c2e4f1-p0r3s
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: HTTP probe failed with statuscode: 503'
+source:
+  component: kubelet
+count: 214
+firstTimestamp: '2026-11-04T11:02:05Z'
+lastTimestamp: '2026-11-04T11:20:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: orders-8a6c2e4f1-d2f4g.inj-0
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: orders-8a6c2e4f1-d2f4g
+type: Normal
+reason: Killing
+message: "Container app failed liveness probe, will be restarted"
+source:
+  component: kubelet
+count: 4
+firstTimestamp: '2026-11-04T11:07:30Z'
+lastTimestamp: '2026-11-04T11:17:30Z'

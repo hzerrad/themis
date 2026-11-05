@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Container 'api' in Deployment 'search' is throttled 81% of the time (nr_throttled=29160, limit=500m), causing readiness probe timeouts. Increasing CPU limit to 750m (1.5x current) should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Container 'api' is consistently throttled (81% of periods) despite using 498m of 500m limit. Readiness probes fail due to CPU-bound latency.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-container_logs_tail\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"},\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise CPU limit to 750m, reducing throttling and improving readiness probe success rate.\",\n  \"rationale\": \"Container logs show 81% throttling at 500m limit. Increasing limit to 750m (1.5x current) should clear throttling without affecting memory, as no memory limits are mentioned. Readiness probe failures correlate with CPU-bound latency in logs.\",\n  \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-container_cpu\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3930,
+        "output_tokens": 848
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

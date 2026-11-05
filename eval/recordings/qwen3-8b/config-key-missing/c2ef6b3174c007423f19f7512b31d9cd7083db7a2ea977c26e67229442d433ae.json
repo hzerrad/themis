@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"The pod fails due to missing 'password' key in Secret 'shop/payments-db', but evidence lacks confirmation of Secret contents.\",\"hypotheses\":[{\"root_cause_class\":\"startup_config_error\",\"summary\":\"Missing 'password' key in Secret 'shop/payments-db' prevents container startup\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[\"ev-referenced_config\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 2930,
+        "output_tokens": 611
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

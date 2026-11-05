@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Pods cannot be scheduled due to untolerated taint {dedicated: batch}\",\"hypotheses\":[{\"root_cause_class\":\"cannot_be_scheduled\",\"summary\":\"Scheduler rejected pods due to untolerated taint {dedicated: batch} on all nodes\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"evidence of pod tolerations configuration\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 2953,
+        "output_tokens": 457
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

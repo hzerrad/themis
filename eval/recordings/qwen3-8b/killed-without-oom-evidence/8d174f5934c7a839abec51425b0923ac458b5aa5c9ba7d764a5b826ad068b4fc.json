@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is likely too low, causing OOM kills despite exit code 137. Increasing the memory limit may resolve this.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [\"oom_killed_current_revision\"],\n    \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\", \"oom_without_recent_rollout\", \"oom_after_long_run\", \"evicted_for_node_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"The current revision's memory limit is insufficient for the workload.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\", \"oom_without_recent_rollout\", \"oom_after_long_run\", \"evicted_for_node_memory\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"1Gi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Increasing the memory limit may prevent OOM kills and allow the application to run without crashing.\",\n  \"rationale\": \"The pods are crashing with exit code 137, which typically indicates an OOM kill. Despite the memory limit being set to 768Mi in the current revision, the application may require more memory to operate without being killed. Increasing the memory limit to 1Gi should provide sufficient headroom to prevent future OOM kills.\",\n  \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"oom_without_recent_rollout\", \"memory_data_available\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4974,
+        "output_tokens": 1447
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
