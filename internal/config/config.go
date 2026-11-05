@@ -67,8 +67,9 @@ type Config struct {
 	// use.
 	Metrics Metrics `json:"metrics,omitzero"`
 
-	// Profiles classify alerts into incident classes; the highest priority match
-	// wins. One named like a scenario pack's profile replaces it.
+	// Profiles classify alerts into incident classes; an incident gets every
+	// profile its alert matches, highest priority first. One named like a
+	// scenario pack's profile replaces it.
 	Profiles []Profile `json:"profiles,omitempty"`
 }
 

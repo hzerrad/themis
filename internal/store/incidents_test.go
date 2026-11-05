@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ func newIncident(fingerprint string) store.IncidentArgs {
 	return store.IncidentArgs{
 		Fingerprint: fingerprint,
 		Profile:     "rollout-regression",
+		AlsoMatched: []string{"stuck-pods"},
 		Target: incident.TargetRef{
 			Group:     "apps",
 			Kind:      "Deployment",
@@ -297,6 +299,9 @@ func TestIncident(t *testing.T) {
 	}
 	if in.State != incident.Received || in.Profile != "rollout-regression" || in.Target.Name != "checkout" || in.OccurrenceCount != 1 {
 		t.Errorf("Incident = %+v", in)
+	}
+	if got := in.Profiles(); !slices.Equal(got, []string{"rollout-regression", "stuck-pods"}) {
+		t.Errorf("profiles = %v, want every profile matched, the primary first", got)
 	}
 	if _, err := s.Incident(t.Context(), uuid.NewString()); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("unknown ID: err = %v, want ErrNotFound", err)

@@ -178,13 +178,13 @@ func (b *Inbox) Submit(ctx context.Context, from Suggester, s Suggestion) (store
 		if err != nil {
 			return err
 		}
-		profile, ok := b.Config.Current().Profile(inv.Profile)
-		if !ok {
-			return refuse(Gone, "profile %q is no longer configured", inv.Profile)
+		matched := b.Config.Current().Matched(inv.Profiles)
+		if len(matched) == 0 {
+			return refuse(Gone, "no profile of this incident is configured any more (%s)", strings.Join(inv.Profiles, ", "))
 		}
 		p, invalid := b.proposal(inv.IncidentID, s)
 		p.LeaseID = inv.LeaseID
-		r, err := b.judge(ctx, tx, from, subject{incidentID: inv.IncidentID, target: inv.Target, profile: profile, configured: true}, p, invalid)
+		r, err := b.judge(ctx, tx, from, subject{incidentID: inv.IncidentID, target: inv.Target, profiles: matched, names: inv.Profiles}, p, invalid)
 		if err != nil {
 			return err
 		}
@@ -243,12 +243,9 @@ func (b *Inbox) submitOutside(ctx context.Context, from Suggester, s Suggestion)
 		if n >= maxExternalProposals {
 			return refuse(TooMany, "this source has suggested too many fixes for this incident")
 		}
-		profile, configured := b.Config.Current().Profile(in.Profile)
-		if !configured {
-			profile.Name = in.Profile
-		}
+		matched := b.Config.Current().Matched(in.Profiles())
 		p, invalid := b.proposal(in.ID, s)
-		r, err := b.judge(ctx, tx, from, subject{incidentID: in.ID, target: in.Target, profile: profile, configured: configured, state: state}, p, invalid)
+		r, err := b.judge(ctx, tx, from, subject{incidentID: in.ID, target: in.Target, profiles: matched, names: in.Profiles(), state: state}, p, invalid)
 		if err != nil {
 			return err
 		}

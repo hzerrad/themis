@@ -80,14 +80,12 @@ func (s *Server) GetIncident(ctx context.Context, req *themisv1.GetIncidentReque
 	for _, r := range results {
 		resp.Predicates = append(resp.Predicates, s.predicateToProto(r))
 	}
-	if profile, ok := s.Config.Current().Profile(in.Profile); ok {
-		var allowed []string
-		for _, c := range profile.Capabilities {
-			if slices.Contains(caller.Fixes, c) {
-				allowed = append(allowed, c)
-			}
+	var allowed []string
+	for _, c := range s.Config.Current().Matched(in.Profiles()).Capabilities() {
+		if slices.Contains(caller.Fixes, c) {
+			allowed = append(allowed, c)
 		}
-		resp.Capabilities = s.capabilities(allowed)
 	}
+	resp.Capabilities = s.capabilities(allowed)
 	return resp, nil
 }

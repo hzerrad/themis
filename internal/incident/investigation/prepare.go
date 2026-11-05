@@ -53,9 +53,9 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 	if in.State != incident.Received {
 		return nil
 	}
-	profile, ok := w.Config.Current().Profile(in.Profile)
-	if !ok {
-		return w.reject(ctx, in, fmt.Sprintf("profile %q is no longer configured", in.Profile))
+	matched := w.Config.Current().Matched(in.Profiles())
+	if len(matched) == 0 {
+		return w.reject(ctx, in, fmt.Sprintf("Themis no longer has %s this incident matched.", config.Named(in.Profiles())))
 	}
 
 	target, err := workload.Read(ctx, w.Reader, in.Target)
@@ -74,7 +74,7 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		return err
 	}
 	now := w.now()
-	d := w.Catalog.Diagnose(ctx, w.Reader, target, profile, catalog.Moment{Now: now, AlertStarted: started, EventRetention: w.EventRetention})
+	d := w.Catalog.Diagnose(ctx, w.Reader, target, matched, catalog.Moment{Now: now, AlertStarted: started, EventRetention: w.EventRetention})
 	gaps := make([]store.EvidenceGap, 0, len(d.Gaps))
 	for _, g := range d.Gaps {
 		// Missing evidence makes checks unknown; it does not stop the

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -61,7 +62,15 @@ type workerEnv struct {
 func profileConfig(ns string) config.Config {
 	return config.Config{
 		EnrolledNamespaces: []string{ns},
+		// A crash loop matches both profiles.
 		Profiles: []config.Profile{{
+			Name:     "crash-memory",
+			Priority: 50,
+			Match: config.Match{
+				AlertNames:  []string{"KubePodCrashLooping"},
+				TargetKinds: []string{"Deployment.apps"},
+			},
+		}, {
 			Name:     "rollout-regression",
 			Priority: 100,
 			Match: config.Match{
@@ -191,13 +200,15 @@ func TestWorker_FiringAlertOpensIncident(t *testing.T) {
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
 
 	var profile, uid string
+	var others []string
 	var state incident.State
-	err := e.pool.QueryRow(t.Context(), `SELECT profile, target_uid, state::text FROM incidents`).Scan(&profile, &uid, &state)
+	err := e.pool.QueryRow(t.Context(), `SELECT profile, other_profiles, target_uid, state::text FROM incidents`).Scan(&profile, &others, &uid, &state)
 	if err != nil {
 		t.Fatalf("read incident: %v", err)
 	}
-	if profile != "rollout-regression" || uid != string(dep.UID) || state != incident.Received {
-		t.Errorf("incident = %s %s %s, want rollout-regression, the Deployment's UID, received", profile, uid, state)
+	// Every profile that matched, the highest-priority one first.
+	if profile != "rollout-regression" || !slices.Equal(others, []string{"crash-memory"}) || uid != string(dep.UID) || state != incident.Received {
+		t.Errorf("incident = %s %v %s %s, want rollout-regression then crash-memory, the Deployment's UID, received", profile, others, uid, state)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incident_alerts WHERE source_id = 'fp-a' AND status = 'firing'`); n != 1 {
 		t.Errorf("firing incident alerts = %d, want 1", n)

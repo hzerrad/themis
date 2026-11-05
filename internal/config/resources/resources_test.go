@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -108,9 +109,8 @@ func TestPlatformProfileAppliesToEveryEnrolledNamespace(t *testing.T) {
 	p := profile(f.platform, "shared", 10)
 	apply(t, p)
 	cfg := f.refresh(t)
-	got, ok := cfg.MatchProfile("A", nil, target(f.team))
-	if !ok || got.Name != "shared" {
-		t.Errorf("match = %+v, %v; want shared", got, ok)
+	if got := cfg.Match("A", nil, target(f.team)).Names(); !slices.Equal(got, []string{"shared"}) {
+		t.Errorf("match = %v; want shared", got)
 	}
 	if status, _, _ := accepted(t, p); status != "True" {
 		t.Errorf("Accepted = %s", status)
@@ -123,12 +123,11 @@ func TestTeamProfileAppliesOnlyToItsOwnNamespace(t *testing.T) {
 	other := k8s.NewNamespace(t)
 	apply(t, profile(f.team, "ours", 10))
 	cfg := f.refresh(t)
-	got, ok := cfg.MatchProfile("A", nil, target(f.team))
-	if !ok || got.Name != f.team+"/ours" {
-		t.Errorf("match = %+v, %v; want %s/ours", got, ok, f.team)
+	if got := cfg.Match("A", nil, target(f.team)).Names(); !slices.Equal(got, []string{f.team + "/ours"}) {
+		t.Errorf("match = %v; want %s/ours", got, f.team)
 	}
-	if got, ok := cfg.MatchProfile("A", nil, target(other)); ok {
-		t.Errorf("profile %s reached another namespace", got.Name)
+	if got := cfg.Match("A", nil, target(other)); len(got) > 0 {
+		t.Errorf("profile %s reached another namespace", got.Primary().Name)
 	}
 	if _, ok := cfg.Profile(f.team + "/ours"); !ok {
 		t.Error("the profile can't be found by the name incidents record")
@@ -139,7 +138,7 @@ func TestTeamProfileWinsATie(t *testing.T) {
 	f := newFixture(t)
 	apply(t, profile(f.platform, "shared", 10))
 	apply(t, profile(f.team, "ours", 10))
-	got, _ := f.refresh(t).MatchProfile("A", nil, target(f.team))
+	got := f.refresh(t).Match("A", nil, target(f.team)).Primary()
 	if got.Name != f.team+"/ours" {
 		t.Errorf("match = %s", got.Name)
 	}

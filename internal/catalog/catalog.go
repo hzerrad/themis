@@ -49,19 +49,26 @@ func (c Catalog) Profile(name string) (config.Profile, bool) {
 // is its profile's.
 type RootCauses map[string][]RootCause
 
-// For is the root causes an investigation under the profile named may name:
-// its pack's, or, for a profile of the install's own with a name no pack has,
-// every pack's, each once, in the packs' name order.
-func (r RootCauses) For(profile string) []RootCause {
-	if causes, ok := r[profile]; ok {
-		return causes
-	}
+// For is the root causes an investigation under the profiles named may name,
+// each once, in the order named: each profile's pack's, or, for a profile of
+// the install's own with a name no pack has, every pack's, in the packs' name
+// order. A name two lists share, such as other, keeps its first place.
+func (r RootCauses) For(profiles ...string) []RootCause {
 	var out []RootCause
-	for _, pack := range slices.Sorted(maps.Keys(r)) {
-		for _, c := range r[pack] {
+	add := func(causes []RootCause) {
+		for _, c := range causes {
 			if !slices.ContainsFunc(out, func(o RootCause) bool { return o.Name == c.Name }) {
 				out = append(out, c)
 			}
+		}
+	}
+	for _, profile := range profiles {
+		if causes, ok := r[profile]; ok {
+			add(causes)
+			continue
+		}
+		for _, pack := range slices.Sorted(maps.Keys(r)) {
+			add(r[pack])
 		}
 	}
 	return out

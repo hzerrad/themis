@@ -42,7 +42,7 @@ func Supersede(ctx context.Context, s *store.Store, tx pgx.Tx, in store.Incident
 		return err
 	}
 	id, created, err := s.CreateOrJoinIncident(ctx, tx, store.IncidentArgs{
-		Fingerprint: incident.Fingerprint(in.Profile, target), Profile: in.Profile, Target: target,
+		Fingerprint: incident.Fingerprint(in.Profile, target), Profile: in.Profile, AlsoMatched: in.AlsoMatched, Target: target,
 		Payload: fmt.Appendf(nil, `{"supersedes":%q}`, in.ID),
 	})
 	if err != nil {

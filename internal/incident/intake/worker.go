@@ -96,17 +96,20 @@ func (w *ProcessAlertWorker) judge(ctx context.Context, a Alert) (store.Incident
 		}, nil
 	}
 
-	profile, ok := w.Config.Current().MatchProfile(a.Name, a.Labels, ref)
-	if !ok {
+	matched := w.Config.Current().Match(a.Name, a.Labels, ref)
+	if len(matched) == 0 {
 		return store.IncidentArgs{}, &rejected{
 			store.RejectionNoProfile,
 			fmt.Sprintf("no profile matches alert %s on %s %s/%s", a.Name, ref.KindGroup(), ref.Namespace, ref.Name),
 		}, nil
 	}
 
+	// The incident gets every profile that matched; the first names it.
+	primary := matched.Primary().Name
 	return store.IncidentArgs{
-		Fingerprint: incident.Fingerprint(profile.Name, ref),
-		Profile:     profile.Name,
+		Fingerprint: incident.Fingerprint(primary, ref),
+		Profile:     primary,
+		AlsoMatched: matched.Names()[1:],
 		Target:      ref,
 		Payload:     a.Payload,
 	}, nil, nil

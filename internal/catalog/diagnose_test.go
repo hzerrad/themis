@@ -64,7 +64,7 @@ func diagnose(t *testing.T, templates evidence.Registry, p config.Profile, at ca
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cat.Diagnose(t.Context(), c, w, p, at)
+	return cat.Diagnose(t.Context(), c, w, config.Matched{p}, at)
 }
 
 func initial(templates ...string) config.Profile {

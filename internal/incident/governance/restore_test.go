@@ -311,7 +311,7 @@ func TestRestore_CannotPutItBack(t *testing.T) {
 		forget func(t *testing.T, e *env)
 		want   string
 	}{
-		"profile removed": {func(_ *testing.T, e *env) { e.worker.Config = config.Config{} }, "The rollout-regression profile was removed from the configuration, so Themis left its change in place."},
+		"profile removed": {func(_ *testing.T, e *env) { e.worker.Config = config.Config{} }, "Themis no longer has the rollout-regression profile this incident matched, so it left its change in place."},
 		"fix unknown":     {func(_ *testing.T, e *env) { e.worker.Fixes = nil }, "Themis doesn't know how to put this fix back, so it left its change in place."},
 		"version before gone": {func(t *testing.T, e *env) {
 			rs := &appsv1.ReplicaSet{}

@@ -12,9 +12,11 @@ import (
 )
 
 type incidentView struct {
-	ID              string    `json:"id"`
-	State           string    `json:"state"`
-	Profile         string    `json:"profile"`
+	ID      string `json:"id"`
+	State   string `json:"state"`
+	Profile string `json:"profile"`
+	// Profiles are every profile the incident matched, Profile first.
+	Profiles        []string  `json:"profiles"`
 	Target          any       `json:"target"`
 	OccurrenceCount int       `json:"occurrenceCount"`
 	CreatedAt       time.Time `json:"createdAt"`
@@ -24,7 +26,7 @@ type incidentView struct {
 
 func viewIncident(in store.Incident) incidentView {
 	return incidentView{
-		ID: in.ID, State: string(in.State), Profile: in.Profile, Target: in.Target,
+		ID: in.ID, State: string(in.State), Profile: in.Profile, Profiles: in.Profiles(), Target: in.Target,
 		OccurrenceCount: in.OccurrenceCount, CreatedAt: in.CreatedAt, UpdatedAt: in.UpdatedAt,
 		SupersededBy: in.SupersededBy,
 	}

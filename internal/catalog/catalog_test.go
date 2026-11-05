@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"io/fs"
+	"reflect"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -168,6 +169,11 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			// pack's root causes, each once.
 			if own := cat.RootCauses.For("own"); len(own) != 12 || own[0].Description != "the code fails" {
 				t.Errorf("root causes for a profile of one's own = %+v, want crashes' then rollout-regression's others", own)
+			}
+			// An incident matching both packs may name either's, each once,
+			// the first pack's first.
+			if both := cat.RootCauses.For("crashes", "rollout-regression"); !reflect.DeepEqual(both, cat.RootCauses.For("own")) {
+				t.Errorf("root causes for both packs = %+v, want crashes' then rollout-regression's others", both)
 			}
 		})
 	}

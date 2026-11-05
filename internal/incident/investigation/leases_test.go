@@ -114,7 +114,7 @@ func TestLease_HandsOutAPreparedInvestigation(t *testing.T) {
 	e := newEnv(t)
 	l := e.leases(t)
 	inv := lease(t, l)
-	if inv.LeaseID == "" || inv.Target != e.target || inv.Scope.Name != "rollout-regression" || len(inv.Evidence) != 3 || len(inv.Results) != 6 {
+	if inv.LeaseID == "" || inv.Target != e.target || inv.Scope.Primary().Name != "rollout-regression" || len(inv.Evidence) != 3 || len(inv.Results) != 6 {
 		t.Errorf("leased %+v", inv)
 	}
 	if want := e.now.Add(inv.Scope.InvestigationBudget().Timeout.Duration); !inv.Deadline.Equal(want) {

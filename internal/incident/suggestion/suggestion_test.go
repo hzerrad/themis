@@ -52,8 +52,9 @@ type env struct {
 	target   incident.TargetRef
 }
 
-// newEnv sets up an incident whose profile allows fixes; nil allows a
-// rollback and test.restart.
+// newEnv sets up an incident that matched two profiles: its primary one
+// offers no fix, and the other offers fixes; nil offers a rollback and
+// test.restart. A fix is judged by every profile the incident matched.
 func newEnv(t *testing.T, fixes []string) *env {
 	t.Helper()
 	s, pool := pgtest.NewStore(t)
@@ -69,14 +70,14 @@ func newEnv(t *testing.T, fixes []string) *env {
 	e := &env{
 		inbox: &suggestion.Inbox{
 			Store: s, Fixes: registry, Checks: cat.Checks, Now: func() time.Time { return now },
-			Config: config.Config{Profiles: []config.Profile{{Name: profileName, Capabilities: fixes}}},
+			Config: config.Config{Profiles: []config.Profile{{Name: "diagnosis"}, {Name: profileName, Capabilities: fixes}}},
 		},
 		store: s, pool: pool, evidence: uuid.NewString(),
 		target: incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "u-checkout"},
 	}
 	err = s.InTx(t.Context(), func(tx pgx.Tx) error {
 		if e.incident, _, err = s.CreateOrJoinIncident(t.Context(), tx, store.IncidentArgs{
-			Fingerprint: "f", Profile: profileName, Target: e.target, Payload: []byte(`{}`),
+			Fingerprint: "f", Profile: "diagnosis", AlsoMatched: []string{profileName}, Target: e.target, Payload: []byte(`{}`),
 		}); err != nil {
 			return err
 		}
@@ -181,8 +182,8 @@ func TestSubmit_Rejected(t *testing.T) {
 		says   string
 		safety string // the safety event counted; "" counts none
 	}{{
-		name: "a fix the profile doesn't allow", from: investigator, fixes: []string{},
-		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "The rollout-regression profile doesn't allow this kind of fix (deployment.rollback-to-revision).", safety: "unknown_capability",
+		name: "a fix no profile allows", from: investigator, fixes: []string{},
+		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "None of this incident's profiles (diagnosis, rollout-regression) allows this kind of fix (deployment.rollback-to-revision).", safety: "unknown_capability",
 	}, {
 		name: "a fix Themis doesn't have", from: investigator, fixes: []string{"x.unknown"},
 		change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
@@ -251,7 +252,7 @@ func TestSubmit_Rejected(t *testing.T) {
 	}, {
 		name: "a profile no longer configured", from: agent,
 		change: func(_ *testing.T, e *env, _ *themisv1.SubmitProposalRequest) { e.inbox.Config = config.Config{} },
-		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "The rollout-regression profile is no longer configured.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "Themis no longer has the diagnosis and rollout-regression profiles this incident matched.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, tc.fixes)
@@ -322,7 +323,7 @@ func TestSubmit_Refused(t *testing.T) {
 		{name: "no fix", change: func(_ *env, r *themisv1.SubmitProposalRequest) { r.Capability = nil }, kind: suggestion.Invalid, says: "a capability is required"},
 		{
 			name: "a profile no longer configured", change: func(e *env, _ *themisv1.SubmitProposalRequest) { e.inbox.Config = config.Config{} },
-			kind: suggestion.Gone, says: `profile "rollout-regression" is no longer configured`,
+			kind: suggestion.Gone, says: `no profile of this incident is configured any more (diagnosis, rollout-regression)`,
 		},
 		{
 			name: "a caller outside naming a lease", outside: true, change: func(e *env, r *themisv1.SubmitProposalRequest) { r.LeaseId = e.lease },
