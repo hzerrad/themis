@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to memory limit regression in revision 2\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low\", \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"bad_configuration\", \"summary\": \"New revision's settings are wrong\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [], \"status\": \"supported\"},\n  {\"root_cause_class\": \"configuration_change\", \"summary\": \"ConfigMap/Secret changed outside rollout\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [], \"status\": \"refuted\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Revert to revision 1 which had healthy pods with higher memory limits\",\n  \"rationale\": \"Revision 2's pods are OOMKilled with memory at limit, while revision 1's pods are healthy. Rollback is justified as failure onset follows rollout and prior revision was healthy.\",\n  \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-container_memory\"],\n  \"cited_predicates\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"prior_revision_was_healthy\", \"oom_killed_new_revision\", \"oom_killed_current_revision\", \"memory_at_limit_before_kill\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4037,
+        "output_tokens": 1563
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

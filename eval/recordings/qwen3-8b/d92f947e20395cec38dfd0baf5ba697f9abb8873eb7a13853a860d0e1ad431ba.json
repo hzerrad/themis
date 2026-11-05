@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"OOM kills due to memory limit being too low; increasing the memory limit to prevent OOMKilled\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"Current revision's memory limit is too low, causing OOM kills.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [\"oom_after_long_run\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Containers need more memory than their limit, leading to OOMKilled.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [\"evicted_for_node_memory\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Need more details on memory usage to confirm the root cause.\", \"supporting\": [\"memory_data_available\"], \"contradicting\": [\"oom_killed_current_revision\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"catalog\",\n        \"uid\": \"uid-deployment-catalog\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"requests\": {\n                    \"memory\": \"384Mi\",\n                    \"cpu\": \"250m\"\n                },\n                \"limits\": {\n                    \"memory\": \"768Mi\",\n                    \"cpu\": \"250m\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Increase memory limit to 768Mi to prevent OOMKilled, based on peak usage of 512Mi and memory_at_limit_before_kill being true.\",\n    \"rationale\": \"The current memory limit of 512Mi is reached, causing OOMKilled. Raising it to 768Mi (1.5x) should prevent this, as per the oom-limit-too-low profile. No config changes or node issues are indicated, so this addresses the memory limit regression directly.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\", \"oom_without_recent_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4192,
+        "output_tokens": 1521
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}
