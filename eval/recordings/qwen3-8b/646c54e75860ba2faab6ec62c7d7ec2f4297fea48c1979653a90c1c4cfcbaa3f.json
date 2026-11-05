@@ -1,0 +1,13 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Pods cannot be scheduled due to untolerated taints on nodes\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"cannot_be_scheduled\",\n        \"summary\": \"Pods are rejected by scheduler due to untolerated taint {dedicated: batch} on all nodes\",\n        \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [\"pod_spec_tolerations\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"other\",\n        \"summary\": \"Other scheduling constraints not captured in evidence\",\n        \"supporting\": [],\n        \"contradicting\": [\"ev-target_events\"],\n        \"missing\": [\"node_taint_details\", \"pod_spec_tolerations\"],\n        \"status\": \"supported\"\n    }\n]\n}",
+      "usage": {
+        "input_tokens": 2430,
+        "output_tokens": 611
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false
+    }
+  ]
+}

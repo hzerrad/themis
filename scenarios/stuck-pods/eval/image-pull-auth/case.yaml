@@ -1,0 +1,26 @@
+name: image-pull-auth
+version: 1
+description: Revision 2 has run for five days. A pod recreated on a fresh node can't pull its image because the registry refuses the credentials; the pods on other nodes have it cached.
+tags: [stuck-pods, image]
+source: synthetic
+difficulty: medium
+incident_class: stuck_pods
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [image_pull_failure]
+  decision: abstain
+  rollback_is_harmful: true
+  required_citations: [target_events]
+  predicates:
+    scheduler_rejected_pods: "false"
+    image_pull_failing: "true"
+    volume_not_bound: "false"
+    init_container_stuck: "false"
+    config_error_on_start: "false"
+    quota_refused_pods: "false"
+    stuck_pods_new_revision_only: "unknown"
+known_limitations: "stuck_pods_new_revision_only is unknown because revision 1 runs no pods; that it rolled out five days ago is in rollout_history, not in a check."

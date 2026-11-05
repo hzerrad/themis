@@ -60,7 +60,6 @@ func TestScaffold_FailsUntilFilledIn(t *testing.T) {
 		"README.md: replace the parts marked TODO",
 		"eval/my-pack-act: case.yaml: truth.root_causes needs a class",
 		"eval/my-pack-look-alike: case.yaml: replace the parts marked TODO",
-		"eval: no case where acting is right",
 		"eval: no look-alike",
 	} {
 		if !strings.Contains(err.Error(), want) {

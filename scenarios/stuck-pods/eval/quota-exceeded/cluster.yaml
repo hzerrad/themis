@@ -1,0 +1,301 @@
+# Revision 1 has run for twelve days, its three pods using all six CPUs the
+# namespace's quota allows. Revision 2 rolled out at 08:40; the surge pod it
+# needs is refused by the quota, so the rollout passed its deadline at 08:50.
+# Nothing is wrong with revision 2: the namespace has no room for it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: search
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  progressDeadlineSeconds: 600
+  selector:
+    matchLabels:
+      app: search
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+      - name: app
+        image: example/search:4.1.0
+        resources:
+          requests:
+            cpu: '2'
+          limits:
+            memory: 2Gi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 0
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 0
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-15T08:01:00Z'
+    lastTransitionTime: '2026-10-15T08:01:00Z'
+  - type: ReplicaFailure
+    status: 'True'
+    reason: FailedCreate
+    message: 'pods "search-5f7d8c9b6-k2m4p" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6'
+    lastUpdateTime: '2026-10-27T08:40:00Z'
+    lastTransitionTime: '2026-10-27T08:40:00Z'
+  - type: Progressing
+    status: 'False'
+    reason: ProgressDeadlineExceeded
+    message: ReplicaSet "search-5f7d8c9b6" has timed out progressing.
+    lastUpdateTime: '2026-10-27T08:50:00Z'
+    lastTransitionTime: '2026-10-27T08:50:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-4c8e2a7d1
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 4c8e2a7d1
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 4c8e2a7d1
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 4c8e2a7d1
+    spec:
+      containers:
+      - name: app
+        image: example/search:4.0.3
+        resources:
+          requests:
+            cpu: '2'
+          limits:
+            memory: 2Gi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 3
+  availableReplicas: 3
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-5f7d8c9b6
+  creationTimestamp: '2026-10-27T08:40:00Z'
+  labels:
+    app: search
+    pod-template-hash: 5f7d8c9b6
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 5f7d8c9b6
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 5f7d8c9b6
+    spec:
+      containers:
+      - name: app
+        image: example/search:4.1.0
+        resources:
+          requests:
+            cpu: '2'
+          limits:
+            memory: 2Gi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+  conditions:
+  - type: ReplicaFailure
+    status: 'True'
+    reason: FailedCreate
+    message: 'pods "search-5f7d8c9b6-k2m4p" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6'
+    lastTransitionTime: '2026-10-27T08:40:00Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-4c8e2a7d1-a1b2c
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 4c8e2a7d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-4c8e2a7d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:4.0.3
+status:
+  phase: Running
+  startTime: '2026-10-15T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-15T08:00:40Z'
+  containerStatuses:
+  - name: app
+    image: example/search:4.0.3
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-15T08:00:10Z'
+    imageID: example/search@sha256:7777777777777777777777777777777777777777777777777777777777777777
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-4c8e2a7d1-d3e4f
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 4c8e2a7d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-4c8e2a7d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:4.0.3
+status:
+  phase: Running
+  startTime: '2026-10-15T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-15T08:00:40Z'
+  containerStatuses:
+  - name: app
+    image: example/search:4.0.3
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-15T08:00:10Z'
+    imageID: example/search@sha256:7777777777777777777777777777777777777777777777777777777777777777
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-4c8e2a7d1-g5h6i
+  creationTimestamp: '2026-10-15T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 4c8e2a7d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-4c8e2a7d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:4.0.3
+status:
+  phase: Running
+  startTime: '2026-10-15T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-15T08:00:40Z'
+  containerStatuses:
+  - name: app
+    image: example/search:4.0.3
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-15T08:00:10Z'
+    imageID: example/search@sha256:7777777777777777777777777777777777777777777777777777777777777777
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search.scaled-up-5f7d8c9b6-1
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: search
+type: Normal
+reason: ScalingReplicaSet
+message: Scaled up replica set search-5f7d8c9b6 from 0 to 1
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-10-27T08:40:00Z'
+lastTimestamp: '2026-10-27T08:40:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search-5f7d8c9b6.failedcreate
+involvedObject:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  name: search-5f7d8c9b6
+type: Warning
+reason: FailedCreate
+message: 'Error creating: pods "search-5f7d8c9b6-k2m4p" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6'
+source:
+  component: replicaset-controller
+count: 18
+firstTimestamp: '2026-10-27T08:40:00Z'
+lastTimestamp: '2026-10-27T09:19:00Z'

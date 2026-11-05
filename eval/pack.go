@@ -30,7 +30,8 @@ type PackReport struct {
 // CheckPack checks the scenario pack root/name as `make scenario-check` does,
 // reporting every problem, each in words a contributor can act on: its files
 // are there, its profile and checks load with every other pack, it has a case
-// where acting is right and a look-alike where it is wrong, and each case's
+// where acting is right, unless its profile allows no fix, and a look-alike
+// where it is wrong, and each case's
 // checks give its right answers and its bundle is up to date. With update, it
 // rewrites each bundle instead of comparing it.
 //
@@ -83,12 +84,16 @@ func CheckPack(ctx context.Context, root, name string, update bool) (PackReport,
 		r.Cases++
 		if s.Truth.Decision == DecisionPropose {
 			r.Act++
+			if len(profile.Capabilities) == 0 {
+				add("eval/%s: truth.decision is propose, but the pack's profile allows no fix", e.Name())
+			}
 		}
 		if s.Truth.Decision == DecisionAbstain || s.Truth.RollbackIsHarmful {
 			r.LookAlikes++
 		}
 	}
-	if r.Act == 0 {
+	// A pack that only diagnoses has nothing to propose.
+	if r.Act == 0 && len(profile.Capabilities) > 0 {
 		add("eval: no case where acting is right (truth.decision: propose)")
 	}
 	if r.LookAlikes == 0 {

@@ -1,0 +1,25 @@
+name: rollout-bad-image
+version: 2
+description: Revision 2, rolled out 20 minutes ago, names an image tag that doesn't exist, and only its pod is stuck; revision 1's pods are ready. A bad rollout, where a rollback is the rollout-regression pack's call; this pack names the cause and escalates.
+tags: [stuck-pods, rollout, image]
+source: synthetic
+difficulty: easy
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: cart}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [image_pull_failure]
+  decision: abstain
+  required_citations: [pod_states]
+  predicates:
+    scheduler_rejected_pods: "false"
+    image_pull_failing: "true"
+    volume_not_bound: "false"
+    init_container_stuck: "false"
+    config_error_on_start: "false"
+    quota_refused_pods: "false"
+    stuck_pods_new_revision_only: "true"
+known_limitations: "The stuck-pods profile offers no fix, so the right answer is the cause and an escalation; the rollback belongs to the rollout-regression incident on the same Deployment."

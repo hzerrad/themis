@@ -1,0 +1,208 @@
+{
+  "scenario": "rollout-bad-image",
+  "version": 2,
+  "difficulty": "easy",
+  "incident_class": "rollout_regression",
+  "truth": {
+    "root_causes": [
+      "image_pull_failure"
+    ],
+    "decision": "abstain",
+    "required_citations": [
+      "pod_states"
+    ],
+    "predicates": {
+      "config_error_on_start": "false",
+      "image_pull_failing": "true",
+      "init_container_stuck": "false",
+      "quota_refused_pods": "false",
+      "scheduler_rejected_pods": "false",
+      "stuck_pods_new_revision_only": "true",
+      "volume_not_bound": "false"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "cart",
+    "UID": "uid-deployment-cart"
+  },
+  "capabilities": [],
+  "fixes": [],
+  "root_causes": [
+    {
+      "name": "cannot_be_scheduled",
+      "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled, for a wrong name or tag, or missing registry credentials"
+    },
+    {
+      "name": "volume_unavailable",
+      "description": "a volume it needs can't be bound or mounted"
+    },
+    {
+      "name": "init_container_failure",
+      "description": "an init container fails or never finishes"
+    },
+    {
+      "name": "startup_config_error",
+      "description": "a ConfigMap, Secret or key its containers need is missing, so they can't start"
+    },
+    {
+      "name": "quota_exceeded",
+      "description": "a namespace quota refuses new pods"
+    },
+    {
+      "name": "still_starting",
+      "description": "its pods are starting slowly and nothing has failed"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "guidance": "No fix is on offer for these incidents: Themis diagnoses them and hands\nthem to a person. Tell which cause keeps the pods from becoming ready,\nfrom the pod states and the events, and back it with the check that shows\nit: scheduler_rejected_pods, image_pull_failing, volume_not_bound,\ninit_container_stuck, config_error_on_start or quota_refused_pods. When\nthe checks and the evidence point to one cause, conclude with it and cite\nthat evidence. When none fails and the pods are only slow, say so. When\nthe evidence can't tell, say what is missing.\n\nA recent rollout doesn't make this a regression to roll back: rolling\nback belongs to another kind of incident, and is never on offer here.\n",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"cart-9b3d7e5a2-m3n4p\",\"revision\":\"2\",\"phase\":\"Pending\",\"ready\":false,\"startedAt\":\"2026-10-27T09:00:02Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.2.0-rc1\",\"ready\":false,\"restartCount\":0,\"state\":{\"status\":\"waiting\",\"reason\":\"ImagePullBackOff\"}}]},{\"name\":\"cart-2f6c8d4b1-a1b2c\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:10Z\"}}]},{\"name\":\"cart-2f6c8d4b1-d3e4f\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:10Z\"}}]},{\"name\":\"cart-2f6c8d4b1-g5h6i\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-20T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-20T08:00:10Z\"}}]}],\"totalPods\":4}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/cart-9b3d7e5a2-m3n4p\",\"type\":\"Normal\",\"reason\":\"BackOff\",\"message\":\"Back-off pulling image \\\"example/cart:3.2.0-rc1\\\"\",\"count\":75,\"firstSeen\":\"2026-10-27T09:00:20Z\",\"lastSeen\":\"2026-10-27T09:19:40Z\"},{\"object\":\"Pod/cart-9b3d7e5a2-m3n4p\",\"type\":\"Warning\",\"reason\":\"Failed\",\"message\":\"Failed to pull image \\\"example/cart:3.2.0-rc1\\\": rpc error: code = NotFound desc = failed to pull and unpack image \\\"docker.io/example/cart:3.2.0-rc1\\\": failed to resolve reference \\\"docker.io/example/cart:3.2.0-rc1\\\": docker.io/example/cart:3.2.0-rc1: not found\",\"count\":8,\"firstSeen\":\"2026-10-27T09:00:05Z\",\"lastSeen\":\"2026-10-27T09:16:00Z\"},{\"object\":\"Deployment/cart\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set cart-9b3d7e5a2 from 0 to 1\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"cart\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"cart-9b3d7e5a2\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"cart-9b3d7e5a2\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.2.0-rc1\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"cart-2f6c8d4b1\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"cart-9b3d7e5a2-m3n4p\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container hasn't started yet (ImagePullBackOff), so it has no logs.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "scheduler_rejected_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "the 1 pod(s) that aren't ready were all scheduled",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "image_pull_failing",
+      "version": "1",
+      "value": "true",
+      "reason": "cart-9b3d7e5a2-m3n4p/app (example/cart:3.2.0-rc1) is waiting with ImagePullBackOff",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "volume_not_bound",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a volume of the 1 pod(s) that aren't ready can't be bound or mounted",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "init_container_stuck",
+      "version": "1",
+      "value": "false",
+      "reason": "no init container of the 1 pod(s) that aren't ready failed or ran longer than 5m0s",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "config_error_on_start",
+      "version": "1",
+      "value": "false",
+      "reason": "no container waits for its configuration, and every ConfigMap the pods need exists",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-referenced_config"
+      ]
+    },
+    {
+      "name": "quota_refused_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a quota refused a pod",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "stuck_pods_new_revision_only",
+      "version": "1",
+      "value": "true",
+      "reason": "the 1 pod(s) that aren't ready are all of revision 2, and 3 pod(s) of revision 1 are ready",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    }
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule diagnosis-only forbids this fix."
+  }
+}

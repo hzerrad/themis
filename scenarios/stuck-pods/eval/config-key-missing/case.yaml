@@ -1,0 +1,25 @@
+name: config-key-missing
+version: 1
+description: Revision 4 has run for four days. The Secret its pods read lost a key this morning, so a pod recreated since can't start, while the pods started earlier still run.
+tags: [stuck-pods, config]
+source: synthetic
+difficulty: medium
+incident_class: stuck_pods
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: payments}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [startup_config_error]
+  decision: abstain
+  rollback_is_harmful: true
+  required_citations: [pod_states]
+  predicates:
+    scheduler_rejected_pods: "false"
+    image_pull_failing: "false"
+    volume_not_bound: "false"
+    init_container_stuck: "false"
+    config_error_on_start: "true"
+    quota_refused_pods: "false"
+    stuck_pods_new_revision_only: "unknown"

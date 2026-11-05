@@ -1,0 +1,24 @@
+name: slow-startup
+version: 1
+description: Revision 5's first pod has spent 20 minutes building its search index, failing its readiness probe meanwhile, but it runs, never restarted, and its logs show steady progress. Nothing is broken, and rolling back would throw a good release away.
+tags: [stuck-pods, look-alike, startup]
+source: synthetic
+difficulty: hard
+incident_class: stuck_pods
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: catalog}
+evidence:
+  initial: [pod_states, target_events, rollout_history, referenced_config]
+  allowed: [pod_states, target_events, rollout_history, referenced_config, container_logs_tail]
+truth:
+  root_causes: [still_starting]
+  decision: abstain
+  rollback_is_harmful: true
+  predicates:
+    scheduler_rejected_pods: "false"
+    image_pull_failing: "false"
+    volume_not_bound: "false"
+    init_container_stuck: "false"
+    config_error_on_start: "false"
+    quota_refused_pods: "false"
+    stuck_pods_new_revision_only: "true"

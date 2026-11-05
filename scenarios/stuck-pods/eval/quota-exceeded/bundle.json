@@ -1,0 +1,204 @@
+{
+  "scenario": "quota-exceeded",
+  "version": 1,
+  "difficulty": "medium",
+  "incident_class": "stuck_pods",
+  "truth": {
+    "root_causes": [
+      "quota_exceeded"
+    ],
+    "decision": "abstain",
+    "required_citations": [
+      "target_events"
+    ],
+    "predicates": {
+      "config_error_on_start": "false",
+      "image_pull_failing": "false",
+      "init_container_stuck": "false",
+      "quota_refused_pods": "true",
+      "scheduler_rejected_pods": "false",
+      "stuck_pods_new_revision_only": "false",
+      "volume_not_bound": "false"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "search",
+    "UID": "uid-deployment-search"
+  },
+  "capabilities": [],
+  "fixes": [],
+  "root_causes": [
+    {
+      "name": "cannot_be_scheduled",
+      "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled, for a wrong name or tag, or missing registry credentials"
+    },
+    {
+      "name": "volume_unavailable",
+      "description": "a volume it needs can't be bound or mounted"
+    },
+    {
+      "name": "init_container_failure",
+      "description": "an init container fails or never finishes"
+    },
+    {
+      "name": "startup_config_error",
+      "description": "a ConfigMap, Secret or key its containers need is missing, so they can't start"
+    },
+    {
+      "name": "quota_exceeded",
+      "description": "a namespace quota refuses new pods"
+    },
+    {
+      "name": "still_starting",
+      "description": "its pods are starting slowly and nothing has failed"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "guidance": "No fix is on offer for these incidents: Themis diagnoses them and hands\nthem to a person. Tell which cause keeps the pods from becoming ready,\nfrom the pod states and the events, and back it with the check that shows\nit: scheduler_rejected_pods, image_pull_failing, volume_not_bound,\ninit_container_stuck, config_error_on_start or quota_refused_pods. When\nthe checks and the evidence point to one cause, conclude with it and cite\nthat evidence. When none fails and the pods are only slow, say so. When\nthe evidence can't tell, say what is missing.\n\nA recent rollout doesn't make this a regression to roll back: rolling\nback belongs to another kind of incident, and is never on offer here.\n",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"search-4c8e2a7d1-a1b2c\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-15T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/search:4.0.3\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-15T08:00:10Z\"}}]},{\"name\":\"search-4c8e2a7d1-d3e4f\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-15T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/search:4.0.3\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-15T08:00:10Z\"}}]},{\"name\":\"search-4c8e2a7d1-g5h6i\",\"revision\":\"1\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-15T08:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/search:4.0.3\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-15T08:00:10Z\"}}]}],\"totalPods\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"ReplicaSet/search-5f7d8c9b6\",\"type\":\"Warning\",\"reason\":\"FailedCreate\",\"message\":\"Error creating: pods \\\"search-5f7d8c9b6-k2m4p\\\" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6\",\"count\":18,\"firstSeen\":\"2026-10-27T08:40:00Z\",\"lastSeen\":\"2026-10-27T09:19:00Z\"},{\"object\":\"Deployment/search\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set search-5f7d8c9b6 from 0 to 1\",\"count\":1,\"firstSeen\":\"2026-10-27T08:40:00Z\",\"lastSeen\":\"2026-10-27T08:40:00Z\"}],\"totalEvents\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"search\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":3,\"updatedReplicas\":0,\"readyReplicas\":3,\"unavailableReplicas\":0,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-15T08:01:00Z\",\"lastTransitionTime\":\"2026-10-15T08:01:00Z\"},{\"type\":\"ReplicaFailure\",\"status\":\"True\",\"reason\":\"FailedCreate\",\"message\":\"pods \\\"search-5f7d8c9b6-k2m4p\\\" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6\",\"lastUpdateTime\":\"2026-10-27T08:40:00Z\",\"lastTransitionTime\":\"2026-10-27T08:40:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"search-5f7d8c9b6\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T08:50:00Z\",\"lastTransitionTime\":\"2026-10-27T08:50:00Z\"}]},\"revisions\":[{\"replicaSet\":\"search-5f7d8c9b6\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T08:40:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search:4.1.0\",\"requests\":{\"cpu\":\"2\"},\"limits\":{\"memory\":\"2Gi\"}}]},{\"replicaSet\":\"search-4c8e2a7d1\",\"revision\":\"1\",\"createdAt\":\"2026-10-15T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/search:4.0.3\",\"requests\":{\"cpu\":\"2\"},\"limits\":{\"memory\":\"2Gi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"search-4c8e2a7d1-a1b2c\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container wrote nothing. Processes killed for using too much memory often write nothing, so the silence proves nothing either way.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "scheduler_rejected_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "image_pull_failing",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "volume_not_bound",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "init_container_stuck",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "config_error_on_start",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "quota_refused_pods",
+      "version": "1",
+      "value": "true",
+      "reason": "ReplicaSet/search-5f7d8c9b6 can't create pods: Error creating: pods \"search-5f7d8c9b6-k2m4p\" is forbidden: exceeded quota: shop-compute, requested: requests.cpu=2, used: requests.cpu=6, limited: requests.cpu=6",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "stuck_pods_new_revision_only",
+      "version": "1",
+      "value": "false",
+      "reason": "every pod is ready",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    }
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule diagnosis-only forbids this fix."
+  }
+}

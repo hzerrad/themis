@@ -1,0 +1,327 @@
+# Revision 4 has run for four days. This morning someone rewrote the Secret
+# payments-db without its password key. The pods started before still have the
+# value; the pod recreated at 09:00, after a node drain, can't be created. Every
+# revision reads the same key, so a rollback wouldn't start either.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments
+  creationTimestamp: '2026-09-30T08:00:00Z'
+  labels:
+    app: payments
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payments
+  template:
+    metadata:
+      labels:
+        app: payments
+    spec:
+      containers:
+      - name: app
+        image: example/payments:7.0.2
+        envFrom:
+        - configMapRef:
+            name: payments-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payments-db
+              key: password
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  observedGeneration: 6
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-09-30T08:01:00Z'
+    lastTransitionTime: '2026-09-30T08:01:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-10-23T16:02:00Z'
+    lastTransitionTime: '2026-10-23T16:02:00Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: payments-79c5b8d4f
+  creationTimestamp: '2026-10-16T10:00:00Z'
+  labels:
+    app: payments
+    pod-template-hash: 79c5b8d4f
+  annotations:
+    deployment.kubernetes.io/revision: '3'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: payments
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: payments
+      pod-template-hash: 79c5b8d4f
+  template:
+    metadata:
+      labels:
+        app: payments
+        pod-template-hash: 79c5b8d4f
+    spec:
+      containers:
+      - name: app
+        image: example/payments:7.0.1
+        envFrom:
+        - configMapRef:
+            name: payments-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payments-db
+              key: password
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: payments-8a2e6f1c3
+  creationTimestamp: '2026-10-23T16:00:00Z'
+  labels:
+    app: payments
+    pod-template-hash: 8a2e6f1c3
+  annotations:
+    deployment.kubernetes.io/revision: '4'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: payments
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payments
+      pod-template-hash: 8a2e6f1c3
+  template:
+    metadata:
+      labels:
+        app: payments
+        pod-template-hash: 8a2e6f1c3
+    spec:
+      containers:
+      - name: app
+        image: example/payments:7.0.2
+        envFrom:
+        - configMapRef:
+            name: payments-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: payments-db
+              key: password
+        resources:
+          limits:
+            memory: 512Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 2
+  availableReplicas: 2
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-config
+  creationTimestamp: '2026-09-30T07:59:00Z'
+  managedFields:
+  - manager: kubectl
+    operation: Apply
+    apiVersion: v1
+    time: '2026-10-16T09:58:00Z'
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:data:
+        f:DB_HOST: {}
+        f:DB_USER: {}
+data:
+  DB_HOST: payments-db.shop.svc
+  DB_USER: payments
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-8a2e6f1c3-c1d2e
+  creationTimestamp: '2026-10-23T16:00:00Z'
+  labels:
+    app: payments
+    pod-template-hash: 8a2e6f1c3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-8a2e6f1c3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments:7.0.2
+status:
+  phase: Running
+  startTime: '2026-10-23T16:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-23T16:00:40Z'
+  containerStatuses:
+  - name: app
+    image: example/payments:7.0.2
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-23T16:00:10Z'
+    imageID: example/payments@sha256:6666666666666666666666666666666666666666666666666666666666666666
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-8a2e6f1c3-f3g4h
+  creationTimestamp: '2026-10-23T16:01:00Z'
+  labels:
+    app: payments
+    pod-template-hash: 8a2e6f1c3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-8a2e6f1c3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments:7.0.2
+status:
+  phase: Running
+  startTime: '2026-10-23T16:01:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-10-23T16:01:40Z'
+  containerStatuses:
+  - name: app
+    image: example/payments:7.0.2
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-10-23T16:01:10Z'
+    imageID: example/payments@sha256:6666666666666666666666666666666666666666666666666666666666666666
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: payments-8a2e6f1c3-z5y6x
+  creationTimestamp: '2026-10-27T09:00:00Z'
+  labels:
+    app: payments
+    pod-template-hash: 8a2e6f1c3
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: payments-8a2e6f1c3
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/payments:7.0.2
+status:
+  phase: Pending
+  startTime: '2026-10-27T09:00:02Z'
+  conditions:
+  - type: PodScheduled
+    status: 'True'
+    lastTransitionTime: '2026-10-27T09:00:01Z'
+  - type: Ready
+    status: 'False'
+    reason: ContainersNotReady
+    lastTransitionTime: '2026-10-27T09:00:02Z'
+  containerStatuses:
+  - name: app
+    image: example/payments:7.0.2
+    ready: false
+    started: false
+    restartCount: 0
+    state:
+      waiting:
+        reason: CreateContainerConfigError
+        message: couldn't find key password in Secret shop/payments-db
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-8a2e6f1c3.created-z5y6x
+involvedObject:
+  apiVersion: apps/v1
+  kind: ReplicaSet
+  name: payments-8a2e6f1c3
+type: Normal
+reason: SuccessfulCreate
+message: 'Created pod: payments-8a2e6f1c3-z5y6x'
+source:
+  component: replicaset-controller
+count: 1
+firstTimestamp: '2026-10-27T09:00:00Z'
+lastTimestamp: '2026-10-27T09:00:00Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: payments-8a2e6f1c3-z5y6x.failed
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: payments-8a2e6f1c3-z5y6x
+type: Warning
+reason: Failed
+message: 'Error: couldn''t find key password in Secret shop/payments-db'
+source:
+  component: kubelet
+count: 95
+firstTimestamp: '2026-10-27T09:00:03Z'
+lastTimestamp: '2026-10-27T09:19:40Z'

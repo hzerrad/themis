@@ -1,0 +1,206 @@
+{
+  "scenario": "init-container-waits",
+  "version": 1,
+  "difficulty": "medium",
+  "incident_class": "stuck_pods",
+  "truth": {
+    "root_causes": [
+      "init_container_failure"
+    ],
+    "decision": "abstain",
+    "rollback_is_harmful": true,
+    "predicates": {
+      "config_error_on_start": "false",
+      "image_pull_failing": "false",
+      "init_container_stuck": "true",
+      "quota_refused_pods": "false",
+      "scheduler_rejected_pods": "false",
+      "stuck_pods_new_revision_only": "unknown",
+      "volume_not_bound": "false"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "orders",
+    "UID": "uid-deployment-orders"
+  },
+  "capabilities": [],
+  "fixes": [],
+  "root_causes": [
+    {
+      "name": "cannot_be_scheduled",
+      "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled, for a wrong name or tag, or missing registry credentials"
+    },
+    {
+      "name": "volume_unavailable",
+      "description": "a volume it needs can't be bound or mounted"
+    },
+    {
+      "name": "init_container_failure",
+      "description": "an init container fails or never finishes"
+    },
+    {
+      "name": "startup_config_error",
+      "description": "a ConfigMap, Secret or key its containers need is missing, so they can't start"
+    },
+    {
+      "name": "quota_exceeded",
+      "description": "a namespace quota refuses new pods"
+    },
+    {
+      "name": "still_starting",
+      "description": "its pods are starting slowly and nothing has failed"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "guidance": "No fix is on offer for these incidents: Themis diagnoses them and hands\nthem to a person. Tell which cause keeps the pods from becoming ready,\nfrom the pod states and the events, and back it with the check that shows\nit: scheduler_rejected_pods, image_pull_failing, volume_not_bound,\ninit_container_stuck, config_error_on_start or quota_refused_pods. When\nthe checks and the evidence point to one cause, conclude with it and cite\nthat evidence. When none fails and the pods are only slow, say so. When\nthe evidence can't tell, say what is missing.\n\nA recent rollout doesn't make this a regression to roll back: rolling\nback belongs to another kind of incident, and is never on offer here.\n",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"orders-6f4d8b2c7-r8s9t\",\"revision\":\"3\",\"phase\":\"Pending\",\"ready\":false,\"startedAt\":\"2026-10-27T08:55:02Z\",\"containers\":[{\"name\":\"wait-for-migrations\",\"init\":true,\"image\":\"example/orders-migrate:5.2.0\",\"ready\":false,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-27T08:55:10Z\"}},{\"name\":\"app\",\"image\":\"example/orders:5.2.0\",\"ready\":false,\"restartCount\":0,\"state\":{\"status\":\"waiting\",\"reason\":\"PodInitializing\"}}]},{\"name\":\"orders-6f4d8b2c7-b4c5d\",\"revision\":\"3\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-25T14:00:00Z\",\"containers\":[{\"name\":\"wait-for-migrations\",\"init\":true,\"image\":\"example/orders-migrate:5.2.0\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"terminated\",\"reason\":\"Completed\",\"exitCode\":0,\"startedAt\":\"2026-10-25T14:00:05Z\",\"finishedAt\":\"2026-10-25T14:00:38Z\"}},{\"name\":\"app\",\"image\":\"example/orders:5.2.0\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-25T14:00:40Z\"}}]},{\"name\":\"orders-6f4d8b2c7-e6f7g\",\"revision\":\"3\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-25T14:01:10Z\",\"containers\":[{\"name\":\"wait-for-migrations\",\"init\":true,\"image\":\"example/orders-migrate:5.2.0\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"terminated\",\"reason\":\"Completed\",\"exitCode\":0,\"startedAt\":\"2026-10-25T14:01:12Z\",\"finishedAt\":\"2026-10-25T14:01:19Z\"}},{\"name\":\"app\",\"image\":\"example/orders:5.2.0\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-25T14:01:20Z\"}}]}],\"totalPods\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/orders-6f4d8b2c7-r8s9t\",\"type\":\"Normal\",\"reason\":\"Started\",\"message\":\"Started container wait-for-migrations\",\"count\":1,\"firstSeen\":\"2026-10-27T08:55:10Z\",\"lastSeen\":\"2026-10-27T08:55:10Z\"},{\"object\":\"Deployment/orders\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set orders-6f4d8b2c7 from 2 to 3\",\"count\":1,\"firstSeen\":\"2026-10-27T08:55:00Z\",\"lastSeen\":\"2026-10-27T08:55:00Z\"}],\"totalEvents\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"orders\",\"currentRevision\":\"3\",\"generation\":0,\"observedGeneration\":4,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-10T08:01:00Z\",\"lastTransitionTime\":\"2026-10-10T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-25T14:03:00Z\",\"lastTransitionTime\":\"2026-10-25T14:03:00Z\"}]},\"revisions\":[{\"replicaSet\":\"orders-6f4d8b2c7\",\"revision\":\"3\",\"current\":true,\"createdAt\":\"2026-10-25T14:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"example/orders:5.2.0\",\"limits\":{\"memory\":\"512Mi\"}}]},{\"replicaSet\":\"orders-58b7c6d9f\",\"revision\":\"2\",\"createdAt\":\"2026-10-18T11:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/orders:5.1.3\",\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"orders-6f4d8b2c7-r8s9t\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container hasn't started yet (PodInitializing), so it has no logs.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "scheduler_rejected_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "the 1 pod(s) that aren't ready were all scheduled",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "image_pull_failing",
+      "version": "1",
+      "value": "false",
+      "reason": "no container of the 1 pod(s) that aren't ready is waiting for its image",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "volume_not_bound",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a volume of the 1 pod(s) that aren't ready can't be bound or mounted",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "init_container_stuck",
+      "version": "1",
+      "value": "true",
+      "reason": "init container orders-6f4d8b2c7-r8s9t/wait-for-migrations has run for 24m50s without finishing",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "config_error_on_start",
+      "version": "1",
+      "value": "false",
+      "reason": "no container waits for its configuration, and every ConfigMap the pods need exists",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-referenced_config"
+      ]
+    },
+    {
+      "name": "quota_refused_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a quota refused a pod",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "stuck_pods_new_revision_only",
+      "version": "1",
+      "value": "unknown",
+      "reason": "revision 2 has no ready pods to compare with",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    }
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule diagnosis-only forbids this fix."
+  }
+}

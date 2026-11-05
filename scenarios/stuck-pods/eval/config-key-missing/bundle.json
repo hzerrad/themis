@@ -1,0 +1,208 @@
+{
+  "scenario": "config-key-missing",
+  "version": 1,
+  "difficulty": "medium",
+  "incident_class": "stuck_pods",
+  "truth": {
+    "root_causes": [
+      "startup_config_error"
+    ],
+    "decision": "abstain",
+    "rollback_is_harmful": true,
+    "required_citations": [
+      "pod_states"
+    ],
+    "predicates": {
+      "config_error_on_start": "true",
+      "image_pull_failing": "false",
+      "init_container_stuck": "false",
+      "quota_refused_pods": "false",
+      "scheduler_rejected_pods": "false",
+      "stuck_pods_new_revision_only": "unknown",
+      "volume_not_bound": "false"
+    }
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "payments",
+    "UID": "uid-deployment-payments"
+  },
+  "capabilities": [],
+  "fixes": [],
+  "root_causes": [
+    {
+      "name": "cannot_be_scheduled",
+      "description": "no node can take its pods, for lack of CPU or memory, a taint, or an affinity or node selector no node matches"
+    },
+    {
+      "name": "image_pull_failure",
+      "description": "its image can't be pulled, for a wrong name or tag, or missing registry credentials"
+    },
+    {
+      "name": "volume_unavailable",
+      "description": "a volume it needs can't be bound or mounted"
+    },
+    {
+      "name": "init_container_failure",
+      "description": "an init container fails or never finishes"
+    },
+    {
+      "name": "startup_config_error",
+      "description": "a ConfigMap, Secret or key its containers need is missing, so they can't start"
+    },
+    {
+      "name": "quota_exceeded",
+      "description": "a namespace quota refuses new pods"
+    },
+    {
+      "name": "still_starting",
+      "description": "its pods are starting slowly and nothing has failed"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "guidance": "No fix is on offer for these incidents: Themis diagnoses them and hands\nthem to a person. Tell which cause keeps the pods from becoming ready,\nfrom the pod states and the events, and back it with the check that shows\nit: scheduler_rejected_pods, image_pull_failing, volume_not_bound,\ninit_container_stuck, config_error_on_start or quota_refused_pods. When\nthe checks and the evidence point to one cause, conclude with it and cite\nthat evidence. When none fails and the pods are only slow, say so. When\nthe evidence can't tell, say what is missing.\n\nA recent rollout doesn't make this a regression to roll back: rolling\nback belongs to another kind of incident, and is never on offer here.\n",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"payments-8a2e6f1c3-z5y6x\",\"revision\":\"4\",\"phase\":\"Pending\",\"ready\":false,\"startedAt\":\"2026-10-27T09:00:02Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"ready\":false,\"restartCount\":0,\"state\":{\"status\":\"waiting\",\"reason\":\"CreateContainerConfigError\"}}]},{\"name\":\"payments-8a2e6f1c3-c1d2e\",\"revision\":\"4\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-23T16:00:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-23T16:00:10Z\"}}]},{\"name\":\"payments-8a2e6f1c3-f3g4h\",\"revision\":\"4\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-10-23T16:01:00Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-10-23T16:01:10Z\"}}]}],\"totalPods\":3}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Pod/payments-8a2e6f1c3-z5y6x\",\"type\":\"Warning\",\"reason\":\"Failed\",\"message\":\"Error: couldn't find key password in Secret shop/payments-db\",\"count\":95,\"firstSeen\":\"2026-10-27T09:00:03Z\",\"lastSeen\":\"2026-10-27T09:19:40Z\"},{\"object\":\"ReplicaSet/payments-8a2e6f1c3\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: payments-8a2e6f1c3-z5y6x\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"payments\",\"currentRevision\":\"4\",\"generation\":0,\"observedGeneration\":6,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-09-30T08:01:00Z\",\"lastTransitionTime\":\"2026-09-30T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-23T16:02:00Z\",\"lastTransitionTime\":\"2026-10-23T16:02:00Z\"}]},\"revisions\":[{\"replicaSet\":\"payments-8a2e6f1c3\",\"revision\":\"4\",\"current\":true,\"createdAt\":\"2026-10-23T16:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"limits\":{\"memory\":\"512Mi\"}}]},{\"replicaSet\":\"payments-79c5b8d4f\",\"revision\":\"3\",\"createdAt\":\"2026-10-16T10:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.1\",\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-referenced_config",
+      "template": "referenced_config",
+      "data": "{\"refs\":[{\"kind\":\"ConfigMap\",\"name\":\"payments-config\",\"changedAt\":\"2026-10-16T09:58:00Z\"},{\"kind\":\"Secret\",\"name\":\"payments-db\"}]}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"payments-8a2e6f1c3-z5y6x\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"\",\"note\":\"The container hasn't started yet (CreateContainerConfigError), so it has no logs.\"}",
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "referenced_config",
+      "description": "The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only, never values."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    }
+  ],
+  "predicates": [
+    {
+      "name": "scheduler_rejected_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "the 1 pod(s) that aren't ready were all scheduled",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "image_pull_failing",
+      "version": "1",
+      "value": "false",
+      "reason": "no container of the 1 pod(s) that aren't ready is waiting for its image",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "volume_not_bound",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a volume of the 1 pod(s) that aren't ready can't be bound or mounted",
+      "evidence_ids": [
+        "ev-pod_states",
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "init_container_stuck",
+      "version": "1",
+      "value": "false",
+      "reason": "no init container of the 1 pod(s) that aren't ready failed or ran longer than 5m0s",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "config_error_on_start",
+      "version": "1",
+      "value": "true",
+      "reason": "payments-8a2e6f1c3-z5y6x/app can't be created with its configuration (CreateContainerConfigError)",
+      "evidence_ids": [
+        "ev-pod_states"
+      ]
+    },
+    {
+      "name": "quota_refused_pods",
+      "version": "1",
+      "value": "false",
+      "reason": "no event says a quota refused a pod",
+      "evidence_ids": [
+        "ev-target_events"
+      ]
+    },
+    {
+      "name": "stuck_pods_new_revision_only",
+      "version": "1",
+      "value": "unknown",
+      "reason": "revision 3 has no ready pods to compare with",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-pod_states"
+      ]
+    }
+  ],
+  "policy": {
+    "outcome": "deny",
+    "reason": "Policy rule diagnosis-only forbids this fix."
+  }
+}
