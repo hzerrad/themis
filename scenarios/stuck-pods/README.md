@@ -6,7 +6,7 @@ Pods of a Deployment never become ready: no node takes them, their image can't b
 
 `KubePodNotReady`, `KubeContainerWaiting` and `KubeDeploymentRolloutStuck`, about a Deployment.
 
-None of them is an alert the rollout-regression pack answers, and this pack's priority, 50, is below that pack's, 100: if a profile is changed so both answer an alert, rollout-regression takes it. A bad rollout raises `KubeDeploymentReplicasMismatch` too, so rollout-regression opens its own incident for it and may suggest a rollback there, while this pack's incident only explains.
+None of them is an alert the rollout-regression pack answers, and this pack's priority, 50, is below that pack's, 100: if a profile is changed so both answer an alert, the incident gets both packs combined, shown under rollout-regression. A bad rollout raises `KubeDeploymentReplicasMismatch` too, so rollout-regression opens its own incident for it and may suggest a rollback there, while this pack's incident only explains.
 
 ## Evidence
 

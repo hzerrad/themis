@@ -24,9 +24,10 @@ var ErrLeaseLost = errors.New("investigation lease lost")
 
 // Investigation is an incident's investigation and its current lease.
 type Investigation struct {
-	ID            string
-	IncidentID    string
-	Profile       string
+	ID         string
+	IncidentID string
+	// Profiles are every profile the incident matched, its primary first.
+	Profiles      []string
 	Target        incident.TargetRef
 	LeaseID       string
 	LeaseDeadline time.Time
@@ -92,17 +93,20 @@ func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID
 }
 
 const investigationColumns = `
-	v.id::text, v.incident_id::text, i.profile, i.target_group, i.target_kind, i.target_namespace, i.target_name, i.target_uid,
+	v.id::text, v.incident_id::text, i.profile, i.other_profiles, i.target_group, i.target_kind, i.target_namespace, i.target_name, i.target_uid,
 	coalesce(v.lease_id::text, ''), coalesce(v.lease_deadline, 'epoch'), v.attempts`
 
 // scanInvestigation scans investigationColumns, then extra.
 func scanInvestigation(row pgx.Row, extra ...any) (Investigation, error) {
 	var inv Investigation
+	var primary string
+	var others []string
 	t := &inv.Target
 	err := row.Scan(append([]any{
-		&inv.ID, &inv.IncidentID, &inv.Profile, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID,
+		&inv.ID, &inv.IncidentID, &primary, &others, &t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID,
 		&inv.LeaseID, &inv.LeaseDeadline, &inv.Attempts,
 	}, extra...)...)
+	inv.Profiles = append([]string{primary}, others...)
 	return inv, err
 }
 

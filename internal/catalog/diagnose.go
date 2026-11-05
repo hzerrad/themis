@@ -42,20 +42,22 @@ type Gap struct {
 type Diagnosis struct {
 	Items []evidence.Item
 	Gaps  []Gap
-	// Results are the profile's checks, in the catalog's order. Each unknown
+	// Results are the profiles' checks, in the catalog's order. Each unknown
 	// one carries the gaps in the evidence it reads, and is blind when Themis
 	// couldn't see.
 	Results []check.Result
 }
 
-// Diagnose reads w's initial evidence under p with c, and decides p's checks
-// from it, as of at.Now. Evidence it can't read is a gap with its cause, not
-// a failure: the checks that needed it are unknown and say why. So are the
-// target's first events, when its alert started longer ago than Kubernetes
-// keeps events.
-func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Workload, p config.Profile, at Moment) Diagnosis {
+// Diagnose reads w's initial evidence under the profiles m with c, all any of
+// them collects first, and decides every check any of them runs from it, as
+// of at.Now, so each profile's rules can read its checks. Evidence it can't
+// read is a gap with its cause, not a failure: the checks that needed it are
+// unknown and say why. So are the target's first events, when its alert
+// started longer ago than Kubernetes keeps events.
+func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Workload, m config.Matched, at Moment) Diagnosis {
 	var d Diagnosis
-	for _, name := range p.Evidence.Initial {
+	initial := m.Evidence().Initial
+	for _, name := range initial {
 		item, err := cat.Evidence.Collect(ctx, c, name, w, nil, at.Now)
 		if err != nil {
 			d.Gaps = append(d.Gaps, Gap{Template: name, Cause: evidence.CauseOf(err), Detail: err.Error()})
@@ -63,10 +65,10 @@ func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Wo
 		}
 		d.Items = append(d.Items, item)
 	}
-	if g, ok := expiredEvents(p.Evidence.Initial, at); ok {
+	if g, ok := expiredEvents(initial, at); ok {
 		d.Gaps = append(d.Gaps, g)
 	}
-	checks := cat.Checks.For(p.Checks)
+	checks := cat.Checks.For(m.Checks())
 	gaps := make([]check.Gap, 0, len(d.Gaps))
 	for _, g := range d.Gaps {
 		gaps = append(gaps, check.Gap{Template: g.Template, Cause: g.Cause})

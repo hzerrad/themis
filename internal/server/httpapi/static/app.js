@@ -425,12 +425,23 @@ function noAccess() {
     h("p", { class: "muted" }, "Ask a Themis admin to add you or one of your groups.")));
 }
 
+// profiles names every profile an incident matched, its primary first.
+function profiles(inc) {
+  return inc.profiles.join(", ");
+}
+
+// matched says which profiles an incident matched: with several, it got
+// what each brings.
+function matched(inc) {
+  return inc.profiles.length === 1 ? `profile ${inc.profile}` : `profiles ${profiles(inc)}, combined`;
+}
+
 async function list() {
   const incidents = await api("/v1/incidents");
   const rows = incidents.map((i) => h("tr", { class: "link", onclick: () => { location.hash = `#/incidents/${i.id}`; } },
     h("td", {}, state(i.state)),
     h("td", {}, target(i.target)),
-    h("td", {}, i.profile),
+    h("td", {}, profiles(i)),
     h("td", {}, i.occurrenceCount),
     h("td", {}, time(i.createdAt)),
     h("td", { class: "mono muted" }, short(i.id))));
@@ -440,7 +451,7 @@ async function list() {
       ? h("p", { class: "muted" }, "No incidents yet. One opens when Alertmanager sends Themis an alert about a workload it watches. ",
         h("a", { href: "#/status" }, "Status"), " shows whether alerts arrive.")
       : h("table", {},
-        h("thead", {}, h("tr", {}, ["State", "Workload", "Profile", "Alerts", "Opened", "ID"].map((c) => h("th", {}, c)))),
+        h("thead", {}, h("tr", {}, ["State", "Workload", "Profiles", "Alerts", "Opened", "ID"].map((c) => h("th", {}, c)))),
         h("tbody", {}, rows))));
 }
 
@@ -722,7 +733,7 @@ async function detail(id) {
   render(
     h("p", {}, h("a", { href: "#" }, "← Incidents")),
     h("h1", {}, target(inc.target), " ", state(inc.state)),
-    h("p", { class: "muted mono" }, `${inc.id} · profile ${inc.profile} · uid ${inc.target.UID} · opened ${time(inc.createdAt)}`),
+    h("p", { class: "muted mono" }, `${inc.id} · ${matched(inc)} · uid ${inc.target.UID} · opened ${time(inc.createdAt)}`),
 
     summary(inc, inv, actions, proposals, d.Headline, d.Missing),
     d.Headline ? null : missing(d.Missing),

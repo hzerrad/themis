@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,78 @@ spec:
 	// With no earlier revision, no rollback reaches anyone.
 	if b.Policy.Outcome != "deny" {
 		t.Errorf("policy = %+v, want deny: there is nothing to roll back to", b.Policy)
+	}
+}
+
+// A case naming the alert that raised it gets every pack's profile that
+// alert matches, as Themis gives them: their fixes, root causes and guidance,
+// and the policy of each pack offering the fix decides it.
+func TestBuild_CombinesThePacksItsAlertMatches(t *testing.T) {
+	root := t.TempDir()
+	for _, f := range []string{"scenario.yaml", "checks.yaml"} {
+		data, err := os.ReadFile(filepath.Join(packs, "rollout-regression", f)) //nolint:gosec // a path in the repository
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(root, "rollout-regression", f), string(data))
+	}
+	writeFile(t, filepath.Join(root, "memory", "scenario.yaml"), `name: memory
+description: Containers run out of memory.
+rootCauses:
+  - name: memory_too_low
+    description: its memory limit is too low for its load
+profile:
+  priority: 10
+  guidance: Raise the memory limit when the container needs more.
+  match:
+    alertNames: [KubePodOOMKilled]
+    targetKinds: [Deployment.apps]
+  evidence:
+    allowed: [pod_states]
+  checks: [gitops_managed]
+  capabilities: [deployment.set-resources]
+`)
+	cat, err := catalog.Build(nil, nil, os.DirFS(root), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollout, _ := cat.Profile("rollout-regression")
+	s, err := eval.Load(oom, rootCauses(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Alert = "KubePodOOMKilled"
+	b, err := eval.Build(t.Context(), oom, s, os.DirFS(root), rollout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"deployment.rollback-to-revision", "deployment.set-resources"}; !slices.Equal(b.Capabilities, want) {
+		t.Errorf("fixes = %v, want %v", b.Capabilities, want)
+	}
+	if !strings.Contains(b.Guidance, "From the memory profile, which offers deployment.set-resources:\nRaise the memory limit") {
+		t.Errorf("guidance doesn't introduce the memory pack's:\n%s", b.Guidance)
+	}
+	if !slices.ContainsFunc(b.RootCauses, func(c catalog.RootCause) bool { return c.Name == "memory_too_low" }) {
+		t.Errorf("root causes = %+v, want the memory pack's too", b.RootCauses)
+	}
+	if want := "Policy rule rollback-needs-approval requires a person's approval. It is the rollout-regression profile's policy."; b.Policy.Reason != want {
+		t.Errorf("policy = %+v, want %q", b.Policy, want)
+	}
+
+	s.Alert = "KubePodNotReady"
+	if _, err := eval.Build(t.Context(), oom, s, os.DirFS(root), rollout); err == nil || !strings.Contains(err.Error(), "doesn't match the pack's profile") {
+		t.Errorf("an alert the pack doesn't answer: err = %v", err)
+	}
+}
+
+func writeFile(t *testing.T, path, data string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil { //nolint:gosec // a path under the test's temporary folder
+		t.Fatal(err)
 	}
 }
 

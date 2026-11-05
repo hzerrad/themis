@@ -44,14 +44,16 @@ type payload struct {
 }
 
 type incidentView struct {
-	ID      string     `json:"id"`
-	State   string     `json:"state"`
-	From    string     `json:"from"`
-	Reason  string     `json:"reason"`
-	Profile string     `json:"profile"`
-	Target  targetView `json:"target"`
-	At      time.Time  `json:"at"`
-	URL     string     `json:"url,omitempty"`
+	ID      string `json:"id"`
+	State   string `json:"state"`
+	From    string `json:"from"`
+	Reason  string `json:"reason"`
+	Profile string `json:"profile"`
+	// Profiles are every profile the incident matched, Profile first.
+	Profiles []string   `json:"profiles"`
+	Target   targetView `json:"target"`
+	At       time.Time  `json:"at"`
+	URL      string     `json:"url,omitempty"`
 	// Missing says what Themis couldn't see, why, and how to let it.
 	Missing []string `json:"missing,omitempty"`
 }
@@ -84,7 +86,7 @@ func (w *Worker) post(ctx context.Context, hook *config.Webhook, n store.Escalat
 	p := payload{
 		Event: "incident." + string(n.To),
 		Incident: incidentView{
-			ID: in.ID, State: string(n.To), From: string(n.From), Reason: n.Reason, Profile: in.Profile, At: n.At,
+			ID: in.ID, State: string(n.To), From: string(n.From), Reason: n.Reason, Profile: in.Profile, Profiles: in.Profiles(), At: n.At,
 			Target: targetView{Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID},
 		},
 	}

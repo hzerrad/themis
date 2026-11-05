@@ -84,8 +84,8 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	profile, _ := w.Config.Current().Profile(in.Profile)
-	v := profile.EffectiveVerification()
+	// The strictest of the profiles offering the fix sets how it is watched.
+	v := w.Config.Current().Matched(in.Profiles()).Offering(a.Capability).Verification()
 	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
 
 	var from json.RawMessage
@@ -207,8 +207,7 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	if err != nil {
 		return false, err
 	}
-	profile, _ := w.Config.Current().Profile(in.Profile)
-	window := profile.EffectiveVerification().Window.Duration
+	window := w.Config.Current().Matched(in.Profiles()).Offering(a.Capability).Verification().Window.Duration
 	var reason string
 	switch {
 	case reading.Changed:

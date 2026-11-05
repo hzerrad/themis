@@ -398,7 +398,7 @@
           "priority": {
             "type": "integer",
             "minimum": 1,
-            "description": "Priority orders profiles matching the same alert; higher wins. Unique,\nfrom 1."
+            "description": "Priority orders the profiles matching the same alert, highest first:\nthe first is the incident's primary profile. Every one that matches\napplies. Unique, from 1."
           },
           "match": {
             "properties": {
@@ -582,7 +582,7 @@
         "description": "Profile is one incident class and the alerts that belong to it."
       },
       "type": "array",
-      "description": "Profiles classify alerts into incident classes; the highest priority match\nwins. One named like a scenario pack's profile replaces it."
+      "description": "Profiles classify alerts into incident classes; an incident gets every\nprofile its alert matches, highest priority first. One named like a\nscenario pack's profile replaces it."
     }
   },
   "additionalProperties": false,

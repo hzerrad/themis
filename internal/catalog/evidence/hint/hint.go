@@ -75,17 +75,21 @@ func (w Writer) Message(in store.Incident, g store.EvidenceGap) string {
 		}
 		return fmt.Sprintf("%s couldn't be read: Themis isn't allowed to read %s in %s. To allow it, add %s to enrolledNamespaces.", name, it, ns, ns)
 	case evidence.GapNotInProfile:
+		if len(in.AlsoMatched) > 0 {
+			return fmt.Sprintf("%s could have helped, but none of this incident's profiles (%s) allows %s. To allow %s, add %s to one of their evidence.allowed.", name, strings.Join(in.Profiles(), ", "), it, it, g.Template)
+		}
 		return fmt.Sprintf("%s could have helped, but the %s profile doesn't allow %s. To allow %s, add %s to that profile's evidence.allowed.", name, in.Profile, it, it, g.Template)
 	case evidence.GapExpired:
 		return fmt.Sprintf("%s %s incomplete: Kubernetes keeps events for about an hour, and this problem started earlier, so the first ones were already gone.", name, n.pick("was", "were"))
 	case evidence.GapNotFound:
 		return fmt.Sprintf("%s couldn't be read: the object %s about no longer exists.", name, n.pick("it's", "they're"))
 	case evidence.GapBudgetSpent:
-		limit := config.DefaultMaxEvidenceRequests
-		if p, ok := w.config().Profile(in.Profile); ok {
-			limit = p.InvestigationBudget().MaxEvidenceRequests
+		limit := w.config().Matched(in.Profiles()).InvestigationBudget().MaxEvidenceRequests
+		where := "the " + in.Profile + " profile"
+		if len(in.AlsoMatched) > 0 {
+			where = "one of this incident's profiles (" + strings.Join(in.Profiles(), ", ") + ")"
 		}
-		return fmt.Sprintf("%s %s read: the investigation had used all %d of its evidence requests. To allow more, raise investigation.maxEvidenceRequests in the %s profile.", name, n.pick("wasn't", "weren't"), limit, in.Profile)
+		return fmt.Sprintf("%s %s read: the investigation had used all %d of its evidence requests. To allow more, raise investigation.maxEvidenceRequests in %s.", name, n.pick("wasn't", "weren't"), limit, where)
 	case evidence.GapDataCeiling:
 		return fmt.Sprintf("%s %s shown to the model, because it isn't allowed to see data this sensitive. To allow it, set model.ceiling to sensitive, or use a self-hosted model.", name, n.pick("wasn't", "weren't"))
 	case evidence.GapTimeout:

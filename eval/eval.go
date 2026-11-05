@@ -56,6 +56,11 @@ type Case struct {
 	Difficulty    string   `json:"difficulty"`
 	IncidentClass string   `json:"incident_class"`
 
+	// Alert is the alert that raised the incident, when the case says. The
+	// incident then gets every pack's profile that alert matches, as Themis
+	// gives it; without, only its own pack's.
+	Alert string `json:"alert,omitempty"`
+
 	// Now is when the investigation happens, since checks depend on the time.
 	Now    time.Time `json:"now"`
 	Target Target    `json:"target"`
@@ -295,10 +300,12 @@ func bundleItem(item evidence.Item) Item {
 	}
 }
 
-// Build reads the case in dir with the real templates and the checks of
-// profile, a scenario pack's from packs, and decides a rollback as governance
-// would. Its metrics source is the one the case's metrics.yaml describes, or
-// none without the file.
+// Build reads the case in dir with the real templates and checks, under the
+// profiles the incident gets: profile, a scenario pack's from packs, or, for
+// a case naming its alert, every pack's profile matching that alert and the
+// target, as Themis matches them. It decides the case's fix, or a rollback,
+// as governance would. Its metrics source is the one the case's metrics.yaml
+// describes, or none without the file.
 func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.Profile) (Bundle, error) {
 	c, target, err := loadCluster(filepath.Join(dir, "cluster.yaml"), s.Target)
 	if err != nil {
@@ -312,23 +319,33 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	if err != nil {
 		return Bundle{}, err
 	}
+	matched := config.Matched{profile}
+	if s.Alert != "" {
+		matched = config.MatchProfiles(cat.Profiles, s.Alert, nil, target)
+		if !slices.ContainsFunc(matched, func(p config.Profile) bool { return p.Name == profile.Name }) {
+			return Bundle{}, fmt.Errorf("case.yaml: the alert %s doesn't match the pack's profile", s.Alert)
+		}
+	}
+	fixes := matched.Capabilities()
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
 		// A profile that only diagnoses offers an empty list, never null.
-		Truth: s.Truth, Target: target, Capabilities: append([]string{}, profile.Capabilities...), Fixes: bundleFixes(cat.Fixes, profile.Capabilities),
-		RootCauses: cat.RootCauses.For(profile.Name), Guidance: profile.Guidance, MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
+		Truth: s.Truth, Target: target, Capabilities: append([]string{}, fixes...), Fixes: bundleFixes(cat.Fixes, fixes),
+		RootCauses: cat.RootCauses.For(matched.Names()...), Guidance: matched.Guidance(), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
 	w, err := workload.Read(ctx, c, target)
 	if err != nil {
 		return Bundle{}, err
 	}
-	// Diagnosed as the core diagnoses an incident, under the profile with the
-	// case's evidence. A case has no alert, so no events have expired.
-	p := profile
-	p.Evidence = config.Evidence{Initial: s.Evidence.Initial, Allowed: s.Evidence.Allowed}
-	d := cat.Diagnose(ctx, c, w, p, catalog.Moment{Now: s.Now})
+	// Diagnosed as the core diagnoses an incident, under the profiles with
+	// the case's evidence. No events have expired.
+	scope := slices.Clone(matched)
+	for i := range scope {
+		scope[i].Evidence = config.Evidence{Initial: s.Evidence.Initial, Allowed: s.Evidence.Allowed}
+	}
+	d := cat.Diagnose(ctx, c, w, scope, catalog.Moment{Now: s.Now})
 	// Items are named after their template, so a rebuilt bundle is the same.
 	ids := map[string]string{}
 	for _, item := range d.Items {
@@ -365,9 +382,9 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 		b.Predicates = append(b.Predicates, out)
 	}
 	if s.Fix == nil {
-		b.Policy, err = decideRollback(ctx, c, w, profile, d.Results, cat.Fixes[rollback.Name])
+		b.Policy, err = decideRollback(ctx, c, w, matched, d.Results, cat.Fixes[rollback.Name])
 	} else {
-		b.Policy, err = decide(ctx, c, w, profile, d.Results, cat.Fixes, *s.Fix)
+		b.Policy, err = decide(ctx, c, w, matched, d.Results, cat.Fixes, *s.Fix)
 	}
 	if err != nil {
 		return Bundle{}, err
@@ -377,7 +394,7 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 
 // decideRollback decides a rollback of w to the revision before its current
 // one.
-func decideRollback(ctx context.Context, c client.Reader, w *workload.Workload, profile config.Profile, checks []check.Result, fix capability.Capability) (PolicyCheck, error) {
+func decideRollback(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fix capability.Capability) (PolicyCheck, error) {
 	revisions, err := w.Revisions(ctx)
 	if err != nil {
 		return PolicyCheck{}, err
@@ -391,16 +408,17 @@ func decideRollback(ctx context.Context, c client.Reader, w *workload.Workload, 
 	if previous == 0 {
 		return PolicyCheck{Outcome: string(policy.Deny), Reason: "The workload has no earlier revision to roll back to."}, nil
 	}
-	return govern(ctx, c, w, profile, checks, fix, map[string]any{"revision": previous})
+	return govern(ctx, c, w, profiles, checks, fix, map[string]any{"revision": previous})
 }
 
-// decide decides the case's own fix, which must be one the profile offers.
-func decide(ctx context.Context, c client.Reader, w *workload.Workload, profile config.Profile, checks []check.Result, fixes capability.Registry, fix Fix) (PolicyCheck, error) {
+// decide decides the case's own fix, which must be one the incident's
+// profiles offer.
+func decide(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fixes capability.Registry, fix Fix) (PolicyCheck, error) {
 	f, ok := fixes[fix.Capability]
-	if !ok || !slices.Contains(profile.Capabilities, fix.Capability) {
+	if !ok || len(profiles.Offering(fix.Capability)) == 0 {
 		return PolicyCheck{}, fmt.Errorf("fix: %s isn't a fix the pack's profile offers", fix.Capability)
 	}
-	out, err := govern(ctx, c, w, profile, checks, f, fix.Params)
+	out, err := govern(ctx, c, w, profiles, checks, f, fix.Params)
 	out.Fix = &fix
 	return out, err
 }
@@ -408,10 +426,10 @@ func decide(ctx context.Context, c client.Reader, w *workload.Workload, profile 
 // govern decides fix with params as governance decides the investigator's
 // suggestion. A fix that can't go ahead reaches nobody, as a denied one
 // doesn't; params it can't take are the case's mistake.
-func govern(ctx context.Context, c client.Reader, w *workload.Workload, profile config.Profile, checks []check.Result, fix capability.Capability, params map[string]any) (PolicyCheck, error) {
+func govern(ctx context.Context, c client.Reader, w *workload.Workload, profiles config.Matched, checks []check.Result, fix capability.Capability, params map[string]any) (PolicyCheck, error) {
 	var decider governance.Decider
 	decided, err := decider.Decide(ctx, c, governance.Fix{
-		Target: w.Target, Profile: profile, Checks: checks,
+		Target: w.Target, Profiles: profiles, Checks: checks,
 		Capability: fix, Params: params,
 		By: governance.Suggester{Source: "themis-intelligence", Authenticated: true},
 	})

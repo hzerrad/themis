@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func TestLeaseInvestigation_LeasesPendingOnce(t *testing.T) {
 	if inv.IncidentID != id || inv.LeaseID == "" || !inv.LeaseDeadline.Equal(t0.Add(leaseFor)) || inv.Attempts != 1 {
 		t.Errorf("leased %+v", inv)
 	}
-	if inv.Profile != "rollout-regression" || inv.Target.Name != "checkout" {
+	if !slices.Equal(inv.Profiles, []string{"rollout-regression", "stuck-pods"}) || inv.Target.Name != "checkout" {
 		t.Errorf("leased investigation lacks its incident: %+v", inv)
 	}
 	if _, ok := lease(t, s, t0.Add(time.Second)); ok {

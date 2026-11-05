@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -50,9 +51,9 @@ type Leases struct {
 type Kind int
 
 const (
-	// Gone is an investigation whose profile is no longer configured.
+	// Gone is an investigation none of whose profiles is configured any more.
 	Gone Kind = iota + 1
-	// NotAllowed is evidence the investigation's profile doesn't allow.
+	// NotAllowed is evidence none of the investigation's profiles allows.
 	NotAllowed
 	// BudgetSpent is evidence asked for once the budget is spent.
 	BudgetSpent
@@ -77,9 +78,9 @@ func refuse(k Kind, format string, args ...any) error {
 // from.
 type Leased struct {
 	store.Investigation
-	// Scope is the incident's profile: what the investigator may read and
-	// suggest, and its budget.
-	Scope config.Profile
+	// Scope is every profile the incident matched: together they say what
+	// the investigator may read and suggest, and its budget.
+	Scope config.Matched
 	// Evidence and Results are the initial evidence and the checks' answers.
 	Evidence []evidence.Item
 	Results  []check.Result
@@ -111,7 +112,7 @@ func (l *Leases) Lease(ctx context.Context, worker string) (Leased, bool, error)
 	if err != nil || !ok {
 		return Leased{}, false, err
 	}
-	profile, err := l.profile(inv)
+	matched, err := l.profiles(inv)
 	if err != nil {
 		return Leased{}, false, err
 	}
@@ -124,8 +125,8 @@ func (l *Leases) Lease(ctx context.Context, worker string) (Leased, bool, error)
 		return Leased{}, false, err
 	}
 	return Leased{
-		Investigation: inv, Scope: profile, Evidence: items, Results: results,
-		Deadline: now.Add(profile.InvestigationBudget().Timeout.Duration),
+		Investigation: inv, Scope: matched, Evidence: items, Results: results,
+		Deadline: now.Add(matched.InvestigationBudget().Timeout.Duration),
 	}, true, nil
 }
 
@@ -168,18 +169,18 @@ func (l *Leases) Collect(ctx context.Context, leaseID, template string, params m
 		if err != nil {
 			return err
 		}
-		profile, err := l.profile(inv)
+		matched, err := l.profiles(inv)
 		if err != nil {
 			return err
 		}
-		if !profile.AllowsTemplate(template) {
-			return refuse(NotAllowed, "template %q is not allowed for profile %s", template, profile.Name)
+		if !matched.AllowsTemplate(template) {
+			return refuse(NotAllowed, "template %q is not allowed for %s", template, config.Named(matched.Names()))
 		}
 		used, err := l.Store.CountLeaseEvidence(ctx, tx, inv.LeaseID)
 		if err != nil {
 			return err
 		}
-		remaining = profile.InvestigationBudget().MaxEvidenceRequests - used
+		remaining = matched.InvestigationBudget().MaxEvidenceRequests - used
 		if remaining <= 0 {
 			return refuse(BudgetSpent, "the evidence budget is spent")
 		}
@@ -260,13 +261,13 @@ func (l *Leases) gap(ctx context.Context, inv store.Investigation, template stri
 	}
 }
 
-// profile returns the configured profile of an investigation.
-func (l *Leases) profile(inv store.Investigation) (config.Profile, error) {
-	p, ok := l.Config.Current().Profile(inv.Profile)
-	if !ok {
-		return config.Profile{}, refuse(Gone, "profile %q is no longer configured", inv.Profile)
+// profiles returns the profiles of an investigation still configured.
+func (l *Leases) profiles(inv store.Investigation) (config.Matched, error) {
+	m := l.Config.Current().Matched(inv.Profiles)
+	if len(m) == 0 {
+		return nil, refuse(Gone, "no profile of this incident is configured any more (%s)", strings.Join(inv.Profiles, ", "))
 	}
-	return p, nil
+	return m, nil
 }
 
 func (l *Leases) leaseFor() time.Duration {

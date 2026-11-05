@@ -206,7 +206,9 @@ func TestIsEnrolled(t *testing.T) {
 
 var deployment = incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "u1"}
 
-func TestMatchProfile(t *testing.T) {
+// An alert matches every profile whose alert names, target kinds and labels
+// it meets, highest priority first, whatever their order in the file.
+func TestMatch(t *testing.T) {
 	c := mustParse(t, validYAML)
 
 	tests := []struct {
@@ -214,84 +216,151 @@ func TestMatchProfile(t *testing.T) {
 		alertName string
 		labels    map[string]string
 		target    incident.TargetRef
-		want      string // profile name; "" means no match
+		want      []string // profile names, highest priority first
 	}{
 		{
 			name:      "matches by alert name and kind",
 			alertName: "KubePodOOMKilled",
 			labels:    map[string]string{"namespace": "shop"},
 			target:    deployment,
-			want:      "rollout-regression",
+			want:      []string{"rollout-regression"},
 		},
 		{
-			name:      "higher priority wins when both match",
+			name:      "every profile that matches, higher priority first",
 			alertName: "KubePodCrashLooping",
 			labels:    map[string]string{"namespace": "shop", "severity": "critical"},
 			target:    deployment,
-			want:      "critical-crashloop",
+			want:      []string{"critical-crashloop", "rollout-regression"},
 		},
 		{
 			name:      "label selector must match",
 			alertName: "KubePodCrashLooping",
 			labels:    map[string]string{"namespace": "shop", "severity": "warning"},
 			target:    deployment,
-			want:      "rollout-regression",
+			want:      []string{"rollout-regression"},
 		},
 		{
 			name:      "missing selector label does not match",
 			alertName: "KubePodCrashLooping",
 			labels:    map[string]string{"namespace": "shop"},
 			target:    deployment,
-			want:      "rollout-regression",
+			want:      []string{"rollout-regression"},
 		},
 		{
 			name:      "unknown alert name",
 			alertName: "KubeNodeNotReady",
 			labels:    map[string]string{"severity": "critical"},
 			target:    deployment,
-			want:      "",
 		},
 		{
 			name:      "kind does not match",
 			alertName: "KubePodCrashLooping",
 			labels:    map[string]string{"severity": "critical"},
 			target:    incident.TargetRef{Group: "apps", Kind: "StatefulSet", Namespace: "shop", Name: "db"},
-			want:      "",
 		},
 		{
 			name:      "same kind in another API group does not match",
 			alertName: "KubePodCrashLooping",
 			labels:    map[string]string{"severity": "critical"},
 			target:    incident.TargetRef{Group: "example.com", Kind: "Deployment", Namespace: "shop", Name: "x"},
-			want:      "",
 		},
 		{
 			name:      "nil labels",
 			alertName: "KubePodOOMKilled",
-			labels:    nil,
 			target:    deployment,
-			want:      "rollout-regression",
+			want:      []string{"rollout-regression"},
 		},
 	}
+	swapped := c
+	swapped.Profiles = []config.Profile{c.Profiles[1], c.Profiles[0]}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, ok := c.MatchProfile(tt.alertName, tt.labels, tt.target)
-
-			switch {
-			case tt.want == "" && ok:
-				t.Errorf("matched %q, want no match", p.Name)
-			case tt.want != "" && !ok:
-				t.Errorf("no match, want %q", tt.want)
-			case tt.want != "" && p.Name != tt.want:
-				t.Errorf("matched %q, want %q", p.Name, tt.want)
+			for _, cfg := range []config.Config{c, swapped} {
+				if got := cfg.Match(tt.alertName, tt.labels, tt.target).Names(); !slices.Equal(got, tt.want) {
+					t.Errorf("matched %v, want %v", got, tt.want)
+				}
 			}
 		})
 	}
+}
 
-	// Priority, not position in the file, decides the winner.
-	c.Profiles[0], c.Profiles[1] = c.Profiles[1], c.Profiles[0]
-	if p, ok := c.MatchProfile("KubePodCrashLooping", map[string]string{"severity": "critical"}, deployment); !ok || p.Name != "critical-crashloop" {
-		t.Errorf("profiles swapped: matched %q (ok=%v), want critical-crashloop", p.Name, ok)
+// An incident matching several profiles gets what each brings: every check,
+// template and fix any of them has, each once, the largest budget, and each
+// one's guidance, introduced by its name and its fixes. Of what decides a
+// fix, the strictest wins.
+func TestMatched(t *testing.T) {
+	rollout := config.Profile{
+		Name: "rollout", Checks: []string{"rollout_recent", "gitops_managed"},
+		Evidence:     config.Evidence{Initial: []string{"pod_states"}, Allowed: []string{"pod_states", "rollout_history"}},
+		Capabilities: []string{"deployment.rollback-to-revision"}, Guidance: "Roll back a bad rollout.",
+		Investigation: config.Investigation{MaxSteps: 4},
+		Policy:        config.Policy{ApprovalTimeout: config.Duration{Duration: time.Hour}},
+		Verification:  config.Verification{Window: config.Duration{Duration: 10 * time.Minute}},
+	}
+	memory := config.Profile{
+		Name: "memory", Checks: []string{"gitops_managed", "memory_near_limit"},
+		Evidence:     config.Evidence{Initial: []string{"container_memory"}, Allowed: []string{"container_memory", "pod_states"}},
+		Capabilities: []string{"deployment.set-resources"}, Guidance: "Raise the limit.\n",
+		Investigation: config.Investigation{MaxEvidenceRequests: 9},
+		Policy:        config.Policy{ApprovalTimeout: config.Duration{Duration: 10 * time.Minute}},
+	}
+	diagnoses := config.Profile{Name: "diagnoses", Checks: []string{"image_pull_failing"}}
+	everything := config.Profile{Name: "everything"}
+
+	for _, tt := range []struct {
+		name string
+		m    config.Matched
+		want config.Matched
+	}{
+		{name: "one profile is itself", m: config.Matched{rollout}, want: config.Matched{rollout}},
+		{
+			name: "several are combined", m: config.Matched{rollout, memory, diagnoses},
+			want: config.Matched{{
+				Checks: []string{"rollout_recent", "gitops_managed", "memory_near_limit", "image_pull_failing"},
+				Evidence: config.Evidence{
+					Initial: []string{"pod_states", "container_memory"},
+					Allowed: []string{"pod_states", "rollout_history", "container_memory"},
+				},
+				Capabilities: []string{"deployment.rollback-to-revision", "deployment.set-resources"},
+				Guidance: "From the rollout profile, which offers deployment.rollback-to-revision:\nRoll back a bad rollout.\n\n" +
+					"From the memory profile, which offers deployment.set-resources:\nRaise the limit.",
+				Investigation: config.Investigation{MaxSteps: 8, MaxEvidenceRequests: 9, Timeout: config.Duration{Duration: 5 * time.Minute}},
+				Policy:        config.Policy{ApprovalTimeout: config.Duration{Duration: 10 * time.Minute}},
+				Verification:  config.Verification{Window: config.Duration{Duration: 10 * time.Minute}, Stability: config.Duration{Duration: 2 * time.Minute}},
+			}},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			want := tt.want[0]
+			if got := tt.m.Checks(); !slices.Equal(got, want.Checks) {
+				t.Errorf("checks = %v, want %v", got, want.Checks)
+			}
+			if got := tt.m.Evidence(); !reflect.DeepEqual(got, want.Evidence) {
+				t.Errorf("evidence = %+v, want %+v", got, want.Evidence)
+			}
+			if got := tt.m.Capabilities(); !slices.Equal(got, want.Capabilities) {
+				t.Errorf("fixes = %v, want %v", got, want.Capabilities)
+			}
+			if got := tt.m.Guidance(); got != want.Guidance {
+				t.Errorf("guidance = %q, want %q", got, want.Guidance)
+			}
+			if got, b := tt.m.InvestigationBudget(), want.InvestigationBudget(); got != b {
+				t.Errorf("budget = %+v, want %+v", got, b)
+			}
+			if got := tt.m.ApprovalTimeout(); got != want.EffectivePolicy().ApprovalTimeout.Duration {
+				t.Errorf("approval timeout = %s, want the shortest", got)
+			}
+			if got := tt.m.Verification(); got != want.EffectiveVerification() {
+				t.Errorf("verification = %+v, want the longest", got)
+			}
+		})
+	}
+	// A profile naming no check runs every check, and so do they all.
+	if got := (config.Matched{rollout, everything}).Checks(); got != nil {
+		t.Errorf("checks = %v, want every check", got)
+	}
+	if got := (config.Matched{rollout, memory, diagnoses}).Offering("deployment.set-resources").Names(); !slices.Equal(got, []string{"memory"}) {
+		t.Errorf("governing the memory fix: %v, want only the profile offering it", got)
 	}
 }
 
@@ -360,22 +429,22 @@ func TestWithProfiles_TheInstallsOwnWin(t *testing.T) {
 		t.Errorf("the pack's profile replaced the install's: %+v", got.Profiles[0])
 	}
 	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop"}
-	if p, _ := got.MatchProfile(own.Match.AlertNames[0], own.Match.Labels, target); p.Name != own.Name {
+	if p := got.Match(own.Match.AlertNames[0], own.Match.Labels, target).Primary(); p.Name != own.Name {
 		t.Errorf("a tie went to %s, want the install's %s", p.Name, own.Name)
 	}
 }
 
-func TestMatchProfile_ScopeLimitsAProfileToItsNamespace(t *testing.T) {
+func TestMatch_ScopeLimitsAProfileToItsNamespace(t *testing.T) {
 	c := mustParse(t, validYAML)
 	p := c.Profiles[0]
 	p.Scope = "team"
 	c.Profiles = []config.Profile{p}
 	target := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "other"}
-	if _, ok := c.MatchProfile(p.Match.AlertNames[0], p.Match.Labels, target); ok {
+	if m := c.Match(p.Match.AlertNames[0], p.Match.Labels, target); len(m) > 0 {
 		t.Error("a scoped profile matched outside its namespace")
 	}
 	target.Namespace = "team"
-	if _, ok := c.MatchProfile(p.Match.AlertNames[0], p.Match.Labels, target); !ok {
+	if m := c.Match(p.Match.AlertNames[0], p.Match.Labels, target); len(m) == 0 {
 		t.Error("a scoped profile didn't match in its namespace")
 	}
 }

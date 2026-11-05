@@ -18,18 +18,21 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 		return &themisv1.LeaseInvestigationResponse{}, nil
 	}
 
-	profile := inv.Scope
+	// The investigation gets what every profile the incident matched
+	// brings: their fixes, root causes, evidence and guidance.
+	scope := inv.Scope
+	fixes := scope.Capabilities()
 	out := &themisv1.Investigation{
 		LeaseId:               inv.LeaseID,
 		LeaseDeadline:         timestamppb.New(inv.LeaseDeadline),
 		IncidentId:            inv.IncidentID,
-		Profile:               inv.Profile,
+		Profile:               scope.Primary().Name,
 		Target:                targetToProto(inv.Target),
-		CandidateCapabilities: profile.Capabilities,
-		Capabilities:          s.capabilities(profile.Capabilities),
-		Guidance:              profile.Guidance,
+		CandidateCapabilities: fixes,
+		Capabilities:          s.capabilities(fixes),
+		Guidance:              scope.Guidance(),
 		Budget: &themisv1.Budget{
-			MaxSteps: int32(profile.InvestigationBudget().MaxSteps), //nolint:gosec // validated config
+			MaxSteps: int32(scope.InvestigationBudget().MaxSteps), //nolint:gosec // validated config
 			Deadline: timestamppb.New(inv.Deadline),
 		},
 	}
@@ -39,10 +42,10 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 	for _, r := range inv.Results {
 		out.Predicates = append(out.Predicates, s.predicateToProto(r))
 	}
-	for _, c := range s.RootCauses.For(inv.Profile) {
+	for _, c := range s.RootCauses.For(scope.Names()...) {
 		out.RootCauses = append(out.RootCauses, &themisv1.RootCause{Name: c.Name, Description: c.Description})
 	}
-	for _, name := range profile.Evidence.Allowed {
+	for _, name := range scope.Evidence().Allowed {
 		t := &themisv1.EvidenceTemplate{Name: name}
 		if d, ok := s.Evidence[name]; ok {
 			t.Description, t.Params = d.Description(), d.Params()
