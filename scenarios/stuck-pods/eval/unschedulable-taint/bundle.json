@@ -26,16 +26,8 @@
     "Name": "reports",
     "UID": "uid-deployment-reports"
   },
-  "capabilities": [
-    "deployment.rollback-to-revision"
-  ],
-  "fixes": [
-    {
-      "name": "deployment.rollback-to-revision",
-      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
-      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
-    }
-  ],
+  "capabilities": [],
+  "fixes": [],
   "root_causes": [
     {
       "name": "unschedulable",
@@ -86,13 +78,13 @@
     {
       "id": "ev-target_events",
       "template": "target_events",
-      "data": "{\"events\":[{\"object\":\"Pod/reports-6b8f9c7d5-k7m8n\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:18:00Z\"},{\"object\":\"Pod/reports-6b8f9c7d5-p4q5r\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:18:00Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-k7m8n\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-p4q5r\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":4}",
+      "data": "{\"events\":[{\"object\":\"Pod/reports-6b8f9c7d5-p4q5r\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:01Z\",\"lastSeen\":\"2026-10-27T09:18:30Z\"},{\"object\":\"Pod/reports-6b8f9c7d5-k7m8n\",\"type\":\"Warning\",\"reason\":\"FailedScheduling\",\"message\":\"0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.\",\"count\":14,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:18:00Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-p4q5r\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:01Z\",\"lastSeen\":\"2026-10-27T09:00:01Z\"},{\"object\":\"ReplicaSet/reports-6b8f9c7d5\",\"type\":\"Normal\",\"reason\":\"SuccessfulCreate\",\"message\":\"Created pod: reports-6b8f9c7d5-k7m8n\",\"count\":1,\"firstSeen\":\"2026-10-27T09:00:00Z\",\"lastSeen\":\"2026-10-27T09:00:00Z\"}],\"totalEvents\":4}",
       "classification": "internal"
     },
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"reports\",\"currentRevision\":\"1\",\"generation\":0,\"observedGeneration\":1,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":1,\"unavailableReplicas\":2,\"conditions\":[{\"type\":\"Available\",\"status\":\"False\",\"reason\":\"MinimumReplicasUnavailable\",\"lastUpdateTime\":\"2026-10-27T09:00:00Z\",\"lastTransitionTime\":\"2026-10-27T09:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"}]},\"revisions\":[{\"replicaSet\":\"reports-6b8f9c7d5\",\"revision\":\"1\",\"current\":true,\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":1,\"containers\":[{\"name\":\"app\",\"image\":\"example/reports:1.8.2\",\"requests\":{\"cpu\":\"500m\",\"memory\":\"512Mi\"},\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":1}",
+      "data": "{\"deployment\":{\"name\":\"reports\",\"currentRevision\":\"1\",\"generation\":0,\"observedGeneration\":1,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":1,\"unavailableReplicas\":2,\"conditions\":[{\"type\":\"Available\",\"status\":\"False\",\"reason\":\"MinimumReplicasUnavailable\",\"lastUpdateTime\":\"2026-10-27T09:00:00Z\",\"lastTransitionTime\":\"2026-10-27T09:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"}]},\"revisions\":[{\"replicaSet\":\"reports-6b8f9c7d5\",\"revision\":\"1\",\"current\":true,\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":1,\"containers\":[{\"name\":\"app\",\"image\":\"example/reports:1.8.2\",\"requests\":{\"cpu\":\"500m\"},\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":1}",
       "classification": "internal"
     },
     {
@@ -142,7 +134,7 @@
       "name": "pods_unschedulable",
       "version": "1",
       "value": "true",
-      "reason": "Pod/reports-6b8f9c7d5-k7m8n can't be scheduled: 0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.",
+      "reason": "Pod/reports-6b8f9c7d5-p4q5r can't be scheduled: 0/4 nodes are available: 2 node(s) had untolerated taint {dedicated: batch}, 2 node(s) were unschedulable. preemption: 0/4 nodes are available: 4 Preemption is not helpful for scheduling.",
       "evidence_ids": [
         "ev-pod_states",
         "ev-target_events"

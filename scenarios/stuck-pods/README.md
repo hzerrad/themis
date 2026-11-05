@@ -55,5 +55,5 @@ In each, a rollback is wrong: the earlier revision fails the same way, or there 
 
 | Case | What it is |
 |---|---|
-| `rollout-bad-image` | A new revision with a tag that doesn't exist, the one before it healthy: a bad rollout, where a rollback is right |
+| `rollout-bad-image` | A new revision with a tag that doesn't exist, the one before it healthy: a bad rollout. A rollback is the rollout-regression pack's call; this pack names the cause and escalates |
 | `slow-startup` | A new revision's pod that is slow to get ready but working, where a rollback would throw a good release away |

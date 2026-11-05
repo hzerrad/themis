@@ -26,16 +26,8 @@
     "Name": "ledger",
     "UID": "uid-deployment-ledger"
   },
-  "capabilities": [
-    "deployment.rollback-to-revision"
-  ],
-  "fixes": [
-    {
-      "name": "deployment.rollback-to-revision",
-      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
-      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
-    }
-  ],
+  "capabilities": [],
+  "fixes": [],
   "root_causes": [
     {
       "name": "unschedulable",

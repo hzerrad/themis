@@ -46,8 +46,8 @@ profile:
     - config_error_on_start
     - quota_exceeded
     - stuck_pods_new_revision_only
-  # Diagnosis only: Themis suggests nothing it may do, and the rule below
-  # refuses any fix all the same.
+  # Diagnosis only: no fix is offered, and the rule below refuses any fix all
+  # the same, so the policy never lets one through, wherever it is asked.
   policy:
     mode: guarded
     rules:

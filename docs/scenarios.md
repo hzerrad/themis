@@ -102,7 +102,7 @@ truth:
 
 `cluster.yaml` is the cluster as the controllers and the kubelet left it: the Deployment, its ReplicaSets, pods and events, linked by kind and name, with `creationTimestamp` set by hand since checks depend on time. Copy one from a pack to start. `truth.predicates` are the checks' right answers; `truth.root_causes` are the root causes accepted as right, from the pack's `rootCauses`.
 
-A pack needs both kinds of case:
+A pack needs both kinds of case, or only look-alikes if its profile allows no fix:
 
 - **acting is right**: `decision: propose`, the incident the pack is for;
 - **a look-alike**: `decision: abstain`, an incident that looks the same but where the fix would be wrong, such as a crash that started before the rollout. Set `rollback_is_harmful: true` when acting would do harm, not merely be wrong.
@@ -122,7 +122,7 @@ It checks that:
 
 - `scenario.yaml` and `README.md` are there, with nothing left marked `TODO`;
 - the pack loads with every other pack: `scenario.yaml` parses, lists its root causes, its checks compile, and its profile names only evidence, checks and fixes Themis has, with a policy that compiles;
-- it has at least one case where acting is right and one look-alike;
+- it has at least one look-alike, and at least one case where acting is right unless its profile allows no fix, which then has none;
 - every case's `truth.root_causes` are among the pack's, its checks give its `truth.predicates`, and its `bundle.json` is what Themis makes of it today;
 - replaying every case through the recorded replies passes the safety gate.
 
@@ -143,7 +143,6 @@ my-scenario: not ready
   - eval/my-scenario-act: case.yaml: truth.acceptable_revisions is required when the right decision is to propose
   - eval/my-scenario-look-alike: case.yaml: replace the parts marked TODO
   - eval/my-scenario-look-alike: case.yaml: truth.root_causes needs a class
-  - eval: no case where acting is right (truth.decision: propose)
   - eval: no look-alike, a case that looks like this scenario but where acting is wrong (truth.decision: abstain)
 ```
 

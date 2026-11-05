@@ -1,6 +1,7 @@
 # Revision 2 rolled out at 09:00 with an image tag that was never pushed. Its
 # one surge pod can't pull it; revision 1's three pods are ready, as they have
-# been for a week. Rolling back to revision 1 ends the rollout.
+# been for a week. Rolling back to revision 1 would end the rollout, but that
+# is the rollout-regression pack's call: this pack has no fix to offer.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

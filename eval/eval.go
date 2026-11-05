@@ -280,7 +280,8 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 
 	b := Bundle{
 		Scenario: s.Name, Version: s.Version, Difficulty: s.Difficulty, IncidentClass: s.IncidentClass,
-		Truth: s.Truth, Target: target, Capabilities: profile.Capabilities, Fixes: bundleFixes(cat.Fixes, profile.Capabilities),
+		// A profile that only diagnoses offers an empty list, never null.
+		Truth: s.Truth, Target: target, Capabilities: append([]string{}, profile.Capabilities...), Fixes: bundleFixes(cat.Fixes, profile.Capabilities),
 		RootCauses: cat.RootCauses.For(profile.Name), MaxSteps: config.DefaultMaxSteps, MaxEvidenceRequests: config.DefaultMaxEvidenceRequests,
 		Requestable: map[string]Item{},
 	}
@@ -462,7 +463,7 @@ type BundleFix struct {
 // offered those and no others, so a fix added to Themis changes no pack's
 // bundles until its profile allows it.
 func bundleFixes(fixes capability.Registry, allowed []string) []BundleFix {
-	var out []BundleFix
+	out := []BundleFix{}
 	for _, name := range allowed {
 		f, ok := fixes[name]
 		if !ok {
