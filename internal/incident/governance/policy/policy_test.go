@@ -164,3 +164,19 @@ func TestPolicy_SeesWhoSuggestedTheFix(t *testing.T) {
 		})
 	}
 }
+
+// Rules see what a fix says about its change, such as a probe it makes more
+// lenient. A rule that first asks which fix it is never fails on one that
+// says nothing.
+func TestPolicy_SeesTheChange(t *testing.T) {
+	p := compile(t, config.ModeGuarded,
+		rule("lenient-readiness", `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`, config.DecisionRequireApproval))
+	probes := input()
+	probes.Capability, probes.Change = "deployment.set-probes", map[string]string{"readiness": "more_lenient"}
+	if d := p.Evaluate(probes); d.PolicyID != "lenient-readiness" {
+		t.Errorf("a lenient readiness probe = %+v, want the rule to match", d)
+	}
+	if d := p.Evaluate(input()); d.Failed || d.PolicyID != "" {
+		t.Errorf("a fix without facts = %+v, want no rule to match", d)
+	}
+}

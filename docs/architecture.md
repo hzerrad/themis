@@ -90,6 +90,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts: it loads the scenario packs, and says whether a profile asks for anything it doesn't have |
 | `internal/catalog/capability` | **What Themis can change.** The interface every fix implements, and the registry |
 | `internal/catalog/capability/rollback` | `deployment.rollback-to-revision` |
+| `internal/catalog/capability/probes` | `deployment.set-probes`: the timing of a container's existing liveness, readiness and startup probes |
 | `internal/catalog/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. The checks themselves are in the scenario packs; see [checks.md](checks.md) |
 | `internal/catalog/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history |
 | `internal/catalog/evidence/hint` | Plain advice when Themis couldn't see something it needed |

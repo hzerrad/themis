@@ -244,7 +244,20 @@ A profile runs every check unless its `checks` lists the ones to run. A name The
 
 ### Capabilities
 
-`deployment.rollback-to-revision` restores the pod template of a prior ReplicaSet revision, as `kubectl rollout undo` does, with the target's resource version as a precondition and a server-side dry run first. A profile without `capabilities` is diagnosis only.
+A profile without `capabilities` is diagnosis only. Every fix writes with the target's resource version as a precondition, after a server-side dry run.
+
+`deployment.rollback-to-revision` restores the pod template of a prior ReplicaSet revision, as `kubectl rollout undo` does.
+
+`deployment.set-probes` changes the timing of a container's liveness, readiness and startup probes. The investigator picks the probes and the values from the evidence; Themis doesn't estimate or cap them.
+
+- **It may change** `initialDelaySeconds`, `periodSeconds`, `timeoutSeconds` and `failureThreshold` of any of the three, and `successThreshold` of a readiness probe. Kubernetes requires `successThreshold` to be 1 for the other two. Parameters: `{"container": "app", "readiness": {"timeoutSeconds": 5}, "liveness": {"failureThreshold": 6}}`, only the fields to change.
+- **It never** adds or removes a probe, or changes what a probe calls (its HTTP path or port, command, TCP or gRPC check): those are changes to the application, for a person. Its parameters can't express them.
+- **It refuses** a container or a probe the workload doesn't have, and values Kubernetes wouldn't accept: whole numbers, `initialDelaySeconds` from 0, the others from 1, up to 2147483647.
+- **The approver sees** each field before and after, marked "more lenient" or "stricter", and a readiness probe made more lenient on a line of its own: pods that fail it keep receiving traffic for longer.
+- **It worked** when the rollout is complete, every replica is ready, and no container restarted during the verification window, as one would if its liveness probe still failed it.
+- **Undoing it** sets the fields it changed back to what they were.
+
+More lenient means slower to call a container failed or quicker to call it ready: a longer delay, period or timeout, a higher `failureThreshold`, or a lower `successThreshold`.
 
 ### Investigation
 
@@ -284,7 +297,8 @@ policy:
 
 These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: the failures began after it, no ConfigMap changed before them, and either the new version runs out of memory or the version before it was healthy. A workload owned by GitOps is never changed. Anything allowed still needs a person's approval.
 
-- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
+- Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
+- `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
 - The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
 - A rule that fails to evaluate denies. Policy never fails open.
 - In **guarded** mode `allow` still needs approval: no action runs without a human. In **observe** mode every action is denied, so Themis only diagnoses and recommends.
