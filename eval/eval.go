@@ -273,7 +273,7 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	if err != nil {
 		return Bundle{}, err
 	}
-	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, packs, nil)
+	cat, err := catalog.Build(fileLogs{dir: filepath.Join(dir, "logs")}, nil, packs, nil)
 	if err != nil {
 		return Bundle{}, err
 	}

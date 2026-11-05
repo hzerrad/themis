@@ -49,6 +49,8 @@ var views = map[string]func() any{
 	evidence.TargetEvents:      func() any { return new(evidence.TargetEventsView) },
 	evidence.ReferencedConfig:  func() any { return new(evidence.ReferencedConfigView) },
 	evidence.ContainerLogsTail: func() any { return new(evidence.LogsView) },
+	evidence.ContainerMemory:   func() any { return new(evidence.ContainerMemoryView) },
+	evidence.ContainerCPU:      func() any { return new(evidence.ContainerCPUView) },
 }
 
 // inputs are the variables every check of one evaluation sees.

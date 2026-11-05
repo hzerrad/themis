@@ -9,6 +9,7 @@ import (
 
 	authorizationv1 "k8s.io/api/authorization/v1"
 
+	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/server/statuspage"
@@ -56,6 +57,11 @@ func (f fakeAccess) Can(_ context.Context, a authorizationv1.ResourceAttributes)
 	return !f[key], nil
 }
 
+// fakeMetrics are metrics sources in the health given.
+type fakeMetrics []metrics.Health
+
+func (f fakeMetrics) Health(context.Context) []metrics.Health { return f }
+
 // healthy is an install where everything works.
 func healthy() (*statuspage.Checker, *fakeStore) {
 	s := &fakeStore{
@@ -67,7 +73,12 @@ func healthy() (*statuspage.Checker, *fakeStore) {
 		accounts: true, finished: true,
 	}
 	return &statuspage.Checker{
-		Config: config.Config{EnrolledNamespaces: []string{"shop", "payments"}}, Store: s, Access: fakeAccess{},
+		Config: config.Config{
+			EnrolledNamespaces: []string{"shop", "payments"},
+			Metrics:            config.Metrics{Prometheus: &config.Prometheus{Address: "http://prometheus:9090"}},
+		},
+		Store: s, Access: fakeAccess{},
+		Metrics:  fakeMetrics{{Source: metrics.Prometheus, History: true}, {Source: metrics.Kubernetes}},
 		Executor: "themis-executor:9091", Dial: func(context.Context, string) error { return nil },
 		Now: func() time.Time { return now },
 	}, s
@@ -91,7 +102,7 @@ func byName(t *testing.T, c *statuspage.Checker) map[string]statuspage.Check {
 func TestChecks_Healthy(t *testing.T) {
 	c, _ := healthy()
 	got := byName(t, c)
-	for _, name := range []string{"Database", "Investigator", "Model", "Alerts", "Namespaces", "Fixes", "Sign-in"} {
+	for _, name := range []string{"Database", "Investigator", "Model", "Alerts", "Namespaces", "Metrics", "Fixes", "Sign-in"} {
 		if got[name].State != statuspage.OK {
 			t.Errorf("%s = %+v, want ok", name, got[name])
 		}
@@ -101,6 +112,9 @@ func TestChecks_Healthy(t *testing.T) {
 	}
 	if s := got["Namespaces"].Summary; s != "Themis can read shop and payments." {
 		t.Errorf("namespaces summary = %q", s)
+	}
+	if s := got["Metrics"].Summary; s != "Memory and CPU use come from Prometheus at http://prometheus:9090 and the Kubernetes metrics API." {
+		t.Errorf("metrics summary = %q", s)
 	}
 }
 
@@ -154,6 +168,16 @@ func TestChecks_Problems(t *testing.T) {
 			func(c *statuspage.Checker, _ *fakeStore) { c.Access = fakeAccess{"shop/get pods/log": true} },
 			"Namespaces", statuspage.Warn, "read container logs",
 		},
+		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Off, "No metrics source"},
+		"metrics without history": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes}}
+		}, "Metrics", statuspage.OK, "No peak memory or CPU throttling data"},
+		"no metrics-server": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: errors.New("the Kubernetes metrics API isn't served")}}
+		}, "Metrics", statuspage.Warn, "The Kubernetes metrics API isn't served."},
+		"prometheus down": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Metrics = fakeMetrics{{Source: metrics.Prometheus, History: true, Err: errors.New("prometheus at http://prometheus:9090 answered 502")}, {Source: metrics.Kubernetes}}
+		}, "Metrics", statuspage.Problem, "Memory and CPU use come from the Kubernetes metrics API. No peak memory or CPU throttling data: the Kubernetes metrics API keeps no history. Set a Prometheus address (metrics.prometheus.address) to see them. Prometheus at http://prometheus:9090 answered 502."},
 		"fixes off": {func(c *statuspage.Checker, _ *fakeStore) { c.Executor = "" }, "Fixes", statuspage.Off, "never applies"},
 		"executor down": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Dial = func(context.Context, string) error { return errors.New("refused") }
