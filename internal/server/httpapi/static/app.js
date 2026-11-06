@@ -30,6 +30,12 @@ function h(tag, attrs = {}, ...children) {
   return el;
 }
 
+// fill replaces el's children, skipping the empty ones h skips: the DOM
+// would print a null as "null".
+function fill(el, ...children) {
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false && c !== ""));
+}
+
 function token() {
   try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
 }
@@ -554,10 +560,10 @@ function alertmanagerSetup() {
   const show = async () => {
     try {
       const { steps } = await api("/v1/setup/alertmanager?namespace=" + encodeURIComponent(ns.value.trim()));
-      out.replaceChildren(...steps.map((s, i) => h("div", { class: "sub" },
+      fill(out, ...steps.map((s, i) => h("div", { class: "sub" },
         h("h3", {}, (i + 1) + ". " + s.title), h("p", { class: "quiet" }, s.text), s.code ? copyable(s.code) : null)));
     } catch (e) {
-      out.replaceChildren(h("div", { class: "error" }, e.message));
+      fill(out, h("div", { class: "error" }, e.message));
     }
   };
   ns.addEventListener("change", show);
@@ -596,7 +602,7 @@ function alertRules() {
     try {
       v = await api("/v1/setup/alert-rules");
     } catch (e) {
-      out.replaceChildren(h("div", { class: "error" }, e.message));
+      fill(out, h("div", { class: "error" }, e.message));
       return;
     }
     const finding = v.checked
@@ -605,7 +611,7 @@ function alertRules() {
         : "All " + v.exist.length + " alerts exist in Prometheus at " + v.address + ".")
       : (v.error ? v.error + " " : "Not checked: no Prometheus address. ") + "Check by hand that Prometheus has rules for " + v.answered.join(", ") + ".";
     const values = "alerting:\n  rules:\n    install: true" + (v.standard ? "\n    standard: true" : "");
-    out.replaceChildren(
+    fill(out, 
       h("h3", {}, "Alert rules"),
       h("p", {}, finding),
       v.unshipped.length ? h("p", { class: "quiet" }, "Themis ships no rule for " + v.unshipped.join(", ") + ". Add one for each.") : null,
@@ -654,10 +660,10 @@ function alertsStep(v, check) {
   };
   const test = async () => {
     error.textContent = "";
-    result.replaceChildren("Testing.");
+    fill(result, "Testing.");
     try {
       const r = await api("/v1/setup/alertmanager/test", { method: "POST", body: JSON.stringify({ address: locked ? "" : address.value.trim() }) });
-      result.replaceChildren(...testFinding(r));
+      fill(result, ...testFinding(r));
     } catch (err) {
       result.replaceChildren();
       error.textContent = err.message;
@@ -743,14 +749,14 @@ function modelStep(v) {
     test.disabled = true;
     error.textContent = "";
     result.className = "test-result";
-    result.replaceChildren("Testing. The model has 20 s to answer.");
+    fill(result, "Testing. The model has 20 s to answer.");
     try {
       const r = await api("/v1/settings/model/test", { method: "POST", body: JSON.stringify(change()) });
       result.className = "test-result " + (r.ok ? "good" : "bad");
-      result.replaceChildren(r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
+      fill(result, r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
     } catch (err) {
       result.className = "test-result bad";
-      result.replaceChildren(err.message);
+      fill(result, err.message);
     } finally {
       test.disabled = false;
     }
@@ -768,7 +774,7 @@ function modelStep(v) {
       byInstall("model.apiKey") ? null : field("API key", key, "Stored encrypted. Never shown again."),
       anthropic || formatByInstall ? null : field("Reply format", format, "For OpenAI, choose OpenAI's strict form."),
     ].filter(Boolean);
-    form.replaceChildren(...asked,
+    fill(form, ...asked,
       h("div", { class: "inline" }, asked.length ? h("button", { class: "btn primary", type: "submit" }, "Save the model") : null, test),
       result, error);
   };
@@ -1527,12 +1533,12 @@ function probeFields(f, evidence) {
       const was = p ? p[t.name] : undefined;
       return { ...t, was, input: h("input", { type: "number", min: t.min, step: "1", value: was }) };
     });
-    box.replaceChildren(...inputs.map((t) => field(t.label, t.input, t.was === undefined ? null : "Currently " + t.was + ".")));
+    fill(box, ...inputs.map((t) => field(t.label, t.input, t.was === undefined ? null : "Currently " + t.was + ".")));
   };
   const fillKinds = () => {
     const p = probes();
     const kinds = p ? PROBES.filter((k) => p[k]) : PROBES;
-    kind.replaceChildren(...kinds.map((k) => h("option", { value: k }, cap(k))));
+    fill(kind, ...kinds.map((k) => h("option", { value: k }, cap(k))));
     kindField.hidden = !kinds.length;
     none.textContent = kinds.length ? "" : "Container " + picker.value + " has no probes to change.";
     fill();
@@ -1655,7 +1661,7 @@ function suggestForm(d, reload) {
   const fields = h("div", { class: "form" });
   const button = h("button", { class: "btn primary", type: "submit" });
   const show = () => {
-    fields.replaceChildren(...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
+    fill(fields, ...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
     button.textContent = "Suggest the " + chosen.noun;
   };
   const choice = fixes.length > 1
