@@ -805,7 +805,7 @@ async function setup() {
   const signIn = check("Sign-in");
   const acting = checks.filter(needsAction).length;
   const steps = [
-    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
+    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, "Signed in as ", h("b", {}, me.username), ".")] : [
       h("p", {}, partFinding(signIn)),
       h("ul", { class: "remedies" },
         h("li", {}, h("a", { href: "#/accounts" }, "Create accounts")),
