@@ -302,10 +302,17 @@ func (c *Checker) alertRules(ctx context.Context) Check {
 		ch.State, ch.Summary = Warn, "Not checked. "+upper(strings.TrimSuffix(err.Error(), "."))+"."
 		ch.Fix = "Check metrics.prometheus.address, and that Prometheus answers."
 	case len(res.Missing) == 0:
-		ch.State, ch.Summary = OK, fmt.Sprintf("All %d alerts exist in Prometheus at %s.", len(res.Exist), res.Address)
+		ch.State, ch.Summary = OK, fmt.Sprintf("All %d alerts have rules in Prometheus.", len(res.Exist))
+		if len(res.Exist) == 1 {
+			ch.Summary = res.Exist[0] + " has a rule in Prometheus."
+		}
 	default:
+		have := "have rules"
+		if len(res.Exist) == 1 {
+			have = "has a rule"
+		}
 		ch.State = Warn
-		ch.Summary = fmt.Sprintf("%d of %d alerts exist. Missing: %s.", len(res.Exist), len(answered), strings.Join(res.Missing, ", "))
+		ch.Summary = fmt.Sprintf("%d of %d alerts %s in Prometheus. Missing: %s.", len(res.Exist), len(answered), have, strings.Join(res.Missing, ", "))
 		ch.Fix = "Add their rules from the Setup page, or with the Prometheus Operator, set alerting.rules.install=true."
 	}
 	return ch

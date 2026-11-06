@@ -190,9 +190,10 @@ func TestChecks_Problems(t *testing.T) {
 			delete(s.heartbeats, store.HeartbeatAlertmanager)
 		}, "Alerts", statuspage.Warn, "No Alertmanager address."},
 		"no address, but the webhook works": {func(c *statuspage.Checker, _ *fakeStore) { c.Alertmanager = reading{} }, "Alerts", statuspage.OK, "Received through the \"themis\" receiver."},
+		"all alert rules": {func(*statuspage.Checker, *fakeStore) {}, "Alert rules", statuspage.OK, "All 2 alerts have rules in Prometheus."},
 		"alert rules missing": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Rules = fixedRules{Exist: []string{"KubePodCrashLooping"}, Missing: []string{"KubePodOOMKilled"}}
-		}, "Alert rules", statuspage.Warn, "1 of 2 alerts exist. Missing: KubePodOOMKilled."},
+		}, "Alert rules", statuspage.Warn, "1 of 2 alerts has a rule in Prometheus. Missing: KubePodOOMKilled."},
 		"no prometheus for the rules": {
 			func(c *statuspage.Checker, _ *fakeStore) { c.Rules = nil }, "Alert rules", statuspage.Waiting,
 			"Not checked: no Prometheus address. Check by hand that Prometheus has rules for KubePodCrashLooping and KubePodOOMKilled.",

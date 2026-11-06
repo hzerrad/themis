@@ -89,7 +89,6 @@ type alertRulesView struct {
 	// Checked says Prometheus was asked which exist. Error says why it
 	// couldn't be.
 	Checked bool     `json:"checked"`
-	Address string   `json:"address,omitempty"`
 	Exist   []string `json:"exist"`
 	Missing []string `json:"missing"`
 	Error   string   `json:"error,omitempty"`
@@ -119,7 +118,7 @@ func (a *API) alertRules(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			v.Error = sentence(err)
 		} else {
-			v.Checked, v.Address, v.Exist, v.Missing, show = true, res.Address, res.Exist, res.Missing, res.Missing
+			v.Checked, v.Exist, v.Missing, show = true, res.Exist, res.Missing, res.Missing
 		}
 	}
 	file, standard, none := shipped.For(show)

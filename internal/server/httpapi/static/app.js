@@ -605,10 +605,11 @@ function alertRules() {
       fill(out, h("div", { class: "error" }, e.message));
       return;
     }
+    const have = v.exist.length === 1 ? " has a rule" : " have rules";
     const finding = v.checked
       ? (v.missing.length
-        ? v.exist.length + " of " + v.answered.length + " alerts exist in Prometheus at " + v.address + ". Missing: " + v.missing.join(", ") + "."
-        : "All " + v.exist.length + " alerts exist in Prometheus at " + v.address + ".")
+        ? v.exist.length + " of " + v.answered.length + " alerts" + have + " in Prometheus. Missing: " + v.missing.join(", ") + "."
+        : v.exist.length === 1 ? v.exist[0] + " has a rule in Prometheus." : "All " + v.exist.length + " alerts have rules in Prometheus.")
       : (v.error ? v.error + " " : "Not checked: no Prometheus address. ") + "Check by hand that Prometheus has rules for " + v.answered.join(", ") + ".";
     const values = "alerting:\n  rules:\n    install: true" + (v.standard ? "\n    standard: true" : "");
     fill(out, 

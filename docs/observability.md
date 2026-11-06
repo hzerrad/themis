@@ -14,7 +14,7 @@ The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, 
 | Investigator | It asked for work in the last 2 minutes | It never has, or stopped |
 | Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident |
 | Alerts | Themis reads Alertmanager, at which address and how often, and when it last did; or, without reading, Alertmanager sent alerts, and through which receiver | Not read yet, why the last read failed (unreachable, credentials refused, not Alertmanager's answer), reads stopped, no address; for the webhook, none yet, the wrong intake token, or refused while no admin account existed |
-| Alert rules | Prometheus has a rule for every alert the profiles answer | Which are missing, with the rules to add on the Setup page; or not checked, without a Prometheus to ask, with the alerts to check by hand |
+| Alert rules | Prometheus has a rule for every alert the profiles answer: "All 7 alerts have rules in Prometheus." | Which are missing, with the rules to add on the Setup page; not checked, without a Prometheus to ask, with the alerts to check by hand; or Prometheus doesn't answer, with its address |
 | Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
 | Metrics | A metrics source answers: Prometheus, or the Kubernetes metrics API | No metrics source, or one failing; without Prometheus, no history of peak memory or CPU throttling |
 | Fixes | The executor is installed and reachable | Off, or unreachable |
