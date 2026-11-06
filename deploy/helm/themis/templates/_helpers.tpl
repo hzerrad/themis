@@ -77,6 +77,88 @@ above.
 {{- end }}
 
 {{/*
+The alerting.alertmanager values, as JSON. Values from before they existed,
+kept with --reuse-values, have none.
+*/}}
+{{- define "themis.alertmanagerValues" -}}
+{{- (.Values.alerting | default dict).alertmanager | default dict | toJson -}}
+{{- end }}
+
+{{/*
+Whether the core reads Alertmanager. A missing key means on, as above.
+*/}}
+{{- define "themis.alertmanagerEnabled" -}}
+{{- $am := include "themis.alertmanagerValues" . | fromJson -}}
+{{- if not (and (hasKey $am "enabled") (eq (toString $am.enabled) "false")) }}true{{ end -}}
+{{- end }}
+
+{{/*
+An Alertmanager in the cluster, found at install with Helm's lookup: the
+first Service, by namespace and name, that selects Alertmanager's pods by
+their standard label and isn't headless, as prometheus-community's
+prometheus and alertmanager charts and kube-prometheus-stack make one. Its
+port named http or http-web, as those charts name it, or else 9093. Empty
+when there is none, and under helm template, Argo CD or Flux, where lookup
+finds nothing. It uses the installer's access, never Themis's.
+*/}}
+{{- define "themis.alertmanagerFound" -}}
+{{- $found := "" -}}
+{{- range (lookup "v1" "Service" "" "").items | default list -}}
+{{- $selector := .spec.selector | default dict -}}
+{{- if and (not $found) (eq (toString (get $selector "app.kubernetes.io/name")) "alertmanager") (ne (toString .spec.clusterIP) "None") -}}
+{{- $port := 0 -}}
+{{- range .spec.ports -}}
+{{- if and (not $port) (has (toString .name) (list "http" "http-web")) }}{{ $port = int .port }}{{ end -}}
+{{- end -}}
+{{- range .spec.ports -}}
+{{- if and (not $port) (eq (int .port) 9093) }}{{ $port = 9093 }}{{ end -}}
+{{- end -}}
+{{- if $port }}{{ $found = printf "http://%s.%s.svc:%d" .metadata.name .metadata.namespace $port }}{{ end -}}
+{{- end -}}
+{{- end -}}
+{{- $found -}}
+{{- end }}
+
+{{/*
+The address the core reads Alertmanager at: the one set, or the one found.
+*/}}
+{{- define "themis.alertmanagerAddress" -}}
+{{- $am := include "themis.alertmanagerValues" . | fromJson -}}
+{{- $am.address | default (include "themis.alertmanagerFound" .) -}}
+{{- end }}
+
+{{/*
+The Secrets the core reads Alertmanager with, projected into one volume:
+its token, the password of its basic auth, its CA and a client
+certificate, each when set. They go only with the address set with them.
+*/}}
+{{- define "themis.alertmanagerSecrets" -}}
+{{- $am := include "themis.alertmanagerValues" . | fromJson -}}
+{{- $basic := $am.basicAuth | default dict -}}
+{{- $tls := $am.tls | default dict -}}
+{{- if include "themis.alertmanagerEnabled" . }}
+{{- if and (or $am.tokenSecret $basic.passwordSecret $tls.caSecret $tls.clientCertSecret $tls.insecureSkipVerify) (not $am.address) }}
+{{- fail "alerting.alertmanager.address is required with its token, basic auth or TLS settings. Themis sends them only to the address set with them." }}
+{{- end }}
+{{- if and $am.tokenSecret $basic.passwordSecret }}
+{{- fail "Set alerting.alertmanager.tokenSecret or alerting.alertmanager.basicAuth, not both." }}
+{{- end }}
+{{- with $am.tokenSecret }}
+- secret: {name: {{ . }}, items: [{key: token, path: token}]}
+{{- end }}
+{{- with $basic.passwordSecret }}
+- secret: {name: {{ . }}, items: [{key: password, path: password}]}
+{{- end }}
+{{- with $tls.caSecret }}
+- secret: {name: {{ . }}, items: [{key: ca.crt, path: ca.crt}]}
+{{- end }}
+{{- with $tls.clientCertSecret }}
+- secret: {name: {{ . }}, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
 The Secrets the core reads Prometheus with, projected into one volume: its
 token, its CA and a client certificate, each when set. Empty without any, or
 without an address.

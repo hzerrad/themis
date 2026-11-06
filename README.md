@@ -54,7 +54,7 @@ Themis supports the same Kubernetes releases the Kubernetes project maintains: t
 | Dependency | Supported |
 |---|---|
 | Kubernetes | 1.35, 1.36, 1.37 |
-| Alertmanager | any release sending webhook payload version `4` |
+| Alertmanager | any release serving API v2, 0.16 or later; for the webhook, any sending payload version `4` |
 | Model | any OpenAI-compatible chat completions endpoint with JSON-schema structured output, or Claude through Anthropic's API |
 
 CI runs the tests against every Kubernetes version in the window, and weekly against the next, unreleased one. Themis logs the warnings the API server sends, such as for a deprecated API, and counts them in the `themis_kube_api_deprecation_warnings_total` metric.

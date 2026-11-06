@@ -83,7 +83,15 @@ kubectl -n themis create secret generic themis-initial-admin-gitops --from-liter
 
 ## Connect Alertmanager
 
-The **Status** page shows the exact steps for your install while no alerts arrive. Alertmanager must send alerts to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
+Themis reads the active alerts from Alertmanager's API every 15 seconds. When Alertmanager runs in the cluster, set nothing: at install, the chart finds its Service with Helm's `lookup`, as prometheus-community's prometheus chart and kube-prometheus-stack install it, and `helm install` prints the address it reads. The lookup uses your access, and Themis gets no permission to list Services. Argo CD and Flux don't run `lookup`: set `alerting.alertmanager.address`, or the address on the **Setup** page.
+
+```bash
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set alerting.alertmanager.address=http://alertmanager-operated.monitoring:9093 \
+  --set 'alerting.alertmanager.matchers={cluster="prod-eu"}'   # for an Alertmanager several clusters share
+```
+
+An Alertmanager that needs a token, basic auth or its own CA gets them with its address, in `alerting.alertmanager`. To have Alertmanager send alerts to Themis's webhook instead, set `alerting.alertmanager.enabled=false`: the **Setup** page then shows the steps for your install. Alertmanager sends to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
 
 ## Open the UI
 
@@ -91,7 +99,7 @@ The **Status** page shows the exact steps for your install while no alerts arriv
 kubectl -n themis port-forward deploy/themis-core 8090:8080
 ```
 
-Then open <http://localhost:8090>. Themis starts once an admin account exists, and serves nothing else until then. Alerts are refused, and Alertmanager sends them again later. Sign in with the initial admin password to create the first admin account. The chart generates it once, in the `themis-initial-admin` Secret, and keeps it across upgrades:
+Then open <http://localhost:8090>. Themis starts once an admin account exists, and serves nothing else until then. It reads no alerts before. Sign in with the initial admin password to create the first admin account. The chart generates it once, in the `themis-initial-admin` Secret, and keeps it across upgrades:
 
 ```bash
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
@@ -154,6 +162,15 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
 | `telemetry.otlp.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the collector, on ports 4317 and 4318 |
 | `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
+| `alerting.alertmanager.enabled` | `true` | Read the active alerts from Alertmanager's API. Off, Alertmanager must send them to Themis's webhook |
+| `alerting.alertmanager.address` | `""` | Alertmanager's base URL. Empty: the chart looks for one in the cluster at install, or the Setup page sets it |
+| `alerting.alertmanager.tokenSecret` | `""` | A Secret with a `token` key, sent as a bearer token. Needs `address` |
+| `alerting.alertmanager.basicAuth.username`, `.passwordSecret` | `""` | Basic auth: a username, and a Secret with a `password` key. Needs `address` |
+| `alerting.alertmanager.tls.caSecret` | `""` | A Secret with a `ca.crt` key: the CA that signs Alertmanager's certificate. Needs `address` |
+| `alerting.alertmanager.tls.clientCertSecret` | `""` | A `kubernetes.io/tls` Secret, for an Alertmanager that asks for a client certificate. Needs `address` |
+| `alerting.alertmanager.tls.insecureSkipVerify` | `false` | Accept any certificate. Only for trying Themis |
+| `alerting.alertmanager.matchers` | `[]` | Matchers that narrow the alerts read, such as `cluster="prod-eu"` |
+| `alerting.alertmanager.interval` | `15s` | How often Alertmanager is read |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |

@@ -80,7 +80,7 @@ func healthy() (*statuspage.Checker, *fakeStore) {
 		Store: s, Access: fakeAccess{},
 		Metrics:  fakeMetrics{{Source: metrics.Prometheus, History: true}, {Source: metrics.Kubernetes}},
 		Executor: "themis-executor:9091", Dial: func(context.Context, string) error { return nil },
-		InitialAdmin: true, Now: func() time.Time { return now },
+		InitialAdmin: true, Now: func() time.Time { return now }, ReadEvery: 15 * time.Second,
 	}, s
 }
 
@@ -166,6 +166,25 @@ func TestChecks_Problems(t *testing.T) {
 		"refused without an admin account": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now, Detail: statuspage.RefusedNoAdminAccount}
 		}, "Alerts", statuspage.Waiting, "Refused while no admin account existed."},
+		"reading": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Second)}}
+		}, "Alerts", statuspage.OK, "Reading from http://am.monitoring:9093 every 15 s."},
+		"not read yet": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: "http://other:9093", ReadAt: now}}
+		}, "Alerts", statuspage.Waiting, "Reading from http://am.monitoring:9093 every 15 s. Not read yet."},
+		"alertmanager unreachable": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{
+				FailedAt: now, FailureKind: store.ReadUnreachable, Failure: "alertmanager at http://am.monitoring:9093 doesn't answer: connection refused",
+			}}
+		}, "Alerts", statuspage.Problem, "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused."},
+		"reading stopped": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Minute)}}
+		}, "Alerts", statuspage.Problem, "Reading from http://am.monitoring:9093 stopped."},
+		"no alertmanager address": {func(c *statuspage.Checker, s *fakeStore) {
+			c.Alertmanager = reading{}
+			delete(s.heartbeats, store.HeartbeatAlertmanager)
+		}, "Alerts", statuspage.Warn, "No Alertmanager address."},
+		"no address, but the webhook works": {func(c *statuspage.Checker, _ *fakeStore) { c.Alertmanager = reading{} }, "Alerts", statuspage.OK, "Received through the \"themis\" receiver."},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
 		}, "Namespaces", statuspage.Problem, "Not allowed in payments: list pods or read deployments."},
@@ -206,6 +225,25 @@ func TestChecks_Problems(t *testing.T) {
 			}
 		})
 	}
+}
+
+const amAddress = "http://am.monitoring:9093"
+
+// reading is an Alertmanager Themis reads at address, last read as last.
+type reading struct {
+	address string
+	last    store.AlertRead
+}
+
+func (r reading) View(context.Context) (settings.AlertmanagerView, error) {
+	return settings.AlertmanagerView{Address: r.address, Reading: true}, nil
+}
+
+func (r reading) LastRead(context.Context) (store.AlertRead, error) {
+	if r.last == (store.AlertRead{}) {
+		return store.AlertRead{}, store.ErrNotFound
+	}
+	return r.last, nil
 }
 
 type fixedView settings.ModelView

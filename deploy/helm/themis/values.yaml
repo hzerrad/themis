@@ -25,6 +25,42 @@ telemetry:
 enrolledNamespaces:
   - shop
 
+# Where Themis gets alerts. By default it reads the active alerts from
+# Alertmanager's API: nothing to configure in Alertmanager.
+alerting:
+  alertmanager:
+    # Off: Themis reads nothing, and Alertmanager must send alerts to its
+    # webhook instead.
+    enabled: true
+    # Alertmanager's base URL, for example
+    # http://alertmanager-operated.monitoring:9093. Empty: the chart looks for
+    # an Alertmanager Service in the cluster at install, with Helm's lookup,
+    # which Argo CD and Flux don't run. Without one, the Setup page asks.
+    address: ""
+    # A Secret in the release namespace with a token key, sent as a bearer
+    # token, if Alertmanager needs one. Needs address.
+    tokenSecret: ""
+    # A username, and a Secret with a password key, if Alertmanager needs
+    # basic auth. Needs address.
+    basicAuth:
+      username: ""
+      passwordSecret: ""
+    tls:
+      # A Secret with a ca.crt key: the CA that signs Alertmanager's
+      # certificate, when the system's don't. Needs address.
+      caSecret: ""
+      # A kubernetes.io/tls Secret, for an Alertmanager that asks for a
+      # client certificate. Needs address.
+      clientCertSecret: ""
+      # Accept any certificate. Only for trying Themis.
+      insecureSkipVerify: false
+    # Matchers that narrow the alerts read, beyond the names the scenario
+    # packs answer, such as ['cluster="prod-eu"'] for an Alertmanager several
+    # clusters share.
+    matchers: []
+    # How often Alertmanager is read.
+    interval: 15s
+
 database:
   # A Secret with a DATABASE_URL key. Empty uses the bundled PostgreSQL.
   existingSecret: ""

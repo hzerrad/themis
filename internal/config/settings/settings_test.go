@@ -220,3 +220,57 @@ func TestModel_ChangedKey(t *testing.T) {
 		t.Errorf("reading with another key: %v", err)
 	}
 }
+
+// The install's address wins; one set in setup replaces the one the chart
+// found, and removing it brings that back.
+func TestAlertmanager_WhereTheAddressComesFrom(t *testing.T) {
+	const found, set = "http://monitoring-alertmanager.monitoring.svc:9093", "http://alertmanager.observability:9093"
+	view := func(s *settings.Settings) settings.AlertmanagerView {
+		t.Helper()
+		v, err := s.Alertmanager(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	installed := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Address: set}}
+	if v := view(installed); v.Address != set || v.From != settings.FromInstall || !v.Reading {
+		t.Errorf("set at install = %+v", v)
+	}
+	if err := installed.SetAlertmanager(t.Context(), found, "alice"); !errors.Is(err, settings.ErrSetByInstall) {
+		t.Errorf("changing the install's address: %v, want ErrSetByInstall", err)
+	}
+
+	s := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Address: found, Found: true}}
+	if v := view(s); v.Address != found || v.From != settings.FromFound {
+		t.Errorf("found at install = %+v", v)
+	}
+	if err := s.SetAlertmanager(t.Context(), " "+set+"/ ", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if v := view(s); v.Address != set || v.From != settings.FromSetup || v.Found != found {
+		t.Errorf("set in setup = %+v", v)
+	}
+	if err := s.SetAlertmanager(t.Context(), "", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if v := view(s); v.Address != found || v.From != settings.FromFound {
+		t.Errorf("removed in setup = %+v, want the one found", v)
+	}
+	if err := s.SetAlertmanager(t.Context(), "alertmanager:9093", "alice"); !errors.Is(err, settings.ErrNotHTTPURL) {
+		t.Errorf("an address without a scheme: %v", err)
+	}
+
+	none := &settings.Settings{Store: memStore{}}
+	if v := view(none); v.Address != "" || v.From != "" || !v.Reading {
+		t.Errorf("nothing set = %+v", v)
+	}
+	off := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Disabled: true}}
+	if v := view(off); v.Reading || v.Address != "" {
+		t.Errorf("reading off = %+v", v)
+	}
+	if err := off.SetAlertmanager(t.Context(), set, "alice"); !errors.Is(err, settings.ErrReadingOff) {
+		t.Errorf("setting an address with reading off: %v", err)
+	}
+}

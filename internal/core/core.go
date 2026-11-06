@@ -220,11 +220,19 @@ func Run(ctx context.Context, o Options) error {
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
+	// The Alertmanager Themis reads. Its address isn't secret, so setup can
+	// set it without a settings key.
+	reading := cfg.Alerting.Alertmanager
+	connection := &alertmanager.Connection{
+		Install:   reading,
+		Addresses: &settings.Settings{Store: s, InstallAlertmanager: reading},
+		Reads:     s,
+	}
+	telemetry.AddUnscopedWorker(workers, &alertmanager.ReadWorker{
+		Connection: connection, Config: current, Store: s, Receiver: intake.NewReceiver(s), Gate: gate, Logger: log,
+	})
 
-	runner, err := s.NewWorkerRunner(workers, map[string]int{
-		river.QueueDefault:  o.Workers,
-		investigation.Queue: o.Workers,
-	}, []*river.PeriodicJob{
+	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
 			return governance.ExpireArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}),
@@ -234,7 +242,16 @@ func Run(ctx context.Context, o Options) error {
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
 			return investigation.CloseUndecidedArgs{}, nil
 		}, nil),
-	}, log)
+	}
+	if !reading.Disabled {
+		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(reading.EffectiveInterval()), func() (river.JobArgs, *river.InsertOpts) {
+			return alertmanager.ReadArgs{}, nil
+		}, &river.PeriodicJobOpts{RunOnStart: true}))
+	}
+	runner, err := s.NewWorkerRunner(workers, map[string]int{
+		river.QueueDefault:  o.Workers,
+		investigation.Queue: o.Workers,
+	}, periodic, log)
 	if err != nil {
 		return err
 	}
@@ -261,6 +278,7 @@ func Run(ctx context.Context, o Options) error {
 	checker := &statuspage.Checker{
 		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
 		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,
+		Alertmanager: connection, ReadEvery: reading.EffectiveInterval(),
 	}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
@@ -276,7 +294,7 @@ func Run(ctx context.Context, o Options) error {
 			api.ModelTests, investigators.ModelTests = tests, tests
 		}
 	}
-	api.Config, api.Intake = current, cfg.Intake
+	api.Config, api.Intake, api.Alertmanager = current, cfg.Intake, connection
 	if cfg.Resources != nil {
 		api.Namespace = cfg.Resources.Namespace
 	}

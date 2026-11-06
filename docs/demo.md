@@ -44,8 +44,8 @@ Small local models work, but make more mistakes: a wrong target, or giving up ea
 ## 3. Install Themis and monitoring
 
 ```bash
+make monitoring-up                            # Prometheus, kube-state-metrics and Alertmanager, first, so the chart finds Alertmanager
 make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the executor
-make monitoring-up                            # Prometheus, kube-state-metrics, Alertmanager wired to Themis
 make demo-up                                  # the healthy checkout workload in namespace shop
 ```
 
@@ -57,7 +57,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
+Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Themis reads no alerts before that. The list is empty for now.
 
 ## 5. Break the rollout
 
@@ -69,7 +69,7 @@ What happens next, and roughly when:
 
 | After | You see |
 |---|---|
-| ~1 min | A checkout pod crash-loops. Alertmanager posts the alert and an incident appears, **investigating**. |
+| ~1 min | A checkout pod crash-loops. Themis reads the alert from Alertmanager and an incident appears, **investigating**. |
 | ~1–5 min | Themis and the model read the evidence, including the failing pod's logs, and suggest a fix. The incident **needs your approval**. |
 
 Open the incident. From the top:

@@ -121,6 +121,18 @@ func TestValidate_Errors(t *testing.T) {
 		{"client certificate without key", func(c *config.Config) {
 			c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus", TLS: config.TLS{CertFile: "/c"}}
 		}, "metrics.prometheus.tls"},
+		{"alertmanager not http", func(c *config.Config) { c.Alerting.Alertmanager.Address = "alertmanager:9093" }, "alerting.alertmanager.address"},
+		{"credentials for an address found", func(c *config.Config) {
+			c.Alerting.Alertmanager = config.Alertmanager{Address: "http://am:9093", Found: true, BearerTokenFile: "/t"}
+		}, "alerting.alertmanager"},
+		{"token and basic auth", func(c *config.Config) {
+			c.Alerting.Alertmanager = config.Alertmanager{Address: "http://am:9093", BearerTokenFile: "/t", BasicAuth: &config.BasicAuth{Username: "u", PasswordFile: "/p"}}
+		}, "alerting.alertmanager"},
+		{"basic auth without a password", func(c *config.Config) {
+			c.Alerting.Alertmanager = config.Alertmanager{Address: "http://am:9093", BasicAuth: &config.BasicAuth{Username: "u"}}
+		}, "alerting.alertmanager.basicAuth"},
+		{"a matcher Alertmanager can't read", func(c *config.Config) { c.Alerting.Alertmanager.Matchers = []string{"cluster prod"} }, "alerting.alertmanager.matchers"},
+		{"reading too often", func(c *config.Config) { c.Alerting.Alertmanager.Interval.Duration = time.Millisecond }, "alerting.alertmanager.interval"},
 		{"unknown schema dialect", func(c *config.Config) { c.Model.SchemaDialect = "strict" }, "model.schemaDialect"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"initial admin without its password", func(c *config.Config) { c.API.InitialAdmin = &config.InitialAdmin{} }, "api.initialAdmin.passwordFile"},

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# End-to-end test of the bad-rollout scenario on kind: real Alertmanager,
-# Themis with the executor, and a fake model. It asserts on incident states
-# and the audit trail, never on model wording.
+# End-to-end test of the bad-rollout scenario on kind: a real Alertmanager,
+# which Themis reads, Themis with the executor, and a fake model. It asserts
+# on incident states and the audit trail, never on model wording.
 #
 #   test/e2e/run.sh            create the cluster if needed, install, test
 #   KEEP=1 test/e2e/run.sh     leave everything running afterwards
@@ -141,9 +141,10 @@ $K -n themis create configmap fake-model --from-file=test/e2e/fake_model.py --dr
 $K -n themis create secret generic e2e-webhook --from-literal=url=http://webhook-sink.themis.svc:8080/ --from-literal=token=e2e-token \
   --dry-run=client -o yaml | $K apply -f - >/dev/null
 $K -n themis apply -f test/e2e/manifests.yaml >/dev/null
-helm --kube-context "$CTX" upgrade --install themis deploy/helm/themis -n themis -f test/e2e/values.yaml --wait --timeout 5m >/dev/null
+# Monitoring first: the chart finds its Alertmanager at install.
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
 make -s monitoring-up KIND_CLUSTER="$CLUSTER" >/dev/null
+helm --kube-context "$CTX" upgrade --install themis deploy/helm/themis -n themis -f test/e2e/values.yaml --wait --timeout 5m >/dev/null
 $K -n themis rollout status deploy/fake-model deploy/webhook-sink --timeout=180s >/dev/null
 
 $K -n themis port-forward svc/themis-core $PORT:8080 18182:8082 >/dev/null 2>&1 &
@@ -176,6 +177,7 @@ rm -f "$BROWSER" "$FIRST"
 OWN=e2e-own-password-$RUN
 check "before an admin account, the token is refused" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 409 ]
 check "before an admin account, alerts are refused" [ "$(code -H "Authorization: Bearer $INTAKE" -d '{}')" = 503 ]
+check "before an admin account, Alertmanager isn't read" bash -c "! curl -sf http://127.0.0.1:18182/metrics | grep -q '^themis_intake_reads_total{'"
 check "the initial admin password in the chart's Secret signs in" [ "$(as "$BROWSER" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
 cp "$BROWSER" "$FIRST"
 check "it creates the first admin account, with its own password" [ "$(as "$BROWSER" POST /v1/accounts -d "{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$OWN\"}")" = 201 ]
@@ -183,6 +185,23 @@ check "which signs the browser in as it" [ "$(curl -s -b "$BROWSER" "$API/v1/me"
 check "and retires the initial admin password's session" [ "$(as "$FIRST" GET /v1/me)" = 401 ]
 check "and the password" [ "$(as "$FIRST" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 403 ]
 check "then the token reaches the API" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 200 ]
+
+# --- Reading Alertmanager ----------------------------------------------------
+
+log "reading Alertmanager"
+AM=http://monitoring-alertmanager.monitoring.svc:9093
+check "the chart found Alertmanager at install" [ "$(api /v1/settings/alertmanager | field 'd["from"] + " " + d["address"]')" = "found $AM" ]
+# alerts_state <timeout-seconds> prints the Alerts part's state and finding once it is ok.
+alerts_state() {
+  local deadline=$((SECONDS + $1)) got=""
+  while [ $SECONDS -lt $deadline ]; do
+    got=$(api /v1/status | field '[c["state"] + " " + c["summary"] for c in d["checks"] if c["name"] == "Alerts"][0]')
+    [ "${got%% *}" = ok ] && break
+    sleep 3
+  done
+  echo "$got"
+}
+check "Themis reads it once an admin account exists" [ "$(alerts_state 60)" = "ok Reading from $AM every 15 s." ]
 
 # --- Intake ------------------------------------------------------------------
 
@@ -451,7 +470,8 @@ check "the core serves the lifecycle and trust metrics" serves 18182 \
   themis_policy_decisions_total themis_gitops_refusals_total themis_approvals_total \
   themis_verification_outcomes_total themis_notifications_total themis_evidence_collected_total \
   themis_evidence_truncated_total themis_redactions_total themis_incidents \
-  themis_approvals_pending themis_oldest_pending_approval_age_seconds themis_metrics_collection_errors_total
+  themis_approvals_pending themis_oldest_pending_approval_age_seconds themis_metrics_collection_errors_total \
+  themis_intake_reads_total themis_intake_alerts_taken_total
 check "the executor serves the action metrics" serves 18183 themis_actions_total themis_incident_transitions_total
 check "the investigator serves the model metrics" serves 18184 \
   themis_model_requests_total themis_model_request_duration_seconds themis_model_tokens_total \

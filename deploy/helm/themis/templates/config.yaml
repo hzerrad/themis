@@ -10,6 +10,47 @@ data:
       bearerTokenFile: /var/run/secrets/themis/intake
       url: http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager
       tokenSecret: {{ include "themis.tokensSecret" . }}
+    alerting:
+      alertmanager:
+        {{- $am := include "themis.alertmanagerValues" . | fromJson }}
+        {{- if include "themis.alertmanagerEnabled" . }}
+        {{- $basic := $am.basicAuth | default dict }}
+        {{- $tls := $am.tls | default dict }}
+        {{- $_ := include "themis.alertmanagerSecrets" . }}
+        {{- with include "themis.alertmanagerAddress" . }}
+        address: {{ . | quote }}
+        {{- if not $am.address }}
+        found: true
+        {{- end }}
+        {{- end }}
+        {{- if $am.tokenSecret }}
+        bearerTokenFile: /var/run/secrets/themis-alertmanager/token
+        {{- end }}
+        {{- if $basic.passwordSecret }}
+        basicAuth:
+          username: {{ required "alerting.alertmanager.basicAuth.username is required with its passwordSecret" $basic.username | quote }}
+          passwordFile: /var/run/secrets/themis-alertmanager/password
+        {{- end }}
+        {{- if or $tls.caSecret $tls.clientCertSecret $tls.insecureSkipVerify }}
+        tls:
+          {{- if $tls.caSecret }}
+          caFile: /var/run/secrets/themis-alertmanager/ca.crt
+          {{- end }}
+          {{- if $tls.clientCertSecret }}
+          certFile: /var/run/secrets/themis-alertmanager/tls.crt
+          keyFile: /var/run/secrets/themis-alertmanager/tls.key
+          {{- end }}
+          {{- if $tls.insecureSkipVerify }}
+          insecureSkipVerify: true
+          {{- end }}
+        {{- end }}
+        {{- with $am.matchers }}
+        matchers: {{ toJson . }}
+        {{- end }}
+        interval: {{ $am.interval | default "15s" | quote }}
+        {{- else }}
+        disabled: true
+        {{- end }}
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
       {{- if not (include "themis.modelEnabled" .) }}
