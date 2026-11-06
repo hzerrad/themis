@@ -33,7 +33,7 @@ To install Themis in a cluster, see the **[Helm chart](deploy/helm/themis/README
 - **Evidence before assertion.** Diagnoses cite the facts that support and contradict them, and `unknown` is a real answer that blocks action. Free text from the cluster, such as logs, can raise a question but never justify a fix on its own.
 - **Verification is mandatory.** Every action is followed by a measured outcome.
 - **Bring your own model.** Works with hosted providers or local, air-gapped endpoints such as Ollama or vLLM.
-- **Measured, not claimed.** A replayable evaluation suite, including prompt-injection attacks, runs on every change; CI fails if a harmful fix would reach a person. See [eval/README.md](eval/README.md).
+- **Measured, not claimed.** A replayable evaluation suite, including prompt-injection attacks, runs on every change; CI fails if a harmful fix would reach a person. See the [results across models](docs/evaluation.md) and [how it works](eval/README.md).
 
 ## Architecture
 
