@@ -25,14 +25,14 @@ func TestEvaluate(t *testing.T) {
 		final     bool
 		says      string
 	}{
-		"changed by someone else":        {capability.Reading{Changed: true, Health: capability.Healthy}, time.Hour, early, verification.Inconclusive, true, "changed outside Themis"},
-		"healthy long enough":            {reading(capability.Healthy), 2 * time.Minute, early, verification.Resolved, true, "The fix worked"},
+		"changed by someone else":        {capability.Reading{Changed: true, Health: capability.Healthy}, time.Hour, early, verification.Inconclusive, true, "Inconclusive: the workload was changed outside Themis while Themis verified the fix. Referred to a person."},
+		"healthy long enough":            {reading(capability.Healthy), 2 * time.Minute, early, verification.Resolved, true, "Fixed. The workload recovered and held: "},
 		"healthy, not yet long enough":   {reading(capability.Healthy), time.Minute, early, "", false, ""},
 		"not healthy before the window":  {reading(capability.Unchanged), 0, early, "", false, ""},
-		"healthy too briefly at the end": {reading(capability.Healthy), time.Minute, late, verification.Contained, true, "isn't stable"},
-		"improved at the end":            {reading(capability.Improved), 0, late, verification.Contained, true, "isn't stable"},
-		"worse at the end":               {reading(capability.Worse), 0, late, verification.Worsened, true, "made things worse"},
-		"unchanged at the end":           {reading(capability.Unchanged), 0, late, verification.Unchanged, true, "didn't help"},
+		"healthy too briefly at the end": {reading(capability.Healthy), time.Minute, late, verification.Contained, true, "Partly recovered: "},
+		"improved at the end":            {reading(capability.Improved), 0, late, verification.Contained, true, "Partly recovered: "},
+		"worse at the end":               {reading(capability.Worse), 0, late, verification.Worsened, true, "Worse after the fix: "},
+		"unchanged at the end":           {reading(capability.Unchanged), 0, late, verification.Unchanged, true, "The fix didn't help: "},
 	} {
 		got, final := verification.Evaluate(tc.reading, tc.stableFor, c, tc.elapsed)
 		if got != tc.want || final != tc.final {
@@ -43,7 +43,7 @@ func TestEvaluate(t *testing.T) {
 			continue
 		}
 		says := verification.Explain(got, tc.reading)
-		if !strings.Contains(says, tc.says) || !strings.HasSuffix(says, tc.reading.Facts) {
+		if !strings.HasPrefix(says, tc.says) || !strings.Contains(says, tc.reading.Facts) {
 			t.Errorf("%s: explained as %q, want %q and what the fix saw", name, says, tc.says)
 		}
 	}
