@@ -38,7 +38,9 @@ type Leases struct {
 	Config config.Provider
 	// Evidence is the templates an investigator may ask for.
 	Evidence evidence.Registry
-	Reader   client.Reader
+	// Checks say in plain words what each check finds.
+	Checks check.List
+	Reader client.Reader
 	// Suggestions takes the fixes suggested, and hands the next to governance.
 	Suggestions *suggestion.Inbox
 	Logger      *slog.Logger

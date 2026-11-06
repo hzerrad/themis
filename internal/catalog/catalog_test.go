@@ -41,6 +41,9 @@ func TestCheckConfig(t *testing.T) {
 			c.Profiles[0].Checks = []string{"rollout_recent"}
 			c.Profiles[0].JustifiedBy = map[string][]string{"deployment.rollback-to-revision": {"failure_onset_after_rollout"}}
 		}, `profile p: justifiedBy deployment.rollback-to-revision names the check "failure_onset_after_rollout", which the profile doesn't run`},
+		{"policy reads a check the profile can't answer", func(c *config.Config) {
+			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates.config_changed_before_failure != "false"`, Decision: config.DecisionDeny}}
+		}, `profile p: rule r reads the check "config_changed_before_failure", which needs the evidence template "referenced_config" in evidence.initial`},
 		{"unknown fix for an outside agent", func(c *config.Config) {
 			c.ExternalProposals.Sources = []config.ProposalSource{{ServiceAccount: "agents/triage", Capabilities: []string{"delete.everything"}}}
 		}, `externalProposals: sources[0].capabilities[0]: unknown capability "delete.everything"`},
@@ -74,7 +77,7 @@ rootCauses: [{name: application_bug, description: the code fails}]
 profile:
   priority: 10
   match: {alertNames: [KubePodCrashLooping], targetKinds: [Deployment.apps]}
-  evidence: {allowed: [pod_states]}
+  evidence: {initial: [pod_states], allowed: [pod_states, target_events]}
   checks: [has_pods]
   policy:
     rules: [{name: r, when: 'predicates.has_pods == "true"', decision: require_approval}]
@@ -147,8 +150,8 @@ func TestBuild_LoadsPacks(t *testing.T) {
 			"scenario pack crashes: check gitops_managed: already defined by Themis",
 		},
 		{
-			"profile the catalog can't run", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "[pod_states]", "[pod_state]") },
-			`scenario pack crashes: profile: unknown evidence template "pod_state"`,
+			"profile the catalog can't run", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "target_events]", "target_event]") },
+			`scenario pack crashes: profile: unknown evidence template "target_event"`,
 		},
 		{
 			"priority another pack has", func(f fstest.MapFS) { replace(f, "crashes/scenario.yaml", "priority: 10", "priority: 100") },

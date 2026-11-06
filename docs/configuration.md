@@ -256,7 +256,7 @@ No template returns pod specs, where environment variables often hold literal se
 
 Deterministic facts, decided from the evidence by checks ([how a check is written](checks.md)): Themis's own, which every profile may run, and those the scenario packs bring. Each is `true`, `false` or `unknown`, and cites the evidence it used. `unknown` means the evidence cannot decide; policy should treat it as *not true*.
 
-A profile runs every check unless its `checks` lists the ones to run, in the order it lists them. Whenever an incident's profiles offer a fix, Themis also runs `gitops_managed`, and reads `rollout_history` for it, whether or not a profile names them: [whether Themis may change the workload at all](#gitops) depends on it. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused.
+A profile runs every check unless its `checks` lists the ones to run, in the order it lists them. Whenever an incident's profiles offer a fix, Themis also runs `gitops_managed`, and reads `rollout_history` for it, whether or not a profile names them: [whether Themis may change the workload at all](#gitops) depends on it. A name Themis doesn't have stops Themis from starting, or for a custom resource, keeps the profile from applying. Policy rules see only the checks the profile runs, so a profile whose rules read a check it doesn't run, or a check that doesn't exist, is refused the same way, with a message naming the rule. Without that, the rule couldn't be evaluated, and a rule that can't be evaluated denies: every fix would be refused. So is a profile whose rules or justifying checks read a check without the evidence it needs in `evidence.initial`, such as `config_changed_before_failure` without `referenced_config`: the check would always be `unknown`.
 
 Themis's own checks, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml):
 
@@ -277,7 +277,7 @@ The `rollout-regression` pack's:
 
 ### Capabilities
 
-A profile without `capabilities` is diagnosis only. Every fix writes with the target's resource version as a precondition, after a server-side dry run.
+A profile without `capabilities` is diagnosis only: when the investigation ends without a fix, and no profile of the incident offers one, Themis hands the incident to a person with what the checks found, such as "An image can't be pulled: inventory-84ddb6f89-6zthq/app (registry.example/shop/inventory:2.4.1) is waiting with ImagePullBackOff.", or says they found no cause. Every fix writes with the target's resource version as a precondition, after a server-side dry run.
 
 `deployment.rollback-to-revision` restores the pod template of a prior ReplicaSet revision, as `kubectl rollout undo` does.
 

@@ -238,7 +238,7 @@ func Run(ctx context.Context, o Options) error {
 		return &statuspage.Heartbeat{Store: s, Component: component, Logger: log}
 	}
 	suggestions := &suggestion.Inbox{Store: s, Config: current, Fixes: cat.Fixes, Logger: log}
-	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
+	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Investigations: leases, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
 		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions,
