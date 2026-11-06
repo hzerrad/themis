@@ -276,6 +276,16 @@ DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
 DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
 MODEL_NAME             ?= qwen3:8b
 OLLAMA_URL             ?= http://127.0.0.1:11434/v1
+# run-intelligence talks to Ollama unless MODEL_PROVIDER or MODEL_BASE_URL say
+# otherwise; anthropic with no MODEL_BASE_URL uses Anthropic's own API.
+MODEL_PROVIDER         ?= openai
+ifeq ($(MODEL_PROVIDER),anthropic)
+MODEL_BASE_URL         ?=
+else
+MODEL_BASE_URL         ?= $(OLLAMA_URL)
+endif
+# `make run` and `make run-executor` use the dev-db database unless DATABASE_URL is set.
+DEV_DB_ENV             = DATABASE_URL="$${DATABASE_URL:-$(DEV_DATABASE_URL)}"
 
 .PHONY: dev-db
 dev-db: ## Start a development PostgreSQL on 127.0.0.1:5432
@@ -291,22 +301,23 @@ dev-tokens:
 		test -s $$f || { openssl rand -hex 32 > $$f && chmod 600 $$f; }; done
 
 .PHONY: run
-run: dev-tokens ## Run themis-core locally against the kind cluster and $DATABASE_URL
-	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
-	go run ./cmd/themis-core --config scripts/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
-		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 --metrics-addr 127.0.0.1:8082
+run: dev-tokens ## Run themis-core locally against the kind cluster and the dev-db database
+	$(DEV_DB_ENV) go run ./cmd/themis-core --config scripts/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
+		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 \
+		--metrics-addr 127.0.0.1:8082 --setup-addr 127.0.0.1:8083
 
 .PHONY: run-executor
-run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and $DATABASE_URL
-	@test -n "$$DATABASE_URL" || { echo "DATABASE_URL is not set"; exit 1; }
-	go run ./cmd/themis-executor --kube-context kind-$(KIND_CLUSTER) --token-file $(DEV_EXECUTOR_TOKEN) \
-		--grpc-addr 127.0.0.1:9091 --probe-addr 127.0.0.1:8083
+run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and the dev-db database
+	$(DEV_DB_ENV) go run ./cmd/themis-executor --kube-context kind-$(KIND_CLUSTER) --token-file $(DEV_EXECUTOR_TOKEN) \
+		--grpc-addr 127.0.0.1:9091 --probe-addr 127.0.0.1:8091 --metrics-addr 127.0.0.1:8092
 
+# The investigator's /metrics would listen on every interface, so it is off here.
 .PHONY: run-intelligence
-run-intelligence: dev-tokens ## Run the investigator against a local Ollama
+run-intelligence: dev-tokens ## Run the investigator against a local Ollama, or the model MODEL_* names
 	THEMIS_CORE_ADDR=127.0.0.1:9090 THEMIS_TOKEN_FILE=$(CURDIR)/$(DEV_INVESTIGATOR_TOKEN) \
-		MODEL_BASE_URL=$(OLLAMA_URL) MODEL_NAME=$(MODEL_NAME) MODEL_ENDPOINT=ollama \
-		$(UV) run python -m themis_intelligence
+		MODEL_PROVIDER=$(MODEL_PROVIDER) MODEL_BASE_URL=$(MODEL_BASE_URL) MODEL_NAME=$(MODEL_NAME) \
+		MODEL_ENDPOINT=$(if $(filter $(OLLAMA_URL),$(MODEL_BASE_URL)),ollama,$(MODEL_PROVIDER)) $(if $(MODEL_API_KEY_FILE),MODEL_API_KEY_FILE=$(abspath $(MODEL_API_KEY_FILE))) \
+		$(UV) run python -m themis_intelligence --metrics-port 0
 
 .PHONY: demo-alert
 demo-alert: ## Post an alert for the crash-looping checkout pod to `make run`
