@@ -203,7 +203,7 @@ async def test_a_reply_cut_off_at_the_limit_is_its_own_error() -> None:
     assert result.usage.output_tokens == 100
 
 
-# The model gets the schema, strictly unless the endpoint turns that off.
+# The model gets the schema as it is, strictly unless the endpoint turns that off.
 @respx.mock
 async def test_strict_output_is_on_unless_the_endpoint_turns_it_off() -> None:
     route = respx.post(f"{BASE}/chat/completions").mock(
@@ -213,7 +213,7 @@ async def test_strict_output_is_on_unless_the_endpoint_turns_it_off() -> None:
     body = json.loads(route.calls.last.request.content)
     assert body["model"] == "qwen3"
     assert body["response_format"]["type"] == "json_schema"
-    assert "verdict" in json.dumps(body["response_format"]["json_schema"]["schema"])
+    assert body["response_format"]["json_schema"]["schema"] == Answer.model_json_schema()
     assert body["response_format"]["json_schema"]["strict"]
 
     loose = ModelClient(
@@ -226,3 +226,46 @@ async def test_strict_output_is_on_unless_the_endpoint_turns_it_off() -> None:
     assert not json.loads(route.calls.last.request.content)["response_format"]["json_schema"][
         "strict"
     ]
+
+
+class Size(BaseModel):
+    memory: str
+    cpu: str = ""
+
+
+class Sizing(BaseModel):
+    verdict: str
+    sizes: dict[str, Size]
+    note: str | None = None
+
+
+# OpenAI's strict mode gets every object closed, every property required, an
+# optional one nullable, and a map as entries; the reply is read back into
+# Themis's shape before it is validated.
+@respx.mock
+async def test_the_openai_strict_dialect_translates_the_schema_and_reads_the_reply_back() -> None:
+    entries = [{"key": "app", "value": {"memory": "1Gi", "cpu": None}}]
+    route = respx.post(f"{BASE}/chat/completions").mock(
+        return_value=reply(json.dumps({"verdict": "x", "sizes": entries, "note": None}))
+    )
+    openai = ModelClient(
+        adapter=OpenAICompatAdapter(base_url=BASE),
+        endpoint=Endpoint(
+            name="openai", model="m", ceiling="sensitive", schema_dialect="openai-strict"
+        ),
+        budget=Budget(max_tokens=10_000),
+    )
+    result = await openai.complete(request(), Sizing)
+    assert result.error is None and result.repair_attempts == 0
+    assert result.output == Sizing(verdict="x", sizes={"app": Size(memory="1Gi")})
+
+    sent = json.loads(route.calls.last.request.content)["response_format"]["json_schema"]
+    assert sent["strict"]
+    schema = sent["schema"]
+    assert (schema["additionalProperties"], schema["required"]) == (
+        False,
+        list(Sizing.model_fields),
+    )
+    size = schema["$defs"]["Size"]
+    assert size["required"] == ["memory", "cpu"]
+    assert {"type": "null"} in size["properties"]["cpu"]["anyOf"]

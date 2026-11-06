@@ -63,6 +63,9 @@ spec:
             {{- with .Values.model.temperature }}
             - {name: MODEL_TEMPERATURE, value: {{ . | quote }}}
             {{- end }}
+            {{- with .Values.model.schemaDialect }}
+            - {name: MODEL_SCHEMA_DIALECT, value: {{ . | quote }}}
+            {{- end }}
             {{- if not .Values.model.strictOutput }}
             - {name: MODEL_STRICT_OUTPUT, value: "false"}
             {{- end }}

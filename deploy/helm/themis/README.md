@@ -140,7 +140,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `model.tokenBudget` | `200000` | Tokens per investigation |
 | `model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`; for `anthropic`, `low`, `medium`, `high`, `xhigh` or `max`. Empty leaves the provider's default |
 | `model.maxOutputTokens` | `""` (`4096`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
-| `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Set `false` for OpenAI, which refuses Themis's schema in strict mode; replies are still checked |
+| `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way |
+| `model.schemaDialect` | `""` (`as-is`) | How the reply schema is sent: `as-is`, as Ollama and vLLM take it, or `openai-strict`, the form OpenAI's strict mode accepts. OpenAI needs `openai-strict` |
 | `model.outputLimitField` | `""` (`max_tokens`) | The field the output limit is sent in, `max_tokens` or `max_completion_tokens`. OpenAI's newer models need `max_completion_tokens` |
 | `model.temperature` | `""` (`0`) | The temperature sent: a number, or `default` to send none and leave the model's own, as OpenAI's newer models require |
 | `model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |

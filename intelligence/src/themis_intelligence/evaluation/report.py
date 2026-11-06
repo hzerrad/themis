@@ -44,6 +44,8 @@ class Provenance(BaseModel):
     # Empty means the provider's default.
     reasoning_effort: str = ""
     strict_output: bool = True
+    # How the reply schema was sent to an OpenAI-compatible API.
+    schema_dialect: str = "as-is"
     step_deadline_s: float = 120.0
     runs_per_scenario: int
     context_tokens: int | None
@@ -354,7 +356,8 @@ def to_markdown(r: Report) -> str:
         f" ({p.provider})",
         f"- Temperature {'the default' if p.temperature is None else f'{p.temperature:g}'}, "
         f"reasoning {p.reasoning_effort or 'the default'}, "
-        f"{'strict' if p.strict_output else 'best-effort'} structured output, "
+        f"{'strict' if p.strict_output else 'best-effort'} structured output"
+        f"{'' if p.schema_dialect == 'as-is' else f' ({p.schema_dialect})'}, "
         f"up to {p.max_output_tokens} output tokens (as {p.output_limit_field}), "
         f"context {context}, ceiling {p.ceiling}, {p.step_deadline_s:.0f}s per step",
         f"- {p.runs_per_scenario} runs per scenario",
