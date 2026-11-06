@@ -46,10 +46,10 @@ Small local models work, but make more mistakes: a wrong target, or giving up ea
 ```bash
 make monitoring-up                            # Prometheus, kube-state-metrics and Alertmanager, first, so the chart finds Alertmanager
 make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the executor
-make demo-up                                  # the healthy checkout workload in namespace shop
+make demo-up                                  # the healthy checkout, catalog and search workloads in namespace shop
 ```
 
-`monitoring-up` uses a fast alert rule: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace.
+`monitoring-up` installs the alert rules every scenario pack answers, as kube-prometheus-stack writes them but faster: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace. `themis-up` points Themis at its Prometheus, for the containers' memory and CPU figures.
 
 ## 4. Open the UI
 
@@ -57,7 +57,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Themis reads no alerts before that. The list is empty for now.
+Open it and sign in with the initial admin password. `make ui` prints the command that reads it, and reconnects by itself when the core restarts, such as after a `helm upgrade`. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Themis reads no alerts before that. The list is empty for now.
 
 ## 5. Break the rollout
 
@@ -103,6 +103,18 @@ Run `make demo-fix` to heal checkout between runs, then `make demo-break` again.
 - **Edit during verification.** Approve, then edit the Deployment while it is verifying. Themis says it can't tell whether the fix worked and hands the incident to a person: it never claims a success it can't prove.
 - **GitOps.** `kubectl --context kind-themis-dev -n shop annotate deploy/checkout argocd.argoproj.io/tracking-id=x`, then break it. Policy denies any change, so the incident closes without action.
 - **Escalation webhook.** Put a `url` key, and optionally a `token` key, in a Secret in namespace `themis`, then `helm upgrade` with `--reuse-values --set notifications.webhookSecret=<name>`. Every escalation is POSTed there as JSON.
+
+### Every scenario pack
+
+Each [scenario pack](scenarios.md) has a break of its own in `shop`, and a target that undoes it. The incident page names the packs that answered under **Scenario packs**. An alert several packs answer brings them all, and the investigator chooses among their fixes.
+
+- **rollout-regression.** `make demo-break`, the bad rollout above. Themis proposes rolling checkout back to the revision before. `make demo-fix` undoes it.
+- **oom-limit-too-low.** `make demo-break-oom` doubles the data catalog loads at start, to 64Mi, and restarts its pods, with no rollout. They peak at 95% of their 60Mi limit and are OOMKilled 3.5 minutes after each start. `KubePodOOMKilled` opens the incident about 5 minutes after the command. Themis refuses a higher memory limit until catalog's version has run 6 hours, then proposes one. Under **What Themis checked**: the OOM kills, the peak Prometheus measured, and when catalog rolled out. `make demo-fix-oom` undoes it.
+- **cpu-throttling.** `make demo-break-cpu` sends search 250m of CPU work, above its 200m limit, with no rollout. The kernel throttles it in nearly every period, and its logs say how far behind it falls. `CPUThrottlingHigh` opens the incident about 5.5 minutes after the command, once the throttling covers most of the 5 minutes over which Themis reads CPU use. Themis refuses a higher CPU limit until search's version has run 6 hours, then proposes one. Under **What Themis checked**: the share of periods throttled, and the CPU use against the limit. `make demo-fix-cpu` undoes it.
+- **probe-restart-storm.** `make demo-break-probes` deploys inventory, whose health check answers in 2 seconds and whose liveness probe allows 1. The kubelet restarts containers that work. `KubePodCrashLooping` opens the incident about 3 minutes later, and Themis proposes a longer liveness timeout, for your approval. Under **Evidence**: probe failures that are all timeouts, and logs where every health check answers. `make demo-fix-probes` sets the timeout to 3 seconds.
+- **stuck-pods.** `make demo-break-stuck` rolls checkout out to `busybox:1.73`, a tag that doesn't exist. The old pods keep serving. `KubeContainerWaiting` opens the incident about a minute and a half later, and `KubeDeploymentRolloutStuck` joins it after checkout's 10-minute progress deadline. Themis finds that the image can't be pulled and refers the incident to a person: it has no fix for stuck pods. `KubePodNotReady` opens a second incident for checkout, under probe-restart-storm, and its checks find the same. `make demo-fix` rolls checkout back.
+
+Both catalog and search break with no rollout, as load does. A new version may be what needs more memory or CPU, so the policy refuses a higher limit within 6 hours of a rollout, and the checks say when the workload rolled out. Break them 6 hours after `make demo-up` to see Themis propose a higher limit, for your approval. A change to their manifest starts the 6 hours again, and so does `make demo-break-oom` or `make demo-break-cpu` after Themis raised a limit: they apply the manifest as shipped.
 
 ## Clean up
 

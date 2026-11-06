@@ -2,7 +2,10 @@
 # rollout. `make demo-up` deploys a healthy revision 1; `make demo-break` sets
 # MODE=leak, which creates revision 2: its container fills memory until it is
 # OOMKilled, so the rollout gets stuck with the revision-1 pods still serving.
-# `make demo-fix` rolls back, the action Themis will propose.
+# `make demo-fix` rolls back, the action Themis will propose. For the
+# stuck-pods pack, `make demo-break-stuck` rolls it out to an image tag that
+# doesn't exist instead. This file holds namespace shop, the other sample
+# workloads' too.
 apiVersion: v1
 kind: Namespace
 metadata:

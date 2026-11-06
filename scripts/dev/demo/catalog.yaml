@@ -1,0 +1,112 @@
+# A workload for the local kind cluster that reproduces the oom-limit-too-low
+# pack's incident. catalog loads the catalog its feed describes into memory
+# when it starts: 32Mi, under its 60Mi limit. `make demo-break-oom` doubles
+# the feed to 64Mi and restarts catalog's pods, with no rollout: they peak at
+# 95% of their limit, then load past it and are OOMKilled, 3.5 minutes after
+# each start. Raising the memory limit is the fix; `make demo-fix-oom`
+# shrinks the feed back.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-feed
+  namespace: shop
+  labels:
+    app: catalog-feed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-feed
+  template:
+    metadata:
+      labels:
+        app: catalog-feed
+    spec:
+      containers:
+        - name: feed
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /www && echo "$SIZE_MI" > /www/size
+              exec httpd -f -p 8080 -h /www
+          env:
+            # How many Mi the catalog takes in memory.
+            - name: SIZE_MI
+              value: "32"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /size
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests:
+              memory: 4Mi
+            limits:
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-feed
+  namespace: shop
+spec:
+  selector:
+    app: catalog-feed
+  ports:
+    - port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  namespace: shop
+  labels:
+    app: catalog
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          # tail keeps the last lines it reads, and what it reads has no line
+          # end: it holds all of it. It is loaded 8Mi every 30 seconds, so
+          # Prometheus sees each step before the next.
+          args:
+            - |
+              until size=$(wget -qO- -T 2 http://catalog-feed:8080/size); do sleep 2; done
+              echo "catalog: loading ${size}Mi from the feed"
+              mkfifo /tmp/catalog
+              (
+                exec >/tmp/catalog
+                loaded=0
+                while [ "$loaded" -lt "$size" ]; do
+                  head -c 8m /dev/zero
+                  loaded=$((loaded + 8))
+                  echo "catalog: ${loaded}Mi of ${size}Mi loaded" >&2
+                  sleep 30
+                done
+                echo "catalog: loaded, serving" >&2
+                exec sleep 2147483647
+              ) &
+              exec tail /tmp/catalog
+          resources:
+            requests:
+              memory: 32Mi
+            limits:
+              memory: 60Mi

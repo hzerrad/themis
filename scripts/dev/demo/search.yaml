@@ -1,0 +1,113 @@
+# A workload for the local kind cluster that reproduces the cpu-throttling
+# pack's incident. search does the CPU work its feed sends, none at first.
+# `make demo-break-cpu` makes the feed send 250m of work, with no rollout:
+# more than search's 200m CPU limit allows, so the kernel throttles it in
+# nearly every period and it falls behind. A limit of 300m, 1.5 times the
+# current one, is enough. `make demo-fix-cpu` stops the work.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-feed
+  namespace: shop
+  labels:
+    app: search-feed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-feed
+  template:
+    metadata:
+      labels:
+        app: search-feed
+    spec:
+      containers:
+        - name: feed
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          args:
+            - |
+              mkdir -p /www && echo "$WORK_MILLICORES" > /www/work
+              exec httpd -f -p 8080 -h /www
+          env:
+            # How much CPU the work takes, in millicores.
+            - name: WORK_MILLICORES
+              value: "0"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /work
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests:
+              memory: 4Mi
+            limits:
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-feed
+  namespace: shop
+spec:
+  selector:
+    app: search-feed
+  ports:
+    - port: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  namespace: shop
+  labels:
+    app: search
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          # It spends the work's share of each second on CPU, by its own CPU
+          # time in /proc/self/stat against the clock in /proc/uptime, both
+          # in hundredths of a second. Within its limit it rests between
+          # turns; over it, it never rests. It asks the feed every 10s.
+          args:
+            - |
+              trap 'exit 0' TERM
+              work=0 next=0 t0=0 u0=0
+              while :; do
+                read -r up _ </proc/uptime
+                t=${up%.*}${up#*.}
+                read -r stat </proc/self/stat
+                set -- $stat
+                u=$((${14} + ${15}))
+                if [ "$t" -ge "$next" ]; then
+                  if w=$(wget -qO- -T 2 http://search-feed:8080/work) && [ "$w" != "$work" ]; then
+                    echo "search: the feed sends ${w}m of CPU work"
+                    work=$w t0=$t u0=$u
+                  fi
+                  behind=$((((t - t0) * work / 1000 - (u - u0)) / 100))
+                  [ "$behind" -gt 1 ] && echo "search: ${behind}s of CPU work behind the feed"
+                  next=$((t + 1000))
+                fi
+                [ $(((u - u0) * 1000)) -lt $(((t - t0) * work)) ] && continue
+                if [ "$work" -gt 0 ]; then sleep 0.01; else sleep 10; fi
+              done
+          resources:
+            requests:
+              cpu: 50m
+              memory: 8Mi
+            limits:
+              cpu: 200m
+              memory: 32Mi
