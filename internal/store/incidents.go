@@ -334,11 +334,12 @@ func (s *Store) SetObservedSpec(ctx context.Context, tx pgx.Tx, id, hash string)
 }
 
 // ReconcilableIncidents are open incidents not yet executing whose template
-// is known, oldest first.
+// is known, oldest first, those waiting for a person's suggested fix
+// included: a person may fix the workload by hand instead.
 func (s *Store) ReconcilableIncidents(ctx context.Context, limit int) ([]Incident, error) {
 	rows, err := s.pool.Query(ctx, `
 	SELECT `+incidentColumns+` FROM incidents
-	WHERE state IN ('investigating', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
+	WHERE state IN ('investigating', 'awaiting_suggestion', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
 	ORDER BY created_at LIMIT $1
 `, limit)
 	if err != nil {
