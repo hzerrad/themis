@@ -196,6 +196,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule no-raise-for-a-new-version forbids this fix."
+    "reason": "Policy rule no-raise-for-a-new-version of the cpu-throttling profile forbids this fix."
   }
 }

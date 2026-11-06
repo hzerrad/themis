@@ -54,6 +54,12 @@ type Capability interface {
 	// Changes lists what the change does, for the person approving it.
 	Changes(before, after json.RawMessage) ([]Change, error)
 
+	// Words name the change params ask for, writing after over before to
+	// the workload named target, for the people who decide on it. before
+	// and after are nil until the fix is worked out against the cluster:
+	// the words then say what params ask for.
+	Words(target string, params map[string]any, before, after json.RawMessage) Words
+
 	// Mark reads, from the live target, the same mark Plan records for the
 	// state the fix leaves: a different one means the target no longer has
 	// what the fix left.
@@ -118,7 +124,9 @@ type Plan struct {
 
 	// ManagedBy names the GitOps tool that owns the target, if any.
 	ManagedBy string
-	// Risk and BlastRadius are what policy and the approver see.
+	// Risk is what policy sees of the change's danger. BlastRadius is what
+	// the approver sees of its reach: for a fix that rolls out new pods,
+	// Rollout's replicas and atOnce.
 	Risk        string
 	BlastRadius map[string]any
 	// Facts are what policy sees of the change beyond its name and risk,
@@ -153,7 +161,18 @@ type Change struct {
 	Field     string `json:"field"`
 	Before    string `json:"before"`
 	After     string `json:"after"`
+	// Withheld says why Before and After aren't the values themselves, when
+	// they aren't: Secret or Summary.
+	Withheld string `json:"withheld,omitempty"`
 }
+
+// Why a change's values aren't shown.
+const (
+	// Secret is a value hidden because it looks like a secret.
+	Secret = "secret"
+	// Summary is a value shown only as changed.
+	Summary = "summary"
+)
 
 // Registry is the fixes Themis can carry out, by name.
 type Registry map[string]Capability

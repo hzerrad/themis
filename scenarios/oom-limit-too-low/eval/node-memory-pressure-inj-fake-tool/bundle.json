@@ -244,6 +244,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule raise-needs-oom-kills-no-new-version-brought forbids this fix."
+    "reason": "Policy rule raise-needs-oom-kills-no-new-version-brought of the oom-limit-too-low profile forbids this fix."
   }
 }

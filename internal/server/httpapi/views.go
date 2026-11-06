@@ -52,9 +52,11 @@ type causeView struct {
 type fixView struct {
 	Capability string         `json:"capability"`
 	Params     map[string]any `json:"params"`
+	// Words name the change, as its fix words it.
+	Words capability.Words `json:"words"`
 }
 
-func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryView {
+func viewSummary(s store.IncidentSummary, target string, causes []catalog.RootCause, fixes capability.Registry) *summaryView {
 	v := &summaryView{Reason: s.Reason, From: string(s.From), Rule: s.Rule}
 	if s.Cause != "" {
 		v.Cause = &causeView{Name: s.Cause}
@@ -65,7 +67,7 @@ func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryVi
 		}
 	}
 	if s.Capability != "" {
-		v.Fix = &fixView{Capability: s.Capability, Params: s.Params}
+		v.Fix = &fixView{Capability: s.Capability, Params: s.Params, Words: fixes.Words(s.Capability, target, s.Params, s.PreState, s.Desired)}
 	}
 	return v
 }
@@ -124,6 +126,16 @@ type actionView struct {
 	Changes           []capability.Change `json:",omitempty"`
 	Execution         *store.Execution    `json:",omitempty"`
 	Verification      *verificationView   `json:",omitempty"`
+	// Words name the change, as its fix words it.
+	Words capability.Words
+}
+
+// proposalView is a suggested fix, with the change it asks for named.
+type proposalView struct {
+	store.Proposal
+	// Words name the change, from its parameters alone: it may never have
+	// been worked out against the cluster.
+	Words capability.Words
 }
 
 type verificationView struct {
@@ -143,8 +155,12 @@ type detailView struct {
 	// in its pack's words.
 	Causes        map[string]string
 	Investigation *store.InvestigationRecord `json:",omitempty"`
-	Proposals     []store.Proposal
+	Proposals     []proposalView
 	Actions       []actionView
+	// Basis says, by name, what each check that came out true and only
+	// says whether figures are there rests on, such as "Prometheus's
+	// container CPU history over 1h".
+	Basis map[string]string `json:",omitempty"`
 
 	// Headline opens an investigation that couldn't decide: whether Themis
 	// couldn't see enough, or saw it all and found no clear answer.
@@ -211,6 +227,9 @@ type checkWords struct {
 	Topic string `json:"topic,omitempty"`
 	// Reads are the evidence templates it reads.
 	Reads []string `json:"reads,omitempty"`
+	// Availability is set for a check that says only whether figures other
+	// checks need are there: people read it as what they rest on.
+	Availability bool `json:"availability,omitempty"`
 }
 
 func viewAction(a store.Action, fixes capability.Registry) actionView {
@@ -220,6 +239,6 @@ func viewAction(a store.Action, fixes capability.Registry) actionView {
 		Target: a.Target, Params: a.Params, BlastRadius: a.BlastRadius, Risk: a.Risk,
 		Decision: a.Decision, DecisionReason: a.DecisionReason, PolicyID: a.PolicyID, PolicyDigest: a.PolicyDigest,
 		Digest: a.Digest, State: a.State, ExpiresAt: a.ExpiresAt, CreatedAt: a.CreatedAt,
-		Changes: changes(a, fixes),
+		Changes: changes(a, fixes), Words: fixes.Words(a.Capability, a.Target.Name, a.Params, a.PreState, a.Desired),
 	}
 }

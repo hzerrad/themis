@@ -3,7 +3,6 @@ package probes
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -107,13 +106,4 @@ func facts(edits []edit, container string) map[string]string {
 		out[key+".before"] = strconv.Itoa(int(e.before))
 	}
 	return out
-}
-
-// done says what edits did, once applied.
-func done(edits []edit, container string) string {
-	parts := make([]string, 0, len(edits))
-	for _, e := range edits {
-		parts = append(parts, fmt.Sprintf("%s probe %s %d → %d", e.kind, e.field, e.before, e.after))
-	}
-	return fmt.Sprintf("Changed the probes of container %s: %s.", container, strings.Join(parts, ", "))
 }

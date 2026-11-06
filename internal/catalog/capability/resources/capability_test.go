@@ -130,7 +130,7 @@ func TestPlan(t *testing.T) {
 				"containers": "app", "memory": "increase", "memory.ratio": "2",
 				"app.memory.limit": "increase", "app.memory.limit.before": "256Mi", "app.memory.limit.after": "512Mi", "app.memory.limit.ratio": "2",
 			},
-			done: "Set the memory limit of app to 512Mi.",
+			done: "Raised the memory limit of checkout's app container from 256Mi to 512Mi.",
 		},
 		"sets one CPU value and lowers another": {
 			params: set("app", map[string]string{"limits.cpu": "1", "requests.cpu": "50m"}),
@@ -139,7 +139,7 @@ func TestPlan(t *testing.T) {
 				"app.cpu.request": "decrease", "app.cpu.request.before": "100m", "app.cpu.request.after": "50m", "app.cpu.request.ratio": "0.5",
 				"app.cpu.limit": "set", "app.cpu.limit.before": "not set", "app.cpu.limit.after": "1",
 			},
-			done: "Set the CPU request of app to 50m, the CPU limit of app to 1.",
+			done: "Changed the CPU request and CPU limit of checkout's app container.",
 		},
 		"no such container": {
 			params:  set("web", map[string]string{"limits.memory": "512Mi"}),

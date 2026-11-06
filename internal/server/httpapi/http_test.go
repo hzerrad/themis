@@ -245,6 +245,7 @@ func TestListIncidents(t *testing.T) {
 			Fix   struct {
 				Capability string
 				Params     map[string]any
+				Words      struct{ Noun, Act string }
 			}
 			Rule, Reason, From string
 		}
@@ -259,7 +260,8 @@ func TestListIncidents(t *testing.T) {
 	if sum.Cause.Name != "new_version_broken" || sum.Cause.Description != "a recent rollout brought a version that fails" {
 		t.Errorf("cause = %+v, want the first not ruled out, in its pack's words", sum.Cause)
 	}
-	if sum.Fix.Capability != "deployment.rollback-to-revision" || sum.Fix.Params["revision"] != float64(1) {
+	if sum.Fix.Capability != "deployment.rollback-to-revision" || sum.Fix.Params["revision"] != float64(1) ||
+		sum.Fix.Words.Noun != "rollback" || sum.Fix.Words.Act != "Roll checkout back to revision 1" {
 		t.Errorf("fix = %+v", sum.Fix)
 	}
 	if sum.From != "proposed" || sum.Reason != "test" || sum.Rule != a.PolicyID {

@@ -10,6 +10,7 @@
   description: A metrics source says how often the containers were throttled
   topic: CPU throttling data
   whenFalse: No metrics source says how often the containers were throttled
+  availability: true
   reads: [container_cpu]
   answers:
     - when: container_cpu.throttling.unavailable != ""

@@ -231,12 +231,12 @@ func TestJudge(t *testing.T) {
 		{
 			"the case's change, with other values",
 			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: raise, Params: cpu("api", "1")}},
-			eval.Verdict{Outcome: "require_approval", Reason: "Policy rule raise-needs-approval requires a person's approval.", SameChange: true},
+			eval.Verdict{Outcome: "require_approval", Reason: "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval.", SameChange: true},
 		},
 		{
 			"a decrease",
 			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: raise, Params: cpu("api", "250m")}},
-			eval.Verdict{Outcome: "deny", Reason: "Policy rule raise-a-cpu-limit-only forbids this fix."},
+			eval.Verdict{Outcome: "deny", Reason: "Policy rule raise-a-cpu-limit-only of the cpu-throttling profile forbids this fix."},
 		},
 		{
 			"a fix the incident isn't offered",

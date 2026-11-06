@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/digest"
@@ -175,6 +176,37 @@ func (w *Workload) Identity() digest.TargetIdentity {
 		Group: t.Group, Kind: t.Kind, Namespace: t.Namespace, Name: t.Name, UID: t.UID,
 		Generation: w.Generation, SpecHash: w.TemplateHash, Manager: w.Writer,
 	}
+}
+
+// AtOnce is how many pods a rollout of a new pod template replaces at a
+// time: all of them for the Recreate strategy; for a rolling update, the
+// pods it may add above the desired count and take below it, as Kubernetes
+// rounds them, and at least one.
+func (w *Workload) AtOnce() int32 {
+	n := w.Replicas.Desired
+	s := w.deployment.Spec.Strategy
+	if s.Type == appsv1.RecreateDeploymentStrategyType {
+		return n
+	}
+	quarter := intstr.FromString("25%")
+	surge, unavailable := &quarter, &quarter
+	if r := s.RollingUpdate; r != nil {
+		if r.MaxSurge != nil {
+			surge = r.MaxSurge
+		}
+		if r.MaxUnavailable != nil {
+			unavailable = r.MaxUnavailable
+		}
+	}
+	up, err := intstr.GetScaledValueFromIntOrPercent(surge, int(n), true)
+	if err != nil {
+		up = 1
+	}
+	down, err := intstr.GetScaledValueFromIntOrPercent(unavailable, int(n), false)
+	if err != nil {
+		down = 0
+	}
+	return min(int32(max(up+down, 1)), n) //nolint:gosec // at most n, an int32
 }
 
 // SetTemplate writes template as the workload's pod template, with the

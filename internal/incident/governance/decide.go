@@ -142,7 +142,8 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 
 // decide is the strictest decision on in of the profiles offering fix, each
 // by its whole policy, mode and all. On a tie, the higher-priority profile's
-// decision stands.
+// decision stands. Its reason names that profile, however many the incident
+// matched, so every policy decision reads the same.
 //
 // A fix no profile offers is forbidden. Judging refuses it before it gets
 // here; the evaluation, which skips judging, learns from the first profile
@@ -160,7 +161,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 				return policy.Decision{}, err
 			}
 			if r, ok := pol.Rule(in); ok && r.Outcome == policy.Deny {
-				return r, nil
+				return r.Of(p.Name), nil
 			}
 		}
 		return policy.Decision{Outcome: policy.Deny, Reason: "Refused. None of the incident's profiles offers this fix."}, nil
@@ -186,10 +187,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 			out, from = got, p.Name
 		}
 	}
-	if len(fix.Profiles) > 1 {
-		out = out.Of(from)
-	}
-	return out, nil
+	return out.Of(from), nil
 }
 
 // gitOps says why Themis only recommends a fix to in's workload, if it does:
