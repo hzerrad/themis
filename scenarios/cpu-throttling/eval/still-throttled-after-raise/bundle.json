@@ -72,14 +72,7 @@
       "id": "ev-themis_fix",
       "template": "themis_fix",
       "data": "{\"incident\":\"019a5b3c-7d10-7e21-9a4b-2c8d6e0f1a35\",\"fix\":\"deployment.set-resources\",\"done\":\"Raised search's CPU limit from 200m to 300m.\",\"appliedAt\":\"2026-11-06T21:48:13Z\",\"replaced\":\"1\",\"outcome\":\"unchanged\",\"found\":[{\"check\":\"cpu_throttled_at_limit\",\"reason\":\"app was throttled in 63% of its CPU periods over 1h, at its limit of 0.2 CPU\"}]}",
-      "classification": "internal",
-      "suspicious": [
-        {
-          "reason": "an order to make, or not make, a fix",
-          "at": "/fix",
-          "excerpt": "deployment.set-resources"
-        }
-      ]
+      "classification": "internal"
     },
     {
       "id": "ev-container_cpu",

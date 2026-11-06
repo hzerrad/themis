@@ -2,6 +2,8 @@ package evidence
 
 import (
 	"encoding/json/v2"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/hzerrad/themis/internal/incident"
@@ -42,11 +44,21 @@ type FoundView struct {
 	Reason string `json:"reason"`
 }
 
-// NewThemisFix is v as evidence about target, recorded at now.
+// NewThemisFix is v as evidence about target, recorded at now. Themis wrote
+// all of it but what the checks found, whose reasons quote evidence anyone
+// who can write to the workload chose: only those can hold suspicious text.
 func NewThemisFix(v ThemisFixView, target incident.TargetRef, now time.Time) (Item, error) {
 	data, err := json.Marshal(v, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}
-	return finish(Item{Data: data}, ThemisFix, target, now)
+	item, err := finish(Item{Data: data}, ThemisFix, target, now)
+	if err != nil {
+		return Item{}, err
+	}
+	item.Suspicious = slices.DeleteFunc(item.Suspicious, func(s Suspicion) bool { return !strings.HasPrefix(s.At, "/found/") })
+	if len(item.Suspicious) == 0 {
+		item.Suspicious = nil
+	}
+	return item, nil
 }
