@@ -43,9 +43,13 @@ Themis never changes a Deployment GitOps manages, or may manage: GitOps would pu
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
 
-There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`. Putting back what Themis changed, after a raise that didn't help, lowers the limit again: none of these rules applies to it, only the GitOps protection.
+There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`.
 
-While `cpu_throttled_at_limit`, the pack's symptom, is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person, saying which fix the checks support or what they found, and waits for the fix they suggest.
+While `cpu_throttled_at_limit`, the pack's symptom, is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person, saying which fix the checks support or what they found, and waits for the fix they suggest, however long it takes.
+
+## Verification
+
+Throttled pods are ready, so readiness can't tell whether a raise worked. The profile names `cpu_throttled_at_limit` in `verification.checks`: once the new pods are ready and stable, and have run at least 5 minutes, the window a throttling rate needs, Themis decides it again from their throttling since the change. Below 25% of CPU periods, the raise fixed it: "Fixed. … Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m, at its limit of 0.3 CPU, below 25%)." Still throttled, it didn't: Themis keeps the raise, which left the workload no worse, and refers the incident. The alert that goes on firing opens an incident that follows Themis's raise, where the revision before it is known to have been throttled, so a further raise can go to a person. Without throttling figures, the outcome is inconclusive, never fixed. Putting the old limit back happens only when the raise left the workload worse, such as pods that no longer become ready.
 
 ## Cases
 
@@ -54,6 +58,7 @@ While `cpu_throttled_at_limit`, the pack's symptom, is true and no fix was appli
 | `limit-below-steady-demand` | Traffic grew for days; `api` is throttled in 64% of its periods at its 500m limit, uses all of it, and readiness probes time out |
 | `renderer-throttled-beside-sidecars` | One container of three is throttled at its 1-core limit and its liveness probe restarts it; the sidecars need nothing |
 | `throttled-first-revision` | A Deployment created 29 minutes ago, with only revision 1, is sent more work than its 200m limit allows: throttled in 90% of its periods, and its logs say how far behind it falls. No new version brought it, so raising the limit is right |
+| `still-throttled-after-raise` | Themis raised the limit from 200m to 300m for an earlier incident 4 minutes ago, and the new pod is still throttled in 57% of its periods. The rollout was Themis's own fix, and revision 1 was throttled before it, so raising again is right |
 
 ## Look-alikes
 

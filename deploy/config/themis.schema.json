@@ -475,7 +475,7 @@
         "window": {
           "type": "string",
           "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
-          "description": "Window is how long an incident Themis couldn't decide stays open for a\nsuggestion. Defaults to 15m with sources, and to none without."
+          "description": "Window is how long an incident Themis couldn't decide stays open for a\nsuggestion, and how long one waiting for a person's fix waits before\nThemis looks again: it keeps waiting while its checks find the failure.\nDefaults to 15m with sources, and to none without."
         }
       },
       "additionalProperties": false,

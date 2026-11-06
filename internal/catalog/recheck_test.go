@@ -59,8 +59,10 @@ func raised(t *testing.T) (client.Reader, *workload.Workload) {
 	t.Helper()
 	labels := map[string]string{"app": "search"}
 	d := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "shop", Name: "search", UID: "uid-search", Generation: 2,
-			Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"}},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "shop", Name: "search", UID: "uid-search", Generation: 2,
+			Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
+		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.To(int32(1)), Selector: &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}, Spec: corev1.PodSpec{Containers: []corev1.Container{{
@@ -75,17 +77,23 @@ func raised(t *testing.T) (client.Reader, *workload.Workload) {
 		tmpl := *d.Spec.Template.DeepCopy()
 		tmpl.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU] = resource.MustParse(limit)
 		return &appsv1.ReplicaSet{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "shop", Name: name, UID: types.UID("uid-" + name), Labels: labels, OwnerReferences: owner,
-				CreationTimestamp: metav1.NewTime(at), Annotations: map[string]string{"deployment.kubernetes.io/revision": revision}},
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "shop", Name: name, UID: types.UID("uid-" + name), Labels: labels, OwnerReferences: owner,
+				CreationTimestamp: metav1.NewTime(at), Annotations: map[string]string{"deployment.kubernetes.io/revision": revision},
+			},
 			Spec: appsv1.ReplicaSetSpec{Selector: d.Spec.Selector, Template: tmpl},
 		}
 	}
 	old, current := replicaSet("1", "search-1", raisedAt.Add(-time.Hour), "200m"), replicaSet("2", "search-2", raisedAt, "300m")
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "shop", Name: "search-2-a", Labels: labels,
-			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(current, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))}},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
-			ContainerStatuses: []corev1.ContainerStatus{{Name: "app", Ready: true}}},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "shop", Name: "search-2-a", Labels: labels,
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(current, appsv1.SchemeGroupVersion.WithKind("ReplicaSet"))},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning, Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+			ContainerStatuses: []corev1.ContainerStatus{{Name: "app", Ready: true}},
+		},
 	}
 	c := fake.NewClientBuilder().WithObjects(d, old, current, pod).Build()
 	w, err := workload.Read(t.Context(), c, incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "search", UID: "uid-search"})

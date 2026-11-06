@@ -45,7 +45,9 @@ Themis refuses a raise unless `oom_killed_current_revision`, the check the profi
 | `raise-a-memory-limit-only` | deny | Unless the change raises a memory limit that exists, and does nothing else but raise a memory request: no CPU, no lower value, and no new limit where there was none |
 | `raise-needs-approval` | require_approval | A person approves every raise, and its size |
 
-There is no size cap: an operator who wants one adds a rule on `change["memory.ratio"]`. Putting back what Themis changed, after a raise that didn't help, lowers the limit again, and no rule here refuses it.
+There is no size cap: an operator who wants one adds a rule on `change["memory.ratio"]`.
+
+A raise is verified by `oom_killed_current_revision`, which the profile names in `verification.checks`: it worked when no container of the new version was OOMKilled, nor restarted, and every pod stayed ready. A container is killed when it reaches its memory limit, so no kill means its peak stayed below the new limit, with or without a metrics source. A raise that didn't stop the kills, but left the workload no worse, stays, and the incident goes to a person; Themis lowers the limit again only when the raise left the workload worse.
 
 While `oom_killed_current_revision` or `evicted_for_node_memory`, the pack's symptoms, is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person, saying which fix the checks support or what they found, and waits for the fix they suggest.
 

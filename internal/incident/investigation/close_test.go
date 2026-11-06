@@ -42,8 +42,10 @@ func TestCloseUndecided_KeepsAFailingIncidentOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	sweep := func(found check.Truth) {
-		w := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Reader: k8s, Checks: symptoms{found}, Words: e.cat.Checks,
-			Now: func() time.Time { return time.Now().Add(time.Hour) }}
+		w := &investigation.CloseUndecidedWorker{
+			Config: cfg, Store: e.store, Reader: k8s, Checks: symptoms{found}, Words: e.cat.Checks,
+			Now: func() time.Time { return time.Now().Add(time.Hour) },
+		}
 		if err := w.Close(t.Context()); err != nil {
 			t.Fatal(err)
 		}

@@ -99,6 +99,8 @@ When checks of the incident read that kind of evidence, the second sentence name
 | A fix needs your approval. Check what it changes, then approve or deny it. | Waiting for your approval. Roll payments back to revision 1? |
 | Grounds for denying (optional) | Reason for denying (optional) |
 | Closed without acting: no fix was justified or allowed. | Closed, no change. No fix met the checks and policy. |
+| Fixed. The workload recovered and stayed healthy. (while it is still throttled) | Not fixed. Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m, at its limit of 0.3 CPU). |
+| No fix proposed. The evidence doesn't point to one cause. (on an incident a person closed) | Closed by alice. Reason: handled by the vendor. |
 | Partly recovered: 2 of 3 pods ready. Referred to a person. | Partly recovered. 2 of 3 pods are ready. Referred to a person. |
 | The fix didn't help, so Themis is putting the workload back as it was before it acted. | The rollback didn't help. Restoring the previous state. |
 | Not restored: the workload changed after Themis's fix. It stays as it is. | Not restored. The workload changed after Themis's fix, so it stays as it is. |

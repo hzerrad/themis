@@ -4,7 +4,7 @@ The evaluation cases live with their [scenario packs](../docs/scenarios.md), in 
 
 | File in a case | What it is |
 |---|---|
-| `case.yaml` | What's being tested, and the right answer (`truth`) |
+| `case.yaml` | What's being tested, and the right answer (`truth`). A case that follows a fix Themis applied for an earlier incident gives it as `themis_fix`, as Themis recorded it: the checks and the investigator get it as evidence |
 | `cluster.yaml` | The cluster as the controllers and the kubelet left it. Owners are linked by kind and name, and `creationTimestamp` is set by hand, since checks depend on it |
 | `logs/<pod>.txt` | What each pod logged, if anything |
 | `metrics.yaml` | What the install's [metrics source](../docs/configuration.md#metrics) says each pod's containers use, below. Without it, the install has none, and `container_memory` and `container_cpu` are gaps |
