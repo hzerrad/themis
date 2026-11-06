@@ -49,7 +49,7 @@ make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them in
 make demo-up                                  # the healthy checkout, catalog and search workloads in namespace shop
 ```
 
-`monitoring-up` installs the alert rules every scenario pack answers, as kube-prometheus-stack writes them but faster: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace. `themis-up` points Themis at its Prometheus, for the containers' memory and CPU figures.
+`monitoring-up` installs the alert rules every scenario pack answers, the ones Themis ships, but faster, as [`scripts/dev/monitoring/fast.yaml`](../scripts/dev/monitoring/fast.yaml) says: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace. `themis-up` points Themis at its Prometheus, for the containers' memory and CPU figures.
 
 ## 4. Open the UI
 

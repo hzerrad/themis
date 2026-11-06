@@ -149,13 +149,13 @@ vuln-images: images ## Scan the images for fixable HIGH and CRITICAL vulnerabili
 # Code generation
 
 .PHONY: gen
-gen: ## Generate code from protobuf contracts, the config schema and the chart's alerting rules
+gen: ## Generate code from protobuf contracts, the config schema, and the alerting rules for the chart and kind
 	$(GO_TOOL) buf generate
 	go run ./scripts/gen-config-schema deploy/config/themis.schema.json deploy/helm/themis/crds
-	go run ./scripts/gen-alert-rules deploy/helm/themis/files/alert-rules.yaml
+	go run ./scripts/gen-alert-rules deploy/helm/themis/files/alert-rules.yaml scripts/dev/monitoring/fast.yaml scripts/dev/monitoring/rules.yaml
 	$(UV) sync --quiet --reinstall-package themis-intelligence  # pick up new generated packages
 
-GENERATED := gen intelligence/gen deploy/config/themis.schema.json deploy/helm/themis/crds deploy/helm/themis/files
+GENERATED := gen intelligence/gen deploy/config/themis.schema.json deploy/helm/themis/crds deploy/helm/themis/files scripts/dev/monitoring/rules.yaml
 
 .PHONY: check-gen
 check-gen: gen ## Fail if committed generated code is out of date
@@ -251,7 +251,7 @@ ui: ## Open the in-cluster Themis UI on http://localhost:8090, reconnecting when
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind; Themis installed after finds Alertmanager and reads it
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring prometheus-community/prometheus \
-		--version $(PROMETHEUS_CHART) -n monitoring --create-namespace -f scripts/dev/monitoring/values.yaml --wait --timeout 5m
+		--version $(PROMETHEUS_CHART) -n monitoring --create-namespace -f scripts/dev/monitoring/values.yaml -f scripts/dev/monitoring/rules.yaml --wait --timeout 5m
 
 monitoring-down: ## Uninstall the monitoring stack from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall monitoring -n monitoring

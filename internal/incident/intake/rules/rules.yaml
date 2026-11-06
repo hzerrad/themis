@@ -4,23 +4,29 @@
 # themis-standard: those kube-prometheus-stack already has, from
 # kubernetes-mixin (Apache-2.0), without its job selectors, so they work
 # however Prometheus scrapes kube-state-metrics and the kubelet.
+# KubeContainerWaiting differs, as its comment says, and no annotation names
+# how long a rule waits, which the kind cluster's rules shorten.
 #
 # The chart's alerting.rules values install them as a PrometheusRule; the
-# Setup page shows those a Prometheus lacks. Generated into the chart by
-# make gen: edit internal/incident/intake/rules/rules.yaml.
+# Setup page shows those a Prometheus lacks, and make monitoring-up installs
+# them on kind, faster (scripts/dev/monitoring/fast.yaml). Generated into the
+# chart and the kind values by make gen: edit
+# internal/incident/intake/rules/rules.yaml.
 groups:
   - name: themis
     rules:
+      # A container whose last end was an OOM kill, as the pod's status says
+      # and Themis's checks read it, and that restarted in the last 10 minutes.
       - alert: KubePodOOMKilled
         expr: |-
-          increase(kube_pod_container_status_restarts_total[10m]) >= 1
+          kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
           and on (namespace, pod, container)
-          max_over_time(kube_pod_container_status_last_terminated_reason{reason="OOMKilled"}[10m]) == 1
+          changes(kube_pod_container_status_restarts_total[10m]) > 0
         labels:
           severity: warning
         annotations:
           summary: A container ran out of memory.
-          description: Container {{ $labels.container }} of pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled in the last 10 minutes.
+          description: Container {{ $labels.container }} of pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled and restarted in the last 10 minutes.
   - name: themis-standard
     rules:
       - alert: KubePodCrashLooping
@@ -52,8 +58,8 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: Pod has been in a non-ready state for more than 15 minutes.
-          description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 15 minutes.
+          summary: Pod has been in a non-ready state.
+          description: Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state.
       - alert: KubeDeploymentReplicasMismatch
         expr: |-
           (
@@ -66,7 +72,7 @@ groups:
           severity: warning
         annotations:
           summary: Deployment has not matched the expected number of replicas.
-          description: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has not matched the expected number of replicas for longer than 15 minutes.
+          description: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has not matched the expected number of replicas.
       - alert: KubeDeploymentRolloutStuck
         expr: kube_deployment_status_condition{condition="Progressing", status="false"} != 0
         for: 15m
@@ -74,15 +80,18 @@ groups:
           severity: warning
         annotations:
           summary: Deployment rollout is not progressing.
-          description: Rollout of deployment {{ $labels.namespace }}/{{ $labels.deployment }} is not progressing for longer than 15 minutes.
+          description: Rollout of deployment {{ $labels.namespace }}/{{ $labels.deployment }} is not progressing.
+      # By container, not reason, unlike kube-prometheus-stack: a container
+      # that can't pull its image alternates between ErrImagePull and
+      # ImagePullBackOff, and each change would start the hour again.
       - alert: KubeContainerWaiting
-        expr: kube_pod_container_status_waiting_reason{reason!="CrashLoopBackOff"} > 0
+        expr: sum by (namespace, pod, container, cluster) (kube_pod_container_status_waiting_reason{reason!="CrashLoopBackOff"}) > 0
         for: 1h
         labels:
           severity: warning
         annotations:
-          summary: Pod container waiting longer than 1 hour.
-          description: Container {{ $labels.container }} of pod {{ $labels.namespace }}/{{ $labels.pod }} has been waiting for longer than 1 hour (reason "{{ $labels.reason }}").
+          summary: Pod container is waiting.
+          description: Container {{ $labels.container }} of pod {{ $labels.namespace }}/{{ $labels.pod }} has been waiting.
       - alert: CPUThrottlingHigh
         expr: |-
           sum without (id, metrics_path, name, image, endpoint, job, node) (
