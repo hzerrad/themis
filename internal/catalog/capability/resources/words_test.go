@@ -47,7 +47,7 @@ func TestWords(t *testing.T) {
 			want: capability.Words{
 				Noun: "raise", Act: "Raise search's CPU limit from 200m to 300m",
 				Doing: "Raising search's CPU limit from 200m to 300m.", Done: "Raised search's CPU limit from 200m to 300m.",
-				Verifies: "the pods become ready and stay ready",
+				Verifies: "the pods become ready and stay ready, and are no longer throttled at their CPU limit",
 			},
 		},
 		"a lowered request of one container of two": {

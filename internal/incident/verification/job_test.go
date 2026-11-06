@@ -17,6 +17,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
@@ -25,6 +26,7 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 const scenario1 = "test/fixtures/scenario1/cluster.yaml"
@@ -226,6 +228,57 @@ func TestJob_FailedOutcome_Restores(t *testing.T) {
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'restore' AND args->>'actionID' = $1`, e.args.ActionID); n != 1 {
 		t.Errorf("%d restore jobs, want 1", n)
+	}
+}
+
+// checks stands in for the catalog: the profile's verification check finds
+// found, from a signal that needs window.
+type checks struct {
+	found  check.Truth
+	window time.Duration
+	asked  []time.Duration
+}
+
+func (c *checks) Recheck(_ context.Context, _ client.Reader, _ *workload.Workload, names []string, window time.Duration, _ time.Time) []check.Result {
+	c.asked = append(c.asked, window)
+	return []check.Result{{Name: names[0], Value: c.found, Reason: "app was throttled in 57% of its CPU periods over 6m, at its limit of 0.3 CPU"}}
+}
+
+func (c *checks) SignalWindow([]string) time.Duration { return c.window }
+
+// A fix whose profile names verification checks is judged by them, once its
+// pods have run long enough for them: ready pods whose failure goes on are
+// not fixed, and the fix stays, since it left the workload no worse.
+func TestJob_FailureGoesOn_KeepsTheFix(t *testing.T) {
+	e := executed(t)
+	found := &checks{found: check.True, window: 5 * time.Minute}
+	e.worker.Config = config.Config{Profiles: []config.Profile{{
+		Name: "rollout-regression", Capabilities: []string{rollback.Name}, Evidence: config.Evidence{Allowed: []string{evidence.PodStates}},
+		Verification: config.Verification{Window: config.Duration{Duration: 5 * time.Minute}, Stability: config.Duration{Duration: 2 * time.Minute}, Checks: []string{"cpu_throttled_at_limit"}},
+	}}}
+	e.worker.Checks = found
+	e.rolledBack(t)
+	for _, at := range []time.Duration{0, 3 * time.Minute} {
+		e.clock = windowStart.Add(at)
+		if e.verify(t) {
+			t.Fatalf("final %s in, before the pods ran long enough for the checks", at)
+		}
+	}
+	e.clock = windowStart.Add(6 * time.Minute)
+	if !e.verify(t) {
+		t.Fatal("not final once the checks could be read")
+	}
+	if got := e.state(t); got != incident.Escalated || e.outcome(t) != string(verification.Unchanged) {
+		t.Errorf("state = %s after %s, want escalated after unchanged", got, e.outcome(t))
+	}
+	if reason := e.lastReason(t); !strings.HasPrefix(reason, "Not fixed. ") || !strings.HasSuffix(reason, " The change stays, as it left the workload no worse. Referred to a person.") {
+		t.Errorf("reason = %q", reason)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'restore'`); n != 0 {
+		t.Errorf("%d restore jobs, want none", n)
+	}
+	if len(found.asked) != 1 || found.asked[0] != 6*time.Minute {
+		t.Errorf("checks read over %v, want once, over the 6m since the change", found.asked)
 	}
 }
 

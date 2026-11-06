@@ -25,6 +25,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/store"
@@ -374,13 +375,24 @@ func TestIncidentDetail_HeadlineForAStopWithoutConclusion(t *testing.T) {
 	if got := e.detail(t, a.IncidentID)["Headline"]; got != nil {
 		t.Errorf("an incident awaiting approval has headline %v", got)
 	}
+	// The investigation's headline holds while it is what ended the incident.
 	for _, state := range []incident.State{incident.Inconclusive, incident.ClosedNoAction} {
 		if _, err := e.pool.Exec(t.Context(), `UPDATE incidents SET state = $2 WHERE id = $1`, a.IncidentID, state); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.pool.Exec(t.Context(), `INSERT INTO transitions (incident_id, from_state, to_state, reason, actor) VALUES ($1, 'investigating', $2, 'No fix proposed.', $3)`, a.IncidentID, state, investigation.Investigator); err != nil {
 			t.Fatal(err)
 		}
 		if got := e.detail(t, a.IncidentID)["Headline"]; got != hint.HeadlineBlind {
 			t.Errorf("%s: Headline = %v, want %q", state, got, hint.HeadlineBlind)
 		}
+	}
+	// One closed for another reason says that reason instead.
+	if _, err := e.pool.Exec(t.Context(), `INSERT INTO transitions (incident_id, from_state, to_state, reason, actor) VALUES ($1, 'awaiting_suggestion', 'closed_no_action', 'Closed by alice.', 'alice')`, a.IncidentID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.detail(t, a.IncidentID)["Headline"]; got != nil {
+		t.Errorf("closed by a person: Headline = %v, want none", got)
 	}
 }
 
