@@ -7,6 +7,8 @@
 
 const TOKEN_KEY = "themis-token";
 const POLL_MS = 3000;
+// Status checks every part of the install, so it refreshes less often.
+const STATUS_POLL_MS = 15000;
 const main = document.getElementById("main");
 let timer = null;
 // me is who's signed in, from /v1/me: a person, whoever holds the break-glass
@@ -1900,6 +1902,25 @@ async function detail(id) {
   // Refreshing would discard what an approver or suggester is typing.
   const typing = actions.some((a) => a.State === "awaiting_approval") || Boolean(suggesting);
   if (!typing) timer = setTimeout(reload, POLL_MS * 2);
+  else timer = setTimeout(() => watchChanges(id, d, reload), POLL_MS * 2);
+}
+
+// watchChanges keeps checking an incident a person is typing on, and says
+// when it changed, so nobody decides from a stale page and nothing typed is
+// lost.
+function watchChanges(id, seen, reload) {
+  const here = location.hash;
+  const stamp = (d) => JSON.stringify([d.Incident.state, (d.Transitions || []).length,
+    (d.Actions || []).map((a) => a.State), (d.Proposals || []).map((p) => p.Status)]);
+  const again = () => { if (location.hash === here) timer = setTimeout(() => watchChanges(id, seen, reload), POLL_MS * 2); };
+  api("/v1/incidents/" + encodeURIComponent(id)).then((d) => {
+    if (location.hash !== here) return;
+    if (stamp(d) === stamp(seen)) return again();
+    if (!main.querySelector(".changed")) {
+      main.prepend(h("p", { class: "flash changed", role: "status" }, "This incident changed. ",
+        h("a", { href: here, onclick: (e) => { e.preventDefault(); reload(); } }, "Reload"), "."));
+    }
+  }).catch(again);
 }
 
 // Routing -----------------------------------------------------------------
@@ -1967,7 +1988,7 @@ async function route() {
   let run, nav;
   if (m) [run, nav] = [() => detail(m[1]), "nav-incidents"];
   else if (hash === "#/accounts" && can("admin")) [run, nav] = [accounts, "nav-accounts"];
-  else if (hash === "#/status") [run, nav] = [status, "nav-status"];
+  else if (hash === "#/status") [run, nav] = [async () => { await status(); timer = setTimeout(route, STATUS_POLL_MS); }, "nav-status"];
   else if (hash === "#/setup" && can("admin")) [run, nav] = [setup, "nav-setup"];
   else if (hash === "#/password" && me.account) [run, nav] = [async () => changePassword(), "nav-password"];
   else [run, nav] = [async () => { await list(); timer = setTimeout(route, POLL_MS); }, "nav-incidents"];
