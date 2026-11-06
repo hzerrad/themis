@@ -47,7 +47,7 @@ type API struct {
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
 	// Fixes are the fixes Themis can carry out, which show what an action
-	// changes.
+	// changes and how a person suggests one.
 	Fixes capability.Registry
 	// CheckList is the checks Themis runs, which say what each answer means.
 	CheckList check.List
@@ -55,7 +55,7 @@ type API struct {
 	// which say what each means.
 	RootCauses catalog.RootCauses
 	// Config is Themis's live configuration, for the alerts its profiles
-	// handle.
+	// handle and the fixes they offer.
 	Config config.Provider
 	// Intake is where Alertmanager reaches Themis, and Namespace Themis's own,
 	// for the commands Themis shows.

@@ -199,6 +199,8 @@ externalProposals:
       ceiling: internal                   # sensitive also lets it read container logs
 ```
 
+**People** with the `approver` role suggest a fix on the incident's page, while Themis investigates or the incident waits for a suggestion. The page offers every fix the incident's profiles offer, each with its values, such as a revision, a memory limit or a probe timeout, and cites all the evidence Themis collected.
+
 **Agents** call the `ProposalService` gRPC API on port 9090: `ListIncidents`, `GetIncident`, and `SubmitProposal` with `incident_id` instead of `lease_id`. `GetIncident` lists the fixes the agent may suggest for that incident, each with what it does and the JSON Schema of its parameters. A suggestion names the fix in `capability_name` and gives `params` as that schema describes, for example `"capability_name": "deployment.rollback-to-revision", "params": {"revision": 1}`; parameters that don't fit are rejected with the reason. The older `rollback_to_revision` field still works. Each sends a Kubernetes ServiceAccount token issued for the audience `themis`, for example from a [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/#serviceaccounttoken), and Themis checks it with the API server. A token for another audience is refused. Add the agent's namespace to the chart's `networkPolicy.agentNamespaces`.
 
 **HolmesGPT** suggests fixes through an adapter the chart installs. Point it at an existing HolmesGPT (0.25 or later) with its API key:
