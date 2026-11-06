@@ -280,6 +280,17 @@
       ],
       "description": "API configures access to the HTTP API and the UI."
     },
+    "approvals": {
+      "properties": {
+        "requireAnotherApprover": {
+          "type": "boolean",
+          "description": "RequireAnotherApprover refuses the approval of a fix by the person who\nsuggested it: someone else must approve it. A fix the investigator or\nan agent suggested is unaffected."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Approvals configures who may approve a fix."
+    },
     "executor": {
       "properties": {
         "address": {

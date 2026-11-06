@@ -42,6 +42,9 @@ type Config struct {
 	// API configures access to the HTTP API and the UI.
 	API API `json:"api"`
 
+	// Approvals configures who may approve a fix.
+	Approvals Approvals `json:"approvals,omitzero"`
+
 	// Executor is where approved actions run; without it Themis never writes.
 	Executor *Executor `json:"executor,omitempty"`
 

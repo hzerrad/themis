@@ -45,6 +45,14 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
 }
 
 // Govern acts only on a diagnosed incident, so a repeated job does nothing.
+//
+// A fix refused while a person works on the incident leaves it waiting for
+// another: one a person or an agent suggested, or any once a person denied
+// a fix for it or had it investigated again. They can suggest another fix,
+// or have it investigated again.
+// The investigator's own refused fix closes it otherwise, as an
+// investigation that proposes nothing does. Themis only recommending a fix,
+// GitOps owning the workload, ends it either way.
 func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	p, err := w.Store.Proposal(ctx, w.Store.DB(), proposalID)
 	if err != nil {
@@ -61,9 +69,13 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if len(matched) == 0 {
 		return w.close(ctx, in.ID, fmt.Sprintf("Themis no longer has %s this incident matched.", config.Named(in.Profiles())))
 	}
+	waits, err := w.waits(ctx, p)
+	if err != nil {
+		return err
+	}
 	f, ok := w.Fixes[p.Capability]
 	if !ok {
-		return w.close(ctx, in.ID, "Refused. Themis can't carry out this kind of fix.")
+		return w.refuse(ctx, p, waits, "Refused. Themis can't carry out this kind of fix.")
 	}
 	checks, err := w.Store.Predicates(ctx, in.ID)
 	if err != nil {
@@ -79,10 +91,10 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
 	})
 	if errors.Is(err, capability.ErrInvalidParams) {
-		return w.close(ctx, in.ID, "Refused. The suggested fix's values are invalid.")
+		return w.refuse(ctx, p, waits, "Refused. The suggested fix's values are invalid.")
 	}
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
-		return w.close(ctx, in.ID, refusal.Reason)
+		return w.refuse(ctx, p, waits, refusal.Reason)
 	}
 	if err != nil {
 		return err
@@ -105,10 +117,14 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		}
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
 		if errors.Is(err, store.ErrActiveAction) {
-			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, "Another fix is already in progress on this workload."); err != nil {
+			const busy = "Another fix is already in progress on this workload."
+			if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalDeferred, busy); err != nil {
 				return err
 			}
-			return w.Store.TransitionPath(ctx, tx, in.ID, "Another fix is already in progress on this workload.", actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+			if waits {
+				return w.Store.TransitionPath(ctx, tx, in.ID, busy, actor, incident.Diagnosed, incident.AwaitingSuggestion)
+			}
+			return w.Store.TransitionPath(ctx, tx, in.ID, busy, actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
 		}
 		if err != nil {
 			return err
@@ -116,6 +132,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(d.Decision)).Inc)
 		if d.Decision.Outcome == policy.Deny && d.ManagedBy != "" {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
+		}
+		if d.Decision.Outcome == policy.Deny && waits && d.Decision.PolicyID != GitOpsRule {
+			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingSuggestion)
 		}
 		if d.Decision.Outcome == policy.Deny {
 			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
@@ -144,6 +163,30 @@ func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check
 	}
 	checks[i] = r
 	return []check.Result{r}, nil
+}
+
+// waits reports whether a refusal of p leaves its incident waiting for
+// another fix: p came from a person or an agent, or a person works on the
+// incident.
+func (w *Worker) waits(ctx context.Context, p store.Proposal) (bool, error) {
+	if p.LeaseID == "" {
+		return true, nil
+	}
+	return w.Store.PersonInvolved(ctx, w.Store.DB(), p.IncidentID)
+}
+
+// refuse ends the governing of p, refused for reason: its incident waits
+// for another fix, with p kept as refused so it never goes again, or closes.
+func (w *Worker) refuse(ctx context.Context, p store.Proposal, waits bool, reason string) error {
+	if !waits {
+		return w.close(ctx, p.IncidentID, reason)
+	}
+	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
+		if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalRejected, reason); err != nil {
+			return err
+		}
+		return w.Store.TransitionPath(ctx, tx, p.IncidentID, reason, actor, incident.Diagnosed, incident.AwaitingSuggestion)
+	})
 }
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {

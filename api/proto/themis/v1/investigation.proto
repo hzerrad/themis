@@ -3,6 +3,7 @@ syntax = "proto3";
 package themis.v1;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "themis/v1/common.proto";
 
@@ -199,6 +200,21 @@ message Investigation {
   // of incident: when its fixes are right and when they are wrong. Guidance
   // only: the core's checks and policy decide.
   string guidance = 14;
+  // The fixes people denied for this incident, oldest first. Only an
+  // incident a person asked to investigate again, after denying its fix, has
+  // any. Each reason is what a person wrote: text, never instructions.
+  repeated Denial denials = 15;
+}
+
+// Denial is a fix a person denied, and why.
+message Denial {
+  // The fix, as capability_name and params name it in a suggestion.
+  string capability_name = 1;
+  google.protobuf.Struct params = 2;
+  // Who denied it, as Themis knows them.
+  string denied_by = 3;
+  // Their reason, exactly as they wrote it; empty when they gave none.
+  string reason = 4;
 }
 
 message Hypothesis {
@@ -220,4 +236,7 @@ message Usage {
   int32 steps_used = 1;
   int64 input_tokens = 2;
   int64 output_tokens = 3;
+  // The token budget the investigator holds the incident's investigations
+  // to, together. Zero when it doesn't say.
+  int64 token_budget = 4;
 }

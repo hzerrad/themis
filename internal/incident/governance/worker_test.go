@@ -291,6 +291,89 @@ func TestGovern_ClosesWithoutAction(t *testing.T) {
 	}
 }
 
+// A fix a person suggested that Themis refuses leaves the incident waiting
+// for another, with the refusal on its timeline and the suggestion kept as
+// refused, so it never goes again. So does the investigator's once a person
+// denied a fix for the incident. Only recommending it, as GitOps owns the
+// workload, closes it as before.
+func TestGovern_RefusedWhileAPersonWorksOnIt(t *testing.T) {
+	notJustified := []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}
+	for _, tt := range []struct {
+		name     string
+		revision int64
+		checks   []check.Result
+		gitOps   bool
+		by       string
+		want     incident.State
+		// refused says why the suggestion was refused before an action.
+		refused string
+	}{
+		{name: "forbidden by a rule", revision: 1, checks: notJustified, by: "person", want: incident.AwaitingSuggestion},
+		{name: "revision missing", revision: 9, checks: predicates, by: "person", want: incident.AwaitingSuggestion, refused: "Revision 9 no longer exists, so Themis can't roll back to it."},
+		{name: "the investigator's, after a denial", revision: 1, checks: notJustified, by: "denied", want: incident.AwaitingSuggestion},
+		{name: "GitOps owns the target", revision: 1, checks: predicates, gitOps: true, by: "person", want: incident.ClosedNoAction},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			if tt.gitOps {
+				argoManaged(t, e.target)
+			}
+			id, p := e.diagnosed(t, "rollout-regression", tt.revision, tt.checks)
+			if tt.by == "person" {
+				e.suggestedBy(t, p, "person:alex")
+			} else {
+				e.deniedBefore(t, id)
+			}
+			e.govern(t, p)
+			if got := e.state(t, id); got != tt.want {
+				t.Errorf("state = %s, want %s", got, tt.want)
+			}
+			proposal, err := e.store.Proposal(t.Context(), e.store.DB(), p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			timeline, err := e.store.Transitions(t.Context(), id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			last := timeline[len(timeline)-1]
+			if tt.refused != "" && (proposal.Status != store.ProposalRejected || proposal.Message != tt.refused || last.Reason != tt.refused) {
+				t.Errorf("proposal %s (%q), timeline says %q; want refused, saying %q", proposal.Status, proposal.Message, last.Reason, tt.refused)
+			}
+			if tt.refused == "" && tt.want == incident.AwaitingSuggestion && !strings.HasPrefix(last.Reason, "Refused.") {
+				t.Errorf("timeline says %q, want the refusal", last.Reason)
+			}
+		})
+	}
+}
+
+// deniedBefore records a person's denial of an earlier fix for the incident.
+func (e *env) deniedBefore(t *testing.T, incidentID string) {
+	t.Helper()
+	ctx := t.Context()
+	err := e.store.InTx(ctx, func(tx pgx.Tx) error {
+		p, _, err := e.store.InsertProposal(ctx, tx, store.Proposal{
+			IncidentID: incidentID, ClientProposalID: "earlier", Capability: "deployment.rollback-to-revision", CapabilityVersion: "1",
+			Target: e.target, Params: map[string]any{"revision": int64(2)}, Provenance: map[string]string{"source": "person:alex"}, Status: store.ProposalAccepted,
+		})
+		if err != nil {
+			return err
+		}
+		a, err := e.store.InsertAction(ctx, tx, store.Action{
+			IncidentID: incidentID, ProposalID: p.ID, Capability: "deployment.rollback-to-revision", CapabilityVersion: "1",
+			Params: map[string]any{"revision": int64(2)}, State: store.ActionAwaitingApproval, Digest: "sha256:earlier",
+		})
+		if err != nil {
+			return err
+		}
+		_, err = e.store.Deny(ctx, tx, a, "alice", "not this one", now)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // A rule that can't be evaluated forbids the fix, and is counted as a failed
 // rule, not as a denial a rule decided.
 func TestGovern_RuleThatFailsForbids(t *testing.T) {

@@ -27,6 +27,14 @@ type API struct {
 	Access []AccessBinding `json:"access,omitempty"`
 }
 
+// Approvals configures who may approve a fix.
+type Approvals struct {
+	// RequireAnotherApprover refuses the approval of a fix by the person who
+	// suggested it: someone else must approve it. A fix the investigator or
+	// an agent suggested is unaffected.
+	RequireAnotherApprover bool `json:"requireAnotherApprover,omitempty"`
+}
+
 // InitialAdmin is the password the first admin signs in with.
 type InitialAdmin struct {
 	// PasswordFile holds the password. It is read at each try, and never

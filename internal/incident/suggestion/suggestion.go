@@ -65,7 +65,7 @@ const (
 	PersonSource = "admin-token"
 
 	// SignedInSource, followed by a username, names someone signed in.
-	SignedInSource = "person:"
+	SignedInSource = governance.SignedIn
 
 	personPerMinute = 60
 )

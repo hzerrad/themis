@@ -156,6 +156,9 @@ const REFERRED = ["escalated", "contained_escalated"];
 const WORKING = ["received", "investigating", "diagnosed", "proposed"];
 // SUGGESTABLE are the states in which a person may suggest a fix.
 const SUGGESTABLE = ["investigating", "awaiting_suggestion", "inconclusive"];
+// REFUSING are the states a refused fix leaves for awaiting_suggestion: a
+// fix suggested while a person works on the incident waits for another.
+const REFUSING = ["diagnosed", "proposed"];
 
 // stateOf names an incident's state, with its tone. how says what the state
 // alone can't: whether the fix was undone, or only recommended.
@@ -854,6 +857,8 @@ function rowWhat(i) {
   if (i.supersededBy) return ["Changed outside Themis and still failing. ", em("A newer incident covers it.")];
   if (i.state === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(fx.short + "?")];
   if (WORKING.includes(i.state)) return "Collecting and weighing evidence.";
+  if (i.state === "awaiting_suggestion" && s.from === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(cap(fx.noun) + " denied. Waiting for another fix.")];
+  if (i.state === "awaiting_suggestion" && REFUSING.includes(s.from)) return [cause ? cause + " " : null, em("Suggested fix refused. Waiting for another fix.")];
   if (i.state === "awaiting_suggestion" || i.state === "inconclusive") return [cause ? cause + " " : null, em("No fix proposed yet.")];
   if (i.state === "closed_no_action" && !listHow(i).recommended && cause) return [cause + " ", em(s.reason)];
   return s.reason || cause || "";
@@ -1053,8 +1058,16 @@ function decision(a, d, ctx, latest, reload) {
     const approve = h("button", { class: "btn primary", type: "button",
       onclick: () => decide("approve", { digest: shown }, approve, cap(fx.noun) + " approved.") }, "Approve the " + fx.noun);
     const deny = h("button", { class: "btn deny", type: "button",
-      onclick: () => decide("deny", { reason: reason.value }, deny, cap(fx.noun) + " denied.") }, "Deny the " + fx.noun);
-    side = h("div", { class: "act" }, approve, field("Reason for denying (optional)", reason), deny, error);
+      onclick: () => decide("deny", { reason: reason.value }, deny, cap(fx.noun) + " denied. Waiting for another fix.") }, "Deny the " + fx.noun);
+    const close = h("button", { class: "btn deny", type: "button",
+      onclick: () => decide("deny", { reason: reason.value, close: true }, close, cap(fx.noun) + " denied. Closed, no change.") }, "Deny and close");
+    // With another approver required, whoever suggested the fix can't approve it.
+    const suggested = (d.Proposals || []).find((p) => p.ID === a.ProposalID);
+    const own = d.AnotherApprover && me && suggested && !suggested.LeaseID
+      && (suggested.Provenance || {}).source === "person:" + me.username;
+    side = h("div", { class: "act" },
+      own ? h("p", { class: "quiet" }, "Another approver must approve this fix.") : approve,
+      field("Reason for denying (optional)", reason), deny, close, error);
   } else if (awaiting) {
     side = h("div", { class: "act" }, h("p", { class: "quiet" }, "Approving or denying requires the approver role."));
   } else if (gitOps) {
@@ -1699,7 +1712,7 @@ function headline(d, ctx) {
   if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + fx.short.toLowerCase() + "." : reason];
   const suggest = !(d.Fixes || []).length ? "Themis has no fix for this kind of incident."
     : can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
-  if (s === "awaiting_suggestion") return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
+  if (s === "awaiting_suggestion") return waitingFor(d, last, fx, suggest);
   if (s === "inconclusive") return [d.Headline || "No fix proposed.", suggest];
   if ((s === "authorized" || s === "executing") && fx) {
     const approved = ts.filter((t) => t.To === "authorized").pop();
@@ -1726,6 +1739,52 @@ function headline(d, ctx) {
   }
   if (s === "self_resolved") return ["Recovered before Themis acted.", reason];
   return [reason || stateOf(s)[0] + ".", ""];
+}
+
+// waitingFor says why an incident waits for a suggested fix: a person
+// denied its fix, a fix suggested was refused, investigating it again found
+// none, or no investigator is installed.
+function waitingFor(d, last, fx, suggest) {
+  const from = last ? last.From : "";
+  const reason = last ? last.Reason : "";
+  const next = " Waiting for another fix.";
+  // A person's reason for denying follows as they wrote it.
+  if (from === "awaiting_approval" && fx) return [cap(fx.noun) + " denied." + next, reason];
+  if (REFUSING.includes(from)) {
+    // The fix refused: a suggestion kept with the refusal, or the change
+    // policy refused.
+    const p = (d.Proposals || []).filter((x) => x.Message === reason).pop()
+      || (d.Actions || []).filter((a) => a.DecisionReason === reason).pop();
+    const noun = p ? fixWords(p.Capability, p.Params, workload(d.Incident.target).name).noun : "suggested fix";
+    return [cap(noun) + " refused." + next, reason.replace(/^Refused\. /, "")];
+  }
+  if (from === "investigating") return [reason + next, suggest];
+  return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
+}
+
+// againBlock offers to have the incident investigated again, or says why it
+// can't be. The investigator then reads the fixes people denied, and why.
+function againBlock(d, reload) {
+  const offer = d.InvestigateAgain;
+  if (!offer || !can("approver")) return null;
+  const denied = (d.Actions || []).some((a) => a.State === "denied" && a.Decision !== "deny");
+  const error = h("div", { class: "error", role: "alert" });
+  const button = h("button", { class: "btn", type: "button", disabled: Boolean(offer.refused),
+    onclick: async () => {
+      button.disabled = true;
+      error.textContent = "";
+      try {
+        await api("/v1/incidents/" + encodeURIComponent(d.Incident.id) + "/investigate", { method: "POST" });
+        flash = "Investigating again.";
+        reload();
+      } catch (e) {
+        error.textContent = e.message;
+        button.disabled = false;
+      }
+    } }, "Investigate again");
+  const note = offer.refused ? "Not available. " + offer.refused
+    : denied ? "The investigator reads which fixes were denied, and why." : null;
+  return h("div", { class: "act" }, button, note ? h("p", { class: "fine" }, note) : null, error);
 }
 
 async function detail(id) {
@@ -1759,6 +1818,7 @@ async function detail(id) {
   const others = proposals.filter((p) => !mine.has(p.ID));
   const fromPerson = source && !source.LeaseID ? source : null;
   const suggesting = SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(d, reload) : null;
+  const again = againBlock(d, reload);
   const said = flash;
   flash = null;
 
@@ -1774,7 +1834,7 @@ async function detail(id) {
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
 
     action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
-    suggesting ? h("div", { class: "more" }, suggesting) : null,
+    again || suggesting ? h("div", { class: "more" }, again, suggesting) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix"),
 

@@ -235,7 +235,9 @@ RESOLVED=$ID
 log "2. a denied action is never executed"
 ID=$(incident_after_break)
 wait_state "$ID" 300 awaiting_approval >/dev/null
-check "denying is accepted" [ "$(post "/v1/actions/$(action "$ID" '["ID"]')/deny" '{"reason":"e2e"}')" = 200 ]
+# Denying and closing, so the next alert opens a new incident: a plain denial
+# keeps this one open, waiting for another fix.
+check "denying and closing is accepted" [ "$(post "/v1/actions/$(action "$ID" '["ID"]')/deny" '{"reason":"e2e","close":true}')" = 200 ]
 check "the incident closes without action" [ "$(state "$ID")" = closed_no_action ]
 check "approving after a denial is refused" [ "$(approve "$ID")" = 409 ]
 check "checkout is untouched" [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].env[0].value}')" = leak ]

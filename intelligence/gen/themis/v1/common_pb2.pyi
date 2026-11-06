@@ -129,16 +129,18 @@ class SuspiciousText(_message.Message):
     def __init__(self, reason: _Optional[str] = ..., at: _Optional[str] = ..., excerpt: _Optional[str] = ...) -> None: ...
 
 class Budget(_message.Message):
-    __slots__ = ("max_steps", "max_input_tokens", "max_output_tokens", "deadline")
+    __slots__ = ("max_steps", "max_input_tokens", "max_output_tokens", "deadline", "tokens_used")
     MAX_STEPS_FIELD_NUMBER: _ClassVar[int]
     MAX_INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     MAX_OUTPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     DEADLINE_FIELD_NUMBER: _ClassVar[int]
+    TOKENS_USED_FIELD_NUMBER: _ClassVar[int]
     max_steps: int
     max_input_tokens: int
     max_output_tokens: int
     deadline: _timestamp_pb2.Timestamp
-    def __init__(self, max_steps: _Optional[int] = ..., max_input_tokens: _Optional[int] = ..., max_output_tokens: _Optional[int] = ..., deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    tokens_used: int
+    def __init__(self, max_steps: _Optional[int] = ..., max_input_tokens: _Optional[int] = ..., max_output_tokens: _Optional[int] = ..., deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., tokens_used: _Optional[int] = ...) -> None: ...
 
 class Capability(_message.Message):
     __slots__ = ("name", "description", "params_schema")

@@ -274,6 +274,7 @@ func Run(ctx context.Context, o Options) error {
 	setup := &identity.Setup{Store: s, Logger: log}
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: setup}
 	api.Sessions, api.Accounts, api.Gate = s, s, gate
+	api.Again = &investigation.Again{Store: s, Config: current}
 	checker := &statuspage.Checker{
 		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
 		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,

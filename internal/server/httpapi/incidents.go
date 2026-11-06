@@ -45,7 +45,17 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}}
+	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}, AnotherApprover: a.anotherApprover()}
+	if a.Again != nil {
+		o, err := a.Again.Offer(ctx, in)
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		if o.Offered {
+			d.InvestigateAgain = &againView{Refused: o.Refused}
+		}
+	}
 	for _, c := range a.CheckList {
 		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads}
 	}

@@ -3,6 +3,7 @@ package grpcapi
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
@@ -32,9 +33,19 @@ func (s *Server) LeaseInvestigation(ctx context.Context, req *themisv1.LeaseInve
 		Capabilities:          s.capabilities(fixes),
 		Guidance:              scope.Guidance(),
 		Budget: &themisv1.Budget{
-			MaxSteps: int32(scope.InvestigationBudget().MaxSteps), //nolint:gosec // validated config
-			Deadline: timestamppb.New(inv.Deadline),
+			MaxSteps:   int32(scope.InvestigationBudget().MaxSteps), //nolint:gosec // validated config
+			Deadline:   timestamppb.New(inv.Deadline),
+			TokensUsed: inv.TokensUsed,
 		},
+	}
+	// After a denial, the investigator learns what was denied, and why, in
+	// the person's own words.
+	for _, d := range inv.Denials {
+		params, err := structpb.NewStruct(d.Params)
+		if err != nil {
+			return nil, s.internal(ctx, err)
+		}
+		out.Denials = append(out.Denials, &themisv1.Denial{CapabilityName: d.Capability, Params: params, DeniedBy: d.Denier, Reason: d.Reason})
 	}
 	for _, it := range inv.Evidence {
 		out.InitialEvidence = append(out.InitialEvidence, itemToProto(it))

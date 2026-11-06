@@ -158,6 +158,19 @@ type detailView struct {
 	// Fixes are the fixes the incident's profiles offer, each once, primary
 	// profile first: what a person may suggest for it.
 	Fixes []offeredFix `json:",omitempty"`
+
+	// InvestigateAgain is set while a person can have the incident
+	// investigated again, and says why it can't be, if it can't.
+	InvestigateAgain *againView `json:",omitzero"`
+	// AnotherApprover is set when a fix needs an approver other than the
+	// person who suggested it.
+	AnotherApprover bool `json:",omitempty"`
+}
+
+// againView is whether investigating an incident again is available.
+type againView struct {
+	// Refused says why it isn't, such as a token budget spent.
+	Refused string `json:"refused,omitempty"`
 }
 
 // offeredFix is a fix as a person suggests it: what it does, and the JSON

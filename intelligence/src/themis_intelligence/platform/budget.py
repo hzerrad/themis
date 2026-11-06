@@ -13,9 +13,10 @@ class Reservation:
 
 
 class Budget:
-    def __init__(self, max_tokens: int) -> None:
+    def __init__(self, max_tokens: int, spent: int = 0) -> None:
         self.max_tokens = max_tokens
-        self.spent = 0
+        # What was spent before, such as by an incident's earlier investigations.
+        self.spent = spent
         self._reserved = 0
 
     def reserve(self, tokens: int) -> Reservation:

@@ -45,6 +45,12 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith is newEnv, with what with sets on the API first.
+func newEnvWith(t *testing.T, with func(a *httpapi.API)) *env {
+	t.Helper()
 	s, pool := pgtest.NewStore(t)
 	file := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(file, []byte(token), 0o600); err != nil {
@@ -52,11 +58,15 @@ func newEnv(t *testing.T) *env {
 	}
 	e := &env{store: s, pool: pool, clock: now}
 	mux := http.NewServeMux()
-	(&httpapi.API{
+	api := &httpapi.API{
 		Store: s, TokenFile: file, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		RootCauses: catalog.RootCauses{"rollout-regression": {{Name: "new_version_broken", Description: "a recent rollout brought a version that fails"}}},
 		Logger:     telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
-	}).Register(mux)
+	}
+	if with != nil {
+		with(api)
+	}
+	api.Register(mux)
 	e.handler = mux
 	return e
 }

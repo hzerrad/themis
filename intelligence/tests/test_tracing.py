@@ -71,7 +71,7 @@ async def test_model_span_has_route_and_tokens_but_no_prompt(spans: InMemorySpan
 
 
 async def test_investigation_is_one_trace_with_its_ids(spans: InMemorySpanExporter) -> None:
-    await Worker(core=LeasingCore(), new_model=ScriptedModel).run_once()
+    await Worker(core=LeasingCore(), new_model=lambda _: ScriptedModel()).run_once()
 
     (root,) = [s for s in spans.get_finished_spans() if s.name == "investigation"]
     attrs = dict(root.attributes or {})

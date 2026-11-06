@@ -11,8 +11,10 @@ type State string
 const (
 	Received      State = "received"
 	Investigating State = "investigating"
-	// AwaitingSuggestion means no investigator is installed, so the incident
-	// waits for a fix suggested by a person or a tool outside Themis.
+	// AwaitingSuggestion means the incident waits for a fix suggested by a
+	// person or a tool outside Themis: no investigator is installed, or a
+	// person works on it, and denied its fix or had theirs refused. A person
+	// may also have it investigated again.
 	AwaitingSuggestion State = "awaiting_suggestion"
 	Diagnosed          State = "diagnosed"
 	Inconclusive       State = "inconclusive"
@@ -37,13 +39,13 @@ const (
 // transitions is the allowlist of legal state changes.
 var transitions = map[State][]State{
 	Received:           {Investigating, AwaitingSuggestion, Rejected, SelfResolved, Canceled},
-	AwaitingSuggestion: {Diagnosed, ClosedNoAction, SelfResolved, Canceled},
-	Investigating:      {Diagnosed, Inconclusive, Escalated, SelfResolved, Canceled},
-	Diagnosed:          {Proposed, Recommended, ClosedNoAction, SelfResolved, Canceled},
+	AwaitingSuggestion: {Diagnosed, Investigating, ClosedNoAction, SelfResolved, Canceled},
+	Investigating:      {Diagnosed, Inconclusive, AwaitingSuggestion, Escalated, SelfResolved, Canceled},
+	Diagnosed:          {Proposed, Recommended, AwaitingSuggestion, ClosedNoAction, SelfResolved, Canceled},
 	Inconclusive:       {Diagnosed, ClosedNoAction, SelfResolved, Canceled},
 	Recommended:        {ClosedNoAction, SelfResolved, Canceled},
-	Proposed:           {AwaitingApproval, Authorized, Recommended, SelfResolved, Canceled},
-	AwaitingApproval:   {Authorized, Recommended, Escalated, SelfResolved, Canceled},
+	Proposed:           {AwaitingApproval, Authorized, Recommended, AwaitingSuggestion, SelfResolved, Canceled},
+	AwaitingApproval:   {Authorized, AwaitingSuggestion, Recommended, Escalated, SelfResolved, Canceled},
 	Authorized:         {Executing, Canceled},
 	Executing:          {Verifying, Escalated},
 	Verifying:          {Resolved, ContainedEscalated, Escalated, Restoring},

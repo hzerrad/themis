@@ -41,20 +41,24 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 	if w.Now != nil {
 		now = w.Now()
 	}
-	window := w.Config.Current().SuggestionWindow()
-	undecided, err := w.Store.UndecidedBefore(ctx, w.Store.DB(), now.Add(-window), closeUndecidedBatch)
+	cfg := w.Config.Current()
+	window, waiting := cfg.SuggestionWindow(), cfg.AwaitingSuggestionWindow()
+	undecided, err := w.Store.UndecidedBefore(ctx, w.Store.DB(), now.Add(-window), now.Add(-waiting), closeUndecidedBatch)
 	if err != nil {
 		return err
 	}
-	reason := "No fix was suggested, and no time to suggest one is configured."
+	reasons := map[incident.State]string{
+		incident.Inconclusive:       "No fix was suggested, and no time to suggest one is configured.",
+		incident.AwaitingSuggestion: "No fix was suggested within " + shortDuration(waiting) + ".",
+	}
 	if window > 0 {
-		reason = "No fix was suggested within " + shortDuration(window) + "."
+		reasons[incident.Inconclusive] = "No fix was suggested within " + shortDuration(window) + "."
 	}
 	for _, u := range undecided {
 		err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 			return w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: u.ID, From: u.State, To: incident.ClosedNoAction,
-				Reason: reason, Actor: actor,
+				Reason: reasons[u.State], Actor: actor,
 			})
 		})
 		if err != nil && !errors.Is(err, store.ErrStateConflict) {
