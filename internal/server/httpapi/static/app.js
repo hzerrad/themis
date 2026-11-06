@@ -924,7 +924,6 @@ function listHow(i) {
 // rowWhat is one plain sentence of what happened and what Themis proposes.
 function rowWhat(i) {
   const s = i.summary || {};
-  const t = workload(i.target);
   const cause = s.cause ? causeText(s.cause.name, s.cause.description) : null;
   const fx = s.fix ? fixWords(s.fix) : null;
   const em = (text) => (text ? h("em", {}, text) : null);
