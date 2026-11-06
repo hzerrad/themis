@@ -1,6 +1,6 @@
 # Writing a check
 
-A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; and `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence). Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
+A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`; `earlier_revision_healthy`, whether a healthy version before the current one is there to go back to; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; and `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence). Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
 
 This is one of them:
 
@@ -70,7 +70,7 @@ This is one of them:
 | `ids.<template>` | That evidence's ID, to cite |
 | `now` | When the checks run |
 | `current` | The current revision from `rollout_history`, or `null` |
-| `prior` | The newest revision older than `current`, or `null` |
+| `prior` | The newest revision older than `current`, or `null`, as for a Deployment's first revision: there is nothing to go back to, and its creation is no rollout |
 | `rollout_at` | When `current` rolled out: its ReplicaSet's creation, or a later template change that reused it. `null` when unknown |
 | `current_revision` | The current revision's number: from `rollout_history`, or without it the newest revision among the pods |
 | `failures` | Signs of trouble, in order: warning events about pods, then containers that died other than `Completed`. Each has `at` (`null` when unknown), `what` and `id` |

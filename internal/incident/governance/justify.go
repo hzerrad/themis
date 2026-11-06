@@ -12,63 +12,94 @@ import (
 )
 
 // justified says why fix isn't justified for an incident whose checks gave
-// predicates: every profile offering it must find one of the checks it names
-// for fix true. ok is set when they all do. "Refused. The rollout-regression
-// profile allows a rollback only when failure_onset_after_rollout is true,
-// and it's false."
-func justified(offering config.Matched, fix capability.Capability, predicates map[string]string) (reason string, ok bool) {
+// results: every profile offering it must find one of the checks it names
+// for fix true. ok is set when they all do. People read the reason, so it
+// says what each check finds in its own words, never its name: "Refused.
+// The rollout-regression profile allows a rollback only when the failures
+// started after the rollout, and the checks found otherwise (…)."
+func justified(offering config.Matched, fix capability.Capability, results []check.Result, words check.List) (reason string, ok bool) {
+	byName := make(map[string]check.Result, len(results))
+	for _, r := range results {
+		byName[r.Name] = r
+	}
 	for _, p := range offering {
 		names := p.JustifiedBy[fix.Name()]
 		if len(names) == 0 {
 			return fmt.Sprintf("Refused. The %s profile names no check that justifies %s.", p.Name, fix.Noun()), false
 		}
-		if len(supporting(names, predicates)) > 0 {
+		if len(supporting(names, results)) > 0 {
 			continue
 		}
-		if len(names) == 1 {
-			it := "it's " + answer(names[0], predicates)
-			if _, ran := predicates[names[0]]; !ran {
-				it = "it didn't run"
+		allows := fmt.Sprintf("Refused. The %s profile allows %s only when ", p.Name, fix.Noun())
+		if len(names) > 1 {
+			finds := make([]string, 0, len(names))
+			for _, name := range names {
+				finds = append(finds, words.Says(name, check.True))
 			}
-			return fmt.Sprintf("Refused. The %s profile allows %s only when %s is true, and %s.", p.Name, fix.Noun(), names[0], it), false
+			return allows + "the checks find one of these: " + strings.Join(finds, ", or ") + ". They found none of them.", false
 		}
-		answers := make([]string, 0, len(names))
-		for _, name := range names {
-			answers = append(answers, name+" ("+answer(name, predicates)+")")
+		requirement := allows + words.Says(names[0], check.True)
+		r, ran := byName[names[0]]
+		if !ran {
+			return requirement + ", and that check didn't run.", false
 		}
-		return fmt.Sprintf("Refused. The %s profile allows %s only when one of these is true: %s.",
-			p.Name, fix.Noun(), strings.Join(answers, ", ")), false
+		found := ", and the checks found otherwise"
+		if r.Value == check.Unknown {
+			found = ", and the checks couldn't tell"
+		}
+		if why := strings.TrimSuffix(r.Reason, "."); why != "" {
+			found += " (" + why + ")"
+		}
+		return requirement + found + ".", false
 	}
 	return "", true
 }
 
 // supporting are the checks of names that are true.
-func supporting(names []string, predicates map[string]string) []string {
+func supporting(names []string, results []check.Result) []string {
 	var out []string
 	for _, name := range names {
-		if check.ParseTruth(predicates[name]) == check.True {
+		if slices.ContainsFunc(results, func(r check.Result) bool { return r.Name == name && r.Value == check.True }) {
 			out = append(out, name)
 		}
 	}
 	return out
 }
 
-// answer says what a check answered: false, unknown, or didn't run.
-func answer(name string, predicates map[string]string) string {
-	value, ok := predicates[name]
-	if !ok {
-		return "didn't run"
+// Failing are the incident's checks that find its failure: those true among
+// the symptoms of its profiles. While one is, Themis never closes the
+// incident with no change on its own.
+func Failing(profiles config.Matched, checks []check.Result) []check.Result {
+	symptoms := profiles.Symptoms()
+	var out []check.Result
+	for _, r := range checks {
+		if r.Value == check.True && slices.Contains(symptoms, r.Name) {
+			out = append(out, r)
+		}
 	}
-	return value
+	return out
+}
+
+// Referral says what a person taking over an incident with no fix applied
+// should know, while its checks find its failure or support a fix: the fixes
+// they support, as Unproposed says, or else what they found. It is empty
+// when they do neither: nothing keeps Themis from closing the incident then.
+func (d *Decider) Referral(profiles config.Matched, fixes capability.Registry, checks []check.Result, words check.List, namespace string) (string, error) {
+	note, err := d.Unproposed(profiles, fixes, checks, words, namespace)
+	if note != "" || err != nil {
+		return note, err
+	}
+	return words.Findings(Failing(profiles, checks)), nil
 }
 
 // Unproposed says which fixes the incident's profiles offer that its checks
 // justify and that no policy of theirs forbids whatever the fix would change,
-// for an investigation that suggested none: "The checks support a rollback
-// (failure_onset_after_rollout is true)." It is empty when there is none. What a fix would change isn't
-// known without one, so a rule that reads the change is passed over, and the
-// cluster isn't read: GitOps may still keep Themis from applying it.
-func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry, checks []check.Result, namespace string) (string, error) {
+// for an investigation that suggested none, in words people read: "The
+// checks support a rollback (the failures started after the rollout)." It is
+// empty when there is none. What a fix would change isn't known without one,
+// so a rule that reads the change is passed over, and the cluster isn't read:
+// GitOps may still keep Themis from applying it.
+func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry, checks []check.Result, words check.List, namespace string) (string, error) {
 	predicates := map[string]string{}
 	for _, c := range checks {
 		predicates[c.Name] = c.Value.String()
@@ -80,7 +111,7 @@ func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry,
 			continue
 		}
 		offering := profiles.Offering(name)
-		if _, ok := justified(offering, fix, predicates); !ok {
+		if _, ok := justified(offering, fix, checks, words); !ok {
 			continue
 		}
 		forbidden := false
@@ -92,14 +123,14 @@ func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry,
 			}
 			// As the investigator would have suggested it.
 			forbidden = forbidden || pol.Forbids(policy.Input{Capability: name, Namespace: namespace, Predicates: predicates, Source: "themis-intelligence", Authenticated: true})
-			for _, c := range supporting(p.JustifiedBy[name], predicates) {
-				if !slices.Contains(support, c+" is true") {
-					support = append(support, c+" is true")
+			for _, c := range supporting(p.JustifiedBy[name], checks) {
+				if says := words.Says(c, check.True); !slices.Contains(support, says) {
+					support = append(support, says)
 				}
 			}
 		}
 		if !forbidden {
-			notes = append(notes, fmt.Sprintf("%s (%s)", fix.Noun(), strings.Join(support, ", ")))
+			notes = append(notes, fmt.Sprintf("%s (%s)", fix.Noun(), strings.Join(support, ", and ")))
 		}
 	}
 	switch len(notes) {

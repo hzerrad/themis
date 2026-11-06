@@ -30,5 +30,5 @@ truth:
     crashed_on_its_own: "false"
     rollout_recent: "true"
     failure_onset_after_rollout: "true"
-    prior_revision_was_healthy: "true"
+    earlier_revision_healthy: "true"
     config_changed_before_failure: "false"

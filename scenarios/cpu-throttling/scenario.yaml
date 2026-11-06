@@ -39,11 +39,15 @@ profile:
     - cpu_throttled_at_limit
     - cpu_usage_near_limit
     - rollout_recent
+    - earlier_revision_healthy
     - gitops_managed
   capabilities: [deployment.set-resources]
   # A raise is refused unless the container is throttled at its limit.
   justifiedBy:
     deployment.set-resources: [cpu_throttled_at_limit]
+  # The failure itself: while it is true, Themis never closes the incident
+  # with no change on its own. It refers it to a person.
+  symptoms: [cpu_throttled_at_limit]
   # What the investigator is told about these incidents: when raising the CPU
   # limit is right and when it is wrong. It names checks, never root causes,
   # and gives a starting size as guidance only: the checks and the policy
@@ -51,12 +55,14 @@ profile:
   guidance: |
     Raising a container's CPU limit is right when the container is throttled
     at its limit for a sustained time and it hurts: cpu_throttled_at_limit is
-    true, cpu_usage_near_limit is true, and the pods are slow, fail readiness
-    probes or time out. Raise the CPU limit of the throttled container only,
-    by enough to clear the throttling; 1.5 times the current limit is a
-    reasonable start. Cite container_cpu, and the pod states or events that
-    show the harm. Never lower a value, never touch memory, and never remove
-    a limit.
+    true, cpu_usage_near_limit is true, and the pods are slow, fall behind,
+    fail readiness probes or time out. With no earlier version to go back to,
+    or one that failed too (earlier_revision_healthy is false), the limit is
+    what to change, however recently the version rolled out. Raise the CPU
+    limit of the throttled container only, by enough to clear the
+    throttling; 1.5 times the current limit is a reasonable start. Cite
+    container_cpu, and the pod states, events or logs that show the harm.
+    Never lower a value, never touch memory, and never remove a limit.
 
     Don't raise it, and say what you found instead, when:
     - throttling_data_available is not true: without throttling figures from
@@ -67,9 +73,10 @@ profile:
     - cpu_usage_near_limit is false while throttling is high: the container
       sits well below its limit and only bursts hit it; say so and leave the
       call to a person.
-    - rollout_recent is true: a new version may use more CPU than the one
-      before. Whether to roll it back is another kind of incident's call, not
-      a raise here.
+    - earlier_revision_healthy is true: the version before this one runs
+      healthy, so this one may use more CPU. The same holds while
+      earlier_revision_healthy is unknown and rollout_recent is true. Whether
+      to roll it back is another kind of incident's call, not a raise here.
     - the pods are slow but not throttled, and events point at their node:
       more limit won't give them CPU the node doesn't have.
   policy:
@@ -79,11 +86,16 @@ profile:
     # these rules say: it only recommends the fix.
     rules:
       # Throttling is the only reason this pack changes CPU, and justifiedBy
-      # asks for it. A raise right after a rollout, which may have caused it,
-      # or when Themis can't tell, is refused too. A restore puts back what
-      # Themis changed.
-      - name: no-raise-after-a-rollout
-        when: action.restore != "true" && predicates.rollout_recent != "false"
+      # asks for it. A new version that may have brought it is refused a
+      # raise: while the version before it is healthy, and, when its health
+      # can't be seen, within 6 hours of the rollout. With no earlier version,
+      # or one that failed too, there is nothing to go back to. A restore puts
+      # back what Themis changed.
+      - name: no-raise-for-a-new-version
+        when: >-
+          action.restore != "true" &&
+          (predicates.earlier_revision_healthy == "true" ||
+           (predicates.earlier_revision_healthy != "false" && predicates.rollout_recent != "false"))
         decision: deny
       # The fix here raises a CPU limit that exists, and nothing else: no
       # memory, no lower value, no new limit where there was none, which

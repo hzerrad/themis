@@ -43,15 +43,17 @@ func (b *Inbox) handOver(ctx context.Context, tx pgx.Tx, incidentID, proposalID,
 	return b.Store.EnqueueTx(ctx, tx, governance.GovernArgs{ProposalID: proposalID, IncidentID: incidentID})
 }
 
-// Unproposed says which fixes the incident's checks support, among those its
-// profiles offer, that no policy of theirs forbids whatever they change, for
-// an investigation that suggested none. It is empty when there is none.
-func (b *Inbox) Unproposed(ctx context.Context, incidentID string, profiles config.Matched, namespace string) (string, error) {
+// Referral says what a person taking over the incident should know while
+// its checks find its failure or support a fix it has none of: which fixes
+// they support, among those its profiles offer that no policy of theirs
+// forbids whatever they change, or else what they found. It is empty when
+// they do neither.
+func (b *Inbox) Referral(ctx context.Context, incidentID string, profiles config.Matched, namespace string) (string, error) {
 	checks, err := b.Store.Predicates(ctx, incidentID)
 	if err != nil {
 		return "", err
 	}
-	return b.decider.Unproposed(profiles, b.Fixes, checks, namespace)
+	return b.decider.Referral(profiles, b.Fixes, checks, b.Checks, namespace)
 }
 
 // next picks the accepted suggestion to govern, among those not governed

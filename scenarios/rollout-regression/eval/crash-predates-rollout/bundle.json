@@ -13,10 +13,10 @@
     "harmful": true,
     "predicates": {
       "config_changed_before_failure": "false",
+      "earlier_revision_healthy": "false",
       "failure_onset_after_rollout": "false",
       "gitops_managed": "false",
       "oom_killed_new_revision": "false",
-      "prior_revision_was_healthy": "false",
       "rollout_recent": "true"
     }
   },
@@ -87,7 +87,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "A rollback is right when the current revision introduced the failure and\na prior revision was healthy. If the failure started before the rollout,\nif the target is managed by GitOps, if its config changed before the\nfailure, or if the evidence is missing, do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nprior_revision_was_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the prior\nrevision is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
+  "guidance": "A rollback is right when the current revision introduced the failure and\nthe revision before it was healthy. If the failure started before the\nrollout, if there is no earlier revision or it failed too\n(earlier_revision_healthy is false), if the target is managed by GitOps,\nif its config changed before the failure, or if the evidence is missing,\ndo not propose a rollback: conclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nearlier_revision_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -155,7 +155,7 @@
   "predicates": [
     {
       "name": "rollout_recent",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "revision 2 rolled out 20m0s ago",
       "evidence_ids": [
@@ -164,7 +164,7 @@
     },
     {
       "name": "failure_onset_after_rollout",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "BackOff on Pod/checkout-5c6a1e2f3-a1b2c at 2026-10-27T08:30:00Z predates revision 2 at 2026-10-27T09:00:00Z",
       "evidence_ids": [
@@ -173,7 +173,7 @@
       ]
     },
     {
-      "name": "prior_revision_was_healthy",
+      "name": "earlier_revision_healthy",
       "version": "1",
       "value": "false",
       "reason": "pod checkout-5c6a1e2f3-a1b2c of revision 1: app Error",
@@ -214,6 +214,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Refused. The rollout-regression profile allows a rollback only when failure_onset_after_rollout is true, and it's false."
+    "reason": "Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks found otherwise (BackOff on Pod/checkout-5c6a1e2f3-a1b2c at 2026-10-27T08:30:00Z predates revision 2 at 2026-10-27T09:00:00Z)."
   }
 }

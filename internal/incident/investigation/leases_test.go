@@ -28,7 +28,7 @@ func (e *env) leases(t *testing.T) *investigation.Leases {
 	cfg := e.worker.Config.Current()
 	l := &investigation.Leases{
 		Store: e.store, Config: cfg, Evidence: e.cat.Evidence, Checks: e.cat.Checks, Reader: k8s, Now: e.clock, For: time.Minute,
-		Suggestions: &suggestion.Inbox{Store: e.store, Config: cfg, Fixes: e.cat.Fixes, Now: e.clock},
+		Suggestions: &suggestion.Inbox{Store: e.store, Config: cfg, Fixes: e.cat.Fixes, Checks: e.cat.Checks, Now: e.clock},
 	}
 	if err := e.worker.Prepare(t.Context(), e.newIncident(t, "rollout-regression", e.target)); err != nil {
 		t.Fatalf("Prepare: %v", err)
@@ -253,10 +253,12 @@ func TestCollect(t *testing.T) {
 }
 
 // A completed investigation hands the suggestion that goes next to
-// governance. Without one, it closes the incident, unless the install gives
-// time for a suggestion, or the checks support a fix the investigator didn't
-// propose: then a person is told. So is one whose profile offers no fix, with
-// what the checks found. One that couldn't decide is blind when it
+// governance. Without one, while the checks find the failure or support a
+// fix the investigator didn't propose, a person takes the incident over,
+// told which fix or what they found, and Themis waits for the fix they
+// suggest. Otherwise it closes the incident, unless the install gives time
+// for a suggestion. One whose profile offers no fix is handed to a person
+// with what the checks found. One that couldn't decide is blind when it
 // missed evidence Themis could have had, and ambiguous otherwise. The
 // timeline says what Themis saw, never the investigator's summary.
 func TestComplete(t *testing.T) {
@@ -268,6 +270,7 @@ func TestComplete(t *testing.T) {
 		suggested  string
 		window     bool
 		justified  bool     // the profile names a check that is true to justify its fix
+		symptom    string   // the profile names this check as finding the failure
 		diagnoses  []string // the profile offers no fix, and runs these checks
 		reported   []catalog.Gap
 		want       []incident.State
@@ -282,8 +285,17 @@ func TestComplete(t *testing.T) {
 			want: []incident.State{incident.Inconclusive, incident.ClosedNoAction}, abstained: "blind",
 		},
 		"inconclusive, though the checks support a fix": {
-			conclusion: investigation.Inconclusive, justified: true, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
-			reason: "No fix proposed. The checks support a rollback (oom_killed_new_revision is true). Referred to a person.",
+			conclusion: investigation.Inconclusive, justified: true, window: true, want: []incident.State{incident.AwaitingSuggestion}, abstained: "ambiguous",
+			reason: "No fix proposed. The checks support a rollback (the new version runs out of memory). Referred to a person.",
+		},
+		// No fix is justified, but the failure is still there: never closed.
+		"inconclusive, while the checks find the failure": {
+			conclusion: investigation.Inconclusive, symptom: "oom_killed_new_revision", want: []incident.State{incident.AwaitingSuggestion}, abstained: "ambiguous",
+			reason: "No fix proposed. The checks found that the new version runs out of memory (checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled). Referred to a person.",
+		},
+		"proposed, with no fix accepted, while the checks find the failure": {
+			conclusion: investigation.Proposed, suggested: rejected, symptom: "oom_killed_new_revision", want: []incident.State{incident.AwaitingSuggestion},
+			reason: noFix + " The checks found that the new version runs out of memory (checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled). Referred to a person.",
 		},
 		"inconclusive, with time for a suggestion": {
 			conclusion: investigation.Inconclusive, window: true, want: []incident.State{incident.Inconclusive}, abstained: "ambiguous",
@@ -314,6 +326,9 @@ func TestComplete(t *testing.T) {
 			}
 			if tc.justified {
 				cfg.Profiles[0].JustifiedBy = map[string][]string{rollback.Name: {"oom_killed_new_revision"}}
+			}
+			if tc.symptom != "" {
+				cfg.Profiles[0].Symptoms = []string{tc.symptom}
 			}
 			if tc.diagnoses != nil {
 				cfg.Profiles[0].Capabilities, cfg.Profiles[0].Checks = nil, tc.diagnoses
@@ -429,8 +444,8 @@ func TestFail_RetriesAfterABackoff(t *testing.T) {
 
 // The last attempt failing, or its lease expiring, gives the investigation
 // up: a fix suggested from outside is checked, and otherwise a person takes
-// over, told why in words. The investigator's own fix, from a lease that
-// didn't finish, isn't used.
+// over, told why in words, and Themis waits for the fix they suggest. The
+// investigator's own fix, from a lease that didn't finish, isn't used.
 func TestLastAttempt_GivesUp(t *testing.T) {
 	failedThrice := "Investigation failed after 3 attempts. Last error: "
 	referred := " Referred to a person."
@@ -442,15 +457,15 @@ func TestLastAttempt_GivesUp(t *testing.T) {
 		why       string
 		outcome   string
 	}{
-		"no reason":           {investigation.Unspecified, nobody, incident.Escalated, failedThrice + "no reason given." + referred, "failed"},
-		"the model is down":   {investigation.ModelUnavailable, nobody, incident.Escalated, failedThrice + "the model was unreachable." + referred, "failed"},
-		"bad model output":    {investigation.InvalidModelOutput, nobody, incident.Escalated, failedThrice + "the model's answers didn't follow the reply format." + referred, "failed"},
-		"the token budget":    {investigation.BudgetExhausted, nobody, incident.Escalated, failedThrice + "the token budget ran out." + referred, "budget_exhausted"},
-		"the time budget":     {investigation.DeadlineExceeded, nobody, incident.Escalated, failedThrice + "the time limit was reached." + referred, "budget_exhausted"},
-		"an internal error":   {investigation.Internal, nobody, incident.Escalated, failedThrice + "an internal error in the investigator." + referred, "failed"},
+		"no reason":           {investigation.Unspecified, nobody, incident.AwaitingSuggestion, failedThrice + "no reason given." + referred, "failed"},
+		"the model is down":   {investigation.ModelUnavailable, nobody, incident.AwaitingSuggestion, failedThrice + "the model was unreachable." + referred, "failed"},
+		"bad model output":    {investigation.InvalidModelOutput, nobody, incident.AwaitingSuggestion, failedThrice + "the model's answers didn't follow the reply format." + referred, "failed"},
+		"the token budget":    {investigation.BudgetExhausted, nobody, incident.AwaitingSuggestion, failedThrice + "the token budget ran out." + referred, "budget_exhausted"},
+		"the time budget":     {investigation.DeadlineExceeded, nobody, incident.AwaitingSuggestion, failedThrice + "the time limit was reached." + referred, "budget_exhausted"},
+		"an internal error":   {investigation.Internal, nobody, incident.AwaitingSuggestion, failedThrice + "an internal error in the investigator." + referred, "failed"},
 		"with an outside fix": {investigation.ModelUnavailable, outside, incident.Diagnosed, failedThrice + "the model was unreachable." + checking, "failed"},
-		"with its own fix":    {investigation.ModelUnavailable, own, incident.Escalated, failedThrice + "the model was unreachable." + referred, "failed"},
-		"stopped responding":  {"", nobody, incident.Escalated, failedThrice + "the investigator stopped responding." + referred, "lease_lost"},
+		"with its own fix":    {investigation.ModelUnavailable, own, incident.AwaitingSuggestion, failedThrice + "the model was unreachable." + referred, "failed"},
+		"stopped responding":  {"", nobody, incident.AwaitingSuggestion, failedThrice + "the investigator stopped responding." + referred, "lease_lost"},
 		"stopped responding, with an outside fix": {
 			"", outside, incident.Diagnosed, failedThrice + "the investigator stopped responding." + checking, "lease_lost",
 		},

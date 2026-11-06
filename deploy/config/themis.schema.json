@@ -674,6 +674,14 @@
             "type": "object",
             "description": "JustifiedBy names, for each fix in Capabilities, the checks that\njustify it: Themis refuses the fix unless one of them is true for the\nincident, whoever suggests it. Each must be a check the profile runs."
           },
+          "symptoms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "uniqueItems": true,
+            "description": "Symptoms are the checks that find the failure itself, such as OOM\nkills or throttling at the limit. While one is true and no fix has been\napplied, Themis never closes the incident with no change on its own: it\nrefers it to a person and waits for a suggested fix. None means the\nchecks in JustifiedBy. Each must be a check the profile runs."
+          },
           "guidance": {
             "type": "string",
             "maxLength": 4000,

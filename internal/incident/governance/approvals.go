@@ -127,7 +127,8 @@ type ExpireArgs struct{}
 // Kind is persisted with each job and must never change.
 func (ExpireArgs) Kind() string { return "expire_approvals" }
 
-// ExpireWorker escalates incidents whose approval nobody gave in time.
+// ExpireWorker hands to a person the incidents whose approval nobody gave in
+// time. Nothing was applied, so each waits for the fix they suggest.
 type ExpireWorker struct {
 	river.WorkerDefaults[ExpireArgs]
 
@@ -152,8 +153,8 @@ func (w *ExpireWorker) Expire(ctx context.Context) error {
 		for _, a := range expired {
 			store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultExpired).Inc)
 			err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: a.IncidentID, From: incident.AwaitingApproval, To: incident.Escalated,
-				Reason: "Approval expired with no decision. Referred to a person.", Actor: "approval",
+				ID: a.IncidentID, From: incident.AwaitingApproval, To: incident.AwaitingSuggestion,
+				Reason: "Approval expired with no decision. Referred to a person.", Actor: "approval", Refer: true,
 			})
 			// An incident that already moved on keeps its state; the action
 			// still expires.

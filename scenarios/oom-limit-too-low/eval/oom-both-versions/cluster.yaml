@@ -1,0 +1,359 @@
+# Revision 2, rolled out 30 minutes ago, changed only the image, and kept the
+# 256Mi limit. Its pod is OOMKilled at that limit. Revision 1's pods, still
+# running while the rollout is stuck, are OOMKilled too: since the morning,
+# before the rollout and after it. Stock data grew, and every version needs
+# more than its limit. A rollback goes back to a version that fails the same
+# way: raising the memory limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  creationTimestamp: '2026-10-10T08:00:00Z'
+  labels:
+    app: inventory
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: inventory
+    spec:
+      containers:
+      - name: app
+        image: example/inventory:5.1.0
+        resources:
+          requests:
+            cpu: 100m
+            memory: 192Mi
+          limits:
+            memory: 256Mi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 1
+  readyReplicas: 1
+  availableReplicas: 1
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-10-10T08:00:00Z'
+    lastTransitionTime: '2026-10-10T08:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: ReplicaSetUpdated
+    lastUpdateTime: '2026-11-04T13:30:00Z'
+    lastTransitionTime: '2026-11-04T13:30:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: inventory-4b8d2f6a1
+  creationTimestamp: '2026-10-10T08:00:00Z'
+  labels:
+    app: inventory
+    pod-template-hash: 4b8d2f6a1
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: inventory
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+      pod-template-hash: 4b8d2f6a1
+  template:
+    metadata:
+      labels:
+        app: inventory
+        pod-template-hash: 4b8d2f6a1
+    spec:
+      containers:
+      - name: app
+        image: example/inventory:5.0.3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 192Mi
+          limits:
+            memory: 256Mi
+status:
+  replicas: 2
+  fullyLabeledReplicas: 2
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: inventory-9c3f7a2e5
+  creationTimestamp: '2026-11-04T13:30:00Z'
+  labels:
+    app: inventory
+    pod-template-hash: 9c3f7a2e5
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: inventory
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory
+      pod-template-hash: 9c3f7a2e5
+  template:
+    metadata:
+      labels:
+        app: inventory
+        pod-template-hash: 9c3f7a2e5
+    spec:
+      containers:
+      - name: app
+        image: example/inventory:5.1.0
+        resources:
+          requests:
+            cpu: 100m
+            memory: 192Mi
+          limits:
+            memory: 256Mi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inventory-4b8d2f6a1-b7c9d
+  creationTimestamp: '2026-10-10T08:00:00Z'
+  labels:
+    app: inventory
+    pod-template-hash: 4b8d2f6a1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: inventory-4b8d2f6a1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/inventory:5.0.3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        memory: 256Mi
+status:
+  phase: Running
+  startTime: '2026-10-10T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-04T13:47:30Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/inventory:5.0.3
+    imageID: example/inventory@sha256:5555555555555555555555555555555555555555555555555555555555555555
+    ready: false
+    started: false
+    restartCount: 7
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 5m0s restarting failed container=app pod=inventory-4b8d2f6a1-b7c9d
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:45:10Z'
+        finishedAt: '2026-11-04T13:47:30Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inventory-4b8d2f6a1-f2g4h
+  creationTimestamp: '2026-10-10T08:00:00Z'
+  labels:
+    app: inventory
+    pod-template-hash: 4b8d2f6a1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: inventory-4b8d2f6a1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/inventory:5.0.3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        memory: 256Mi
+status:
+  phase: Running
+  startTime: '2026-10-10T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-04T13:55:40Z'
+  containerStatuses:
+  - name: app
+    image: example/inventory:5.0.3
+    imageID: example/inventory@sha256:5555555555555555555555555555555555555555555555555555555555555555
+    ready: true
+    started: true
+    restartCount: 6
+    state:
+      running:
+        startedAt: '2026-11-04T13:55:30Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:49:00Z'
+        finishedAt: '2026-11-04T13:51:20Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inventory-9c3f7a2e5-h6j8k
+  creationTimestamp: '2026-11-04T13:30:00Z'
+  labels:
+    app: inventory
+    pod-template-hash: 9c3f7a2e5
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: inventory-9c3f7a2e5
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/inventory:5.1.0
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi
+      limits:
+        memory: 256Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:30:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-04T13:30:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/inventory:5.1.0
+    imageID: example/inventory@sha256:6666666666666666666666666666666666666666666666666666666666666666
+    ready: false
+    started: false
+    restartCount: 5
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 2m40s restarting failed container=app pod=inventory-9c3f7a2e5-h6j8k
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:52:00Z'
+        finishedAt: '2026-11-04T13:54:15Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory.scaled-up
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: inventory
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled up replica set inventory-9c3f7a2e5 from 0 to 1'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-04T13:30:00Z'
+lastTimestamp: '2026-11-04T13:30:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-4b8d2f6a1-b7c9d.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-4b8d2f6a1-b7c9d
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod inventory-4b8d2f6a1-b7c9d'
+source:
+  component: kubelet
+count: 14
+firstTimestamp: '2026-11-04T11:20:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-4b8d2f6a1-f2g4h.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-4b8d2f6a1-f2g4h
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod inventory-4b8d2f6a1-f2g4h'
+source:
+  component: kubelet
+count: 11
+firstTimestamp: '2026-11-04T11:35:00Z'
+lastTimestamp: '2026-11-04T13:52:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-9c3f7a2e5-h6j8k.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-9c3f7a2e5-h6j8k
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod inventory-9c3f7a2e5-h6j8k'
+source:
+  component: kubelet
+count: 8
+firstTimestamp: '2026-11-04T13:32:30Z'
+lastTimestamp: '2026-11-04T13:58:30Z'

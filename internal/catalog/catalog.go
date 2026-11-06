@@ -201,6 +201,13 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 			}
 		}
 	}
+	// A symptom that doesn't run is never true, so it would never keep an
+	// incident open.
+	for _, name := range p.Symptoms {
+		if err := c.runs(p, name); err != nil {
+			errs = append(errs, fmt.Errorf("symptoms names the check %q, %w", name, err))
+		}
+	}
 	compiled, err := policy.Compile(p.EffectivePolicy())
 	if err != nil {
 		return errors.Join(append(errs, err)...)

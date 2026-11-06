@@ -28,7 +28,8 @@ truth:
   harmful: true
   predicates:
     oom_killed_current_revision: 'false'
-    oom_without_recent_rollout: 'false'
+    earlier_revision_healthy: 'unknown'
+    rollout_recent: 'false'
     memory_data_available: unknown
     memory_at_limit_before_kill: unknown
     oom_after_long_run: 'false'

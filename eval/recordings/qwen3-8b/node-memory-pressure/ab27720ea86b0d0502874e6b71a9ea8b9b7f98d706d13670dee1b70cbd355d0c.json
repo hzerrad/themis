@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Node memory pressure evicted pods despite container memory usage below limit. Raising container limits won't resolve node-level resource exhaustion.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Pods evicted due to node memory pressure, not container memory limits.\",\n    \"supporting\": [\"evicted_for_node_memory\", \"memory_at_limit_before_kill\"],\n    \"contradicting\": [\"oom_killed_current_revision\"],\n    \"missing\": [\"node_memory_usage_metrics\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_leak\",\n    \"summary\": \"Memory usage grew over time until node eviction, despite not hitting container limits.\",\n    \"supporting\": [\"oom_after_long_run\"],\n    \"contradicting\": [\"memory_at_limit_before_kill\"],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4108,
+        "output_tokens": 1140
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

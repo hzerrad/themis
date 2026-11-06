@@ -12,9 +12,10 @@ const (
 	Received      State = "received"
 	Investigating State = "investigating"
 	// AwaitingSuggestion means the incident waits for a fix suggested by a
-	// person or a tool outside Themis: no investigator is installed, or a
-	// person works on it, and denied its fix or had theirs refused. A person
-	// may also have it investigated again.
+	// person or a tool outside Themis: no investigator is installed; a person
+	// works on it, and denied its fix or had theirs refused; or Themis
+	// referred it to a person with no fix applied, while its checks find the
+	// failure. A person may also have it investigated again.
 	AwaitingSuggestion State = "awaiting_suggestion"
 	Diagnosed          State = "diagnosed"
 	Inconclusive       State = "inconclusive"
@@ -45,7 +46,7 @@ var transitions = map[State][]State{
 	Inconclusive:       {Diagnosed, ClosedNoAction, SelfResolved, Canceled},
 	Recommended:        {ClosedNoAction, SelfResolved, Canceled},
 	Proposed:           {AwaitingApproval, Authorized, Recommended, AwaitingSuggestion, SelfResolved, Canceled},
-	AwaitingApproval:   {Authorized, AwaitingSuggestion, Recommended, Escalated, SelfResolved, Canceled},
+	AwaitingApproval:   {Authorized, AwaitingSuggestion, Recommended, SelfResolved, Canceled},
 	Authorized:         {Executing, Canceled},
 	Executing:          {Verifying, Escalated},
 	Verifying:          {Resolved, ContainedEscalated, Escalated, Restoring},

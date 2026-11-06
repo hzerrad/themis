@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to memory exhaustion in revision 2\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"Revision 2's memory limit is insufficient for its workload\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"Revision 2's code has a memory leak\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[\"ev-container_logs_tail\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to revision 1 which was healthy before the rollout\",\"rationale\":\"Container logs confirm revision 2's app started and marked itself ready, but was later OOMKilled. Earlier revision 1 with same memory limit was healthy. This indicates memory_limit_regression in revision 2. Rolling back to revision 1 resolves the issue without further investigation.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"oom_killed_new_revision\",\"failure_onset_after_rollout\",\"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 3655,
+        "output_tokens": 500
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

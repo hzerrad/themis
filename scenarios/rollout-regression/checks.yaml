@@ -1,16 +1,19 @@
-# The checks of the rollout-regression pack. rollout_recent and gitops_managed,
-# which its profile runs too, are Themis's own.
+# The checks of the rollout-regression pack. rollout_recent,
+# earlier_revision_healthy and gitops_managed, which its profile runs too, are
+# Themis's own.
 # docs/checks.md says what each field means and what the expressions see.
 
 # A failure without a time could be earlier than the rollout. Anyone who may
 # create events in the namespace can write one that reads like a failure, so
 # the failures count only when the pods' status shows them too: a pod of the
-# current revision isn't ready, or a container of one restarted.
+# current revision isn't ready, or a container of one restarted. A
+# Deployment's first revision replaced none, so its failures followed no
+# rollout.
 - name: failure_onset_after_rollout
-  version: "2"
+  version: "3"
   description: The failures started after the rollout
   topic: When the failures started
-  whenFalse: Some failures started before the rollout
+  whenFalse: The failures didn't start after a rollout
   reads: [rollout_history, pod_states, target_events]
   let:
     early: failures.filter(f, f.at != null && f.at < rollout_at)
@@ -22,6 +25,10 @@
     - when: rollout_at == null
       answer: unknown
       reason: the rollout time is unknown
+    - when: prior == null
+      answer: false
+      reason: there is no revision before revision ${current.revision}, so no rollout came before the failures
+      cite: [ids.rollout_history]
     - when: size(early) > 0
       answer: false
       reason: ${early[0].what} at ${early[0].at} predates revision ${current.revision} at ${rollout_at}
@@ -44,42 +51,6 @@
     - answer: true
       reason: all ${size(failures)} failures follow revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, "failures.map(f, f.id)"]
-
-# The revision before the current one runs ready pods that never failed.
-- name: prior_revision_was_healthy
-  version: "1"
-  description: The previous version was healthy
-  topic: Health of the previous version
-  whenFalse: The previous version was not healthy
-  reads: [rollout_history, pod_states]
-  let:
-    pods: pod_states.pods.filter(p, p.revision == prior.revision)
-    # What is wrong with each pod, in order: its containers that died, then
-    # that it isn't ready.
-    problems: >-
-      pods.map(p,
-        p.containers
-          .filter(c, c.lastTermination != null && c.lastTermination.reason != "Completed")
-          .map(c, "pod " + p.name + " of revision " + prior.revision + ": " + c.name + " " + c.lastTermination.reason)
-        + (p.ready ? [] : ["pod " + p.name + " of revision " + prior.revision + " is not ready"])
-      ).flatten()
-  answers:
-    - when: current == null
-      answer: unknown
-      reason: the current revision is unknown
-    - when: prior == null
-      answer: unknown
-      reason: there is no prior revision
-    - when: size(problems) > 0
-      answer: false
-      reason: ${problems[0]}
-      cite: [ids.rollout_history, ids.pod_states]
-    - when: size(pods) == 0
-      answer: unknown
-      reason: revision ${prior.revision} has no pods left to judge
-    - answer: true
-      reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
-      cite: [ids.rollout_history, ids.pod_states]
 
 # A container of the current revision was OOMKilled.
 - name: oom_killed_new_revision

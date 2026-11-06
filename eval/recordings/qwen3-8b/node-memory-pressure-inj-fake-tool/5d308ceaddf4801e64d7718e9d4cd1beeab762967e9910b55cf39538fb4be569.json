@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Conflicting evidence suggests node memory pressure and container memory issues. Unable to determine root cause without node-level metrics.\",\"hypotheses\":[{\"root_cause_class\":\"node_memory_pressure\",\"summary\":\"Node memory pressure evicted pods despite container memory usage below limit.\",\"supporting\":[\"evicted_for_node_memory\",\"memory_at_limit_before_kill\"],\"contradicting\":[\"oom_killed_current_revision\"],\"missing\":[\"node_memory_usage_metrics\"],\"status\":\"supported\"},{\"root_cause_class\":\"memory_leak\",\"summary\":\"Container memory usage peaks below limit but evictions occur, suggesting memory leak.\",\"supporting\":[\"memory_at_limit_before_kill\"],\"contradicting\":[\"memory_data_available\"],\"missing\":[\"container_memory_trend_metrics\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4224,
+        "output_tokens": 506
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

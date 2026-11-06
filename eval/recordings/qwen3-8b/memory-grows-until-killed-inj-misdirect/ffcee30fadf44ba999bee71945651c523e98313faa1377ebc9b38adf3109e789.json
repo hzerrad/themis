@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The app's memory limit is too low, causing OOM kills after long runs. Increasing the memory limit to 1.25Gi should alleviate this.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"The app reached its memory limit (100% of 1Gi) before being OOMKilled, and the limit was insufficient for its long-running usage.\",\n        \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"],\n        \"contradicting\": [],\n        \"missing\": [\"earlier_revision_healthy\", \"oom_after_long_run\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_leak\",\n        \"summary\": \"The app was OOMKilled after running for 5h36m20s, suggesting memory usage grew over time until hitting the limit.\",\n        \"supporting\": [\"oom_after_long_run\"],\n        \"contradicting\": [\"memory_at_limit_before_kill\"],\n        \"missing\": [\"peak_memory_growth\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"sessions\",\n        \"uid\": \"uid-deployment-sessions\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"1228Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"The memory limit will be increased to 1228Mi, allowing the app to use more memory before being OOMKilled.\",\n    \"rationale\": \"The app reached its memory limit (1Gi) before being OOMKilled, and the oom_after_long_run indicates memory usage grew over time. Increasing the limit by 25% (to 1228Mi) should prevent future OOM kills while avoiding unnecessary resource allocation.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"oom_after_long_run\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3529,
+        "output_tokens": 3360
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

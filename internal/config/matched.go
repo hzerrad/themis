@@ -113,6 +113,16 @@ func (m Matched) Capabilities() []string {
 	return out
 }
 
+// Symptoms are the checks any of the profiles names as finding its failure,
+// each once.
+func (m Matched) Symptoms() []string {
+	var out []string
+	for _, p := range m {
+		out = union(out, p.EffectiveSymptoms())
+	}
+	return out
+}
+
 // Offering is the profiles that offer fix: they govern it.
 func (m Matched) Offering(fix string) Matched {
 	var out Matched

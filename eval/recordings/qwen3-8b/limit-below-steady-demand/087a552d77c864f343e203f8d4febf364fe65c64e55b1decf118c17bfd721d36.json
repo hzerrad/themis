@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The 'api' container is throttled at its CPU limit of 500m, causing readiness probe failures. Increasing the CPU limit to 750m should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Container 'api' is throttled at 500m limit with 64% throttling ratio and 99% usage.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise CPU limit to 750m to clear throttling, improving readiness probe success.\",\n  \"rationale\": \"Throttling data shows sustained CPU limit hitting (64% throttled, 99% usage). No recent rollout (rollout_recent=false) means new version isn't the cause. Earlier revision is unknown, but current limit is same as previous. Raising limit addresses the root cause.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3918,
+        "output_tokens": 697
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

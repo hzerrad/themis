@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"The failure onset predates the rollout, and the earlier revision was unhealthy. However, no evidence of a specific cause (e.g., config change, image issue, or application bug) is present. Missing container logs and clear root cause indicators prevent a definitive fix.\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Pods in both revisions show CrashLoopBackOff, suggesting a code issue.\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"No config changes detected, but earlier revision was unhealthy.\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No clear cause identified; logs and config changes are missing.\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3208,
+        "output_tokens": 2078
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

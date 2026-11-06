@@ -39,6 +39,9 @@ type Fix struct {
 	Profiles config.Matched
 	// Checks are the incident's check results, as stored.
 	Checks []check.Result
+	// Words say what each check finds, for the reasons people read: a
+	// refusal names what a check finds, never the check.
+	Words check.List
 
 	Capability capability.Capability
 	Params     map[string]any
@@ -163,7 +166,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 		return policy.Decision{Outcome: policy.Deny, Reason: "Refused. None of the incident's profiles offers this fix."}, nil
 	}
 	if fix.Restores == "" {
-		if reason, ok := justified(offering, fix.Capability, in.Predicates); !ok {
+		if reason, ok := justified(offering, fix.Capability, fix.Checks, fix.Words); !ok {
 			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: UnjustifiedRule}, nil
 		}
 	}

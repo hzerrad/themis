@@ -218,6 +218,11 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 			add("justifiedBy", "%s is not in capabilities", fix)
 		}
 	}
+	for j, name := range p.Symptoms {
+		if slices.Contains(p.Symptoms[:j], name) {
+			add(fmt.Sprintf("symptoms[%d]", j), "duplicate check %q", name)
+		}
+	}
 	if n := utf8.RuneCountInString(p.Guidance); n > MaxGuidance {
 		add("guidance", "must be at most %d characters, got %d", MaxGuidance, n)
 	}

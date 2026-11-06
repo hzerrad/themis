@@ -47,7 +47,7 @@ profile:
   checks:
     - rollout_recent
     - failure_onset_after_rollout
-    - prior_revision_was_healthy
+    - earlier_revision_healthy
     - oom_killed_new_revision
     - gitops_managed
     - config_changed_before_failure
@@ -55,20 +55,24 @@ profile:
   # A rollback is refused unless the failures started after the rollout.
   justifiedBy:
     deployment.rollback-to-revision: [failure_onset_after_rollout]
+  # The failure itself: while one is true, Themis never closes the incident
+  # with no change on its own. It refers it to a person.
+  symptoms: [failure_onset_after_rollout, oom_killed_new_revision]
   # What the investigator is told about these incidents: when a rollback is
   # right and when it is wrong. Guidance only: the checks and the policy
   # below decide.
   guidance: |
     A rollback is right when the current revision introduced the failure and
-    a prior revision was healthy. If the failure started before the rollout,
-    if the target is managed by GitOps, if its config changed before the
-    failure, or if the evidence is missing, do not propose a rollback:
-    conclude inconclusive and say what is missing.
+    the revision before it was healthy. If the failure started before the
+    rollout, if there is no earlier revision or it failed too
+    (earlier_revision_healthy is false), if the target is managed by GitOps,
+    if its config changed before the failure, or if the evidence is missing,
+    do not propose a rollback: conclude inconclusive and say what is missing.
 
     When oom_killed_new_revision, failure_onset_after_rollout and
-    prior_revision_was_healthy are all true, and gitops_managed and
-    config_changed_before_failure are false, rolling back to the prior
-    revision is justified, even if the logs are empty: a process killed for
+    earlier_revision_healthy are all true, and gitops_managed and
+    config_changed_before_failure are false, rolling back to the revision
+    before it is justified, even if the logs are empty: a process killed for
     memory often writes nothing.
 
     Naming a cause doesn't make a rollback right: these conditions do.
@@ -80,16 +84,17 @@ profile:
     rules:
       # justifiedBy asks that the failures started after the rollout. The
       # rollout must also be recent, no config changed before the failures,
-      # and the version before it must have been healthy, or the new one run
-      # out of memory.
+      # and there must be an earlier version that isn't known to have failed:
+      # one known healthy, or, when the new one runs out of memory, one whose
+      # pods are gone.
       - name: rollback-needs-a-bad-rollout
         when: >-
           action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
           (predicates.rollout_recent != "true" ||
            predicates.config_changed_before_failure != "false" ||
-           predicates.prior_revision_was_healthy == "false" ||
+           predicates.earlier_revision_healthy == "false" ||
            (predicates.oom_killed_new_revision != "true" &&
-            predicates.prior_revision_was_healthy != "true"))
+            predicates.earlier_revision_healthy != "true"))
         decision: deny
       - name: rollback-needs-approval
         when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"

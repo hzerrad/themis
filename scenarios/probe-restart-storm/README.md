@@ -25,7 +25,7 @@ Both are answered by another pack as well: `KubePodCrashLooping` by rollout-regr
 | `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection, and a pod of the current revision the failures name has a container that isn't ready or restarted since. Events alone make it `unknown` |
 | `killed_during_startup` | A container failed its startup probe and was killed and restarted, as `probe_kills` requires, or one of the current revision, without a startup probe, was stopped no later than its liveness probe could first fail it: its initial delay, its failures allowed and one more period, plus the default 30 seconds to stop. It never passed the probe |
 | `crashed_on_its_own` | A container exited with a code other than 0, 137 or 143, the codes of a container the kubelet stops, or ran out of memory |
-| `rollout_recent` | The current revision rolled out within 6 hours |
+| `rollout_recent` | Themis's own: the current revision replaced an earlier one within 6 hours. False for a Deployment's first revision |
 
 Whether the logs show errors, whether a probe's error answer means the application is unhealthy or only not ready yet, and whether a dependency is down are left to the investigator: they can't be read reliably from the evidence by a check. A container that traps SIGTERM and exits with 1 looks crashed to `crashed_on_its_own`.
 
@@ -42,6 +42,8 @@ Themis refuses any fix on a Deployment GitOps owns, whatever the pack, and a pro
 | `probe-change-needs-approval` | require_approval | A person approves every probe change |
 
 Putting back what Themis changed, after a change that didn't help, passes.
+
+While one of the pack's symptoms, `probe_kills`, `probe_timeouts`, `killed_during_startup` and `crashed_on_its_own`, is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person and waits for the fix they suggest.
 
 ## Cases
 

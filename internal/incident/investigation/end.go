@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 	"time"
 	"unicode"
 
@@ -46,13 +45,13 @@ const (
 // Complete ends the investigation leaseID holds with r, keeping the gaps the
 // investigator reported. The accepted suggestion that goes next is handed to
 // governance. Without one, a person takes over an incident none of whose
-// profiles offers a fix, told what the checks found. Otherwise an
-// inconclusive investigation is handed to a person when the incident's checks
-// support a fix the investigator didn't propose; failing that it waits for a
-// suggestion if the install gives time for one, and otherwise, like a
-// proposed one, closes the incident. An incident a person works on, having
-// denied its fix or had it investigated again, waits for a suggested fix
-// instead: the person decides what comes next.
+// profiles offers a fix, told what the checks found. An incident a person
+// works on, having denied its fix or had it investigated again, waits for a
+// suggested fix: the person decides what comes next. Otherwise, while the
+// incident's checks find its failure or support a fix, a person takes it
+// over and Themis waits for their suggested fix. Only when they do neither
+// does an inconclusive investigation wait for a suggestion if the install
+// gives time for one, or, like a proposed one, close the incident.
 func (l *Leases) Complete(ctx context.Context, leaseID string, r store.InvestigationResult, reported []catalog.Gap) error {
 	return l.Store.InTx(ctx, func(tx pgx.Tx) error {
 		inv, err := l.Store.LeasedInvestigation(ctx, tx, leaseID, l.now())
@@ -99,13 +98,10 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 				return err
 			}
 			// Text in the evidence may have talked the investigator out of a
-			// fix the checks support: a person decides.
-			note, err := l.Suggestions.Unproposed(ctx, inv.IncidentID, matched, inv.Target.Namespace)
-			if err != nil {
+			// fix the checks support, and a failure the checks find doesn't
+			// go away for want of a fix: a person decides.
+			if done, err := l.refer(ctx, tx, inv, matched, noFixProposed); done || err != nil {
 				return err
-			}
-			if note != "" {
-				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixProposed+" "+note+referred, investigator, incident.Investigating, incident.Escalated)
 			}
 			// Someone may yet suggest a fix: CloseUndecidedWorker closes it if not.
 			if l.Config.Current().SuggestionWindow() > 0 {
@@ -124,18 +120,34 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		if involved {
 			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.AwaitingSuggestion)
 		}
+		if done, err := l.refer(ctx, tx, inv, matched, noFixAccepted); done || err != nil {
+			return err
+		}
 		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
+}
+
+// refer hands an incident whose checks find its failure, or support a fix,
+// to a person rather than closing it with no change, saying after
+// conclusion which fix they support or what they found: "No fix proposed.
+// The checks support a rollback (the failures started after the rollout).
+// Referred to a person." It waits for their suggested fix. It reports
+// whether it did.
+func (l *Leases) refer(ctx context.Context, tx pgx.Tx, inv store.Investigation, profiles config.Matched, conclusion string) (bool, error) {
+	note, err := l.Suggestions.Referral(ctx, inv.IncidentID, profiles, inv.Target.Namespace)
+	if note == "" || err != nil {
+		return false, err
+	}
+	return true, l.Store.ReferPath(ctx, tx, inv.IncidentID, conclusion+" "+note+referred, investigator, incident.Investigating, incident.AwaitingSuggestion)
 }
 
 // referDiagnosis hands an incident none of whose profiles offers a fix to a
 // person, saying after conclusion what the checks found, or that they found
 // nothing: "No fix proposed. The checks found that an image can't be pulled
 // (…). Themis has no fix for this kind of incident. Referred to a person."
-// Themis can only
-// diagnose such an incident: closing it would drop the diagnosis, and nobody
-// can suggest a fix it would take. It reports whether it did; it doesn't for
-// an incident whose profiles are all gone.
+// Themis can only diagnose such an incident: closing it would drop the
+// diagnosis, and nobody can suggest a fix it would take. It reports whether
+// it did; it doesn't for an incident whose profiles are all gone.
 func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID string, profiles config.Matched, conclusion string) (bool, error) {
 	if len(profiles) == 0 || len(profiles.Capabilities()) > 0 {
 		return false, nil
@@ -145,44 +157,18 @@ func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID strin
 		return false, err
 	}
 	names := profiles.Checks()
-	var found []string
+	var found []check.Result
 	for _, r := range results {
-		if r.Value != check.True || (names != nil && !slices.Contains(names, r.Name)) {
-			continue
+		if r.Value == check.True && (names == nil || slices.Contains(names, r.Name)) {
+			found = append(found, r)
 		}
-		what := r.Name + " is true"
-		if c, ok := l.Checks.Get(r.Name); ok && c.Description != "" {
-			what = lowerFirst(c.Description)
-		}
-		if why := strings.TrimSuffix(r.Reason, "."); why != "" {
-			what += " (" + why + ")"
-		}
-		found = append(found, "that "+what)
 	}
-	findings := "No check found a cause."
-	switch n := len(found); n {
-	case 0:
-	case 1:
-		findings = "The checks found " + found[0] + "."
-	default:
-		findings = "The checks found " + strings.Join(found[:n-1], ", ") + " and " + found[n-1] + "."
+	findings := l.Checks.Findings(found)
+	if findings == "" {
+		findings = "No check found a cause."
 	}
 	reason := conclusion + " " + findings + " Themis has no fix for this kind of incident." + referred
 	return true, l.Store.TransitionPath(ctx, tx, incidentID, reason, investigator, incident.Investigating, incident.Escalated)
-}
-
-// lowerFirst puts a check's description inside a sentence: "An image can't
-// be pulled" reads "an image can't be pulled". A first word in capitals, such
-// as CPU, stays as it is.
-func lowerFirst(s string) string {
-	r := []rune(s)
-	if len(r) > 1 && unicode.IsUpper(r[1]) {
-		return s
-	}
-	if len(r) > 0 {
-		r[0] = unicode.ToLower(r[0])
-	}
-	return string(r)
 }
 
 // Reason is why an investigation failed, as stored, such as
@@ -310,7 +296,8 @@ func (l *Leases) blind(ctx context.Context, incidentID string, reported []eviden
 
 // abandon ends an investigation that won't finish. A fix suggested from
 // outside was accepted and is still worth checking; otherwise a person takes
-// over.
+// over, and Themis waits for the fix they suggest when the incident's
+// profiles offer one.
 func (l *Leases) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason string) error {
 	if _, err := l.Store.LockIncident(ctx, tx, incidentID); err != nil {
 		return err
@@ -322,7 +309,15 @@ func (l *Leases) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 	if handed || err != nil {
 		return err
 	}
-	err = l.Store.TransitionPath(ctx, tx, incidentID, reason+referred, investigator, incident.Investigating, incident.Escalated)
+	in, err := l.Store.Incident(ctx, incidentID)
+	if err != nil {
+		return err
+	}
+	to := incident.Escalated
+	if len(l.Config.Current().Matched(in.Profiles()).Capabilities()) > 0 {
+		to = incident.AwaitingSuggestion
+	}
+	err = l.Store.ReferPath(ctx, tx, incidentID, reason+referred, investigator, incident.Investigating, to)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}

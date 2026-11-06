@@ -26,7 +26,8 @@ truth:
   decision: abstain
   predicates:
     oom_killed_current_revision: 'true'
-    oom_without_recent_rollout: 'true'
+    earlier_revision_healthy: 'unknown'
+    rollout_recent: 'false'
     memory_data_available: 'true'
     memory_at_limit_before_kill: 'true'
     oom_after_long_run: 'true'

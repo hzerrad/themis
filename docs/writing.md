@@ -16,7 +16,7 @@ The judge is in the manner, not the vocabulary. Terse, formal labels are good: "
 ## Rules
 
 1. **State first, then what follows.** "Waiting for your approval. Roll payments back to revision 1?"
-2. **Give the reason.** A refusal, referral or closure says why, in terms of the checks, the policy or the evidence. "Refused. The rollout-regression profile allows a rollback only when failure_onset_after_rollout is true, and it's false."
+2. **Give the reason.** A refusal, referral or closure says why, in terms of the checks, the policy or the evidence. A check is named by what it finds, never by its identifier. "Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks found otherwise (there is no revision before revision 1, so no rollout came before the failures)."
 3. **Say something about this incident, or cut it.** A sentence that explains how Themis thinks, such as what counts as evidence or how checks weigh it, tells the reader nothing about the incident in front of them. Delete it. "Evidence" needs no subtitle.
 4. **Attribute other people's text, and leave it alone.** What the investigator or a suggester wrote is shown exactly as written, with a short attribution: "Written by the investigator's model", "Written by the suggester". No editorial next to it. This guide governs only what Themis writes.
 5. **Never apologise or soften.** Not "Sorry", "unfortunately", "it seems", "we couldn't". Write "Approval expired with no decision.", not "Sorry, this approval has expired."
@@ -34,7 +34,8 @@ These make a message read as generated. Each has a plainer form.
 
 | Tell | Before | After |
 |---|---|---|
-| Colon chains | Refused: the check that justifies a rollback isn't true: failure_onset_after_rollout is false. | Refused. The rollout-regression profile allows a rollback only when failure_onset_after_rollout is true, and it's false. |
+| Colon chains | Refused: the check that justifies a rollback isn't true: failure_onset_after_rollout is false. | Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks found otherwise (…). |
+| Check identifiers in prose | No fix proposed. The checks support a rollback (failure_onset_after_rollout is true). | No fix proposed. The checks support a rollback (the failures started after the rollout). |
 | Semicolons gluing clauses | Not read; all 6 evidence requests were used. | Not read. The investigation used all 6 of its evidence requests. |
 | Legal jargon in prose | It is material, not a finding; the checks do not rely on it. | Themis's checks don't read log text, so it had no effect on them. |
 | "X, not Y" as a flourish | Recommended, not applied: Argo CD manages this workload. | Argo CD manages this workload. Apply the change in Git. |
@@ -69,6 +70,7 @@ When checks of the incident read that kind of evidence, the second sentence name
 | Fixed | The change worked and held | resolved successfully |
 | Restored | The change didn't help and was undone | rolled back (ambiguous with the fix) |
 | Referred to a person | Themis hands the incident over | escalated, needs a human |
+| Waiting for a suggested fix | The incident waits for a fix a person or a tool suggests: after a denial or a refusal, or referred with no fix applied | pending, waiting for input |
 | Closed, no change | Nothing was applied | closed without acting, nothing changed |
 | Recommended | A change Themis may not apply itself (GitOps) | suggested |
 | Operational | A part of the install works (Status) | working, OK, healthy |

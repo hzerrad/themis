@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probe failures not linked to CPU throttling or limits\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"CPU usage (34% of limit) and throttling (6% ratio) do not meet thresholds for limit adjustment. Readiness probe failures may stem from non-CPU factors.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [\"ev-target_events\"], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3475,
+        "output_tokens": 653
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

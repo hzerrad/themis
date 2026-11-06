@@ -71,7 +71,9 @@ func init() {
 				transitionsTotal.WithLabelValues(string(from), string(to))
 			}
 		}
-		if incident.CanTransition(from, incident.Escalated) || incident.CanTransition(from, incident.ContainedEscalated) {
+		// A referral may also leave the incident waiting for a person's fix.
+		if incident.CanTransition(from, incident.Escalated) || incident.CanTransition(from, incident.ContainedEscalated) ||
+			incident.CanTransition(from, incident.AwaitingSuggestion) {
 			escalationsTotal.WithLabelValues(string(from))
 		}
 	}
@@ -87,9 +89,9 @@ func CountInvestigation(tx pgx.Tx, outcome string) {
 
 // observeTransition records a committed transition, which spent sinceChange
 // seconds in its previous state and sinceCreated since the incident began.
-func observeTransition(from, to incident.State, sinceChange, sinceCreated float64) {
+func observeTransition(from, to incident.State, referred bool, sinceChange, sinceCreated float64) {
 	transitionsTotal.WithLabelValues(string(from), string(to)).Inc()
-	if to == incident.Escalated || to == incident.ContainedEscalated {
+	if referred || to == incident.Escalated || to == incident.ContainedEscalated {
 		escalationsTotal.WithLabelValues(string(from)).Inc()
 	}
 	if to == incident.Proposed {

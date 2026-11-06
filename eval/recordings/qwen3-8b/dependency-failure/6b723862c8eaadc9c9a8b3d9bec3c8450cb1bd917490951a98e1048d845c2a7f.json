@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":\"deployment.rollback-to-revision\",\"params\":{\"revision\": \"}, \" },\"summary\":\"Rollback to revision 1 to resolve dependency failure caused by unreachable orders-db service\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Logs show application cannot connect to orders-db service\",\"supporting\":[\"ev-container_logs_tail\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Earlier revision health status unknown\",\"supporting\":[\"earlier_revision_healthy\"],\"contradicting\":[\"rollout_recent\"],\"missing\":[\"container_logs_tail\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore connectivity to orders-db service by reverting to previous revision\",\"rationale\":\"Container logs indicate dependency failure on orders-db service which is unreachable. Earlier revision's health status is unknown but rollback is justified as the new revision introduced the dependency issue.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-target_events\",\"ev-rollout_history\"],\"cited_predicates\":[\"rollout_recent\",\"failure_onset_after_rollout\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3642,
+        "output_tokens": 716
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

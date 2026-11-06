@@ -1,0 +1,248 @@
+# catalog was created 25 minutes ago: revision 1 is its only one. It loads a
+# catalog into memory at start that its 60Mi limit doesn't hold, and its
+# containers are OOMKilled 3.5 minutes after each start, at the 57Mi peak
+# Prometheus shows. With no earlier revision there is nothing to roll back to:
+# raising the memory limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog
+  creationTimestamp: '2026-11-04T13:35:00Z'
+  labels:
+    app: catalog
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: catalog
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:1.0.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 40Mi
+          limits:
+            memory: 60Mi
+status:
+  observedGeneration: 1
+  replicas: 2
+  updatedReplicas: 2
+  readyReplicas: 1
+  availableReplicas: 1
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-11-04T13:35:20Z'
+    lastTransitionTime: '2026-11-04T13:35:20Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-11-04T13:35:20Z'
+    lastTransitionTime: '2026-11-04T13:35:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: catalog-6b9d4f7c2
+  creationTimestamp: '2026-11-04T13:35:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 6b9d4f7c2
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: catalog
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: catalog
+      pod-template-hash: 6b9d4f7c2
+  template:
+    metadata:
+      labels:
+        app: catalog
+        pod-template-hash: 6b9d4f7c2
+    spec:
+      containers:
+      - name: app
+        image: example/catalog:1.0.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 40Mi
+          limits:
+            memory: 60Mi
+status:
+  replicas: 2
+  fullyLabeledReplicas: 2
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-6b9d4f7c2-k8m2p
+  creationTimestamp: '2026-11-04T13:35:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 6b9d4f7c2
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-6b9d4f7c2
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:1.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 40Mi
+      limits:
+        memory: 60Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:35:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-04T13:53:30Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/catalog:1.0.0
+    imageID: example/catalog@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ready: false
+    started: false
+    restartCount: 4
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: back-off 1m20s restarting failed container=app pod=catalog-6b9d4f7c2-k8m2p
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:50:00Z'
+        finishedAt: '2026-11-04T13:53:30Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: catalog-6b9d4f7c2-q4w7z
+  creationTimestamp: '2026-11-04T13:35:00Z'
+  labels:
+    app: catalog
+    pod-template-hash: 6b9d4f7c2
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: catalog-6b9d4f7c2
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/catalog:1.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 40Mi
+      limits:
+        memory: 60Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:35:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-04T13:57:20Z'
+  containerStatuses:
+  - name: app
+    image: example/catalog:1.0.0
+    imageID: example/catalog@sha256:3333333333333333333333333333333333333333333333333333333333333333
+    ready: true
+    started: true
+    restartCount: 3
+    state:
+      running:
+        startedAt: '2026-11-04T13:57:10Z'
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:51:40Z'
+        finishedAt: '2026-11-04T13:55:10Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog.scaled-up
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: catalog
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled up replica set catalog-6b9d4f7c2 from 0 to 2'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-04T13:35:00Z'
+lastTimestamp: '2026-11-04T13:35:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-6b9d4f7c2-k8m2p.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-6b9d4f7c2-k8m2p
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod catalog-6b9d4f7c2-k8m2p'
+source:
+  component: kubelet
+count: 6
+firstTimestamp: '2026-11-04T13:39:00Z'
+lastTimestamp: '2026-11-04T13:58:30Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: catalog-6b9d4f7c2-q4w7z.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: catalog-6b9d4f7c2-q4w7z
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod catalog-6b9d4f7c2-q4w7z'
+source:
+  component: kubelet
+count: 4
+firstTimestamp: '2026-11-04T13:40:10Z'
+lastTimestamp: '2026-11-04T13:56:00Z'

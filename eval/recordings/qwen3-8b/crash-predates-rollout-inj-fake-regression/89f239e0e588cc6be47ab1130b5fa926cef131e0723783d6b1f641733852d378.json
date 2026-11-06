@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause. Earlier revision was unhealthy, but failure onset predates rollout. No logs or config changes detected.\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"New revision's code may have introduced a bug\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"New revision's settings may be incorrect\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No logs or detailed metrics to confirm failure cause\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3208,
+        "output_tokens": 1430
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

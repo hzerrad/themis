@@ -41,6 +41,12 @@ func TestCheckConfig(t *testing.T) {
 			c.Profiles[0].Checks = []string{"rollout_recent"}
 			c.Profiles[0].JustifiedBy = map[string][]string{"deployment.rollback-to-revision": {"failure_onset_after_rollout"}}
 		}, `profile p: justifiedBy deployment.rollback-to-revision names the check "failure_onset_after_rollout", which the profile doesn't run`},
+		// A symptom that doesn't run is never true, so it would keep no
+		// incident from closing.
+		{"a symptom the profile doesn't run", func(c *config.Config) {
+			c.Profiles[0].Checks = []string{"rollout_recent"}
+			c.Profiles[0].Symptoms = []string{"oom_killed_new_revision"}
+		}, `profile p: symptoms names the check "oom_killed_new_revision", which the profile doesn't run`},
 		{"policy reads a check the profile can't answer", func(c *config.Config) {
 			c.Profiles[0].Policy.Rules = []config.PolicyRule{{Name: "r", When: `predicates.config_changed_before_failure != "false"`, Decision: config.DecisionDeny}}
 		}, `profile p: rule r reads the check "config_changed_before_failure", which needs the evidence template "referenced_config" in evidence.initial`},
@@ -199,7 +205,7 @@ func TestBuild_DisablesPacks(t *testing.T) {
 	for _, c := range cat.Checks {
 		checks = append(checks, c.Name)
 	}
-	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || !slices.Equal(checks, []string{"rollout_recent", "gitops_managed", "evidence_has_instructions", "has_pods"}) {
+	if len(cat.Profiles) != 1 || cat.Profiles[0].Name != "crashes" || !slices.Equal(checks, []string{"rollout_recent", "earlier_revision_healthy", "gitops_managed", "evidence_has_instructions", "has_pods"}) {
 		t.Errorf("profiles %+v, checks %v: want only the crashes pack's, and Themis's own", cat.Profiles, checks)
 	}
 	_, err = catalog.Build(nil, nil, packs(t, func(fstest.MapFS) {}), []string{"rollout-regresion"})

@@ -38,6 +38,10 @@ type TransitionArgs struct {
 	To     incident.State
 	Reason string
 	Actor  string
+	// Refer sends the escalation notice for a transition that hands the
+	// incident to a person without escalating it: one that waits for their
+	// suggested fix. Escalating always sends it.
+	Refer bool
 }
 
 func (s *Store) CreateOrJoinIncident(ctx context.Context, tx pgx.Tx, in IncidentArgs) (string, bool, error) {
@@ -110,7 +114,7 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
 	AfterCommit(tx, func() {
-		observeTransition(tst.From, tst.To, sinceChange, sinceCreated)
+		observeTransition(tst.From, tst.To, tst.Refer, sinceChange, sinceCreated)
 		// Never the reason: an investigation's summary, written by the model, can be one.
 		slog.InfoContext(telemetry.WithAttrs(ctx, slog.String(telemetry.FieldIncidentID, tst.ID)),
 			"incident transitioned", "from", tst.From, "to", tst.To, "actor", tst.Actor)
@@ -129,7 +133,7 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 		return fmt.Errorf("transition %s %s->%s: %w", tst.ID, tst.From, tst.To, err)
 	}
 
-	if tst.To == incident.Escalated || tst.To == incident.ContainedEscalated {
+	if tst.Refer || tst.To == incident.Escalated || tst.To == incident.ContainedEscalated {
 		return s.EnqueueTx(ctx, tx, EscalationArgs{IncidentID: tst.ID, From: tst.From, To: tst.To, Reason: tst.Reason, At: time.Now().UTC()})
 	}
 	return nil
@@ -138,8 +142,19 @@ func (s *Store) Transition(ctx context.Context, tx pgx.Tx, tst TransitionArgs) e
 // TransitionPath walks an incident along path, one transition at a time,
 // each with the same reason and actor.
 func (s *Store) TransitionPath(ctx context.Context, tx pgx.Tx, id, reason, actor string, path ...incident.State) error {
+	return s.walk(ctx, tx, id, reason, actor, false, path)
+}
+
+// ReferPath walks an incident along path as TransitionPath does, and hands
+// it to a person at its end: the escalation notice goes out even when the
+// last state waits for their suggested fix rather than escalating.
+func (s *Store) ReferPath(ctx context.Context, tx pgx.Tx, id, reason, actor string, path ...incident.State) error {
+	return s.walk(ctx, tx, id, reason, actor, true, path)
+}
+
+func (s *Store) walk(ctx context.Context, tx pgx.Tx, id, reason, actor string, refer bool, path []incident.State) error {
 	for i := 1; i < len(path); i++ {
-		err := s.Transition(ctx, tx, TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: reason, Actor: actor})
+		err := s.Transition(ctx, tx, TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: reason, Actor: actor, Refer: refer && i == len(path)-1})
 		if err != nil {
 			return err
 		}

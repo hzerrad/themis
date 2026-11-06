@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's liveness probe is too strict for startup, causing premature termination. Adjusting the initial delay to 90 seconds aligns with the observed startup time.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"The liveness probe kills the pod during startup before the app is ready, as evidenced by the probe failures, logs showing slow route loading, and the event suggesting a longer initial delay.\",\n    \"supporting\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The new revision introduced a failure, but the earlier revision was healthy, suggesting a problem with the new version's configuration or code.\",\n    \"supporting\": [\"rollout_recent\", \"failure_onset_after_rollout\", \"earlier_revision_healthy\"],\n    \"contradicting\": [\"config_changed_before_failure\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 90\n    }\n  },\n  \"expected_effect\": \"The liveness probe will wait 90 seconds before checking, allowing the app to finish loading routes before being terminated.\",\n  \"rationale\": \"The logs show the app takes ~60 seconds to load routes, but the liveness probe checks every 10 seconds. The event explicitly recommends increasing the initial delay to 90 seconds. This change aligns with the observed behavior and prevents premature termination.\",\n  \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"rollout_recent\", \"failure_onset_after_rollout\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7010,
+        "output_tokens": 875
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

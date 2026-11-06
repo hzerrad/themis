@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Increase the memory limit for the app container.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"The container's memory limit is insufficient for its workload, causing OOM kills.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"640Mi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"The increased memory limit should prevent OOM kills by providing sufficient memory for the app container's workload.\",\n  \"rationale\": \"The container was OOMKilled despite reaching its memory limit, indicating the limit is insufficient. Increasing the limit by 25% (from 512Mi to 640Mi) should address the memory constraint without requiring a rollback.\",\n  \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\", \"rollout_recent\", \"failure_onset_after_rollout\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4255,
+        "output_tokens": 1631
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

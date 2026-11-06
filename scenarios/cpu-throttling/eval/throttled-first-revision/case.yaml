@@ -1,0 +1,33 @@
+name: throttled-first-revision
+version: 1
+description: search was created 29 minutes ago and has only revision 1. It is sent more CPU work than its 200m limit
+  allows, is throttled in 90% of its CPU periods, and falls behind. There is no earlier revision to go back to; raising
+  the limit is right.
+tags: [cpu, throttling]
+source: synthetic
+difficulty: easy
+incident_class: cpu_throttling
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          cpu: 300m
+truth:
+  root_causes: [cpu_limit_too_low]
+  decision: propose
+  required_citations: [container_cpu]
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    rollout_recent: 'false'
+    earlier_revision_healthy: 'false'
+    gitops_managed: 'false'
+  policy: require_approval

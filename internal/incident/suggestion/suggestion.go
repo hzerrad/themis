@@ -20,6 +20,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
@@ -140,7 +141,9 @@ type Inbox struct {
 	Store  *store.Store
 	Config config.Provider
 	// Fixes are what a suggestion may name.
-	Fixes  capability.Registry
+	Fixes capability.Registry
+	// Checks say in plain words what each check finds.
+	Checks check.List
 	Logger *slog.Logger
 	Now    func() time.Time
 

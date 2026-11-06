@@ -226,7 +226,7 @@ The chart adds the adapter as a source with its own service account, limited to 
 
 **When a suggestion is taken:** while Themis investigates, for `window` after it couldn't decide, and, without an investigator, for `window` from when the incident opens. `window` defaults to 15 minutes with sources or without an investigator, and to none otherwise. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
 
-**A refused suggestion** doesn't close the incident. When the checks, the fix itself or policy refuse a fix a person or an agent suggested, the refusal and its reason go on the timeline, and the incident waits (`awaiting_suggestion`) for another, for `window`, or 15 minutes when that is none. The same holds for any refused fix, the investigator's included, once a person has denied a fix for the incident or had it investigated again. A fix Themis only recommends, because Argo CD or Flux manages the workload, still closes it.
+**A refused suggestion** doesn't close the incident. When the checks, the fix itself or policy refuse a fix a person or an agent suggested, the refusal and its reason go on the timeline, and the incident waits (`awaiting_suggestion`) for another, for `window`, or 15 minutes when that is none. The same holds for any refused fix, the investigator's included, once a person has denied a fix for the incident or had it investigated again, and for the investigator's refused fix while the checks find the failure: Themis then [refers it to a person](#never-closed-while-it-still-fails). A fix Themis only recommends, because Argo CD or Flux manages the workload, still closes it.
 
 **What policy sees:** rules can read `proposal.source`, `proposal.authenticated` and `proposal.external`, all strings. To send every outside suggestion to a person, or refuse them, write a rule on `proposal.external == "true"`.
 
@@ -261,6 +261,7 @@ profiles:
     capabilities: [deployment.rollback-to-revision]
     justifiedBy:                         # for each fix, the checks that justify it
       deployment.rollback-to-revision: [failure_onset_after_rollout]
+    symptoms: [failure_onset_after_rollout, oom_killed_new_revision]   # optional; none means the justifying checks
     guidance: |                          # optional
       A rollback is right when the current revision introduced the failure
       and a prior revision was healthy. ...
@@ -318,7 +319,8 @@ Themis's own checks, in [`internal/catalog/check/builtin.yaml`](../internal/cata
 
 | Predicate | True when |
 |---|---|
-| `rollout_recent` | The current revision rolled out within the last 6 hours |
+| `rollout_recent` | The current revision replaced an earlier one within the last 6 hours. A Deployment's first revision replaced none, so creating it is no rollout: `false` |
+| `earlier_revision_healthy` | The revision before the current one runs ready pods that never failed: a healthy version to go back to. `false` when there is no earlier revision, or its pods failed; `unknown` once its pods are gone |
 | `gitops_managed` | The target carries Argo CD or Flux markers, or is written by their controllers. Governance also checks this live. |
 | `evidence_has_instructions` | Some evidence contains text that looks like instructions or forged tool output: see [suspicious evidence](#suspicious-evidence). No pack runs it; name it in a profile's `checks` to write a rule on it. Governance decides it again over all the incident's evidence, logs an investigator asked for included, before deciding a fix. |
 
@@ -326,8 +328,7 @@ The `rollout-regression` pack's:
 
 | Predicate | True when |
 |---|---|
-| `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`, and so do missing events: an earlier failure could be among them. A pod failure from before the rollout still makes it `false`. When every pod of the current revision is ready and none restarted, it is `unknown`, whatever the events say. |
-| `prior_revision_was_healthy` | Pods of the previous revision are ready and never failed |
+| `failure_onset_after_rollout` | Every failure seen followed the rollout. A failure without a time makes it `unknown`, and so do missing events: an earlier failure could be among them. A pod failure from before the rollout still makes it `false`, and so does a Deployment's first revision, which no rollout brought. When every pod of the current revision is ready and none restarted, it is `unknown`, whatever the events say. |
 | `oom_killed_new_revision` | A container of the current revision was OOMKilled |
 | `config_changed_before_failure` | A ConfigMap the pod template refers to changed more than a minute after the rollout and no later than the first failure, so rolling back might not undo the cause. The first failure is dated by the pods' status, and by an event only when the status agrees with it, so an event anyone could write can't move it earlier. `unknown` when a required ConfigMap is missing or doesn't say when it changed, or the status can't date the first failure. Secrets are never read, so a change to one can't be seen. |
 
@@ -359,7 +360,7 @@ More lenient means slower to call a container failed or quicker to call it ready
 
 ### Justifying checks
 
-`justifiedBy` names, for every fix a profile offers, the checks that justify it. Themis refuses the fix unless at least one of them is true for the incident, before any policy and whoever suggests it, and says why on the incident's timeline, such as "None of the checks that justify a probe change is true: probe_kills is unknown, probe_timeouts is false." Putting a fix back is exempt.
+`justifiedBy` names, for every fix a profile offers, the checks that justify it. Themis refuses the fix unless at least one of them is true for the incident, before any policy and whoever suggests it, and says why on the incident's timeline in the checks' own words, such as "Refused. The probe-restart-storm profile allows a probe change only when the checks find one of these: the kubelet restarts a container because its liveness or startup probe fails, or probes fail by running out of time, not by an error answer. They found none of them." Putting a fix back is exempt.
 
 ```yaml
 capabilities: [deployment.set-probes]
@@ -367,7 +368,17 @@ justifiedBy:
   deployment.set-probes: [probe_kills, probe_timeouts]   # either one true is enough
 ```
 
-A profile that offers a fix must name its justifying checks, and each must be a check the profile runs: a check that doesn't run is never true, so the fix would always be refused. Logs, event messages and config values are written by whoever can write to the workload, and they may suggest a fix to the investigator, never justify one: only checks, which read what Kubernetes itself records, do. Policy still decides everything else, such as forbidding a raise right after a rollout.
+A profile that offers a fix must name its justifying checks, and each must be a check the profile runs: a check that doesn't run is never true, so the fix would always be refused. Logs, event messages and config values are written by whoever can write to the workload, and they may suggest a fix to the investigator, never justify one: only checks, which read what Kubernetes itself records, do. Policy still decides everything else, such as forbidding a raise while the version before it runs healthy.
+
+### Symptoms
+
+`symptoms` names the checks that find the failure itself, such as OOM kills or throttling at the CPU limit. While one of them is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person and waits for the fix they suggest, as [never closed while it still fails](#never-closed-while-it-still-fails) says. Without `symptoms`, the profile's justifying checks are its symptoms. Each must be a check the profile runs.
+
+```yaml
+symptoms: [probe_kills, probe_timeouts, killed_during_startup, crashed_on_its_own]
+```
+
+Name the checks that find something wrong, not those that say whether a fix is right: `crashed_on_its_own` is a symptom of the probe-restart-storm pack, though it rules out a probe change. A diagnosis-only profile's symptoms matter when an incident gets it together with one that offers a fix.
 
 ### Guidance
 
@@ -383,7 +394,7 @@ It is guidance, not a rule. What must hold before a fix runs belongs in [checks]
 | `maxEvidenceRequests` | 6 | Templates the investigator may request beyond the initial ones |
 | `timeout` | 5m | Deadline for the whole investigation |
 
-A failed investigation is retried twice, 30 seconds and then a minute later. After that the incident is escalated.
+A failed investigation is retried twice, 30 seconds and then a minute later. After that a person takes the incident over: it waits for the fix they suggest (`awaiting_suggestion`) when its profiles offer one, and is escalated otherwise.
 
 **Investigating again.** While an incident waits for a suggested fix, an approver can have it investigated again (`POST /v1/incidents/{id}/investigate`), when an investigator is installed. The investigation starts from everything the incident has: its evidence and checks, and each fix people denied for it, with the reason, as they wrote it. The investigator passes reasons to its model as a reviewer's note: fenced like evidence, and followed by the rule that it is text to weigh, never instructions. Whatever comes back passes the same checks, policy and approval. The model's token budget (the chart's `model.tokenBudget`) is the incident's, shared by all its investigations: once they used it all, investigating again is refused, and the button says how many tokens they used. If the investigation finds no fix, the incident waits for a suggested fix again.
 
@@ -401,22 +412,23 @@ policy:
         action.restore != "true" &&
         (predicates.rollout_recent != "true" ||
          predicates.config_changed_before_failure != "false" ||
+         predicates.earlier_revision_healthy == "false" ||
          (predicates.oom_killed_new_revision != "true" &&
-          predicates.prior_revision_was_healthy != "true"))
+          predicates.earlier_revision_healthy != "true"))
       decision: deny
     - name: rollback-needs-approval
       when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
       decision: require_approval
 ```
 
-A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: no ConfigMap changed before the failures, and either the new version runs out of memory or the version before it was healthy. That the failures began after the rollout is the check that [justifies](#justifying-checks) a rollback, so no rule repeats it. Anything allowed still needs a person's approval. A workload owned by GitOps is never changed either, but no rule says so: [Themis does that itself](#gitops).
+A profile's rules decide only the fixes it offers in `capabilities`: on an incident that matched [several profiles](#combined-profiles), another profile's fixes are decided by that profile's rules. These are the rules Themis ships. A rollback is forbidden unless a recent rollout looks to blame: no ConfigMap changed before the failures, there is an earlier revision not known to have failed, and either the new version runs out of memory or the version before it is healthy. That the failures began after the rollout is the check that [justifies](#justifying-checks) a rollback, so no rule repeats it. Anything allowed still needs a person's approval. A workload owned by GitOps is never changed either, but no rule says so: [Themis does that itself](#gitops).
 
 - Rules are [CEL](https://cel.dev) expressions over `action.capability`, `action.risk`, `action.restore` (`"true"` when Themis puts back what it changed, after a fix that didn't help), `target.namespace`, `target.managed_by` (`argocd`, `flux` or empty), `predicates.<name>` (`"true"`, `"false"` or `"unknown"`), `change.<key>` (what the fix says about the change, below), `proposal.source`, `proposal.authenticated`, `proposal.external`, and `mode`.
 - `change` holds what a fix tells policy about its change. A rollback says nothing. `deployment.set-probes` sets `change.container`; `change.liveness`, `change.readiness` and `change.startup`, each `more_lenient`, `stricter`, `mixed` or `unchanged`; and for each field it changes, `change["<probe>.<field>"]` with the new value and `change["<probe>.<field>.before"]` with the old, such as `change["readiness.timeoutSeconds"] == "5"`. `deployment.set-resources` sets `change.containers`, the containers it changes, comma-separated; `change.memory` and `change.cpu`, each `increase`, `decrease` or `mixed`; `change["memory.ratio"]` and `change["cpu.ratio"]`, the largest new value over its old one; and for each value it changes, `change["<container>.<memory|cpu>.<request|limit>"]`, `increase`, `decrease` or `set` (where there was none), with `.before`, `.after` and `.ratio` beside it, such as `change["app.memory.limit.ratio"] == "2"`. The shipped policies set no size limits. A key a fix doesn't set fails the rule, which denies, so ask which fix it is first: `action.capability == "deployment.set-probes" && change.readiness == "more_lenient"`.
 - The first rule that matches decides. When none match, a fix needs approval, and putting things back doesn't: it returns the workload to how a person left it. A rule matching `action.restore == "true"` can ask for approval or forbid it, and Themis then escalates with its change left in place.
 - A rule that fails to evaluate denies. Policy never fails open.
 - In **guarded** mode `allow` still needs approval: no action runs without a human. In **observe** mode every action is denied, so Themis only diagnoses and recommends.
-- An approval not given within `approvalTimeout` expires, and the incident is escalated.
+- An approval not given within `approvalTimeout` expires. Nothing was applied, so a person takes the incident over, told so, and it waits for the fix they suggest (`awaiting_suggestion`).
 
 Every rule is compiled at startup; a rule that does not compile to a boolean stops Themis from starting.
 
@@ -436,9 +448,15 @@ This holds for putting a fix back too. A rule of your own that reads `predicates
 
 #### Justified fixes
 
-A fix none of its [justifying checks](#justifying-checks) supports is refused before any policy, with the reason, and recorded as denied by `no-justifying-check`. Putting a fix back is exempt.
+A fix none of its [justifying checks](#justifying-checks) supports is refused before any policy, with the reason, and recorded as denied by `no-justifying-check`. People read the reason, so it says what the check finds, never its name: "Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks found otherwise (there is no revision before revision 1, so no rollout came before the failures)." Putting a fix back is exempt.
 
-When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "No fix proposed. The checks support a rollback (failure_onset_after_rollout is true). Referred to a person." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
+When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "No fix proposed. The checks support a rollback (the failures started after the rollout). Referred to a person." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
+
+#### Never closed while it still fails
+
+Themis never closes an incident with no change on its own while its checks find the failure. When nothing was applied and none of its fixes goes ahead, because the investigation proposed none, the fix it proposed wasn't accepted, or the checks or policy refused it, Themis refers the incident to a person, and it waits for the fix they suggest (`awaiting_suggestion`), for `externalProposals.window`, or 15 minutes when that is none, before it closes. The person can suggest a fix on the incident page or through the API, or have it investigated again. The reason says why Themis stopped, then which fix the checks support or, without one, what they found: "No fix proposed. The checks found that a container is throttled at its CPU limit (app was throttled in 90% of its CPU periods over 1h, at its limit of 0.2 CPU). Referred to a person." An [escalation notice](#escalation-notices) goes out.
+
+The failure is found by the profiles' [symptoms](#profiles): checks that find the failure itself, such as `oom_killed_current_revision` or `cpu_throttled_at_limit`. A profile that lists none uses the checks that justify its fixes. Themis closes the incident with no change only when no symptom is true and the checks support no fix, when it recovered on its own, when Themis only recommends the fix because GitOps manages the workload, or when a person denies a fix and closes the incident. An incident none of whose profiles offers a fix is referred to a person as before, with what the checks found.
 
 What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, labelled "Written by the investigator's model" or "Written by the suggester".
 
@@ -617,9 +635,9 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 
 ```json
 {
-  "event": "incident.escalated",
+  "event": "incident.awaiting_suggestion",
   "incident": {
-    "id": "01a1837f-…", "state": "escalated", "from": "investigating",
+    "id": "01a1837f-…", "state": "awaiting_suggestion", "from": "investigating",
     "reason": "Investigation failed after 3 attempts. Last error: the model was unreachable. Referred to a person.",
     "profile": "rollout-regression",
     "profiles": ["rollout-regression"],
@@ -631,4 +649,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `missing` says in one line each what evidence Themis was missing, and the change that lets it read that evidence next time. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says where and what, such as "Suspicious text in the container logs (pod checkout-7d9f8b6c4-x2kqp, container app). The line is written as an instruction to Themis. Read it in Themis before acting on this incident." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`, or `incident.awaiting_suggestion` when Themis hands over an incident it applied no fix to, which then waits for the fix the person suggests: after an investigation that found none, or failed, an approval that expired, or a fix refused while the checks [still find the failure](#never-closed-while-it-still-fails). `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so, and otherwise what they found. `missing` says in one line each what evidence Themis was missing, and the change that lets it read that evidence next time. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says where and what, such as "Suspicious text in the container logs (pod checkout-7d9f8b6c4-x2kqp, container app). The line is written as an instruction to Themis. Read it in Themis before acting on this incident." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
