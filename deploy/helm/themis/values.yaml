@@ -72,6 +72,22 @@ alerting:
     # Labels your Prometheus selects rules by, such as {release: kube-prometheus-stack}.
     # Empty: those of the first Prometheus resource found at install.
     labels: {}
+  # Alertmanager sending alerts to Themis's webhook, besides or instead of
+  # Themis reading them.
+  webhook:
+    # A Secret you manage, with a token key holding the intake token, in
+    # Alertmanager's namespace and, for alertmanagerConfig, in each enrolled
+    # namespace. The Setup page's steps then use it instead of copying the
+    # token. Needed under GitOps, with tokens.existingSecret.
+    tokenSecret: ""
+    alertmanagerConfig:
+      # With the Prometheus Operator: an AlertmanagerConfig in each enrolled
+      # namespace, which the operator limits to that namespace's alerts, and a
+      # Secret there with the intake token, unless tokenSecret names one.
+      # Anyone who can read Secrets there can then send alerts to Themis.
+      enabled: false
+      # Labels your Alertmanager selects AlertmanagerConfigs by, if any.
+      labels: {}
 
 database:
   # A Secret with a DATABASE_URL key. Empty uses the bundled PostgreSQL.

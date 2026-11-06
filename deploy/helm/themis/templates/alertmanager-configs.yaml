@@ -1,0 +1,54 @@
+{{- /*
+With the Prometheus Operator, an AlertmanagerConfig in each enrolled
+namespace sends that namespace's alerts to Themis's webhook. The operator
+adds a namespace matcher for the namespace an AlertmanagerConfig is in to its
+route, and reads the token from a Secret there.
+*/}}
+{{- if include "themis.alertmanagerConfigs" . }}
+{{- $webhook := (.Values.alerting | default dict).webhook | default dict }}
+{{- $labels := ($webhook.alertmanagerConfig | default dict).labels | default dict }}
+{{- if and (not $webhook.tokenSecret) (.Values.tokens | default dict).existingSecret }}
+{{- fail "alerting.webhook.tokenSecret is required with tokens.existingSecret. Create a Secret with a token key holding the intake token in each enrolled namespace, and name it there." }}
+{{- end }}
+{{- $secret := $webhook.tokenSecret | default (printf "%s-intake-token" .Release.Name) }}
+{{- $names := include "themis.alertNames" . }}
+{{- range $ns := .Values.enrolledNamespaces }}
+{{- if not $webhook.tokenSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret }}
+  namespace: {{ $ns }}
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+type: Opaque
+data:
+  token: {{ (include "themis.tokenData" $ | fromJson).intake }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: {{ $.Release.Name }}
+  namespace: {{ $ns }}
+  labels: {{- include "themis.labels" $ | nindent 4 }}
+    {{- with $labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  route:
+    receiver: themis
+    groupBy: [alertname, namespace, pod]
+    matchers:
+      - {name: alertname, matchType: "=~", value: {{ $names | quote }}}
+  receivers:
+    - name: themis
+      webhookConfigs:
+        - url: http://{{ $.Release.Name }}-core.{{ $.Release.Namespace }}.svc:8080/v1/intake/alertmanager
+          sendResolved: true
+          httpConfig:
+            authorization:
+              type: Bearer
+              credentials: {name: {{ $secret }}, key: token}
+{{- end }}
+{{- end }}

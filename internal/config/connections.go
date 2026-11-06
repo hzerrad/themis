@@ -78,6 +78,16 @@ type Intake struct {
 	// TokenSecret names the Secret, in Themis's namespace, whose intake key
 	// holds the token, for the setup steps Themis shows. The chart sets it.
 	TokenSecret string `json:"tokenSecret,omitempty"`
+
+	// AlertmanagerSecret names a Secret the install manages, with a token
+	// key holding the token, in Alertmanager's namespace and each enrolled
+	// one. The setup steps use it instead of copying the token. The chart
+	// sets it from alerting.webhook.tokenSecret.
+	AlertmanagerSecret string `json:"alertmanagerSecret,omitempty"`
+
+	// AlertmanagerConfigs says the chart made an AlertmanagerConfig in each
+	// enrolled namespace, which routes its alerts to Themis.
+	AlertmanagerConfigs bool `json:"alertmanagerConfigs,omitempty"`
 }
 
 // Investigators configures the investigators' gRPC API.

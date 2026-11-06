@@ -35,6 +35,15 @@ Alerts:   Read from {{ . }} every {{ $am.interval | default "15s" }}.
 Alerts:   No Alertmanager found in the cluster. Set its address on the Setup page.
 {{- end }}
 {{- end }}
+{{- if (((.Values.alerting | default dict).webhook | default dict).alertmanagerConfig | default dict).enabled }}
+{{- if include "themis.alertmanagerConfigs" . }}
+Webhook:  AlertmanagerConfig {{ .Release.Name }} in each enrolled namespace sends its
+          alerts to Themis.
+{{- else }}
+Webhook:  No AlertmanagerConfig made: this cluster serves none. The Setup page
+          shows how to send alerts to Themis.
+{{- end }}
+{{- end }}
 {{- $rules := include "themis.rulesValues" . | fromJson }}
 {{- if $rules.install }}
 {{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule" }}

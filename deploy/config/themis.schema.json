@@ -25,6 +25,14 @@
         "tokenSecret": {
           "type": "string",
           "description": "TokenSecret names the Secret, in Themis's namespace, whose intake key\nholds the token, for the setup steps Themis shows. The chart sets it."
+        },
+        "alertmanagerSecret": {
+          "type": "string",
+          "description": "AlertmanagerSecret names a Secret the install manages, with a token\nkey holding the token, in Alertmanager's namespace and each enrolled\none. The setup steps use it instead of copying the token. The chart\nsets it from alerting.webhook.tokenSecret."
+        },
+        "alertmanagerConfigs": {
+          "type": "boolean",
+          "description": "AlertmanagerConfigs says the chart made an AlertmanagerConfig in each\nenrolled namespace, which routes its alerts to Themis."
         }
       },
       "additionalProperties": false,
