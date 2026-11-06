@@ -78,6 +78,15 @@ jobs:
       - run: make deps
       # setup-envtest picks the newest patch release of the minor.
       - run: make test-go ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}.x
+      # The web UI, once: the page doesn't depend on the Kubernetes version,
+      # and its fixtures reuse the build test-go just made.
+      - if: strategy.job-index == 0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: mise.toml
+          package-manager-cache: false
+      - if: strategy.job-index == 0
+        run: make test-ui
 
   generated:
     name: Generated code

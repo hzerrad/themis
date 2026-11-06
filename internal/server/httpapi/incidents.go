@@ -1,15 +1,18 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	"errors"
 	"net/http"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -39,22 +42,96 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) detail(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	in, err := a.Store.Incident(ctx, r.PathValue("id"))
+	rec, err := a.record(r.Context(), r.PathValue("id"))
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}, AnotherApprover: a.anotherApprover()}
+	// Raw evidence, such as logs, is for responders: others learn that some
+	// looks like instructions, and where, but not what it says.
+	who, _ := identity.From(r.Context())
+	a.reply(w, r, a.viewDetail(rec, who.Can(config.RoleResponder)))
+}
+
+// incidentRecord is what is stored about an incident that its page shows.
+type incidentRecord struct {
+	incident      store.Incident
+	again         investigation.Offer
+	transitions   []store.Transition
+	evidence      []evidence.Item
+	predicates    []check.Result
+	investigation *store.InvestigationRecord
+	gaps          []store.EvidenceGap
+	proposals     []store.Proposal
+	actions       []actionRecord
+}
+
+// actionRecord is an action, with its execution and verification once
+// there are any.
+type actionRecord struct {
+	action       store.Action
+	execution    *store.Execution
+	verification *store.Verification
+}
+
+// record reads what is stored about the incident id.
+func (a *API) record(ctx context.Context, id string) (incidentRecord, error) {
+	var rec incidentRecord
+	var err error
+	if rec.incident, err = a.Store.Incident(ctx, id); err != nil {
+		return rec, err
+	}
 	if a.Again != nil {
-		o, err := a.Again.Offer(ctx, in)
-		if err != nil {
-			a.fail(w, r, err)
-			return
+		if rec.again, err = a.Again.Offer(ctx, rec.incident); err != nil {
+			return rec, err
 		}
-		if o.Offered {
-			d.InvestigateAgain = &againView{Refused: o.Refused}
+	}
+	if rec.transitions, err = a.Store.Transitions(ctx, id); err != nil {
+		return rec, err
+	}
+	if rec.evidence, err = a.Store.Evidence(ctx, id); err != nil {
+		return rec, err
+	}
+	if rec.predicates, err = a.Store.Predicates(ctx, id); err != nil {
+		return rec, err
+	}
+	if inv, err := a.Store.IncidentInvestigation(ctx, id); err == nil {
+		rec.investigation = &inv
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return rec, err
+	}
+	if rec.gaps, err = a.Store.EvidenceGaps(ctx, id); err != nil {
+		return rec, err
+	}
+	if rec.proposals, err = a.Store.Proposals(ctx, a.Store.DB(), id); err != nil {
+		return rec, err
+	}
+	actions, err := a.Store.IncidentActions(ctx, a.Store.DB(), id)
+	if err != nil {
+		return rec, err
+	}
+	for _, act := range actions {
+		ar := actionRecord{action: act}
+		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
+			ar.execution = &e
 		}
+		if v, err := a.Store.Verification(ctx, a.Store.DB(), act.ID); err == nil {
+			ar.verification = &v
+		}
+		rec.actions = append(rec.actions, ar)
+	}
+	return rec, nil
+}
+
+// viewDetail is the incident's page, with raw evidence when raw is set.
+func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
+	in := rec.incident
+	d := detailView{
+		Incident: viewIncident(in), Transitions: rec.transitions, Predicates: rec.predicates, Proposals: rec.proposals,
+		Checks: map[string]checkWords{}, Causes: map[string]string{}, AnotherApprover: a.anotherApprover(),
+	}
+	if rec.again.Offered {
+		d.InvestigateAgain = &againView{Refused: rec.again.Refused}
 	}
 	for _, c := range a.CheckList {
 		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads}
@@ -62,20 +139,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 	for _, c := range a.RootCauses.For(in.Profiles()...) {
 		d.Causes[c.Name] = c.Description
 	}
-	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	items, err := a.Store.Evidence(ctx, in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	// Raw evidence, such as logs, is for responders: others learn that some
-	// looks like instructions, and where, but not what it says.
-	who, _ := identity.From(ctx)
-	raw := who.Can(config.RoleResponder)
-	for _, it := range items {
+	for _, it := range rec.evidence {
 		v := evidenceView{Item: it}
 		if raw {
 			v.Data = it.Data
@@ -89,48 +153,25 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Evidence = append(d.Evidence, v)
 	}
-	d.EvidenceWarning = evidence.Warning(items, raw)
-	if d.Predicates, err = a.Store.Predicates(ctx, in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if inv, err := a.Store.IncidentInvestigation(ctx, in.ID); err == nil {
-		d.Investigation = &inv
+	d.EvidenceWarning = evidence.Warning(rec.evidence, raw)
+	if inv := rec.investigation; inv != nil {
+		d.Investigation = inv
 		// Once someone's suggestion moves it on, what's next matters more.
 		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction) {
 			d.Headline = hint.Headline(inv.Blind)
 		}
-	} else if !errors.Is(err, store.ErrNotFound) {
-		a.fail(w, r, err)
-		return
 	}
-	gaps, err := a.Store.EvidenceGaps(ctx, in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	d.Missing = a.Remedy.Messages(in, gaps)
+	d.Missing = a.Remedy.Messages(in, rec.gaps)
 	d.Fixes = a.offered(in)
-	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	actions, err := a.Store.IncidentActions(ctx, a.Store.DB(), in.ID)
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	for _, act := range actions {
-		v := viewAction(act, a.Fixes)
-		if e, err := a.Store.ActionExecution(ctx, a.Store.DB(), act.ID); err == nil {
-			v.Execution = &e
-		}
-		if ver, err := a.Store.Verification(ctx, a.Store.DB(), act.ID); err == nil {
-			v.Verification = &verificationView{Verification: ver, Observation: ver.Observation}
+	for _, ar := range rec.actions {
+		v := viewAction(ar.action, a.Fixes)
+		v.Execution = ar.execution
+		if ver := ar.verification; ver != nil {
+			v.Verification = &verificationView{Verification: *ver, Observation: ver.Observation}
 		}
 		d.Actions = append(d.Actions, v)
 	}
-	a.reply(w, r, d)
+	return d
 }
 
 // offered are the fixes the incident's profiles still configured offer, as
