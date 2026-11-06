@@ -4,6 +4,7 @@ import (
 	"encoding/json/jsontext"
 	"time"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
@@ -22,6 +23,48 @@ type incidentView struct {
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 	SupersededBy    string    `json:"supersededBy,omitempty"`
+	// Summary says in brief what happened and what Themis proposes. Only
+	// the list carries it: the detail has the whole record.
+	Summary *summaryView `json:"summary,omitempty"`
+}
+
+// summaryView is an incident in brief, for a list of incidents.
+type summaryView struct {
+	// Cause is the root cause the investigation leads with, by name and in
+	// its pack's words.
+	Cause *causeView `json:"cause,omitempty"`
+	// Fix is the latest fix for the incident.
+	Fix *fixView `json:"fix,omitempty"`
+	// Reason is why the incident last changed state, and From the state it
+	// left.
+	Reason string `json:"reason,omitempty"`
+	From   string `json:"from,omitempty"`
+}
+
+type causeView struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+type fixView struct {
+	Capability string         `json:"capability"`
+	Params     map[string]any `json:"params"`
+}
+
+func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryView {
+	v := &summaryView{Reason: s.Reason, From: string(s.From)}
+	if s.Cause != "" {
+		v.Cause = &causeView{Name: s.Cause}
+		for _, c := range causes {
+			if c.Name == s.Cause {
+				v.Cause.Description = c.Description
+			}
+		}
+	}
+	if s.Capability != "" {
+		v.Fix = &fixView{Capability: s.Capability, Params: s.Params}
+	}
+	return v
 }
 
 func viewIncident(in store.Incident) incidentView {
@@ -76,7 +119,10 @@ type detailView struct {
 	Evidence    []evidenceView
 	Predicates  []check.Result
 	// Checks describe each check by name, in plain words.
-	Checks        map[string]string
+	Checks map[string]string
+	// Causes describe each root cause the investigation may name, by name,
+	// in its pack's words.
+	Causes        map[string]string
 	Investigation *store.InvestigationRecord `json:",omitempty"`
 	Proposals     []store.Proposal
 	Actions       []actionView

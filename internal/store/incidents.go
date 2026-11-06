@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -224,6 +225,63 @@ func (s *Store) ListIncidents(ctx context.Context, limit int) ([]Incident, error
 		return nil, fmt.Errorf("list incidents: %w", err)
 	}
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Incident, error) { return scanIncident(row) })
+}
+
+// IncidentSummary is what a list of incidents says of each, without its
+// whole record: the cause its investigation leads with, the latest fix for
+// it, and its latest change of state.
+type IncidentSummary struct {
+	// Cause names the first root cause the investigation didn't rule out.
+	Cause string
+	// Capability and Params are the latest action's fix, or else the
+	// latest accepted suggestion's.
+	Capability string
+	Params     map[string]any
+	// Reason is why the incident last changed state, and From the state
+	// it left.
+	Reason string
+	From   incident.State
+}
+
+// IncidentSummaries summarises the incidents named, by ID, in one query.
+func (s *Store) IncidentSummaries(ctx context.Context, ids []string) (map[string]IncidentSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+	SELECT i.id::text,
+		coalesce((SELECT h->>'rootCauseClass'
+			FROM jsonb_array_elements(CASE WHEN jsonb_typeof(inv.hypotheses) = 'array' THEN inv.hypotheses ELSE '[]' END) WITH ORDINALITY AS x(h, n)
+			WHERE coalesce(h->>'status', '') NOT LIKE '%REFUTED' ORDER BY n LIMIT 1), ''),
+		coalesce(a.capability, p.capability, ''), coalesce(a.params, p.params, '{}'),
+		coalesce(t.reason, ''), coalesce(t.from_state::text, '')
+	FROM incidents i
+	LEFT JOIN investigations inv ON inv.incident_id = i.id
+	LEFT JOIN LATERAL (SELECT capability, params FROM actions WHERE incident_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1) a ON true
+	LEFT JOIN LATERAL (SELECT capability, params FROM proposals WHERE incident_id = i.id AND status = 'accepted' ORDER BY created_at DESC, id DESC LIMIT 1) p ON true
+	LEFT JOIN LATERAL (SELECT reason, from_state FROM transitions WHERE incident_id = i.id ORDER BY id DESC LIMIT 1) t ON true
+	WHERE i.id = ANY($1::uuid[])
+`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("summarise incidents: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]IncidentSummary, len(ids))
+	for rows.Next() {
+		var (
+			id     string
+			sum    IncidentSummary
+			params []byte
+		)
+		if err := rows.Scan(&id, &sum.Cause, &sum.Capability, &params, &sum.Reason, &sum.From); err != nil {
+			return nil, fmt.Errorf("summarise incidents: %w", err)
+		}
+		if err := json.Unmarshal(params, &sum.Params); err != nil {
+			return nil, fmt.Errorf("summarise incident %s: %w", id, err)
+		}
+		out[id] = sum
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("summarise incidents: %w", err)
+	}
+	return out, nil
 }
 
 type Transition struct {
