@@ -24,6 +24,10 @@ _Avoid_: config, ruleset
 One kind of incident Themis handles, as a folder: the alerts it answers, the evidence it reads, the checks it runs, the root causes it tells apart, the fix it may suggest, its policy, and the cases that prove it.
 _Avoid_: plugin, playbook, runbook
 
+**Poll mode, push mode**:
+How alerts reach Themis. In poll mode, Themis reads the active alerts from Alertmanager's API. In push mode, Alertmanager sends them to Themis's webhook. An alert that arrives both ways is the same alert.
+_Avoid_: pull, reading, intake mode
+
 **Supersede**:
 To close an incident because its target changed or was replaced, and open a new one for the target as it is now, linked to the old.
 _Avoid_: merge, reopen

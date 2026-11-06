@@ -115,7 +115,13 @@ func (c Config) Validate() error {
 	if a := c.Alerting.Prometheus.Address; a != "" && !IsHTTPURL(a) {
 		add("alerting.prometheus.address", "%q is not an http or https URL", a)
 	}
-	if !c.Alerting.Alertmanager.Disabled {
+	switch m := c.Alerting.Mode; {
+	case m != "" && m != PollMode && m != PushMode:
+		add("alerting.mode", "must be poll or push, got %q", m)
+	case m == PollMode && c.Alerting.Alertmanager.Disabled:
+		add("alerting.alertmanager.disabled", "fixes push mode, and alerting.mode is poll. Set only alerting.mode")
+	}
+	if c.Alerting.FixedMode() != PushMode {
 		c.Alerting.Alertmanager.validate(add)
 	}
 	c.ExternalProposals.validate(func(sub, format string, args ...any) { add("externalProposals."+sub, format, args...) })

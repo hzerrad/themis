@@ -573,8 +573,11 @@ function alertmanagerSetup() {
     out);
 }
 
-// alertmanagerSaved says the address was just saved, so Setup says so once.
-let alertmanagerSaved = false;
+// alertsSaid is what the alerts step just changed, so Setup says so once.
+let alertsSaid = null;
+
+// SWITCH names, for each mode, the other mode and the button that switches to it.
+const SWITCH = { poll: ["push", "Switch to push mode"], push: ["poll", "Switch to poll mode"] };
 
 // ADDRESS_FROM says where the Alertmanager address in use comes from.
 const ADDRESS_FROM = {
@@ -630,18 +633,30 @@ function alertRules() {
   return out;
 }
 
-// alertsStep reads alerts from Alertmanager: the address in use, where it
-// comes from, and a test. Sending them to Themis is the other way.
+// alertsStep is how alerts reach Themis. In poll mode, Themis reads
+// Alertmanager: the address in use, where it comes from, and a test. In push
+// mode, Alertmanager sends them: the steps for this install. An admin may
+// switch modes, unless Helm set the mode.
 function alertsStep(v, check) {
-  const saved = alertmanagerSaved;
-  alertmanagerSaved = false;
-  const webhook = h("details", { class: "fold sub", "data-key": "alerts-webhook" },
-    h("summary", {}, "Or let Alertmanager send alerts to Themis"), alertmanagerSetup());
-  if (!v.reading) {
-    return [h("p", {}, partFinding(check)),
-      check.state === "ok" ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()],
-      alertRules()];
-  }
+  const said = alertsSaid;
+  alertsSaid = null;
+  const [other, label] = SWITCH[v.mode] || SWITCH.poll;
+  const switchError = h("div", { class: "error", role: "alert" });
+  const switchMode = v.modeByInstall ? h("p", { class: "quiet sub" }, "Mode set in Helm.") : h("div", { class: "sub" },
+    h("button", { class: "btn", type: "button", onclick: async () => {
+      switchError.textContent = "";
+      try {
+        await api("/v1/settings/alertmanager", { method: "PUT", body: JSON.stringify({ mode: other }) });
+        alertsSaid = "Switched to " + other + " mode.";
+        route();
+      } catch (err) {
+        switchError.textContent = err.message;
+      }
+    } }, label),
+    switchError);
+  const head = [said ? h("p", { class: "flash", role: "status" }, said) : null, h("p", {}, partFinding(check))];
+  if (v.mode === "push") return [head, alertmanagerSetup(), switchMode, alertRules()];
+
   const locked = v.from === "install";
   const address = h("input", { type: "text", value: v.address, placeholder: "http://alertmanager-operated.monitoring:9093", autocapitalize: "none", disabled: locked });
   const from = v.from === "setup" && v.found ? ADDRESS_FROM.setup + " Empty it to go back to " + v.found + "."
@@ -653,7 +668,7 @@ function alertsStep(v, check) {
     error.textContent = "";
     try {
       await api("/v1/settings/alertmanager", { method: "PUT", body: JSON.stringify({ address: address.value.trim() }) });
-      alertmanagerSaved = true;
+      alertsSaid = "Address saved. Used from the next read.";
       route();
     } catch (err) {
       error.textContent = err.message;
@@ -671,17 +686,15 @@ function alertsStep(v, check) {
     }
   };
   return [
-    saved ? h("p", { class: "flash", role: "status" }, "Address saved. Used from the next read.") : null,
-    h("p", {}, partFinding(check)),
-    h("p", { class: "quiet" }, "Done when Themis reads from Alertmanager."),
+    head,
     h("form", { class: "form", onsubmit: save },
       field("Alertmanager's address", address, from),
       h("div", { class: "inline" },
         locked ? null : h("button", { class: "btn primary", type: "submit" }, "Save the address"),
         h("button", { class: "btn", type: "button", onclick: test }, "Test")),
       error, result),
-    alertRules(),
-    webhook];
+    switchMode,
+    alertRules()];
 }
 
 // modelSaved says the model was just saved, so Setup says so once.
@@ -806,7 +819,7 @@ async function setup() {
   const done = (name) => check(name).state === "ok";
   let model = null;
   try { model = await api("/v1/settings/model"); } catch {}
-  let alertmanager = { reading: false };
+  let alertmanager = { mode: "push", modeByInstall: true };
   try { alertmanager = await api("/v1/settings/alertmanager"); } catch {}
   const investigatorOff = check("Investigator").state === "off";
   const signIn = check("Sign-in");

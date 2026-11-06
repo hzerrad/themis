@@ -34,11 +34,13 @@ func (a *API) alertmanagerSetup(w http.ResponseWriter, r *http.Request) {
 	a.reply(w, r, map[string][]alertmanager.SetupStep{"steps": alertmanager.SetupSteps(in, a.Namespace, ns, a.Config.Current().AlertNames())})
 }
 
-// AlertmanagerConnection is the Alertmanager Themis reads, whose address the
-// Setup page may set unless the install did.
+// AlertmanagerConnection is how alerts reach Themis, and the Alertmanager
+// Themis reads in poll mode. The Setup page may switch the mode and set the
+// address, unless the install did.
 type AlertmanagerConnection interface {
 	View(ctx context.Context) (settings.AlertmanagerView, error)
 	SetAddress(ctx context.Context, address, by string) error
+	SetMode(ctx context.Context, mode, by string) error
 	Test(ctx context.Context, address string, answered []string) (alertmanager.TestResult, error)
 }
 
@@ -51,31 +53,50 @@ func (a *API) alertmanagerSettings(w http.ResponseWriter, r *http.Request) {
 	a.reply(w, r, v)
 }
 
+// alertmanagerChange is what setup changes. Nil leaves a setting as it is.
 type alertmanagerChange struct {
-	Address string `json:"address"`
+	// Mode is poll or push.
+	Mode    *string `json:"mode"`
+	Address *string `json:"address"`
 }
 
-// setAlertmanager sets the address Themis reads Alertmanager at, from the
-// next read. An empty one goes back to the address found at install.
+// setAlertmanager switches between poll and push mode, and sets the address
+// Themis reads Alertmanager at, from the next read. An empty address goes
+// back to the one found at install.
 func (a *API) setAlertmanager(w http.ResponseWriter, r *http.Request) {
 	var change alertmanagerChange
 	if !a.decode(w, r, &change) {
 		return
 	}
-	err := a.Alertmanager.SetAddress(r.Context(), change.Address, actor(r))
+	if change.Mode != nil {
+		if !a.alertingDone(w, r, a.Alertmanager.SetMode(r.Context(), *change.Mode, actor(r))) {
+			return
+		}
+		a.logger().InfoContext(r.Context(), "the alerts mode was set", "mode", *change.Mode, "by", actor(r))
+	}
+	if change.Address != nil {
+		if !a.alertingDone(w, r, a.Alertmanager.SetAddress(r.Context(), *change.Address, actor(r))) {
+			return
+		}
+		a.logger().InfoContext(r.Context(), "the Alertmanager address was changed", "by", actor(r))
+	}
+	a.alertmanagerSettings(w, r)
+}
+
+// alertingDone answers a change of the alerting settings that err refused,
+// and says whether it went through.
+func (a *API) alertingDone(w http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
 	case errors.Is(err, settings.ErrSetByInstall):
 		http.Error(w, "That was set when Themis was installed. Change it in the Helm values instead.", http.StatusConflict)
-		return
-	case errors.Is(err, settings.ErrReadingOff) || errors.Is(err, settings.ErrNotHTTPURL):
+	case errors.Is(err, settings.ErrPushByInstall) || errors.Is(err, settings.ErrNotHTTPURL) || errors.Is(err, settings.ErrUnknownMode):
 		http.Error(w, sentence(err), http.StatusBadRequest)
-		return
 	case err != nil:
 		a.fail(w, r, err)
-		return
+	default:
+		return true
 	}
-	a.logger().InfoContext(r.Context(), "the Alertmanager address was changed", "by", actor(r))
-	a.alertmanagerSettings(w, r)
+	return false
 }
 
 // AlertRules says which alerts have alerting rules in Prometheus.
@@ -132,11 +153,13 @@ func (a *API) alertRules(w http.ResponseWriter, r *http.Request) {
 // testAlertmanager reads Alertmanager at the address given, or at the one in
 // use, and says which of the alerts Themis answers fire now.
 func (a *API) testAlertmanager(w http.ResponseWriter, r *http.Request) {
-	var change alertmanagerChange
-	if !a.decode(w, r, &change) {
+	var test struct {
+		Address string `json:"address"`
+	}
+	if !a.decode(w, r, &test) {
 		return
 	}
-	got, err := a.Alertmanager.Test(r.Context(), strings.TrimSpace(change.Address), a.Config.Current().AlertNames())
+	got, err := a.Alertmanager.Test(r.Context(), strings.TrimSpace(test.Address), a.Config.Current().AlertNames())
 	if err != nil {
 		http.Error(w, sentence(err), http.StatusBadGateway)
 		return

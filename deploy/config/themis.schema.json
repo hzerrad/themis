@@ -44,11 +44,19 @@
     },
     "alerting": {
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "poll",
+            "push"
+          ],
+          "description": "Mode fixes how alerts reach Themis: poll, Themis reads Alertmanager's\nAPI, or push, Alertmanager sends them to Themis's webhook. Empty starts\nin poll mode, and the Setup page may switch it. The webhook takes\nalerts in either mode."
+        },
         "alertmanager": {
           "properties": {
             "disabled": {
               "type": "boolean",
-              "description": "Disabled stops reading: alerts arrive only through the webhook."
+              "description": "Disabled fixes push mode, as the earlier form of alerting.mode push."
             },
             "address": {
               "type": "string",
@@ -119,7 +127,7 @@
           },
           "additionalProperties": false,
           "type": "object",
-          "description": "Alertmanager is the Alertmanager whose active alerts Themis reads."
+          "description": "Alertmanager is the Alertmanager whose active alerts Themis reads in\npoll mode."
         },
         "prometheus": {
           "properties": {

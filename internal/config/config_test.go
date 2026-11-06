@@ -134,6 +134,10 @@ func TestValidate_Errors(t *testing.T) {
 		}, "alerting.alertmanager.basicAuth"},
 		{"a matcher Alertmanager can't read", func(c *config.Config) { c.Alerting.Alertmanager.Matchers = []string{"cluster prod"} }, "alerting.alertmanager.matchers"},
 		{"reading too often", func(c *config.Config) { c.Alerting.Alertmanager.Interval.Duration = time.Millisecond }, "alerting.alertmanager.interval"},
+		{"unknown alerts mode", func(c *config.Config) { c.Alerting.Mode = "pull" }, "alerting.mode"},
+		{"poll mode with reading off", func(c *config.Config) {
+			c.Alerting = config.Alerting{Mode: config.PollMode, Alertmanager: config.Alertmanager{Disabled: true}}
+		}, "alerting.alertmanager.disabled"},
 		{"unknown schema dialect", func(c *config.Config) { c.Model.SchemaDialect = "strict" }, "model.schemaDialect"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"initial admin without its password", func(c *config.Config) { c.API.InitialAdmin = &config.InitialAdmin{} }, "api.initialAdmin.passwordFile"},

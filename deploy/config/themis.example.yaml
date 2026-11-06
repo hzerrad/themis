@@ -10,9 +10,11 @@ enrolledNamespaces:
 intake:
   bearerTokenFile: /var/run/secrets/themis/intake-token
 
-# Themis reads the active alerts the profiles answer from Alertmanager's API.
-# Without an address, the Setup page sets one.
+# In poll mode, Themis reads the active alerts the profiles answer from
+# Alertmanager's API. Without an address, the Setup page sets one. The Setup
+# page can switch to push mode, unless mode is set here.
 alerting:
+  # mode: poll
   alertmanager:
     address: http://alertmanager-operated.monitoring:9093
     # For an Alertmanager several clusters share, only this one's alerts:

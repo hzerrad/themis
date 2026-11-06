@@ -100,11 +100,11 @@ The chart's built-in profile handles this kind of incident: a Deployment whose n
 
 ## 3. Connect Alertmanager
 
-Nothing to do when Alertmanager runs in the cluster. The chart found it at install, and Themis reads its active alerts every 15 seconds. `helm install` printed the address it reads, and the **Setup** page shows it, with a **Test** button.
+Nothing to do when Alertmanager runs in the cluster. The chart found it at install, and Themis starts in poll mode: it reads Alertmanager's active alerts every 15 seconds. `helm install` printed the address it reads, and the **Setup** page shows it, with a **Test** button. **Status** then says "Poll mode. Last read 12 s ago."
 
 When the chart found none, as under Argo CD or Flux, which don't let it look, or when Alertmanager runs elsewhere, set its address on the **Setup** page, or install with `--set alerting.alertmanager.address=http://alertmanager-operated.monitoring:9093`. For an Alertmanager several clusters share, add `--set 'alerting.alertmanager.matchers={cluster="prod-eu"}'` to read only this cluster's alerts.
 
-With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. kube-prometheus-stack has no `KubePodOOMKilled`: the Setup page says which of the alerts Themis answers your Prometheus lacks, with their rules to copy, and with the Prometheus Operator, `--set alerting.rules.install=true` installs them. More, and how to have Alertmanager send alerts to Themis instead, in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
+With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. kube-prometheus-stack has no `KubePodOOMKilled`: the Setup page says which of the alerts Themis answers your Prometheus lacks, with their rules to copy, and with the Prometheus Operator, `--set alerting.rules.install=true` installs them. To have Alertmanager send alerts to Themis instead, choose **Switch to push mode** on the Setup page, which then shows the steps. More in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
 
 ## 4. See an incident
 
@@ -130,7 +130,7 @@ kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}'
 
 Themis starts once an admin account exists, and serves nothing else until then. It reads no alerts before. The initial admin password only creates that account. Create your admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
 
-The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, with **Test the connection** to check it, and the Alertmanager Themis reads. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, with **Test the connection** to check it, and how alerts reach Themis, in poll or push mode. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 

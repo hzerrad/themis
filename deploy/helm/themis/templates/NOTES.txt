@@ -24,15 +24,19 @@ signs you in, and the initial admin password stops working.
 Watching: {{ join ", " .Values.enrolledNamespaces }}
 {{- $am := include "themis.alertmanagerValues" . | fromJson }}
 {{- if not (include "themis.alertmanagerEnabled" .) }}
-Alerts:   Sent by Alertmanager to Themis's webhook.
+Alerts:   Push mode, to http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager.
+{{- if not (include "themis.alertmanagerConfigs" .) }}
+          The Setup page shows how to have Alertmanager send them.
+{{- end }}
 {{- else if $am.address }}
-Alerts:   Read from {{ $am.address }} every {{ $am.interval | default "15s" }}.
+Alerts:   Poll mode, from {{ $am.address }} every {{ $am.interval | default "15s" }}.
 {{- else }}
 {{- with include "themis.alertmanagerFound" . }}
-Alerts:   Read from {{ . }} every {{ $am.interval | default "15s" }}.
+Alerts:   Poll mode, from {{ . }} every {{ $am.interval | default "15s" }}.
           Found in the cluster at install.
 {{- else }}
-Alerts:   No Alertmanager found in the cluster. Set its address on the Setup page.
+Alerts:   Poll mode. No Alertmanager found in the cluster. Set its address on
+          the Setup page.
 {{- end }}
 {{- end }}
 {{- if (((.Values.alerting | default dict).webhook | default dict).alertmanagerConfig | default dict).enabled }}

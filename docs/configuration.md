@@ -9,7 +9,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | Key | Required | Meaning |
 |---|---|---|
 | `enrolledNamespaces` | yes | Namespaces Themis may act on. Alerts about any other namespace are recorded as rejected. Each also needs RBAC, which the chart renders per namespace. |
-| `alerting.alertmanager` | no | The Alertmanager whose active alerts Themis reads; see [Connecting your Alertmanager](#connecting-your-alertmanager). Reading is on by default, and the Setup page sets the address when none is given. |
+| `alerting.mode` | no | How alerts reach Themis: `poll`, Themis reads Alertmanager, or `push`, Alertmanager sends them to the webhook. Empty starts in poll mode, and the Setup page can switch it. See [Connecting your Alertmanager](#connecting-your-alertmanager). |
+| `alerting.alertmanager` | no | The Alertmanager whose active alerts Themis reads in poll mode. The Setup page sets the address when none is given. |
 | `intake.bearerTokenFile` | yes | File holding the token Alertmanager must send when it sends alerts to Themis's webhook. Read on every request, so rotating the Secret needs no restart. |
 | `intake.url` | no | Where Alertmanager reaches the webhook, for the steps the Setup page shows. The chart sets it. |
 | `intake.tokenSecret` | no | The Secret, in Themis's namespace, whose `intake` key holds the token, for the same steps. The chart sets it. |
@@ -506,7 +507,9 @@ A figure no source can give is `null` in the evidence, with why, never a guess. 
 
 ## Connecting your Alertmanager
 
-Themis reads the active alerts from Alertmanager's API, `/api/v2/alerts`, every 15 seconds: only the alerts that the scenario packs and your profiles answer. Nothing changes in Alertmanager.
+Alerts reach Themis in one of two modes. In poll mode, the default, Themis reads the active alerts from Alertmanager's API, `/api/v2/alerts`, every 15 seconds: only the alerts that the scenario packs and your profiles answer. Nothing changes in Alertmanager. In [push mode](#push-mode), Alertmanager sends them to Themis's webhook.
+
+**Switching modes.** An admin switches on the **Setup** page, with **Switch to push mode** or **Switch to poll mode**. With `alerting.mode` set to `poll` or `push` in Helm, the Setup page says "Mode set in Helm." and can't switch it. Switching to push mode stops reading. Open incidents keep their alerts, and close when Alertmanager sends their resolution. Switching back to poll mode resumes reading, as the table below says. The webhook takes alerts in either mode: an alert that arrives both ways is the same alert.
 
 **Where it reads.** With the chart, set nothing when Alertmanager runs in the same cluster. At install, the chart looks for a Service that selects Alertmanager's pods by their standard label, `app.kubernetes.io/name: alertmanager`, and isn't headless, as prometheus-community's prometheus and alertmanager charts and kube-prometheus-stack make one. It uses Helm's `lookup`, with your access, so Themis needs no permission to list Services. Argo CD and Flux don't run `lookup`. There, or when no Alertmanager is found, set the address on the **Setup** page, or in `alerting.alertmanager.address`. An address set in Helm is read-only on the Setup page. One set on the Setup page replaces the one found at install; empty it to go back to that one.
 
@@ -531,7 +534,7 @@ alerting:
 | `alerting.alertmanager.basicAuth.username`, `.passwordFile` | Basic auth. The password is read on every request. |
 | `alerting.alertmanager.tls` | `caFile`, `certFile` and `keyFile`, and `insecureSkipVerify`, as for [Prometheus](#metrics) |
 | `alerting.alertmanager.interval` | How often Alertmanager is read. Default `15s`. |
-| `alerting.alertmanager.disabled` | Read nothing. Alertmanager must then send alerts to the webhook, below. |
+| `alerting.alertmanager.disabled` | The earlier form of `alerting.mode: push` |
 
 A token, basic auth and TLS settings need the address set with them. Themis sends them only to that address, never to one set on the Setup page.
 
@@ -546,6 +549,7 @@ A token, basic auth and TLS settings need the address set with them. Themis send
 | The alert leaves the list, or its end time passes | Takes it as resolved. When every alert of an incident has, before Themis acts, the incident closes as `self_resolved`. |
 | Alertmanager restarted without storage and lost the alert | Waits for Prometheus to send it again. It takes the alert as resolved only once the end time Alertmanager last gave has passed. |
 | The address or the matchers change | Forgets the alerts it took before, without resolving them |
+| Push mode, then poll mode again | Keeps the alerts it took before. One that ended meanwhile is taken as resolved at the first read. That never resolves a later firing of the same alert. |
 
 **Do the alerts exist?** An alert Prometheus has no rule for never fires. Themis reads the alerting rules, `/api/v1/rules`, of the Prometheus at `metrics.prometheus.address`, with its token and TLS settings, or else of the one at `alerting.prometheus.address`, which the chart sets to the Prometheus it finds in the cluster at install, as it does for Alertmanager. The **Status** page's **Alert rules** part, and the **Setup** page, say which of the alerts the profiles answer have a rule, such as "5 of 7 alerts have rules in Prometheus. Missing: KubePodOOMKilled, KubeDeploymentRolloutStuck." Without a Prometheus to ask, they list the alerts to check by hand. When Prometheus doesn't answer, they name its address.
 
@@ -561,11 +565,11 @@ Themis ships a rule for every alert its scenario packs answer, in [`internal/inc
 |---|---|
 | `alerting.prometheus.address` | A server answering Prometheus's API whose alerting rules Themis reads, without credentials, when `metrics.prometheus` has no address. The chart sets it. |
 
-Every core replica can read. One read applies at a time, and a read that finishes after a later one changes nothing. Nothing is read while no admin account exists. The **Status** page says when Alertmanager was last read, or why it couldn't be. The **Setup** page tests an address: whether Alertmanager answers, how many alerts are active, and which of the alerts Themis answers fire now.
+Every core replica can read. One read applies at a time, and a read that finishes after a later one changes nothing. Nothing is read while no admin account exists. The **Status** page says when Alertmanager was last read, such as "Poll mode. Last read 12 s ago.", or "Poll mode. Not read yet." until the first read after switching to poll mode. A failure names the address, such as "Poll mode. Alertmanager at http://alertmanager-operated.monitoring:9093 doesn't answer: connection refused." The **Setup** page tests an address: whether Alertmanager answers, how many alerts are active, and which of the alerts Themis answers fire now.
 
-### Or let Alertmanager send alerts to Themis
+### Push mode
 
-Alertmanager can post alerts to Themis's webhook instead, or as well: an alert that arrives both ways is the same alert. To use only the webhook, set `alerting.alertmanager.enabled=false` in the chart. The **Setup** page shows the steps below with your install's address and alerts filled in, under **Or let Alertmanager send alerts to Themis**. Alertmanager sends the intake token, the `intake` key of the `themis-tokens` Secret, as a bearer token.
+In push mode, Alertmanager posts alerts to Themis's webhook, and Themis reads nothing. The **Setup** page shows the steps below with your install's address and alerts filled in. Alertmanager sends the intake token, the `intake` key of the `themis-tokens` Secret, as a bearer token. The **Status** page says when the last alert arrived, such as "Push mode. Last alert 3 min ago.", or "Push mode. No alert received yet."
 
 **With the Prometheus Operator**, such as kube-prometheus-stack, the chart makes the routing:
 

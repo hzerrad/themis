@@ -17,9 +17,12 @@ data:
       alertmanagerConfigs: true
       {{- end }}
     alerting:
+      {{- with include "themis.alertsMode" . }}
+      mode: {{ . }}
+      {{- end }}
+      {{- if include "themis.alertmanagerEnabled" . }}
       alertmanager:
         {{- $am := include "themis.alertmanagerValues" . | fromJson }}
-        {{- if include "themis.alertmanagerEnabled" . }}
         {{- $basic := $am.basicAuth | default dict }}
         {{- $tls := $am.tls | default dict }}
         {{- $_ := include "themis.alertmanagerSecrets" . }}
@@ -54,9 +57,7 @@ data:
         matchers: {{ toJson . }}
         {{- end }}
         interval: {{ $am.interval | default "15s" | quote }}
-        {{- else }}
-        disabled: true
-        {{- end }}
+      {{- end }}
       {{- with include "themis.prometheusFound" . }}
       prometheus:
         address: {{ . | quote }}

@@ -201,7 +201,7 @@ alerts_state() {
   done
   echo "$got"
 }
-check "Themis reads it once an admin account exists" [ "$(alerts_state 60)" = "ok Reading from $AM every 15 s." ]
+check "Themis reads it once an admin account exists" [ "$(alerts_state 60)" = "ok Poll mode." ]
 RULES=$(api /v1/status | field '[c["summary"] for c in d["checks"] if c["name"] == "Alert rules"][0]')
 printf '  %s\n' "$RULES"
 check "Themis reads the alerting rules of the Prometheus the chart found" grep -q " in Prometheus\." <<<"$RULES"
