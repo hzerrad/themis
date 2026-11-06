@@ -19,7 +19,6 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
-	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -43,7 +42,7 @@ func signedIn(t *testing.T) *env {
 	mux := http.NewServeMux()
 	log := telemetry.NewLogger(&e.logs, "core", slog.LevelDebug)
 	(&httpapi.API{
-		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: &identity.Setup{Store: s, Logger: log}, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},
@@ -198,35 +197,6 @@ func TestPeople_Me(t *testing.T) {
 	rec = e.do(t, http.MethodGet, "/v1/me", token, nil)
 	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil || me.Role != config.RoleAdmin || !me.Token {
 		t.Errorf("me with the token = %+v, %v", me, err)
-	}
-}
-
-// Setup finishes, retiring the initial admin password, when an admin signs in
-// through the identity provider or with an account: not with the token, and
-// not as anyone less trusted.
-func TestPeople_AnAdminSigningInFinishesSetup(t *testing.T) {
-	e := signedIn(t)
-	finished := func() bool {
-		t.Helper()
-		done, err := e.store.SetupFinished(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return done
-	}
-	e.as(t, "approver", http.MethodGet, "/v1/me", nil)
-	e.do(t, http.MethodGet, "/v1/me", token, nil)
-	if finished() {
-		t.Fatal("setup finished without an admin signing in")
-	}
-	if rec := e.as(t, "admin", http.MethodGet, "/v1/me", nil); rec.Code != http.StatusOK {
-		t.Fatalf("me for admin = %d %q", rec.Code, rec.Body)
-	}
-	if !finished() {
-		t.Error("setup still open after an admin signed in")
-	}
-	if logs := e.logs.String(); !strings.Contains(logs, `"msg":"initial admin password retired"`) || !strings.Contains(logs, `"by":"admin@example.com"`) {
-		t.Errorf("no log says admin@example.com retired the initial admin password: %s", e.logs.String())
 	}
 }
 

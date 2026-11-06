@@ -69,27 +69,37 @@ func TestAccount_LocksAfterWrongPasswords(t *testing.T) {
 
 var byAdmin = store.AccountChange{By: "root", At: t0}
 
-// With KeepAnAdmin, the last admin account can't be deleted or lose its role;
-// without it, as when the identity provider grants admin too, it can.
+// The last admin account can never be deleted or lose its role; once another
+// admin account exists, it can.
 func TestAccount_KeepsAnAdmin(t *testing.T) {
 	s, _ := newStore(t)
-	newAccount(t, s, "alice")
-	keep := store.AccountChange{By: "admin", At: t0, KeepAnAdmin: true}
-	if err := s.SetRole(t.Context(), "alice", "admin", keep); err != nil {
-		t.Fatal(err)
+	admin := func() bool {
+		t.Helper()
+		has, err := s.HasAdminAccount(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return has
 	}
-	if err := s.SetRole(t.Context(), "alice", "viewer", keep); !errors.Is(err, store.ErrLastAdmin) {
+	newAccount(t, s, "alice")
+	if admin() {
+		t.Fatal("an approver counts as an admin account")
+	}
+	if err := s.SetRole(t.Context(), "alice", "admin", byAdmin); err != nil || !admin() {
+		t.Fatalf("making alice admin: %v, admin account %v", err, admin())
+	}
+	if err := s.SetRole(t.Context(), "alice", "viewer", byAdmin); !errors.Is(err, store.ErrLastAdmin) {
 		t.Errorf("demoting the last admin: %v, want ErrLastAdmin", err)
 	}
-	if err := s.DeleteAccount(t.Context(), "alice", keep); !errors.Is(err, store.ErrLastAdmin) {
+	if err := s.DeleteAccount(t.Context(), "alice", byAdmin); !errors.Is(err, store.ErrLastAdmin) {
 		t.Errorf("deleting the last admin: %v, want ErrLastAdmin", err)
 	}
 	newAccount(t, s, "bob")
-	if err := s.DeleteAccount(t.Context(), "bob", keep); err != nil {
-		t.Errorf("deleting an approver while alice is admin: %v", err)
+	if err := s.SetRole(t.Context(), "bob", "admin", byAdmin); err != nil {
+		t.Fatal(err)
 	}
 	if err := s.DeleteAccount(t.Context(), "alice", byAdmin); err != nil {
-		t.Errorf("deleting the last admin without KeepAnAdmin: %v", err)
+		t.Errorf("deleting alice while bob is admin: %v", err)
 	}
 }
 
@@ -121,10 +131,10 @@ func TestAccount_ChangesEndSessions(t *testing.T) {
 	if a, _ := s.Account(t.Context(), "alice"); a.PasswordHash != "hash-2" {
 		t.Errorf("password hash = %q", a.PasswordHash)
 	}
-	if err := s.SetRole(t.Context(), "bob", "admin", byAdmin); err != nil {
+	if err := s.SetRole(t.Context(), "bob", "viewer", byAdmin); err != nil {
 		t.Fatal(err)
 	}
-	if a, _ := s.Account(t.Context(), "bob"); a.Role != "admin" {
+	if a, _ := s.Account(t.Context(), "bob"); a.Role != "viewer" {
 		t.Errorf("bob's role = %q", a.Role)
 	}
 	if err := s.DeleteAccount(t.Context(), "bob", byAdmin); err != nil {

@@ -1,6 +1,7 @@
-{{- if not (.Values.initialAdmin | default dict).existingSecret }}
-{{- /* Generated once; an upgrade keeps it. It signs the first admin in until
-an admin signs in with an account or through OIDC, and no one after that. */ -}}
+{{- /* With an admin account configured, there is no initial admin password. */ -}}
+{{- if and (not (include "themis.adminAccount" .)) (not (.Values.initialAdmin | default dict).existingSecret) }}
+{{- /* Generated once; an upgrade keeps it. It signs in only to create the
+first admin account, and no one after that. */ -}}
 {{- $name := include "themis.initialAdminSecret" . -}}
 {{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
 {{- $data := dict -}}

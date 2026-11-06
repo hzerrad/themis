@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -28,11 +27,12 @@ type Accounts interface {
 
 func (a *API) registerAccounts(mux *http.ServeMux) {
 	mux.Handle("GET /v1/accounts", a.authed(config.RoleAdmin, a.listAccounts, nil))
-	mux.Handle("POST /v1/accounts", a.authed(config.RoleAdmin, a.createAccount, nil))
+	// While no admin account exists, making the first is all Themis serves.
+	mux.Handle("POST /v1/accounts", a.guard(config.RoleAdmin, serves{closed: true, initialAdmin: true}, a.createAccount, nil))
 	mux.Handle("PATCH /v1/accounts/{username}", a.authed(config.RoleAdmin, a.changeAccount, nil))
 	mux.Handle("DELETE /v1/accounts/{username}", a.authed(config.RoleAdmin, a.deleteAccount, nil))
 	mux.Handle("GET /v1/audit/accounts", a.authed(config.RoleAdmin, a.accountRecord, nil))
-	mux.Handle("POST /v1/me/password", a.whileTemporary(a.changeOwnPassword))
+	mux.Handle("POST /v1/me/password", a.guard("", serves{temporary: true}, a.changeOwnPassword, nil))
 }
 
 type accountView struct {
@@ -94,6 +94,19 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if !a.decode(w, r, &in) {
+		return
+	}
+	open, err := a.Gate.Open(r.Context())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if who, _ := identity.From(r.Context()); who.InitialAdmin && open {
+		http.Error(w, initialAdminOnly, http.StatusForbidden)
+		return
+	}
+	if !open && in.Role != config.RoleAdmin {
+		http.Error(w, identity.ClosedMessage, http.StatusConflict)
 		return
 	}
 	if err := errors.Join(identity.CheckUsername(in.Username), identity.CheckRole(in.Role), identity.CheckNewPassword(in.Username, in.Password)); err != nil {
@@ -240,12 +253,9 @@ func (a *API) setPassword(w http.ResponseWriter, r *http.Request, username, pass
 	return true
 }
 
-// change is who is changing an account, now. An admin account must remain
-// unless the identity provider can sign an admin in: the break-glass token is
-// for scripts and failed sign-ins, and the initial admin password retires.
+// change is who is changing an account, now.
 func (a *API) change(r *http.Request) store.AccountChange {
-	adminElsewhere := a.OIDC && slices.ContainsFunc(a.Access, func(b config.AccessBinding) bool { return b.Role == config.RoleAdmin })
-	return store.AccountChange{By: actor(r), At: a.now(), KeepAnAdmin: !adminElsewhere}
+	return store.AccountChange{By: actor(r), At: a.now()}
 }
 
 func (a *API) failAccount(w http.ResponseWriter, r *http.Request, username string, err error) {

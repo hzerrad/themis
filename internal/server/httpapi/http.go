@@ -69,17 +69,30 @@ type API struct {
 		Checks(ctx context.Context) []statuspage.Check
 	}
 	// Setup is the install's first run, which an admin signing in with an
-	// account or through OIDC finishes. Nil means no one signs in with the
-	// initial admin password.
+	// account finishes. Nil means no one signs in with the initial admin
+	// password.
 	Setup *identity.Setup
-	// InitialAdmin is the password the first admin signs in with while setup
-	// is open, which the sign-in page offers. Nil means there is none.
+	// InitialAdmin is the password that signs in to make the first admin
+	// account, which the sign-in page offers. Nil means there is none.
 	InitialAdmin *config.InitialAdmin
+	// Gate keeps the API closed but for making the first admin account while
+	// none exists. Nil means always open.
+	Gate *identity.Gate
+}
+
+// What a route serves beyond someone signed in with the role it needs.
+type serves struct {
+	// temporary: someone whose password is temporary.
+	temporary bool
+	// closed: anyone, while no admin account exists.
+	closed bool
+	// initialAdmin: whoever signed in with the initial admin password.
+	initialAdmin bool
 }
 
 func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sign-in", a.signInMethods)
-	mux.Handle("GET /v1/me", a.whileTemporary(a.me))
+	mux.Handle("GET /v1/me", a.guard("", serves{temporary: true, closed: true, initialAdmin: true}, a.me, nil))
 	mux.Handle("GET /v1/incidents", a.authed(config.RoleViewer, a.list, nil))
 	mux.Handle("GET /v1/incidents/{id}", a.authed(config.RoleViewer, a.detail, incidentFields))
 	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
@@ -106,19 +119,19 @@ func (a *API) status(w http.ResponseWriter, r *http.Request) {
 }
 
 // authed serves h to whoever has role, or to anyone signed in when role is
-// empty, with the log fields of the request's path, and logs the request at
-// debug level. Someone whose password is temporary is refused.
+// empty, once an admin account exists. Someone whose password is temporary,
+// or who signed in with the initial admin password, is refused.
 func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
-	return a.guard(role, false, h, fields)
+	return a.guard(role, serves{}, h, fields)
 }
 
-// whileTemporary serves h to anyone signed in, even with a temporary
-// password: they may see who they are and choose their own.
-func (a *API) whileTemporary(h http.HandlerFunc) http.Handler {
-	return a.guard("", true, h, nil)
-}
+// initialAdminOnly is all the initial admin password is refused with once an
+// admin account exists.
+const initialAdminOnly = "The initial admin password only creates the first admin account."
 
-func (a *API) guard(role string, temporaryOK bool, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
+// guard serves h to whoever has role and s allows, with the log fields of
+// the request's path, and logs the request at debug level.
+func (a *API) guard(role string, s serves, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
 	directory := &identity.Directory{TokenFile: a.TokenFile, Access: a.Access, Sessions: a.Sessions, Setup: a.Setup, Now: a.now}
 	if a.Accounts != nil {
 		directory.Accounts = a.Accounts
@@ -140,8 +153,23 @@ func (a *API) guard(role string, temporaryOK bool, h http.HandlerFunc, fields fu
 		case err != nil:
 			http.Error(w, "Sign in to Themis first.", http.StatusUnauthorized)
 			return
-		case who.TemporaryPassword && !temporaryOK:
+		case who.TemporaryPassword && !s.temporary:
 			http.Error(w, "Refused: the password is temporary. Choose a new one first.", http.StatusForbidden)
+			return
+		}
+		if !s.closed {
+			open, err := a.Gate.Open(r.Context())
+			if err != nil {
+				a.fail(w, r, err)
+				return
+			}
+			if !open {
+				http.Error(w, identity.ClosedMessage, http.StatusConflict)
+				return
+			}
+		}
+		if who.InitialAdmin && !s.initialAdmin {
+			http.Error(w, initialAdminOnly, http.StatusForbidden)
 			return
 		}
 		if role != "" && !who.Can(role) {
@@ -183,13 +211,21 @@ type meView struct {
 	// TemporaryPassword is set while that account's password is one an admin
 	// set, which its holder must replace before anything else.
 	TemporaryPassword bool `json:"temporaryPassword,omitempty"`
+	// Closed is set while no admin account exists, and Themis serves nothing
+	// but the making of the first.
+	Closed bool `json:"closed,omitempty"`
 }
 
 func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	who, _ := identity.From(r.Context())
+	open, err := a.Gate.Open(r.Context())
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	a.reply(w, r, meView{
 		Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, InitialAdmin: who.InitialAdmin, Account: who.Account,
-		TemporaryPassword: who.TemporaryPassword,
+		TemporaryPassword: who.TemporaryPassword, Closed: !open,
 	})
 }
 
@@ -216,13 +252,19 @@ func (a *API) signInMethods(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// The initial admin password only makes the first admin account.
 	if a.InitialAdmin != nil && a.Setup != nil {
-		open, err := a.Setup.Open(r.Context())
+		setup, err := a.Setup.Open(r.Context())
 		if err != nil {
 			a.fail(w, r, err)
 			return
 		}
-		if open {
+		accounts, err := a.Gate.Open(r.Context())
+		if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+		if setup && !accounts {
 			v.InitialAdmin = &initialAdminView{}
 			if a.InitialAdmin.Secret != "" && a.Namespace != "" {
 				v.InitialAdmin.Command = fmt.Sprintf("kubectl -n %s get secret %s -o jsonpath='{.data.password}' | base64 -d", a.Namespace, a.InitialAdmin.Secret)

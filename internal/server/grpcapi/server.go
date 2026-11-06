@@ -28,6 +28,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 
@@ -72,6 +73,10 @@ type Server struct {
 	// nothing.
 	Heartbeat *statuspage.Heartbeat
 
+	// Gate refuses every call while no admin account exists. Nil means
+	// always open.
+	Gate *identity.Gate
+
 	limiters sync.Map
 	reviews  lru[[sha256.Size]byte, review]
 	peers    lru[string, *rate.Limiter]
@@ -93,6 +98,9 @@ func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
 		if caller, external, err := s.externalCaller(ctx, tokenFile, info.FullMethod); err != nil {
 			return nil, err
 		} else if external {
+			if err := s.open(ctx); err != nil {
+				return nil, err
+			}
 			ctx = withCaller(ctx, caller)
 			resp, err := handler(ctx, req)
 			s.logger().DebugContext(ctx, "gRPC request served", "method", info.FullMethod, "code", status.Code(err).String(), "source", caller.Source)
@@ -100,6 +108,9 @@ func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
 		}
 		logCtx := ctx
 		resp, err := authenticate(ctx, req, info, func(ctx context.Context, req any) (any, error) {
+			if err := s.open(ctx); err != nil {
+				return nil, err
+			}
 			if r, ok := req.(interface{ GetLeaseId() string }); ok {
 				ctx = s.leaseFields(ctx, r.GetLeaseId())
 			}
@@ -114,6 +125,19 @@ func (s *Server) Interceptor(tokenFile string) grpc.UnaryServerInterceptor {
 		s.logger().DebugContext(logCtx, "gRPC request served", "method", info.FullMethod, "code", status.Code(err).String())
 		return resp, err
 	}
+}
+
+// open refuses a call while no admin account exists.
+func (s *Server) open(ctx context.Context) error {
+	open, err := s.Gate.Open(ctx)
+	if err != nil {
+		s.logger().ErrorContext(ctx, "cannot check for an admin account", telemetry.FieldError, err)
+		return status.Error(codes.Unavailable, "Themis can't check its accounts right now. Try again shortly.")
+	}
+	if !open {
+		return status.Error(codes.FailedPrecondition, identity.ClosedMessage)
+	}
+	return nil
 }
 
 func (s *Server) leaseFields(ctx context.Context, leaseID string) context.Context {

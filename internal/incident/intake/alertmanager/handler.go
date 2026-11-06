@@ -12,6 +12,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 )
 
@@ -36,8 +37,13 @@ type Handler struct {
 	TokenFile string
 
 	// Heartbeat records alerts arriving, and Refused webhooks sent with a
-	// wrong token, for the status page. Nil records nothing.
+	// wrong token or while no admin account exists, for the status page. Nil
+	// records nothing.
 	Heartbeat, Refused *statuspage.Heartbeat
+
+	// Gate refuses alerts while no admin account exists, so a Themis no one
+	// can operate acts on nothing. Nil takes them always.
+	Gate *identity.Gate
 
 	Logger *slog.Logger
 	Now    func() time.Time
@@ -73,6 +79,19 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if !token.Matches(r.Header.Get("Authorization"), want) {
 		h.Refused.Beat(ctx, "")
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// 503, so Alertmanager sends them again once an admin account exists.
+	open, err := h.Gate.Open(ctx)
+	if err != nil {
+		log.ErrorContext(ctx, "cannot check for an admin account", telemetry.FieldError, err)
+		http.Error(w, "intake temporarily unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	if !open {
+		h.Refused.Beat(ctx, statuspage.RefusedNoAdminAccount)
+		intake.ObserveRefused(Source, intake.RefusedNoAdminAccount)
+		http.Error(w, identity.ClosedMessage, http.StatusServiceUnavailable)
 		return
 	}
 

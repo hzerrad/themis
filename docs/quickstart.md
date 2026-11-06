@@ -140,7 +140,9 @@ Open <http://localhost:8090> and sign in with the initial admin password. The ch
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-It signs in as an admin until an admin signs in with an account or through your identity provider; then it stops working. Opening Themis grants nothing by itself. The first page is **Setup**, in order: create your admin account, sign in with it and choose your own password, which completes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+Themis starts once an admin account exists, and serves nothing else until then: alerts sent before are refused, and Alertmanager sends them again. The initial admin password only creates that account. Create your admin account, sign in with it, and choose your own password; the initial admin password then stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup: see [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
+
+The first page is then **Setup**, in order: sign-in, where you can add your identity provider (step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 
@@ -212,7 +214,7 @@ Themis accounts, on the **Accounts** page, are enough for a small team. With an 
 | `approver` | Also suggest, approve and deny fixes |
 | `admin` | Everything |
 
-Once someone with the `admin` role signs in, the initial admin password stops working. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
+The admin account stays: Themis always needs one of its own, and the last can't be deleted. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
 
 ## Clean up
 

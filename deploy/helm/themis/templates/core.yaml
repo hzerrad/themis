@@ -60,7 +60,11 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/themis, readOnly: true}
             - {name: tokens, mountPath: /var/run/secrets/themis, readOnly: true}
+            {{- if include "themis.adminAccount" . }}
+            - {name: admin-account, mountPath: /var/run/secrets/themis-admin-account, readOnly: true}
+            {{- else }}
             - {name: initial-admin, mountPath: /var/run/secrets/themis-initial-admin, readOnly: true}
+            {{- end }}
             {{- if .Values.notifications.webhookSecret }}
             - {name: webhook, mountPath: /var/run/secrets/themis-webhook, readOnly: true}
             {{- end }}
@@ -90,13 +94,26 @@ spec:
         {{- end }}
         - name: config
           configMap: {name: {{ .Release.Name }}-config}
-        # Optional, so the core starts without it: once an admin has signed
-        # in, the password signs no one in anyway.
+        {{- if include "themis.adminAccount" . }}
+        {{- $account := .Values.initialAdmin.account }}
+        # Read only while no admin account exists; then the core refuses to
+        # start without it. Optional, so it may go once the account exists.
+        - name: admin-account
+          secret:
+            secretName: {{ $account.existingSecret }}
+            items:
+              - {key: {{ $account.passwordHashKey | default "password-hash" }}, path: password-hash}
+              - {key: {{ $account.passwordKey | default "password" }}, path: password}
+            optional: true
+        {{- else }}
+        # Optional, so the core starts without it: once an admin account
+        # exists, the password signs no one in anyway.
         - name: initial-admin
           secret:
             secretName: {{ include "themis.initialAdminSecret" . }}
             items: [{key: password, path: password}]
             optional: true
+        {{- end }}
         - name: tokens
           secret:
             secretName: {{ include "themis.tokensSecret" . }}

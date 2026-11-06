@@ -19,7 +19,7 @@ import (
 )
 
 // firstRun is a new install in memory: whether setup finished, the initial
-// admin password's wrong tries, and sessions.
+// admin password's wrong tries, sessions, and accounts.
 type firstRun struct {
 	*memStore
 	finished    bool
@@ -27,6 +27,24 @@ type firstRun struct {
 	asked       int
 	failures    int
 	lockedUntil time.Time
+	accounts    map[string]store.Account
+}
+
+func (f *firstRun) HasAdminAccount(context.Context) (bool, error) {
+	for _, a := range f.accounts {
+		if a.Role == config.RoleAdmin {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (f *firstRun) Account(_ context.Context, username string) (store.Account, error) {
+	a, ok := f.accounts[username]
+	if !ok {
+		return store.Account{}, store.ErrNotFound
+	}
+	return a, nil
 }
 
 func (f *firstRun) SetupFinished(context.Context) (bool, error) {
@@ -75,11 +93,13 @@ func newFirstRun(t *testing.T) *firstRunRig {
 	if err := os.WriteFile(file, []byte(initialPassword+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := &firstRunRig{store: &firstRun{memStore: newMemStore()}, file: file, logs: &bytes.Buffer{}}
+	r := &firstRunRig{store: &firstRun{memStore: newMemStore(), accounts: map[string]store.Account{}}, file: file, logs: &bytes.Buffer{}}
 	log := slog.New(slog.NewTextHandler(r.logs, nil))
 	r.setup = &identity.Setup{Store: r.store, Logger: log}
 	mux := http.NewServeMux()
-	(&identity.InitialAdmin{PasswordFile: file, Setup: r.setup, Store: r.store, Logger: log, Now: func() time.Time { return now }}).Register(mux)
+	(&identity.InitialAdmin{
+		PasswordFile: file, Setup: r.setup, Gate: &identity.Gate{Store: r.store}, Store: r.store, Logger: log, Now: func() time.Time { return now },
+	}).Register(mux)
 	r.handler = mux
 	return r
 }
@@ -95,10 +115,12 @@ func (r *firstRunRig) signIn(t *testing.T, password string, header bool) *httpte
 	return rec
 }
 
-// The initial admin password signs in as an admin until an admin signs in
-// with an account or through OIDC. Then neither the password nor the sessions
-// it started sign anyone in, and the record says when it was retired.
-func TestInitialAdmin_RetiredWhenAnAdminSignsIn(t *testing.T) {
+// The initial admin password signs in while no admin account exists. It is
+// retired once an admin signs in with an account and a password of their
+// own; an admin through the identity provider, or with a temporary password,
+// doesn't retire it. Then neither the password nor the sessions it started
+// sign anyone in, and the record says when it was retired.
+func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
 	r := newFirstRun(t)
 	// Space around it is from copying it.
 	rec := r.signIn(t, ` `+initialPassword+`\n`, true)
@@ -106,32 +128,44 @@ func TestInitialAdmin_RetiredWhenAnAdminSignsIn(t *testing.T) {
 		t.Fatalf("sign-in = %d %q", rec.Code, rec.Body)
 	}
 	first := cookieNamed(t, rec, identity.SessionCookie)
-	d := &identity.Directory{Sessions: r.store, Access: bindings, Setup: r.setup, Now: func() time.Time { return now }}
-	identify := func(c *http.Cookie) (identity.Identity, error) {
+	d := &identity.Directory{Sessions: r.store, Accounts: r.store, Access: bindings, Setup: r.setup, Now: func() time.Time { return now }}
+	identify := func(session string) (identity.Identity, error) {
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
-		req.AddCookie(c)
+		req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: session, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 		return d.Identify(req)
 	}
-	if who, err := identify(first); err != nil || who.Username != identity.InitialAdminUser || who.Role != config.RoleAdmin || !who.InitialAdmin {
+	if who, err := identify(first.Value); err != nil || who.Username != identity.InitialAdminUser || who.Role != config.RoleAdmin || !who.InitialAdmin {
 		t.Fatalf("identity = %+v, %v; want the initial admin", who, err)
 	}
-	if open, _ := r.setup.Open(t.Context()); !open {
-		t.Fatal("signing in with the initial admin password finished setup")
-	}
 
-	// root@example.com is an admin through the bindings.
-	r.store.sessions["root"] = store.Session{Subject: "sub-root", Username: "root@example.com", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
-	if who, err := identify(&http.Cookie{Name: identity.SessionCookie, Value: "root", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}); err != nil || who.Role != config.RoleAdmin {
-		t.Fatalf("root = %+v, %v", who, err)
+	// root@example.com is an admin through the bindings; root's account is
+	// an admin's, first with a temporary password.
+	r.store.sessions["oidc-root"] = store.Session{Subject: "sub-root", Username: "root@example.com", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	r.store.sessions["account-root"] = store.Session{Subject: store.AccountSubjectPrefix + "root", Username: "root", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin, TemporaryPassword: true}
+	for _, session := range []string{"oidc-root", "account-root"} {
+		if who, err := identify(session); err != nil || who.Role != config.RoleAdmin {
+			t.Fatalf("%s = %+v, %v", session, who, err)
+		}
 	}
-	if who, err := identify(first); !errors.Is(err, identity.ErrSignedOut) {
+	if open, _ := r.setup.Open(t.Context()); !open {
+		t.Fatal("an admin through the identity provider, or with a temporary password, retired the initial admin password")
+	}
+	if rec := r.signIn(t, initialPassword, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "An admin account exists.") {
+		t.Errorf("the password once an admin account exists = %d %q, want 403", rec.Code, rec.Body)
+	}
+	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin}
+	if _, err := identify("account-root"); err != nil {
+		t.Fatal(err)
+	}
+	if who, err := identify(first.Value); !errors.Is(err, identity.ErrSignedOut) {
 		t.Errorf("the initial admin's session once retired = %+v, %v; want signed out", who, err)
 	}
 	if rec := r.signIn(t, initialPassword, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "retired") {
 		t.Errorf("the password once retired = %d %q, want 403 saying it is retired", rec.Code, rec.Body)
 	}
 	logs := r.logs.String()
-	if strings.Count(logs, "signed in with the initial admin password") != 1 || strings.Count(logs, "initial admin password retired") != 1 || !strings.Contains(logs, "by=root@example.com") {
+	if strings.Count(logs, "signed in with the initial admin password") != 1 || strings.Count(logs, "initial admin password retired") != 1 || !strings.Contains(logs, "by=root") {
 		t.Errorf("logs = %s, want one sign-in and one retirement by root", logs)
 	}
 	if strings.Contains(logs, initialPassword) {

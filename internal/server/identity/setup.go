@@ -30,7 +30,7 @@ const SetupUser = "setup"
 // reserved reports whether username names one of Themis's own ways in, which
 // records use, so no one may sign in as it.
 func reserved(username string) bool {
-	return username == TokenUser || username == InitialAdminUser || username == SetupUser
+	return username == TokenUser || username == InitialAdminUser || username == SetupUser || username == ChartUser
 }
 
 // SetupStore says whether setup has finished, and records when it does.
@@ -40,9 +40,9 @@ type SetupStore interface {
 }
 
 // Setup is an install's first run. It is open until an admin signs in with a
-// Themis account or through the identity provider. While it is open, the
-// initial admin password signs in as an admin; once it finishes, the password
-// and the sessions it started are retired for good.
+// Themis account and a password of their own. While it is open, the initial
+// admin password signs in to make the first admin account; once it
+// finishes, the password and the sessions it started are retired for good.
 type Setup struct {
 	Store  SetupStore
 	Logger *slog.Logger
@@ -64,11 +64,10 @@ func (s *Setup) Open(ctx context.Context) (bool, error) {
 	return !finished, nil
 }
 
-// finish ends setup once who is an admin signed in with an account, with a
-// password of their own, or through the identity provider: an admin can now
-// sign in without the initial admin password, which is retired.
+// finish ends setup once who is an admin signed in with an account and a
+// password of their own: the initial admin password is then retired.
 func (s *Setup) finish(ctx context.Context, who Identity, at time.Time) {
-	if who.Token || who.InitialAdmin || who.TemporaryPassword || who.Role != config.RoleAdmin || s.finished.Load() {
+	if !who.Account || who.TemporaryPassword || who.Role != config.RoleAdmin || s.finished.Load() {
 		return
 	}
 	done, err := s.Store.FinishSetup(ctx, who.Username, at)
@@ -103,12 +102,14 @@ type InitialAdminStore interface {
 // password lasts: long enough to set up, short enough not to linger.
 const initialAdminSessionTTL = time.Hour
 
-// InitialAdmin signs the first admin in with the initial admin password while
-// setup is open. The password is read from PasswordFile at each try, compared
-// in constant time, and never stored, logged or shown.
+// InitialAdmin signs in with the initial admin password while setup is open
+// and no admin account exists: it only makes the first admin account. The
+// password is read from PasswordFile at each try, compared in constant time,
+// and never stored, logged or shown.
 type InitialAdmin struct {
 	PasswordFile string
 	Setup        *Setup
+	Gate         *Gate
 	Store        InitialAdminStore
 	Logger       *slog.Logger
 	Now          func() time.Time
@@ -123,7 +124,8 @@ func (i *InitialAdmin) Register(mux *http.ServeMux) {
 // saying it is locked or retired reveals nothing about anyone's account.
 const (
 	wrongInitialPassword   = "Wrong password. After 10 wrong tries in a row, the initial admin password is locked for 15 minutes."
-	retiredInitialPassword = "The initial admin password is retired: an admin has signed in with an account or the identity provider. Sign in with one of those."
+	retiredInitialPassword = "The initial admin password is retired. Sign in with your account."
+	adminAccountExists     = "An admin account exists. Sign in with it."
 )
 
 func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
@@ -147,6 +149,14 @@ func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !open {
 		i.refuse(w, r, "retired", http.StatusForbidden, retiredInitialPassword)
+		return
+	}
+	// Its only use is making the first admin account.
+	if accounts, err := i.Gate.Open(ctx); err != nil {
+		i.fail(w, r, err)
+		return
+	} else if accounts {
+		i.refuse(w, r, "an admin account exists", http.StatusForbidden, adminAccountExists)
 		return
 	}
 	until, err := i.Store.InitialAdminLockedUntil(ctx)

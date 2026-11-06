@@ -252,8 +252,9 @@ function passwordForm(primary) {
   return { form, focus: () => username.focus() };
 }
 
-// initialAdminForm signs the first admin in with the initial admin password,
-// while setup is incomplete. where says how to read it, when Themis knows.
+// initialAdminForm signs in with the initial admin password, while no admin
+// account exists, to create the first. where says how to read it, when
+// Themis knows.
 function initialAdminForm(where) {
   const password = h("input", { type: "password", autocomplete: "off", required: true });
   const error = h("div", { class: "error", role: "alert" });
@@ -266,12 +267,11 @@ function initialAdminForm(where) {
       error.textContent = (await resp.text()).trim();
       return;
     }
-    location.hash = "#/setup";
     me = null;
     route();
   };
   const section = [
-    h("p", {}, "Setup is incomplete. The initial admin password signs in as admin until an admin signs in with an account or the identity provider."),
+    h("p", {}, "No admin account. Sign in with the initial admin password to create the first one."),
     where.command ? [h("p", { class: "quiet small" }, "Read it with kubectl:"), copyable(where.command)] : null,
     h("form", { class: "form", onsubmit: submit },
       field("Initial admin password", password),
@@ -299,7 +299,7 @@ async function login() {
   if (!methods.oidc && !methods.password && !first) {
     render(h("div", { class: "plate centre" },
       h("h1", {}, "Sign-in is not set up"),
-      h("p", {}, "No accounts or identity provider. Sign in with the break-glass token, then create accounts or configure the identity provider."),
+      h("p", {}, "No admin account. Sign in with the break-glass token to create the first one."),
       breakGlass));
     return;
   }
@@ -313,6 +313,57 @@ async function login() {
     breakGlass));
   if (first) first.focus();
   else if (pw && !methods.oidc) pw.focus();
+}
+
+// CLOSED is what Themis says while no admin account exists.
+const CLOSED = "No admin account. Create the first admin account to start Themis.";
+
+// firstAdmin is all Themis serves while no admin account exists: creating
+// the first.
+function firstAdmin() {
+  if (!can("admin")) {
+    render(h("div", { class: "plate centre" }, h("h1", {}, "Themis has not started"), h("p", {}, CLOSED)));
+    return;
+  }
+  const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
+  const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
+  const error = h("div", { class: "error", role: "alert" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const name = username.value.trim();
+    try {
+      await api("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: "admin", password: password.value }) });
+      flash = "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.";
+      me = null;
+      route();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  render(h("div", { class: "plate centre" },
+    h("h1", {}, "Create the first admin account"),
+    h("p", {}, CLOSED),
+    h("form", { class: "form", onsubmit: submit },
+      field("Username", username),
+      field("Temporary password", password, "12 characters or more. A new one is chosen at the first sign-in."),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Create the admin account")),
+      error)));
+  username.focus();
+}
+
+// signInAsAdmin follows the first admin account's making by the initial
+// admin password, whose only use that was.
+function signInAsAdmin() {
+  const pw = passwordForm(true);
+  const said = flash;
+  flash = null;
+  render(h("div", { class: "plate centre" },
+    h("h1", {}, "Sign in with the admin account"),
+    said ? h("p", { class: "flash", role: "status" }, said) : null,
+    h("p", {}, "Then choose your own password. The initial admin password then stops working."),
+    pw.form));
+  pw.focus();
 }
 
 function noAccess() {
@@ -363,7 +414,7 @@ function changePassword() {
 // of the one who did it.
 function recordLine(e) {
   const role = ROLE_LABEL[e.role] || e.role;
-  if (e.action === "account_created") return "Created " + e.username + ", " + role + ", with a temporary password.";
+  if (e.action === "account_created") return "Created " + e.username + " with the " + role + " role.";
   if (e.action === "account_deleted") return "Deleted " + e.username + ".";
   if (e.action === "role_changed") return "Gave " + e.username + " the " + role + " role.";
   if (e.action === "temporary_password_set") return "Set a temporary password for " + e.username + ".";
@@ -378,12 +429,12 @@ function recordLine(e) {
 function recordActor(actor) {
   if (actor === "admin") return "The break-glass token";
   if (actor === "initial-admin") return "The initial admin password";
+  if (actor === "helm-chart") return "The Helm chart";
   return actor;
 }
 
 // accounts lets admins manage who signs in with a password, and shows the
-// record of changes to accounts. During setup, it's where the first admin
-// account is made.
+// record of changes to accounts.
 async function accounts() {
   const list = await api("/v1/accounts");
   const { events } = await api("/v1/audit/accounts");
@@ -400,7 +451,7 @@ async function accounts() {
   };
   const roleSelect = (value, name) => h("select", { "aria-label": name }, ROLES.map((r) => h("option", { value: r, selected: r === value }, ROLE_LABEL[r])));
   const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
-  const role = roleSelect(me.initialAdmin && !list.length ? "admin" : "approver", "Role");
+  const role = roleSelect("approver", "Role");
   const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const create = (e) => {
     e.preventDefault();
@@ -408,11 +459,7 @@ async function accounts() {
     act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) },
       "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.");
   };
-  const hasAdmin = list.some((a) => a.role === "admin");
-  const first = me.initialAdmin && !hasAdmin;
-  // During setup, once an admin account exists, signing in with it finishes setup.
-  const finish = me.initialAdmin && hasAdmin ? passwordForm(true) : null;
-  const path = (a) => "/v1/accounts/" + encodeURIComponent(a.username);
+  const path =(a) => "/v1/accounts/" + encodeURIComponent(a.username);
   const rows = list.map((a) => {
     const self = me.account && me.username === a.username;
     const r = roleSelect(a.role, "Role of " + a.username);
@@ -435,14 +482,8 @@ async function accounts() {
   const said = flash;
   flash = null;
   render(
-    finish ? h("div", { class: "plate" },
-      h("h1", {}, "Sign in with the admin account"),
-      h("p", { class: "quiet" }, "Then choose your own password. That completes setup; the initial admin password then stops working."),
-      finish.form) : null,
-    h("h1", { class: finish ? "sub" : "" }, first ? "Create the admin account" : "Accounts"),
-    h("p", { class: "lede" }, first
-      ? "Then sign in with it here and choose your own password. That completes setup; the initial admin password then stops working."
-      : "Accounts sign in with a username and password. A password an admin sets is temporary: its holder chooses a new one at the next sign-in. People signing in through the identity provider take their roles from Themis's settings."),
+    h("h1", {}, "Accounts"),
+    h("p", { class: "lede" }, "Accounts sign in with a username and password. A password an admin sets is temporary. Its holder chooses a new one at the next sign-in. The last admin account stays."),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}, h("span", { class: "quiet" }, "Password and removal")))),
@@ -582,9 +623,9 @@ async function setup() {
   const acting = checks.filter(needsAction).length;
   const steps = [
     { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
-      h("p", {}, me.initialAdmin ? "Incomplete. The initial admin password grants admin until an admin signs in with an account or the identity provider." : partFinding(signIn)),
+      h("p", {}, partFinding(signIn)),
       h("ul", { class: "remedies" },
-        h("li", {}, h("a", { href: "#/accounts" }, me.initialAdmin ? "Create the admin account" : "Create accounts")),
+        h("li", {}, h("a", { href: "#/accounts" }, "Create accounts")),
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
@@ -1246,14 +1287,23 @@ async function route() {
     : me.initialAdmin ? "Signed in with the initial admin password"
     : me.token ? "Signed in with the break-glass token"
     : me.username + (me.role ? " · " + ROLE_LABEL[me.role] : "");
-  document.getElementById("setup").hidden = !(me && me.initialAdmin);
   document.getElementById("logout").hidden = !me;
-  document.querySelector(".bar nav").hidden = !me || !me.role || me.temporaryPassword;
+  document.querySelector(".bar nav").hidden = !me || !me.role || me.temporaryPassword || me.closed || me.initialAdmin;
   if (!me) return login();
   // A temporary password opens nothing but the page that replaces it.
   if (me.temporaryPassword) {
     document.title = "Password · Themis";
     return changePassword();
+  }
+  // Without an admin account, Themis serves nothing but the making of the
+  // first; that is also all the initial admin password ever does.
+  if (me.closed) {
+    document.title = "Themis";
+    return firstAdmin();
+  }
+  if (me.initialAdmin) {
+    document.title = "Sign in · Themis";
+    return signInAsAdmin();
   }
   if (!me.role) return noAccess();
   document.getElementById("nav-accounts").hidden = !can("admin");
@@ -1265,7 +1315,7 @@ async function route() {
   if (m) [run, nav] = [() => detail(m[1]), "nav-incidents"];
   else if (hash === "#/accounts" && can("admin")) [run, nav] = [accounts, "nav-accounts"];
   else if (hash === "#/status") [run, nav] = [status, "nav-status"];
-  else if ((hash === "#/setup" || (hash === "" && me.initialAdmin)) && can("admin")) [run, nav] = [setup, "nav-setup"];
+  else if (hash === "#/setup" && can("admin")) [run, nav] = [setup, "nav-setup"];
   else if (hash === "#/password" && me.account) [run, nav] = [async () => changePassword(), "nav-password"];
   else [run, nav] = [async () => { await list(); timer = setTimeout(route, POLL_MS); }, "nav-incidents"];
   markNav(nav);

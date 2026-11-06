@@ -235,7 +235,7 @@ themis-down: ## Uninstall Themis from kind
 .PHONY: ui
 ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	@echo "UI: http://localhost:8090"
-	@echo "Until an admin signs in, the initial admin password signs in:"
+	@echo "Until an admin account exists, the initial admin password signs in to create it:"
 	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
 	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
@@ -275,6 +275,7 @@ DEV_TOKEN              := bin/dev/intake-token
 DEV_INVESTIGATOR_TOKEN := bin/dev/investigator-token
 DEV_ADMIN_TOKEN        := bin/dev/admin-token
 DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
+DEV_ADMIN_PASSWORD     := bin/dev/admin-password
 DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
 MODEL_NAME             ?= qwen3:8b
 OLLAMA_URL             ?= http://127.0.0.1:11434/v1
@@ -299,7 +300,7 @@ dev-db: ## Start a development PostgreSQL on 127.0.0.1:5432
 .PHONY: dev-tokens
 dev-tokens:
 	@mkdir -p $(dir $(DEV_TOKEN))
-	@for f in $(DEV_TOKEN) $(DEV_INVESTIGATOR_TOKEN) $(DEV_ADMIN_TOKEN) $(DEV_EXECUTOR_TOKEN); do \
+	@for f in $(DEV_TOKEN) $(DEV_INVESTIGATOR_TOKEN) $(DEV_ADMIN_TOKEN) $(DEV_EXECUTOR_TOKEN) $(DEV_ADMIN_PASSWORD); do \
 		test -s $$f || { openssl rand -hex 32 > $$f && chmod 600 $$f; }; done
 
 .PHONY: run

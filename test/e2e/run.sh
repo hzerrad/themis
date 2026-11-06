@@ -156,15 +156,40 @@ sleep 3
 ADMIN=$(token admin)
 INTAKE=$(token intake)
 
+# --- The first admin account -------------------------------------------------
+
+# Themis serves nothing until an admin account exists. The first is created
+# the default way: with the initial admin password from the chart's Secret.
+log "the first admin account"
+code() { curl -s -o /dev/null -w '%{http_code}' -X POST "$API/v1/intake/alertmanager" "$@"; }
+# as <cookie jar> <method> <path> [curl arguments]: a request from the UI, in a session.
+as() {
+  local jar=$1 method=$2 path=$3
+  shift 3
+  curl -s -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -X "$method" -H 'X-Themis-Request: 1' "$API$path" "$@"
+}
+FIRST=$ART/initial-admin.cookies
+OWNER=$ART/e2e-admin.cookies
+rm -f "$FIRST" "$OWNER"
+TEMPORARY=e2e-temporary-$RUN
+OWN=e2e-own-password-$RUN
+check "before an admin account, the token is refused" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 409 ]
+check "before an admin account, alerts are refused" [ "$(code -H "Authorization: Bearer $INTAKE" -d '{}')" = 503 ]
+check "the initial admin password in the chart's Secret signs in" [ "$(as "$FIRST" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
+check "it creates the first admin account" [ "$(as "$FIRST" POST /v1/accounts -d "{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$TEMPORARY\"}")" = 201 ]
+check "the account signs in with its temporary password" [ "$(as "$OWNER" POST /auth/password -d "{\"username\":\"e2e-admin\",\"password\":\"$TEMPORARY\"}")" = 204 ]
+check "and chooses its own" [ "$(as "$OWNER" POST /v1/me/password -d "{\"current\":\"$TEMPORARY\",\"new\":\"$OWN\"}")" = 204 ]
+check "it signs in with its own password" [ "$(as "$OWNER" POST /auth/password -d "{\"username\":\"e2e-admin\",\"password\":\"$OWN\"}")" = 204 ]
+check "which retires the initial admin password" [ "$(as "$OWNER" GET /v1/me)" = 200 ]
+check "and ends its session" [ "$(as "$FIRST" GET /v1/me)" = 401 ]
+check "then the token reaches the API" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 200 ]
+
 # --- Intake ------------------------------------------------------------------
 
 log "intake"
-code() { curl -s -o /dev/null -w '%{http_code}' -X POST "$API/v1/intake/alertmanager" "$@"; }
 check "a webhook without a token is refused" [ "$(code -d '{}')" = 401 ]
 check "an unknown payload version is refused" [ "$(code -H "Authorization: Bearer $INTAKE" -d '{"version":"3","alerts":[]}')" = 400 ]
 check "the API needs the admin token" [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/v1/incidents")" = 401 ]
-check "the initial admin password in the chart's Secret signs in" [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-Themis-Request: 1' \
-  "$API/auth/initial-admin" -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
 # No profile matches this alert, so it is ignored.
 CANARY_ALERT=$(python3 -c '
 import json, sys, datetime

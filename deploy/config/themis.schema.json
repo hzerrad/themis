@@ -77,7 +77,30 @@
           "required": [
             "passwordFile"
           ],
-          "description": "InitialAdmin lets the first admin sign in with a generated password,\nuntil an admin signs in with an account or through OIDC."
+          "description": "InitialAdmin lets the first admin sign in with a generated password, to\nmake the first admin account. Set it or AdminAccount, not both."
+        },
+        "adminAccount": {
+          "properties": {
+            "username": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Username names the account."
+            },
+            "passwordHashFile": {
+              "type": "string",
+              "description": "PasswordHashFile holds the password's hash: argon2id in the PHC string\nformat, or bcrypt."
+            },
+            "passwordFile": {
+              "type": "string",
+              "description": "PasswordFile holds the password itself, for secrets tools that can't\nhash it. Themis hashes it, and uses it only when the hash file doesn't\nexist."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "username"
+          ],
+          "description": "AdminAccount is an admin account Themis makes at startup when no admin\naccount exists. Set it or InitialAdmin, not both."
         },
         "oidc": {
           "properties": {

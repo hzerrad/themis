@@ -18,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
+	"github.com/hzerrad/themis/internal/server/identity"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -93,6 +94,25 @@ func TestExternal_AgentCannotCallTheInvestigatorsMethods(t *testing.T) {
 	wantCode(t, err, codes.Unauthenticated)
 	_, err = themisv1.NewEvidenceServiceClient(conn).CollectEvidence(t.Context(), &themisv1.CollectEvidenceRequest{Template: "pod_states"})
 	wantCode(t, err, codes.Unauthenticated)
+}
+
+// noAdminAccount is a store without an admin account.
+type noAdminAccount struct{}
+
+func (noAdminAccount) HasAdminAccount(context.Context) (bool, error) { return false, nil }
+
+// While no admin account exists, the investigator and agents are refused.
+func TestGRPC_ClosedWithoutAnAdminAccount(t *testing.T) {
+	e := newEnv(t)
+	agent := e.external(t)
+	e.server.Gate = &identity.Gate{Store: noAdminAccount{}}
+	_, err := e.investigations.LeaseInvestigation(t.Context(), &themisv1.LeaseInvestigationRequest{WorkerId: "w-1"})
+	wantCode(t, err, codes.FailedPrecondition)
+	_, err = agent.ListIncidents(t.Context(), &themisv1.ListIncidentsRequest{})
+	wantCode(t, err, codes.FailedPrecondition)
+	if status.Convert(err).Message() != identity.ClosedMessage {
+		t.Errorf("message = %q", status.Convert(err).Message())
+	}
 }
 
 func TestExternal_InvestigatorCannotListIncidents(t *testing.T) {

@@ -147,6 +147,17 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
+	// The admin account the install configures, made before anything is
+	// served, so Themis opens at once.
+	if a := cfg.API.AdminAccount; a != nil {
+		if err := identity.EnsureAdminAccount(ctx, s, *a, time.Now(), log); err != nil {
+			return err
+		}
+	}
+	// Without an admin account, Themis serves nothing but the making of the
+	// first, and takes no alerts.
+	gate := &identity.Gate{Store: s}
+
 	states := store.NewStateCollector(ctx, s)
 	if err := metrics.Registry.Register(states); err != nil {
 		return fmt.Errorf("register state metrics: %w", err)
@@ -234,7 +245,7 @@ func Run(ctx context.Context, o Options) error {
 	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Investigations: leases, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
-		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions,
+		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions, Gate: gate,
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
@@ -244,7 +255,7 @@ func Run(ctx context.Context, o Options) error {
 	// one set later never signs in once an admin has.
 	setup := &identity.Setup{Store: s, Logger: log}
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: setup}
-	api.Sessions, api.Accounts = s, s
+	api.Sessions, api.Accounts, api.Gate = s, s, gate
 	checker := &statuspage.Checker{
 		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
 		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,
@@ -270,7 +281,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	if ia := cfg.API.InitialAdmin; ia != nil {
 		api.InitialAdmin = ia
-		(&identity.InitialAdmin{PasswordFile: ia.PasswordFile, Setup: setup, Store: s, Logger: log}).Register(mux)
+		(&identity.InitialAdmin{PasswordFile: ia.PasswordFile, Setup: setup, Gate: gate, Store: s, Logger: log}).Register(mux)
 	}
 	(&identity.Passwords{Store: s, Logger: log}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
@@ -279,6 +290,7 @@ func Run(ctx context.Context, o Options) error {
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
 		TokenFile: cfg.Intake.BearerTokenFile,
+		Gate:      gate,
 		Logger:    log,
 		Heartbeat: beat(store.HeartbeatAlertmanager),
 		Refused:   beat(store.HeartbeatAlertmanagerRefused),

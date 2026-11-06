@@ -94,6 +94,24 @@ generates, or one the install provides, as GitOps tools need.
 {{- end }}
 
 {{/*
+The username of the admin account the install configures, or nothing. A
+password in values is refused: Git and Helm's release history keep values.
+*/}}
+{{- define "themis.adminAccount" -}}
+{{- $initial := .Values.initialAdmin | default dict -}}
+{{- $account := $initial.account | default dict -}}
+{{- range $key := list "password" "passwordHash" }}
+{{- if or (hasKey $initial $key) (hasKey $account $key) }}
+{{- fail "Refused: a password in values. Values are kept in Git and in Helm's release history. Put the password or its hash in a Secret, and set initialAdmin.account.existingSecret." }}
+{{- end }}
+{{- end }}
+{{- with $account.username }}
+{{- $_ := required "initialAdmin.account.existingSecret is required with initialAdmin.account.username: the Secret holding the password or its hash." $account.existingSecret }}
+{{- . }}
+{{- end }}
+{{- end }}
+
+{{/*
 The Secret holding the initial admin password: the one the chart generates,
 or one the install provides, as GitOps tools need.
 */}}

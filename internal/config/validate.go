@@ -48,6 +48,17 @@ func (c Config) Validate() error {
 	if ia := c.API.InitialAdmin; ia != nil && ia.PasswordFile == "" {
 		add("api.initialAdmin.passwordFile", "is required")
 	}
+	if a := c.API.AdminAccount; a != nil {
+		if a.Username == "" {
+			add("api.adminAccount.username", "is required")
+		}
+		if a.PasswordHashFile == "" && a.PasswordFile == "" {
+			add("api.adminAccount", "set passwordHashFile, passwordFile, or both")
+		}
+		if c.API.InitialAdmin != nil {
+			add("api.adminAccount", "set it or api.initialAdmin, not both")
+		}
+	}
 	if o := c.API.OIDC; o != nil {
 		if !IsHTTPURL(o.IssuerURL) {
 			add("api.oidc.issuerURL", "%q is not an http or https URL", o.IssuerURL)

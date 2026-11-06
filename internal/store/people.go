@@ -73,13 +73,21 @@ type AccountEvent struct {
 type AccountChange struct {
 	By string
 	At time.Time
-	// KeepAnAdmin refuses, with ErrLastAdmin, a change that would leave no
-	// admin account.
-	KeepAnAdmin bool
 }
 
-// ErrLastAdmin means a change would leave no admin account.
+// ErrLastAdmin means a change would leave no admin account, which is never
+// allowed.
 var ErrLastAdmin = errors.New("the last admin account")
+
+// HasAdminAccount reports whether an account has the admin role. Without
+// one, Themis serves nothing but the making of the first.
+func (s *Store) HasAdminAccount(ctx context.Context) (bool, error) {
+	var exists bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM accounts WHERE role = 'admin')`).Scan(&exists); err != nil {
+		return false, fmt.Errorf("read the admin accounts: %w", err)
+	}
+	return exists, nil
+}
 
 func recordEvent(ctx context.Context, tx pgx.Tx, e AccountEvent) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO account_events (at, actor, action, username, role) VALUES ($1, $2, $3, $4, $5)`,
@@ -201,7 +209,7 @@ func (s *Store) SetPassword(ctx context.Context, username, hash string, temporar
 func (s *Store) SetRole(ctx context.Context, username, role string, c AccountChange) error {
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		if role != "admin" {
-			if err := keepAnAdmin(ctx, tx, username, c); err != nil {
+			if err := keepAnAdmin(ctx, tx, username); err != nil {
 				return err
 			}
 		}
@@ -226,7 +234,7 @@ func (s *Store) DeleteAccount(ctx context.Context, username string, c AccountCha
 func (s *Store) changeAccount(ctx context.Context, username string, c AccountChange, action string, removesAdmin bool, query string, args ...any) error {
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		if removesAdmin {
-			if err := keepAnAdmin(ctx, tx, username, c); err != nil {
+			if err := keepAnAdmin(ctx, tx, username); err != nil {
 				return err
 			}
 		}
@@ -244,13 +252,10 @@ func (s *Store) changeAccount(ctx context.Context, username string, c AccountCha
 	})
 }
 
-// keepAnAdmin refuses, when c asks, to take the admin role from username if
-// no other admin account remains. The admin accounts stay locked until tx
-// ends, so two admins removing each other at once can't both succeed.
-func keepAnAdmin(ctx context.Context, tx pgx.Tx, username string, c AccountChange) error {
-	if !c.KeepAnAdmin {
-		return nil
-	}
+// keepAnAdmin refuses to take the admin role from username if no other admin
+// account remains. The admin accounts stay locked until tx ends, so two
+// admins removing each other at once can't both succeed.
+func keepAnAdmin(ctx context.Context, tx pgx.Tx, username string) error {
 	rows, err := tx.Query(ctx, `SELECT username FROM accounts WHERE role = 'admin' FOR UPDATE`)
 	if err != nil {
 		return fmt.Errorf("read the admin accounts: %w", err)

@@ -15,10 +15,14 @@ investigators:
 
 api:
   bearerTokenFile: /var/run/secrets/themis/admin-token
-  # Optional: the first admin signs in with this password, until an admin
-  # signs in with an account or through OIDC.
+  # Themis serves nothing until an admin account exists. Either a password
+  # that signs in only to create the first one:
   # initialAdmin:
   #   passwordFile: /var/run/secrets/themis-initial-admin/password
+  # or an admin account Themis creates at startup while it has none:
+  # adminAccount:
+  #   username: root
+  #   passwordHashFile: /var/run/secrets/themis-admin-account/password-hash
   # Optional: people sign in through an OIDC provider, each with a role.
   # oidc:
   #   issuerURL: https://idp.example.com

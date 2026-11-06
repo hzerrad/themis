@@ -163,6 +163,9 @@ func TestChecks_Problems(t *testing.T) {
 		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
 		}, "Alerts", statuspage.Problem, "Refused: wrong intake token."},
+		"refused without an admin account": {func(_ *statuspage.Checker, s *fakeStore) {
+			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now, Detail: statuspage.RefusedNoAdminAccount}
+		}, "Alerts", statuspage.Waiting, "Refused while no admin account existed."},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
 		}, "Namespaces", statuspage.Problem, "Not allowed in payments: list pods or read deployments."},
@@ -190,7 +193,7 @@ func TestChecks_Problems(t *testing.T) {
 		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
 		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
 		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "no investigator"},
-		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "The initial admin password grants admin."},
+		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "The initial admin password is not retired."},
 		"setup finished":  {func(*statuspage.Checker, *fakeStore) {}, "Sign-in", statuspage.OK, "Through Themis accounts. The initial admin password is retired."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},
 	} {

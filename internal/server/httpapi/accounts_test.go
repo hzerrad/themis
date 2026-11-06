@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/server/identity"
@@ -25,6 +27,7 @@ import (
 type fresh struct {
 	t       *testing.T
 	handler http.Handler
+	pool    *pgxpool.Pool
 }
 
 const initialPassword = "a long initial password"
@@ -33,7 +36,7 @@ const initialPassword = "a long initial password"
 // with the roles access gives them.
 func newFresh(t *testing.T, access ...config.AccessBinding) *fresh {
 	t.Helper()
-	s, _ := pgtest.NewStore(t)
+	s, pool := pgtest.NewStore(t)
 	file := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(file, []byte(token), 0o600); err != nil {
 		t.Fatal(err)
@@ -44,17 +47,17 @@ func newFresh(t *testing.T, access ...config.AccessBinding) *fresh {
 	}
 	log := slog.New(slog.DiscardHandler)
 	clock := func() time.Time { return now }
-	setup := &identity.Setup{Store: s, Logger: log}
+	setup, gate := &identity.Setup{Store: s, Logger: log}, &identity.Gate{Store: s}
 	mux := http.NewServeMux()
 	(&httpapi.API{
-		Store: s, TokenFile: file, Sessions: s, Accounts: s, Logger: log, Now: clock, Namespace: "themis",
+		Store: s, TokenFile: file, Sessions: s, Accounts: s, Logger: log, Now: clock, Namespace: "themis", Gate: gate,
 		Setup: setup, InitialAdmin: &config.InitialAdmin{PasswordFile: password, Secret: "themis-initial-admin"},
 		OIDC: len(access) > 0, Access: access,
 	}).Register(mux)
-	(&identity.InitialAdmin{PasswordFile: password, Setup: setup, Store: s, Logger: log, Now: clock}).Register(mux)
+	(&identity.InitialAdmin{PasswordFile: password, Setup: setup, Gate: gate, Store: s, Logger: log, Now: clock}).Register(mux)
 	(&identity.Passwords{Store: s, Logger: log, Now: clock}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
-	return &fresh{t: t, handler: mux}
+	return &fresh{t: t, handler: mux, pool: pool}
 }
 
 // send sends a request from localhost, with session's cookie if any, and the
@@ -185,9 +188,10 @@ const (
 )
 
 // Reaching a new install from localhost, as kubectl port-forward does, grants
-// nothing. The first admin signs in with the initial admin password and makes
-// their admin account. Its password is temporary, so they choose their own,
-// and signing in with it retires the initial admin password.
+// nothing. The first admin signs in with the initial admin password, whose
+// only use is making the first admin account. Its password is temporary, so
+// its holder chooses their own, and signing in with it retires the initial
+// admin password.
 func TestAccounts_SetupFlow(t *testing.T) {
 	f := newFresh(t)
 	if code, me := f.me(nil); code != http.StatusUnauthorized {
@@ -198,12 +202,24 @@ func TestAccounts_SetupFlow(t *testing.T) {
 		t.Errorf("sign-in methods on a new install = %s, want %s", rec.Body, want)
 	}
 	first := f.signInFirst()
-	if code, me := f.me(first); code != http.StatusOK || me["username"] != "initial-admin" || me["role"] != config.RoleAdmin || me["initialAdmin"] != true {
+	if code, me := f.me(first); code != http.StatusOK || me["username"] != "initial-admin" || me["role"] != config.RoleAdmin || me["initialAdmin"] != true || me["closed"] != true {
 		t.Fatalf("me as the initial admin = %d %v", code, me)
 	}
+	expect(t, "the initial admin making a viewer first", f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "bob", "role": "viewer", "password": rootPassword}), http.StatusConflict)
 	expect(t, "creating the first admin", f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	for _, rec := range []*httptest.ResponseRecorder{
+		f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "carol", "role": "admin", "password": rootPassword}),
+		f.send(http.MethodGet, "/v1/accounts", first, nil),
+	} {
+		if rec.Code != http.StatusForbidden || strings.TrimSpace(rec.Body.String()) != "The initial admin password only creates the first admin account." {
+			t.Errorf("the initial admin once root exists = %d %q, want 403", rec.Code, rec.Body)
+		}
+	}
+	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != `{"oidc":false,"password":true,"token":true}` {
+		t.Errorf("sign-in methods once root exists = %s, want no initial admin password", rec.Body)
+	}
 	temporary := f.signIn("root", rootPassword)
-	if code, me := f.me(temporary); code != http.StatusOK || me["temporaryPassword"] != true {
+	if code, me := f.me(temporary); code != http.StatusOK || me["temporaryPassword"] != true || me["closed"] != false {
 		t.Fatalf("me as root, with the password the initial admin chose = %d %v, want it temporary", code, me)
 	}
 	if code, _ := f.me(first); code != http.StatusOK {
@@ -217,9 +233,6 @@ func TestAccounts_SetupFlow(t *testing.T) {
 		t.Errorf("the initial admin's session once root signed in = %d, want 401", code)
 	}
 	expect(t, "the initial admin password once root signed in", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}), http.StatusForbidden)
-	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != `{"oidc":false,"password":true,"token":true}` {
-		t.Errorf("sign-in methods once set up = %s", rec.Body)
-	}
 	expectRecord(t, f.record(root), []string{
 		"root initial_admin_retired",
 		"root password_changed root",
@@ -305,12 +318,55 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 	})
 }
 
-// When the identity provider can sign an admin in, the last admin account
-// may go.
+// The last admin account stays even when the identity provider signs an
+// admin in: Themis always needs an admin account of its own.
 func TestAccounts_TheLastAdminAccountWithAnAdminThroughOIDC(t *testing.T) {
 	f := newFresh(t, config.AccessBinding{Role: config.RoleAdmin, Users: []string{"alice@example.com"}})
 	f.admin()
-	expect(t, "the token deleting root", f.withToken(http.MethodDelete, "/v1/accounts/root", nil), http.StatusNoContent)
+	rec := f.withToken(http.MethodDelete, "/v1/accounts/root", nil)
+	if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != "Refused: root is the last admin." {
+		t.Errorf("the token deleting root = %d %q, want 409", rec.Code, rec.Body)
+	}
+}
+
+// While no admin account exists, Themis serves nothing but the making of the
+// first, to anyone, the break-glass token included. It closes again if the
+// admin accounts are ever gone, as from a database restored without them.
+func TestAccounts_ClosedWithoutAnAdminAccount(t *testing.T) {
+	f := newFresh(t)
+	const id = "0192f0c1-0000-7000-8000-000000000001"
+	closed := func(when string) {
+		t.Helper()
+		for _, r := range []struct{ method, path string }{
+			{http.MethodGet, "/v1/incidents"},
+			{http.MethodGet, "/v1/incidents/" + id},
+			{http.MethodPost, "/v1/incidents/" + id + "/proposals"},
+			{http.MethodPost, "/v1/actions/" + id + "/approve"},
+			{http.MethodPost, "/v1/actions/" + id + "/deny"},
+			{http.MethodGet, "/v1/accounts"},
+			{http.MethodPatch, "/v1/accounts/root"},
+			{http.MethodDelete, "/v1/accounts/root"},
+			{http.MethodGet, "/v1/audit/accounts"},
+			{http.MethodPost, "/v1/me/password"},
+		} {
+			rec := f.withToken(r.method, r.path, map[string]string{})
+			if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != identity.ClosedMessage {
+				t.Errorf("%s: %s %s = %d %q, want 409", when, r.method, r.path, rec.Code, rec.Body)
+			}
+		}
+		var me map[string]any
+		if rec := f.withToken(http.MethodGet, "/v1/me", nil); json.Unmarshal(rec.Body.Bytes(), &me) != nil || me["closed"] != true {
+			t.Errorf("%s: me = %d %q, want closed", when, rec.Code, rec.Body)
+		}
+	}
+	closed("on a new install")
+	expect(t, "the token making a viewer first", f.withToken(http.MethodPost, "/v1/accounts", map[string]string{"username": "bob", "role": "viewer", "password": rootPassword}), http.StatusConflict)
+	expect(t, "the token making the first admin", f.withToken(http.MethodPost, "/v1/accounts", map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	expect(t, "incidents once an admin account exists", f.withToken(http.MethodGet, "/v1/incidents", nil), http.StatusOK)
+	if _, err := f.pool.Exec(t.Context(), `DELETE FROM accounts`); err != nil {
+		t.Fatal(err)
+	}
+	closed("once the admin accounts are gone")
 }
 
 // Changing your own password is under the same lock as signing in, so a

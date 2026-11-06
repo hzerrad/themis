@@ -46,6 +46,10 @@ type Check struct {
 	Since string     `json:"since,omitempty"`
 }
 
+// RefusedNoAdminAccount is the refused heartbeat of alerts sent while no
+// admin account existed; a refusal without it was for a wrong token.
+const RefusedNoAdminAccount = "no_admin_account"
+
 // Store is what the checks read from the database.
 type Store interface {
 	Ping(ctx context.Context) error
@@ -224,7 +228,13 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		return failed(ch, rerr)
 	}
 	if rerr == nil && (err != nil || refused.SeenAt.After(got.SeenAt)) {
-		ch.State, ch.Summary, ch.At, ch.Since = Problem, "Refused: wrong intake token.", &refused.SeenAt, "Last refused"
+		ch.At, ch.Since = &refused.SeenAt, "Last refused"
+		if refused.Detail == RefusedNoAdminAccount {
+			// Alertmanager sends them again: the next arrival settles it.
+			ch.State, ch.Summary = Waiting, "Refused while no admin account existed."
+			return ch
+		}
+		ch.State, ch.Summary = Problem, "Refused: wrong intake token."
 		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
@@ -422,8 +432,8 @@ func (c *Checker) signIn(ctx context.Context) Check {
 	}
 	switch {
 	case !finished && c.InitialAdmin:
-		ch.State, ch.Summary = Warn, "The initial admin password grants admin."
-		ch.Fix = "Create an admin account and sign in with it, or configure the identity provider. The initial admin password then stops working."
+		ch.State, ch.Summary = Warn, "The initial admin password is not retired."
+		ch.Fix = "Sign in with an admin account. The initial admin password then stops working."
 	case len(ways) == 0:
 		ch.State, ch.Summary = Warn, "Only the break-glass token signs in."
 		ch.Fix = "Create accounts, or configure the identity provider."
