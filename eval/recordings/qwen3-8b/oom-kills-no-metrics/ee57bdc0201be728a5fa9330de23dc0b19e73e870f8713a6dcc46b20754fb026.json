@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Increase memory limit for app container in reports Deployment to address OOMKilled incidents\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"Current revision's memory limit (1Gi) is insufficient for workload\",\n    \"supporting\": [\"oom_killed_current_revision\", \"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\", \"oom_after_long_run\", \"evicted_for_node_memory\", \"earlier_revision_healthy\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing memory usage metrics to confirm limit adequacy\",\n    \"supporting\": [\"memory_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"reports\", \"uid\": \"uid-deployment-reports\"},\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"1250Mi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise memory limit to 1250Mi to prevent OOMKilled incidents\",\n  \"rationale\": \"Current revision (4) has 1Gi memory limit but is OOMKilled. Increasing by 25% to 1250Mi addresses potential memory insufficiency without requiring usage metrics. Earlier revision (3) had same limit but no reported issues, suggesting workload change may require higher limit. Node memory pressure is false, ruling out node-level issues. No evidence of memory leaks or long-running OOM issues. Fix aligns with guidelines for memory_limit_too_low when OOMKilled occurs without rollout-related factors. No GitOps markers prevent automated rollback, so adjustment is justified as temporary mitigation. No \",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"evicted_for_node_memory\", \"oom_after_long_run\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3456,
+        "output_tokens": 1101
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

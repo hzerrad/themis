@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"Missing container memory metrics and revision health data prevent determining if the memory limit is insufficient or if the new revision caused the OOM kills. Without this evidence, no definitive action can be taken.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit may be insufficient despite no change from revision 4.\",\n    \"supporting\": [\"failure_onset_after_rollout\", \"ev-pod_states\"],\n    \"contradicting\": [\"oom_killed_current_revision\", \"memory_data_available\"],\n    \"missing\": [\"container_memory\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The latest rollout introduced a broken version causing OOM kills.\",\n    \"supporting\": [\"failure_onset_after_rollout\", \"ev-pod_states\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [\"revision_health\", \"configuration_change\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeouts may be causing restarts before the app is ready.\",\n    \"supporting\": [\"probe_timeouts\", \"ev-target_events\"],\n    \"contradicting\": [\"crashed_on_its_own\"],\n    \"missing\": [\"probe_kills\", \"killed_during_startup\"],\n    \"status\": \"supported\"\n  }\n] }",
+      "usage": {
+        "input_tokens": 6503,
+        "output_tokens": 714
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

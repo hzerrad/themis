@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The current revision's memory limit is too low, causing OOM kills. Increase the memory limit to prevent crashes.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\", \"supporting\": [\"oom_killed_new_revision\", \"oom_killed_current_revision\", \"memory_at_limit_before_kill\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Containers are killed for memory, needing more than their limit.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [\"evicted_for_node_memory\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"The new revision's settings are wrong, causing memory issues.\", \"supporting\": [\"oom_killed_new_revision\", \"oom_killed_current_revision\"], \"contradicting\": [\"config_changed_before_failure\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"inventory\", \"uid\": \"uid-deployment-inventory\"},\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"512Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise the memory limit of the app container to 512Mi, preventing OOM kills by providing more memory than the peak usage.\",\n    \"rationale\": \"The app container in the current revision peaked at 98% of its 256Mi memory limit, leading to OOM kills. Increasing the limit to 512Mi will accommodate the peak usage and prevent crashes. This change is necessary as the earlier revision also had OOM issues, but the current revision's memory usage has exceeded its limit, indicating a regression in memory allocation settings.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failure_onset_after_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4794,
+        "output_tokens": 1639
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

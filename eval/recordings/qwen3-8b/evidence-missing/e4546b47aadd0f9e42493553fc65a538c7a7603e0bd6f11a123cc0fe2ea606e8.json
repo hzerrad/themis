@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to failures starting with the rollout\",\"hypotheses\":[{\"root_cause_class\":\"bad_configuration\",\"summary\":\"Revision 2's config may be incorrect\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"New revision's code may have a bug\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Replace failing revision 2 with working revision 1\",\"rationale\":\"Failures began with rollout, earlier revision is healthy, no config changes detected, and no memory issues observed. Rollback is justified per Kubernetes best practices for such scenarios.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-referenced_config\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"failures_came_with_rollout\",\"earlier_revision_healthy\",\"gitops_managed\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3180,
+        "output_tokens": 810
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"Policy blocks probe adjustments; no revision health data to confirm root cause.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"New version (5.4.1) takes longer to start than the 1s probe timeout.\",\n    \"supporting\": [\"probe_timeouts\", \"ev-rollout_history\"],\n    \"contradicting\": [\"killed_during_startup\"],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Probes fail before app is ready, causing restarts.\",\n    \"supporting\": [\"probe_kills\", \"ev-target_events\", \"ev-pod_states\"],\n    \"contradicting\": [\"crashed_on_its_own\"],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Policy blocks probe changes; no revision health data to confirm cause.\",\n    \"supporting\": [\"container_logs_tail\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 6537,
+        "output_tokens": 759
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

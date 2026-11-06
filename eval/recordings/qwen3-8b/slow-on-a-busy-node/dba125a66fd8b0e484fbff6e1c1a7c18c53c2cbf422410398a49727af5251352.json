@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Readiness probe failures may stem from non-CPU resource constraints or application-specific issues. CPU metrics do not indicate throttling or near-limit usage.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"CPU metrics do not show throttling or near-limit usage, but readiness failures could indicate other resource constraints or application issues.\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"],\"missing\":[\"throttling_came_with_rollout\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4197,
+        "output_tokens": 842
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

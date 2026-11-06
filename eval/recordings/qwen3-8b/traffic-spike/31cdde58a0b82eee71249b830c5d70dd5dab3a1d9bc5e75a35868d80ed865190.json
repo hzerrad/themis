@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"OOM kills in new revision after rollout, but failures_came_with_rollout is unknown. Need to confirm if failures started with the rollout.\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit may be insufficient\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"failure_onset_after_rollout\", \"failures_came_with_rollout\"],\"status\": \"supported\"}, {\"root_cause_class\": \"application_bug\", \"summary\": \"Code in new revision may have memory leak\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_capacity\", \"summary\": \"Cluster may not have enough memory for new revision\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [], \"missing\": [\"node_problem\", \"storage_full\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3810,
+        "output_tokens": 1631
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

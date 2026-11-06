@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"Rollback to revision 1 due to database connection failure in new revision\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"New revision cannot connect to orders-db\",\"supporting\":[\"ev-container_logs_tail\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"No config changes detected but database host may be misconfigured\",\"supporting\":[\"ev-referenced_config\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No metrics history to confirm earlier revision health\",\"supporting\":[\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore database connectivity if new revision has configuration or code issue\",\"rationale\":\"Failure onset after rollout, no config changes, and OOM kills false suggest new revision has dependency issue. Logs show application cannot reach orders-db, which matches rollback approval in logs. Rolling back to revision 1 would resolve if the issue is in the new code or configuration.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-target_events\",\"ev-container_logs_tail\",\"ev-referenced_config\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"gitops_managed\",\"config_changed_before_failure\",\"oom_killed_new_revision\"]}}",
+      "usage": {
+        "input_tokens": 3977,
+        "output_tokens": 954
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

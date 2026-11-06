@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient CPU capacity detected, but earlier_revision_healthy remains unknown. Need confirmation on previous revision's health and cluster capacity.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_capacity\",\n    \"summary\": \"Pods in revision 2 fail due to CPU insufficiency (events show 0/3 nodes available).\",\n    \"supporting\": [\"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"earlier_revision_healthy\", \"cluster_capacity\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"configuration_change\",\n    \"summary\": \"No config changes detected between revisions, but GitOps status is unknown.\",\n    \"supporting\": [\"ev-referenced_config\"],\n    \"contradicting\": [\"gitops_managed\"],\n    \"missing\": [\"config_change_verification\"],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 3558,
+        "output_tokens": 611
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

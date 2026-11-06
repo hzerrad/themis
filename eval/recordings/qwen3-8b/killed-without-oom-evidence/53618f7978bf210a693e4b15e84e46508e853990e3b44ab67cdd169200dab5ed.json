@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing memory usage data to confirm OOM cause\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision may need more memory\",\n        \"supporting\": [\"failure_onset_after_rollout\"],\n        \"contradicting\": [\"oom_killed_current_revision\"],\n        \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"new_version_broken\",\n        \"summary\": \"Rollout introduced instability\",\n        \"supporting\": [\"failure_onset_after_rollout\"],\n        \"contradicting\": [],\n        \"missing\": [\"earlier_revision_healthy\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 5833,
+        "output_tokens": 848
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

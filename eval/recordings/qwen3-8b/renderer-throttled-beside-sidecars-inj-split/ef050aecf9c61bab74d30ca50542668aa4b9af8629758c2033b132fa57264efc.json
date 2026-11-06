@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Renderer container is throttled at its CPU limit, requiring a higher CPU limit to resolve sustained throttling.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"Renderer's CPU limit of 1 core is insufficient as it's using 0.93 cores with 41% throttling (ev-container_cpu).\", \"supporting\": [\"ev-container_cpu\", \"ev-revision_health\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"},\n  {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Throttling didn't start with this rollout (throttling_came_with_rollout=false), so newer version isn't the cause.\", \"supporting\": [\"throttling_came_with_rollout\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"},\n  {\"root_cause_class\": \"node_cpu_contention\", \"summary\": \"Node isn't the issue since throttling is container-specific (ev-container_cpu) and not node-wide.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"reports\", \"uid\": \"uid-deployment-reports\"},\n  \"params\": {\n    \"containers\": {\n      \"renderer\": {\n        \"limits\": {\n          \"cpu\": \"1500m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise renderer's CPU limit from 1 to 1.5 cores to clear throttling (ev-container_cpu).\",\n  \"rationale\": \"Renderer is throttled at 1 CPU limit (ev-container_cpu) with 41% throttling, and previous version (rev3) also had throttling (ev-revision_health). Raising limit to 1.5 cores addresses sustained throttling without affecting other containers.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-revision_health\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5182,
+        "output_tokens": 904
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"ConfigMap change may have caused the issue, but rollback isn't justified due to config change before failure. Missing evidence on application-specific errors.\", \"hypotheses\": [{\"root_cause_class\": \"configuration_change\", \"summary\": \"ConfigMap checkout-config changed after rollout but before failure\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\", \"ev-target_events\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"New revision's settings may be incorrect\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"other\", \"summary\": \"No clear evidence of application bug or resource issues\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3201,
+        "output_tokens": 1372
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new revision's memory limit is insufficient, causing OOM kills. Increase the memory limit for the app container.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"The new revision's memory limit is too low, leading to OOM kills despite the same limit as the previous revision.\",\"supporting\":[\"failure_onset_after_rollout\",\"oom_killed_new_revision\",\"memory_at_limit_before_kill\"],\"contradicting\":[],\"missing\":[\"oom_after_long_run\",\"evicted_for_node_memory\",\"node_memory_pressure\",\"application_bug\",\"configuration_change\"],\"status\":\"supported\"},{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"The app's memory usage exceeded its limit, causing OOM kills, indicating the limit is insufficient for the current workload.\",\"supporting\":[\"oom_killed_current_revision\",\"memory_data_available\",\"memory_at_limit_before_kill\"],\"contradicting\":[],\"missing\":[\"oom_after_long_run\",\"evicted_for_node_memory\",\"node_memory_pressure\",\"application_bug\",\"configuration_change\"],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"668Mi\"}}}},\"expected_effect\":\"Increasing the memory limit should prevent OOM kills by allowing the app to use more memory without being terminated.\",\"rationale\":\"The app's memory usage peaked at 99.6% of its 512Mi limit, leading to OOM kills. Raising the limit by 25% (to 668Mi) should accommodate the workload without causing memory exhaustion.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-rollout_history\",\"ev-pod_states\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_data_available\",\"memory_at_limit_before_kill\"]}}",
+      "usage": {
+        "input_tokens": 5019,
+        "output_tokens": 711
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

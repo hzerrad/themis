@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short, causing premature termination during startup\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Logs show the app was still starting when liveness probe failed\",\n    \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"finance\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 5\n    }\n  },\n  \"expected_effect\": \"Allow the app 5 seconds to complete startup before liveness probe times out\",\n  \"rationale\": \"Logs show the app was still loading data (account index) when the probe failed. The current 1s timeout is insufficient for the app's startup sequence.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6106,
+        "output_tokens": 572
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause due to missing memory usage metrics and lack of historical revision health data\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Missing container memory metrics and revision health history prevents definitive analysis\", \"supporting\": [\"memory_data_available\", \"earlier_revision_healthy\"], \"contradicting\": [], \"missing\": [\"container_memory\", \"revision_health\"], \"status\": \"supported\"}, {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Current memory limit may be insufficient based on OOM events\", \"supporting\": [\"oom_killed_current_revision\"], \"contradicting\": [\"evicted_for_node_memory\"], \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 4017,
+        "output_tokens": 772
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
