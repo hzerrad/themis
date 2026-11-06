@@ -110,3 +110,9 @@ profile:
       - name: raise-needs-approval
         when: action.restore != "true"
         decision: require_approval
+  # Throttled pods are ready, so their readiness can't tell whether a raise
+  # worked: it worked only when the container is no longer throttled at its
+  # limit, read from what the new pods did since the change, over 5 minutes
+  # at least, as a rate needs.
+  verification:
+    checks: [cpu_throttled_at_limit]

@@ -125,6 +125,8 @@ profile:
       - name: raise-needs-approval
         when: action.restore != "true"
         decision: require_approval
+  # A raise worked only when no container of the new version is OOMKilled.
   verification:
     window: 10m
     stability: 5m
+    checks: [oom_killed_current_revision]

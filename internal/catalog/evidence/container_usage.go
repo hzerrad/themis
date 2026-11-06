@@ -98,7 +98,10 @@ func (containerMemory) Description() string {
 	return "Memory each container of the current revision uses now and at its peak over a window (default 1h), against its request and limit, and which metrics source said so. A figure the source can't give is null, with why."
 }
 
-func (containerMemory) Params() []string { return []string{"window"} }
+func (containerMemory) Params() []string { return []string{WindowParam} }
+
+// MinWindow is the least a peak is read over.
+func (containerMemory) MinWindow() time.Duration { return minWindow }
 
 func (m containerMemory) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, params map[string]string) (Item, error) {
 	window, err := windowParam(params)
@@ -146,7 +149,11 @@ func (containerCPU) Description() string {
 	return "CPU each container of the current revision uses now, in cores, and how often it was throttled over a window (default 1h), against its request and limit, and which metrics source said so. A figure the source can't give is null, with why."
 }
 
-func (containerCPU) Params() []string { return []string{"window"} }
+func (containerCPU) Params() []string { return []string{WindowParam} }
+
+// MinWindow is the least throttling is read over: a share of CPU periods
+// is a rate, and the metrics source reads a rate over metrics.RateWindow.
+func (containerCPU) MinWindow() time.Duration { return max(minWindow, metrics.RateWindow) }
 
 func (m containerCPU) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, params map[string]string) (Item, error) {
 	window, err := windowParam(params)
@@ -191,11 +198,11 @@ func orNone(s metrics.Source) metrics.Source {
 
 func windowParam(params map[string]string) (time.Duration, error) {
 	for k := range params {
-		if k != "window" {
+		if k != WindowParam {
 			return 0, fmt.Errorf("%w: unknown parameter %q", ErrInvalidParams, k)
 		}
 	}
-	s, ok := params["window"]
+	s, ok := params[WindowParam]
 	if !ok {
 		return defaultWindow, nil
 	}

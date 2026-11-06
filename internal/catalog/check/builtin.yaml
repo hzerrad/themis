@@ -6,9 +6,10 @@
 # docs/checks.md says what each field means and what the expressions see.
 
 # The current revision replaced an earlier one within the last 6 hours. A
-# Deployment's first revision replaced none: creating it isn't a rollout.
+# Deployment's first revision replaced none: creating it isn't a rollout. A
+# rollout that was Themis's own fix says so: it brought no new version.
 - name: rollout_recent
-  version: "2"
+  version: "3"
   description: A rollout happened recently
   topic: Recent rollout
   whenFalse: No recent rollout
@@ -21,6 +22,10 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout replaced one
       cite: [ids.rollout_history]
+    - when: themis_fix != null && now - rollout_at <= duration("6h")
+      answer: true
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, as Themis's fix on incident ${themis_fix.incident}
+      cite: [ids.rollout_history, themis_fix.id]
     - when: now - rollout_at <= duration("6h")
       answer: true
       reason: revision ${current.revision} rolled out ${now - rollout_at} ago
@@ -31,9 +36,11 @@
 
 # The revision before the current one runs ready pods that never failed: a
 # version to go back to. Without an earlier revision there is none, and one
-# whose pods failed is no better. Once its pods are gone, nothing tells.
+# whose pods failed is no better. Once its pods are gone, Themis's own record
+# tells when the current revision is its fix: the incident it fixed found
+# the revision before failing.
 - name: earlier_revision_healthy
-  version: "1"
+  version: "2"
   description: The version before it is healthy, to go back to
   topic: Health of the version before it
   whenFalse: No healthy earlier version to go back to
@@ -61,6 +68,12 @@
       answer: false
       reason: ${problems[0]}
       cite: [ids.rollout_history, ids.pod_states]
+    - when: >-
+        size(pods) == 0 && themis_fix != null && themis_fix.replaced == prior.revision &&
+        size(themis_fix.found) > 0
+      answer: false
+      reason: "revision ${prior.revision} failed before Themis's fix on incident ${themis_fix.incident} replaced it: ${themis_fix.found[0].reason}"
+      cite: [ids.rollout_history, themis_fix.id]
     - when: size(pods) == 0
       answer: unknown
       reason: revision ${prior.revision} has no pods left to judge

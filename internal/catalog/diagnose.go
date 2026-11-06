@@ -55,9 +55,11 @@ type Diagnosis struct {
 // governance needs it to tell whether Themis may change w at all. Evidence it
 // can't read is a gap with its cause, not a failure: the checks that needed it
 // are unknown and say why. So are the target's first events, when its alert
-// started longer ago than Kubernetes keeps events.
-func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Workload, m config.Matched, at Moment) Diagnosis {
-	var d Diagnosis
+// started longer ago than Kubernetes keeps events. own is evidence from
+// Themis's own record rather than the cluster, such as its fix the target
+// runs (evidence.ThemisFix): the checks read it with the rest.
+func (cat Catalog) Diagnose(ctx context.Context, c client.Reader, w *workload.Workload, m config.Matched, at Moment, own ...evidence.Item) Diagnosis {
+	d := Diagnosis{Items: slices.Clone(own)}
 	initial, names := m.Evidence().Initial, m.Checks()
 	if gitOps, ok := cat.Checks.Get(check.GitOpsManaged); ok && len(m.Capabilities()) > 0 {
 		for _, t := range gitOps.Reads {

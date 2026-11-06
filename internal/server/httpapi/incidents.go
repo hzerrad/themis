@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 
@@ -140,6 +141,10 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		d.Causes[c.Name] = c.Description
 	}
 	for _, it := range rec.evidence {
+		var fix evidence.ThemisFixView
+		if it.Template == evidence.ThemisFix && d.Follows == nil && json.Unmarshal(it.Data, &fix) == nil {
+			d.Follows = &followsView{Incident: fix.Incident, Done: fix.Done, AppliedAt: fix.AppliedAt, Before: int64(in.CreatedAt.Sub(fix.AppliedAt).Seconds())}
+		}
 		v := evidenceView{Item: it}
 		if raw {
 			v.Data = it.Data
@@ -156,8 +161,9 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 	d.EvidenceWarning = evidence.Warning(rec.evidence, raw)
 	if inv := rec.investigation; inv != nil {
 		d.Investigation = inv
-		// Once someone's suggestion moves it on, what's next matters more.
-		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction) {
+		// Once someone's suggestion moves it on, what's next matters more,
+		// and an incident closed for another reason says that reason.
+		if inv.Conclusion == "inconclusive" && (in.State == incident.Inconclusive || in.State == incident.ClosedNoAction && closedBy(rec.transitions, investigation.Investigator)) {
 			d.Headline = hint.Headline(inv.Blind)
 		}
 	}
@@ -202,4 +208,9 @@ func changes(a store.Action, fixes capability.Registry) []capability.Change {
 		return unknown
 	}
 	return list
+}
+
+// closedBy reports whether actor made the incident's last change of state.
+func closedBy(transitions []store.Transition, actor string) bool {
+	return len(transitions) > 0 && transitions[len(transitions)-1].Actor == actor
 }

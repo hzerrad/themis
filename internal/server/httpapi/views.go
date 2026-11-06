@@ -159,12 +159,30 @@ type detailView struct {
 	// profile first: what a person may suggest for it.
 	Fixes []offeredFix `json:",omitempty"`
 
+	// Follows is set when the incident opened on a workload that runs a
+	// fix Themis applied for an earlier incident.
+	Follows *followsView `json:",omitzero"`
+
 	// InvestigateAgain is set while a person can have the incident
 	// investigated again, and says why it can't be, if it can't.
 	InvestigateAgain *againView `json:",omitzero"`
 	// AnotherApprover is set when a fix needs an approver other than the
 	// person who suggested it.
 	AnotherApprover bool `json:",omitempty"`
+}
+
+// followsView is Themis's fix the workload ran when the incident opened,
+// from the evidence Themis keeps of it.
+type followsView struct {
+	// Incident is the earlier incident whose fix it was.
+	Incident string `json:"incident"`
+	// Done says what the fix did, such as "Set the CPU limit of app from
+	// 200m to 300m."
+	Done      string    `json:"done"`
+	AppliedAt time.Time `json:"appliedAt"`
+	// Before is how long before this incident opened it was applied, in
+	// seconds.
+	Before int64 `json:"before"`
 }
 
 // againView is whether investigating an incident again is available.
