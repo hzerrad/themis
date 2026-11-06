@@ -12,6 +12,12 @@ Classification = Literal["public", "internal", "sensitive"]
 OutputLimitField = Literal["max_tokens", "max_completion_tokens"]
 OUTPUT_LIMIT_FIELDS: tuple[str, ...] = get_args(OutputLimitField)
 
+# How an OpenAI-compatible API is sent the reply schema: as-is, as Ollama and
+# vLLM take it, or openai-strict, translated into what OpenAI's strict mode
+# accepts, with the reply turned back before Themis validates it.
+SchemaDialect = Literal["as-is", "openai-strict"]
+SCHEMA_DIALECTS: tuple[str, ...] = get_args(SchemaDialect)
+
 CLASSIFICATION_RANK: dict[Classification, int] = {"public": 0, "internal": 1, "sensitive": 2}
 
 
@@ -85,8 +91,9 @@ class ProviderRequest(BaseModel):
     # provider's default.
     reasoning_effort: str | None = None
     # Strict structured output: the provider must follow the schema exactly.
-    # Some, such as OpenAI's, refuse Themis's schema in strict mode.
+    # OpenAI's accepts Themis's schema in strict mode only in its own dialect.
     strict: bool = True
+    schema_dialect: SchemaDialect = "as-is"
     output_limit_field: OutputLimitField = "max_tokens"
     # None sends no temperature, leaving the model's own: some take no other.
     temperature: float | None = 0

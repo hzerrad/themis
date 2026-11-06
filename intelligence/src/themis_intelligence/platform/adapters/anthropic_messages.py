@@ -1,7 +1,7 @@
 """An adapter for Anthropic's Messages API, through Anthropic's own SDK.
 
 The reply comes as structured output, in the schema subset Anthropic accepts
-(see anthropic_schema). Thinking is left to the model, which decides how much
+(see schema_translation). Thinking is left to the model, which decides how much
 it needs; the reasoning effort, when set, says how hard it tries. Sampling
 settings aren't sent: these models refuse any but their own.
 """
@@ -11,7 +11,7 @@ from typing import Literal, cast, get_args
 import anthropic
 from anthropic.types import MessageParam, OutputConfigParam
 
-from themis_intelligence.platform.adapters.anthropic_schema import reply_schema
+from themis_intelligence.platform.adapters.schema_translation import ANTHROPIC, translate
 from themis_intelligence.platform.client import Price
 from themis_intelligence.platform.contract import (
     ProviderError,
@@ -56,7 +56,7 @@ class AnthropicAdapter:
         await self.client.close()
 
     async def send(self, req: ProviderRequest) -> ProviderResponse:
-        schema = reply_schema(req.json_schema)
+        schema = translate(req.json_schema, ANTHROPIC)
         config: OutputConfigParam = {"format": {"type": "json_schema", "schema": schema.sent}}
         if req.reasoning_effort:
             if req.reasoning_effort not in EFFORTS:

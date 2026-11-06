@@ -21,7 +21,9 @@ Configuration comes from the environment:
     MODEL_MAX_OUTPUT_TOKENS  each reply's output limit (4096); raise it for a model that
                              reasons, or its replies are cut off
     MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
-                             schema exactly; set false for OpenAI, which refuses it
+                             schema exactly
+    MODEL_SCHEMA_DIALECT     as-is (the default) or openai-strict: how the reply schema
+                             is sent; OpenAI's strict mode accepts it only as openai-strict
     MODEL_OUTPUT_LIMIT_FIELD max_tokens (the default) or max_completion_tokens: the
                              field the output limit is sent in; OpenAI's newer models
                              need max_completion_tokens
@@ -48,7 +50,9 @@ from themis_intelligence.platform.client import Endpoint, ModelClient, Price, re
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
     OUTPUT_LIMIT_FIELDS,
+    SCHEMA_DIALECTS,
     OutputLimitField,
+    SchemaDialect,
 )
 from themis_intelligence.rpc.core_client import CoreClient
 from themis_intelligence.worker import Worker
@@ -96,9 +100,9 @@ def read_provider() -> Provider:
     return cast(Provider, value)
 
 
-def read_sampling() -> tuple[OutputLimitField, float | None]:
+def read_sampling() -> tuple[OutputLimitField, float | None, SchemaDialect]:
     """How an OpenAI-compatible API is asked for its reply: the field the output
-    limit goes in, and the temperature, None to send none."""
+    limit goes in, the temperature, None to send none, and the schema's dialect."""
     env = os.environ.get
     field = env("MODEL_OUTPUT_LIMIT_FIELD", "").strip() or "max_tokens"
     if field not in OUTPUT_LIMIT_FIELDS:
@@ -109,7 +113,10 @@ def read_sampling() -> tuple[OutputLimitField, float | None]:
         temperature = read_temperature(env("MODEL_TEMPERATURE", "").strip() or "0")
     except ValueError:
         raise SystemExit('MODEL_TEMPERATURE must be a number, or "default".') from None
-    return cast(OutputLimitField, field), temperature
+    dialect = env("MODEL_SCHEMA_DIALECT", "").strip() or "as-is"
+    if dialect not in SCHEMA_DIALECTS:
+        raise SystemExit(f"MODEL_SCHEMA_DIALECT must be one of {', '.join(SCHEMA_DIALECTS)}.")
+    return cast(OutputLimitField, field), temperature, cast(SchemaDialect, dialect)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -141,7 +148,7 @@ async def main() -> None:
         provider=read_provider(),
     )
     max_output = env("MODEL_MAX_OUTPUT_TOKENS")
-    output_limit_field, temperature = read_sampling()
+    output_limit_field, temperature, schema_dialect = read_sampling()
     endpoint = Endpoint(
         name=env("MODEL_ENDPOINT", "default"),
         model="",
@@ -150,6 +157,7 @@ async def main() -> None:
         max_output_tokens=int(max_output) if max_output else None,
         output_limit_field=output_limit_field,
         temperature=temperature,
+        schema_dialect=schema_dialect,
     )
     budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()

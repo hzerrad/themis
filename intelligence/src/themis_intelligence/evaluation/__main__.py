@@ -39,7 +39,11 @@ from themis_intelligence.platform.client import (
     Price,
     read_temperature,
 )
-from themis_intelligence.platform.contract import CLASSIFICATION_RANK, OUTPUT_LIMIT_FIELDS
+from themis_intelligence.platform.contract import (
+    CLASSIFICATION_RANK,
+    OUTPUT_LIMIT_FIELDS,
+    SCHEMA_DIALECTS,
+)
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 ROUTE = "evaluation"
@@ -122,7 +126,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--no-strict-output",
         dest="strict_output",
         action="store_false",
-        help="don't ask the provider to follow the schema exactly; for OpenAI",
+        help="don't ask the provider to follow the schema exactly",
+    )
+    p.add_argument(
+        "--schema-dialect",
+        choices=SCHEMA_DIALECTS,
+        default="as-is",
+        help="for openai, how the reply schema is sent; OpenAI's strict mode accepts it "
+        "only as openai-strict",
     )
     p.add_argument(
         "--output-limit-field",
@@ -243,6 +254,7 @@ async def main() -> None:
         strict_output=args.strict_output,
         output_limit_field=args.output_limit_field,
         temperature=args.temperature,
+        schema_dialect=args.schema_dialect,
     )
     caps = Caps(max_tokens=args.max_tokens, max_usd=args.max_usd, price=price)
     started = datetime.now(UTC).isoformat(timespec="seconds")
@@ -289,6 +301,7 @@ async def main() -> None:
         output_limit_field=args.output_limit_field if args.provider == "openai" else "max_tokens",
         reasoning_effort=args.reasoning_effort or "",
         strict_output=args.strict_output,
+        schema_dialect=args.schema_dialect if args.provider == "openai" else "as-is",
         step_deadline_s=args.step_deadline,
         runs_per_scenario=args.runs,
         context_tokens=args.context_tokens,

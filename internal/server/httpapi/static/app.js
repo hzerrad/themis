@@ -337,7 +337,7 @@ function modelStep(v, done) {
           h("dt", {}, "API key"), h("dd", {}, field("model.apiKey", key),
             h("div", { class: "muted" }, "Kept encrypted, and never shown again.")),
           h("dt", {}, "Strict format"), h("dd", {}, h("label", {}, field("model.strictOutput", strict),
-            " Ask the model to follow Themis's reply format exactly. Turn it off for OpenAI, which refuses it."))),
+            " Ask the model to follow Themis's reply format exactly. For OpenAI, turn it off, or install with model.schemaDialect=openai-strict."))),
         h("div", { class: "actions" }, h("button", { class: "primary", type: "submit" }, "Save")),
         error));
 }

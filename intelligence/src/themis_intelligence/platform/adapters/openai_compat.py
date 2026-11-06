@@ -1,10 +1,16 @@
-"""An adapter for OpenAI-compatible chat completions, as Ollama and others serve them."""
+"""An adapter for OpenAI-compatible chat completions, as Ollama and others serve them.
+
+The reply schema is sent as it is, unless the endpoint names OpenAI's strict
+dialect: then it is translated into what OpenAI's strict mode accepts (see
+schema_translation), and the reply turned back before Themis validates it.
+"""
 
 from typing import Any
 
 import httpx
 from pydantic import BaseModel
 
+from themis_intelligence.platform.adapters.schema_translation import OPENAI_STRICT, translate
 from themis_intelligence.platform.contract import ProviderRequest, ProviderResponse, Usage
 
 # The caller's deadline bounds each call. Connecting is bounded separately, so
@@ -48,6 +54,11 @@ class OpenAICompatAdapter:
 
     async def send(self, req: ProviderRequest) -> ProviderResponse:
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+        schema = (
+            translate(req.json_schema, OPENAI_STRICT)
+            if req.schema_dialect == "openai-strict"
+            else None
+        )
         body: dict[str, Any] = {
             "model": req.model,
             "messages": [m.model_dump() for m in req.messages],
@@ -56,7 +67,11 @@ class OpenAICompatAdapter:
             **({"reasoning_effort": req.reasoning_effort} if req.reasoning_effort else {}),
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {"name": "reply", "schema": req.json_schema, "strict": req.strict},
+                "json_schema": {
+                    "name": "reply",
+                    "schema": schema.sent if schema else req.json_schema,
+                    "strict": req.strict,
+                },
             },
         }
         resp = await self.client.post(
@@ -66,9 +81,11 @@ class OpenAICompatAdapter:
         data = _Completion.model_validate_json(resp.content)
         usage = data.usage or _Usage()
         choice = data.choices[0]
+        content = choice.message.content or ""
+        truncated = choice.finish_reason == "length"
         return ProviderResponse(
-            content=choice.message.content or "",
-            truncated=choice.finish_reason == "length",
+            content=schema.decode(content) if schema and not truncated else content,
+            truncated=truncated,
             usage=Usage(input_tokens=usage.prompt_tokens, output_tokens=usage.completion_tokens),
             model=data.model or req.model,
         )

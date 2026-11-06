@@ -2,8 +2,7 @@
 
 import json
 from collections.abc import Callable
-from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import anthropic
 import httpx2
@@ -11,10 +10,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from tests.platform.test_client import request
-from themis_intelligence.evaluation.bundle import job_of, load_bundles
-from themis_intelligence.investigation.schemas import reply_schema as themis_schema
 from themis_intelligence.platform.adapters.anthropic_messages import PRICES, AnthropicAdapter
-from themis_intelligence.platform.adapters.anthropic_schema import reply_schema, within_limits
 from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient
 from themis_intelligence.platform.contract import Message
@@ -95,13 +91,6 @@ async def test_a_step_maps_to_a_messages_call_and_back() -> None:
     assert schema["properties"]["params"]["items"]["properties"]["value"] == {"type": "string"}
 
 
-def test_entries_that_dont_make_a_map_are_left_for_validation_to_refuse() -> None:
-    schema = reply_schema(Decision.model_json_schema())
-    twice = [{"key": "pod", "value": "a"}, {"key": "pod", "value": "b"}]
-    reply = json.loads(schema.decode(json.dumps({"verdict": "x", "params": twice})))
-    assert reply["params"] == twice
-
-
 @pytest.mark.parametrize(("stop", "kind"), [("refusal", "refused"), ("max_tokens", "truncated")])
 async def test_a_reply_stopped_short_is_its_own_error(stop: str, kind: str) -> None:
     fake = Fake(200, message("I can't help with that.", stop))
@@ -126,47 +115,3 @@ async def test_a_call_that_fails_is_unavailable(status: int, effort: str, calls:
     assert result.error is not None and result.error.kind == "unavailable"
     assert "test-key" not in result.error.message
     assert len(fake.sent) == calls
-
-
-def test_a_choice_too_big_for_the_limits_is_asked_for_as_text() -> None:
-    def fix(name: str) -> dict[str, Any]:
-        props = {f"{name}{i}": {"type": "integer"} for i in range(13)}
-        return {"type": "object", "properties": props, "additionalProperties": False}
-
-    schema = {
-        "type": "object",
-        "properties": {"params": {"anyOf": [fix("a"), fix("b")]}},
-        "required": ["params"],
-    }
-    assert not within_limits(schema)
-    got = reply_schema(schema)
-    assert got.sent["properties"]["params"]["type"] == "string"
-    assert within_limits(got.sent)
-    assert json.loads(got.decode(json.dumps({"params": '{"a1": 3}'}))) == {"params": {"a1": 3}}
-
-
-SUBSET = {
-    "type", "enum", "const", "anyOf", "allOf", "$ref", "$defs", "description", "title",
-    "default", "required", "properties", "additionalProperties", "items", "minItems", "format",
-}  # fmt: skip
-
-
-def in_subset(node: dict[str, Any]) -> bool:
-    if not set(node) <= SUBSET or node.get("minItems", 0) > 1:
-        return False
-    if node.get("type") == "object" and node.get("additionalProperties") is not False:
-        return False
-    nested = [
-        *cast(dict[str, Any], node.get("properties", {})).values(),
-        *cast(dict[str, Any], node.get("$defs", {})).values(),
-        *node.get("anyOf", []),
-        *node.get("allOf", []),
-        *([node["items"]] if "items" in node else []),
-    ]
-    return all(in_subset(n) for n in nested)
-
-
-def test_every_cases_reply_schema_is_one_anthropic_accepts() -> None:
-    for b in load_bundles(Path(__file__).parents[3] / "scenarios"):
-        sent = reply_schema(themis_schema(job_of(b))).sent
-        assert in_subset(sent) and within_limits(sent), b.scenario

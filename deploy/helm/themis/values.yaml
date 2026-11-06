@@ -65,10 +65,12 @@ model:
   # Each reply's output limit. Empty: 4096. A model that reasons needs more,
   # or its replies are cut off.
   maxOutputTokens: ""
-  # Ask the provider to follow the reply schema exactly. OpenAI refuses
-  # Themis's schema in strict mode: set false there. Replies are still
+  # Ask the provider to follow the reply schema exactly. Replies are still
   # checked either way.
   strictOutput: true
+  # How the reply schema is sent: as-is, or openai-strict, the form OpenAI's
+  # strict mode accepts. Empty: as-is, as Ollama and vLLM take it.
+  schemaDialect: ""
   # The field the output limit is sent in: max_tokens or max_completion_tokens.
   # Empty: max_tokens, as Ollama and vLLM read it. OpenAI's newer models need
   # max_completion_tokens.

@@ -22,6 +22,7 @@ from themis_intelligence.platform.contract import (
     ProviderError,
     ProviderRequest,
     ProviderResponse,
+    SchemaDialect,
     TypedError,
     Usage,
 )
@@ -43,9 +44,12 @@ class Endpoint:
     # that reasons needs room for it.
     max_output_tokens: int | None = None
     # strict_output asks the provider to follow the schema exactly. Turn it
-    # off for providers that refuse Themis's schema in strict mode, such as
-    # OpenAI: replies are still checked, and repaired once.
+    # off for providers that refuse Themis's schema in strict mode: replies
+    # are still checked, and repaired once.
     strict_output: bool = True
+    # schema_dialect is how an OpenAI-compatible API is sent the schema:
+    # OpenAI's strict mode takes it only as openai-strict.
+    schema_dialect: SchemaDialect = "as-is"
     # output_limit_field and temperature say how an OpenAI-compatible API is
     # asked for its reply. OpenAI's newer models refuse max_tokens, and any
     # temperature but their own, which None leaves them.
@@ -171,6 +175,7 @@ class ModelClient:
                                 json_schema=req.json_schema or schema.model_json_schema(),
                                 reasoning_effort=self.endpoint.reasoning_effort,
                                 strict=self.endpoint.strict_output,
+                                schema_dialect=self.endpoint.schema_dialect,
                                 output_limit_field=self.endpoint.output_limit_field,
                                 temperature=self.endpoint.temperature,
                             )

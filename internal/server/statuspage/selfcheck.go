@@ -143,7 +143,7 @@ var modelFixes = map[string]struct{ summary, fix string }{
 	},
 	"invalid_model_output": {
 		"The model's answers weren't in the format Themis asks for during the last investigation.",
-		"OpenAI's models need model.strictOutput=false. Otherwise the model may be too small to follow Themis's reply format; try a larger one.",
+		"OpenAI's models need model.schemaDialect=openai-strict. Otherwise the model may be too small to follow Themis's reply format; try a larger one.",
 	},
 	"deadline_exceeded": {
 		"The model was too slow to finish the last investigation in time.",

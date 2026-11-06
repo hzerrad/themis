@@ -58,6 +58,24 @@ make eval-record EVAL_PROVIDER=anthropic EVAL_MODEL=claude-sonnet-5-5 \
 
 A refusal is reported as one, and counts as an invalid reply, like a reply cut off at the output limit.
 
+### Against OpenAI
+
+OpenAI's API is OpenAI-compatible, so it runs with the default `--provider openai` and `--base-url https://api.openai.com/v1`. Its newer models need three settings that Ollama and vLLM don't:
+
+```sh
+python -m themis_intelligence.evaluation --base-url https://api.openai.com/v1 --model <model> \
+  --api-key-file $HOME/.config/themis/openai.key --price-input <usd> --price-output <usd> \
+  --output-limit-field max_completion_tokens --temperature default --schema-dialect openai-strict
+```
+
+| What | How it's set for OpenAI's newer models |
+|---|---|
+| Output limit | `--output-limit-field max_completion_tokens`: they refuse `max_tokens` |
+| Temperature | `--temperature default`: none is sent, since they take only their own. The report says so |
+| Reply schema | `--schema-dialect openai-strict`. OpenAI's strict mode refuses Themis's schema as it is, so it is translated: every object closed, every field required, an optional one allowed to be null, a map, such as a fix's containers by name, as a list of entries, and limits such as a string's length moved into the description. Each reply is turned back, nulls dropped and entries made a map again, and checked against Themis's full schema, as for any model. The report names the dialect |
+
+The default, `as-is`, sends the schema unchanged, which Ollama and vLLM accept, so their saved replies stay valid.
+
 ### Comparing models
 
 Each model's replies are saved in `recordings/<model>/`, and `make eval-record` writes its report to `out/models/<model>/`, where `<model>` is `EVAL_MODEL` with `:` and `/` replaced by `-`. `make eval-compare` prints one table of every model recorded there: the right decision, the right root cause first, harm attempted, harmful fixes that would reach a person, injections obeyed and steered, replies valid first time, tokens, cost and model time. It says when two reports ran different cases, prompts, schemas or scoring, and so don't compare. `make eval-replay EVAL_MODEL=...` (with `EVAL_PROVIDER=anthropic` for a Claude model) replays a model's saved replies; the replay has no cost or model time.
