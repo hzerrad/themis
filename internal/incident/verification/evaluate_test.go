@@ -25,14 +25,14 @@ func TestEvaluate(t *testing.T) {
 		final     bool
 		says      string
 	}{
-		"changed by someone else":        {capability.Reading{Changed: true, Health: capability.Healthy}, time.Hour, early, verification.Inconclusive, true, "Inconclusive: the workload was changed outside Themis while Themis verified the fix. Referred to a person."},
-		"healthy long enough":            {reading(capability.Healthy), 2 * time.Minute, early, verification.Resolved, true, "Fixed. The workload recovered and held: "},
+		"changed by someone else":        {capability.Reading{Changed: true, Health: capability.Healthy}, time.Hour, early, verification.Inconclusive, true, "Inconclusive. The workload was changed outside Themis during verification. Referred to a person."},
+		"healthy long enough":            {reading(capability.Healthy), 2 * time.Minute, early, verification.Resolved, true, "Fixed. The workload recovered and stayed healthy. "},
 		"healthy, not yet long enough":   {reading(capability.Healthy), time.Minute, early, "", false, ""},
 		"not healthy before the window":  {reading(capability.Unchanged), 0, early, "", false, ""},
-		"healthy too briefly at the end": {reading(capability.Healthy), time.Minute, late, verification.Contained, true, "Partly recovered: "},
-		"improved at the end":            {reading(capability.Improved), 0, late, verification.Contained, true, "Partly recovered: "},
-		"worse at the end":               {reading(capability.Worse), 0, late, verification.Worsened, true, "Worse after the fix: "},
-		"unchanged at the end":           {reading(capability.Unchanged), 0, late, verification.Unchanged, true, "The fix didn't help: "},
+		"healthy too briefly at the end": {reading(capability.Healthy), time.Minute, late, verification.Contained, true, "Partly recovered. "},
+		"improved at the end":            {reading(capability.Improved), 0, late, verification.Contained, true, "Partly recovered. "},
+		"worse at the end":               {reading(capability.Worse), 0, late, verification.Worsened, true, "Worse after the fix. "},
+		"unchanged at the end":           {reading(capability.Unchanged), 0, late, verification.Unchanged, true, "The fix didn't help. "},
 	} {
 		got, final := verification.Evaluate(tc.reading, tc.stableFor, c, tc.elapsed)
 		if got != tc.want || final != tc.final {

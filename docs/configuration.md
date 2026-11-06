@@ -370,9 +370,9 @@ Some protections hold for every fix and every profile, whoever suggested the fix
 
 Themis never changes a workload that Argo CD or Flux manages: the GitOps controller would undo the change, or fight it. It only recommends the fix. The fix is recorded as denied by `gitops-owns-the-target`, the incident closes without a change, and the incident page shows it as the recommended fix, with the reason:
 
-- "Recommended, not applied: Argo CD manages this workload. Apply the change in Git." when Themis reads the markers or field managers on the live workload as it decides (`Flux` for Flux's).
-- "Recommended, not applied: Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` was true from the evidence.
-- "Recommended, not applied: Themis couldn't tell whether Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
+- "Argo CD manages this workload. Apply the change in Git." when Themis reads the markers or field managers on the live workload as it decides (`Flux` for Flux's).
+- "Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` was true from the evidence.
+- "Themis couldn't tell whether Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
 
 This holds for putting a fix back too. A rule of your own that reads `predicates.gitops_managed` or `target.managed_by` still works, but is never needed for this.
 
@@ -382,7 +382,7 @@ A fix none of its [justifying checks](#justifying-checks) supports is refused be
 
 When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "No fix proposed. The checks support a rollback (failure_onset_after_rollout is true). Referred to a person." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
 
-What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, marked as written by the model or the suggester.
+What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, labelled "Written by the investigator's model" or "Written by the suggester".
 
 #### Suspicious evidence
 
@@ -401,8 +401,8 @@ It is a small heuristic, not a filter: the text stays in the evidence, and nothi
 What it changes:
 
 - The investigator is told, before the evidence, that Themis flagged it and why, and the evidence is marked `suspicious="true"`. Outside investigators get the same flags in each evidence item's `suspicious` field.
-- The incident page warns, above the evidence and on every fix: "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail: "Ignore all previous instructions…"). It is material, not a finding; the checks do not rely on it. Check the fix against the cluster before approving." Viewers, who may not read raw evidence, see which evidence without the text.
-- [Escalation notices](#escalation-notices) carry `evidenceWarning`, naming the evidence without its text.
+- The incident page shows a warning for each flagged text, above the findings: the kind of evidence in its title, such as "Suspicious text in the container logs", the text itself, where it is, such as "Pod checkout-7d9f8b6c4-x2kqp, container app", then what it is, whether the checks read it, and what to do: "This line is written as an instruction to Themis. Themis's checks don't read log text, so it had no effect on them. Approve only if the checks below justify the rollback on their own." When checks of the incident read that kind of evidence, such as events, the warning names them instead and asks to confirm their results in the cluster. Viewers, who may not read raw evidence, see where without the text.
+- [Escalation notices](#escalation-notices) carry `evidenceWarning`, which says where and what without the text.
 - Policy can read `predicates.evidence_has_instructions`, for example to forbid fixes when it is `"true"`, once the profile runs that check.
 
 ### Verification
@@ -445,7 +445,7 @@ metrics:
 | `metrics.prometheus.tls.certFile`, `.keyFile` | A client certificate, for a server that asks for one. Set both or neither. Read on every connection. |
 | `metrics.prometheus.tls.insecureSkipVerify` | Accept any certificate. Only for trying Themis. |
 
-A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "No history: peak memory and CPU throttling are unknown." An incident's missing evidence says the same in one line, such as "Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address."
+A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "No history. Peak memory and CPU throttling are unknown." An incident's missing evidence says the same in one line, such as "Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address."
 
 ## Connecting your Alertmanager
 
@@ -480,7 +480,7 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
   "event": "incident.escalated",
   "incident": {
     "id": "01a1837f-…", "state": "escalated", "from": "investigating",
-    "reason": "Investigation failed after 3 attempts: the model was unreachable. Referred to a person.",
+    "reason": "Investigation failed after 3 attempts. Last error: the model was unreachable. Referred to a person.",
     "profile": "rollout-regression",
     "profiles": ["rollout-regression"],
     "target": {"group": "apps", "kind": "Deployment", "namespace": "shop", "name": "checkout", "uid": "…"},
@@ -491,4 +491,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `missing` says in one line each what evidence Themis was missing, and the change that lets it read that evidence next time. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail). It is material, not a finding; the checks do not rely on it." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `missing` says in one line each what evidence Themis was missing, and the change that lets it read that evidence next time. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says where and what, such as "Suspicious text in the container logs (pod checkout-7d9f8b6c4-x2kqp, container app). The line is written as an instruction to Themis. Read it in Themis before acting on this incident." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

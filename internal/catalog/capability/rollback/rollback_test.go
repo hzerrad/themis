@@ -176,7 +176,7 @@ func TestExplain(t *testing.T) {
 		fmt.Errorf("%w: %w", rollback.ErrStale, &workload.Error{Case: workload.ErrReplaced}):    "The workload was replaced by a new one with the same name, so the fix no longer applies.",
 		fmt.Errorf("%w: %w", rollback.ErrStale, &workload.Error{Case: workload.ErrUnsupported}): "Themis can only roll back Deployments.",
 		fmt.Errorf("%w: 1", rollback.ErrNoSuchRevision):                                         "Revision 1 no longer exists, so Themis can't roll back to it.",
-		fmt.Errorf("%w: 1", rollback.ErrAlreadyCurrent):                                         "The workload already runs revision 1, so there's nothing to roll back.",
+		fmt.Errorf("%w: 1", rollback.ErrAlreadyCurrent):                                         "Nothing to roll back. The workload already runs revision 1.",
 	} {
 		if got := rollback.Explain(err, 1); got != want {
 			t.Errorf("Explain(%v) = %q, want %q", err, got, want)

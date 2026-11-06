@@ -67,10 +67,10 @@ func TestRemedy(t *testing.T) {
 		template string
 		want     string
 	}{
-		{"forbidden, not enrolled", away, evidence.GapForbidden, evidence.RolloutHistory, "Rollout history: access denied in billing, which is not enrolled. Add billing to enrolledNamespaces."},
+		{"forbidden, not enrolled", away, evidence.GapForbidden, evidence.RolloutHistory, "Rollout history: access denied in billing, which isn't enrolled. Add billing to enrolledNamespaces."},
 		{"forbidden, enrolled", checkout, evidence.GapForbidden, evidence.TargetEvents, "Events: access denied in shop. Grant read access in the Role Themis has in shop."},
 		{"not in the profile", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "Container logs: not allowed by the rollout-regression profile. Add container_logs_tail to its evidence.allowed."},
-		{"budget uses the profile's limit", checkout, evidence.GapBudgetSpent, evidence.ContainerLogsTail, "Container logs: not read; all 2 evidence requests were used. Raise investigation.maxEvidenceRequests in the rollout-regression profile."},
+		{"budget uses the profile's limit", checkout, evidence.GapBudgetSpent, evidence.ContainerLogsTail, "Container logs: not read. The investigation used all 2 of its evidence requests. Raise investigation.maxEvidenceRequests in the rollout-regression profile."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,13 +97,13 @@ func TestMessages_OneLinePerFinding(t *testing.T) {
 	want := []string{
 		"Pod states: Kubernetes didn't answer in time.",
 		"Container memory, container CPU and container logs: no metrics source. Install metrics-server, or set metrics.prometheus.address.",
-		"Referenced config: not read: connection refused.",
+		"Referenced config: not read (connection refused).",
 	}
 	if got := writer.Messages(checkout, gaps); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 	budget := []store.EvidenceGap{{Template: evidence.PodStates, Cause: evidence.GapBudgetSpent}, {Template: evidence.TargetEvents, Cause: evidence.GapForbidden}, {Template: evidence.ContainerLogsTail, Cause: evidence.GapBudgetSpent}}
-	if got := writer.Messages(checkout, budget); len(got) != 2 || !strings.HasPrefix(got[0], "Pod states and container logs: not read;") {
+	if got := writer.Messages(checkout, budget); len(got) != 2 || !strings.HasPrefix(got[0], "Pod states and container logs: not read. ") {
 		t.Errorf("got %q, want the budget once, for both", got)
 	}
 }

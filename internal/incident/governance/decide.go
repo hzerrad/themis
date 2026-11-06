@@ -160,7 +160,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 				return r, nil
 			}
 		}
-		return policy.Decision{Outcome: policy.Deny, Reason: "Refused: none of the incident's profiles offers this fix."}, nil
+		return policy.Decision{Outcome: policy.Deny, Reason: "Refused. None of the incident's profiles offers this fix."}, nil
 	}
 	if fix.Restores == "" {
 		if reason, ok := justified(offering, fix.Capability, in.Predicates); !ok {
@@ -199,16 +199,16 @@ func gitOps(in policy.Input) (string, bool) {
 		if !ok {
 			tool = in.ManagedBy
 		}
-		return "Recommended, not applied: " + tool + " manages this workload." + recommend, true
+		return tool + " manages this workload." + recommend, true
 	}
 	switch check.ParseTruth(in.Predicates[check.GitOpsManaged]) {
 	case check.False:
 		return "", false
 	case check.True:
-		return "Recommended, not applied: Argo CD or Flux manages this workload." + recommend, true
+		return "Argo CD or Flux manages this workload." + recommend, true
 	case check.Unknown:
 	}
-	return "Recommended, not applied: Themis couldn't tell whether Argo CD or Flux manages this workload." + recommend, true
+	return "Themis couldn't tell whether Argo CD or Flux manages this workload." + recommend, true
 }
 
 // policy returns p's compiled policy.

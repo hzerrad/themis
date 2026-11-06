@@ -111,7 +111,7 @@ func (w *Worker) close(ctx context.Context, in store.Incident, to incident.State
 // now, to be investigated from scratch.
 func (w *Worker) supersede(ctx context.Context, in store.Incident, by string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		reason := fmt.Sprintf("Replaced by a new incident: the workload was changed outside Themis, by %s, and still fails.", by)
+		reason := fmt.Sprintf("Replaced by a new incident. The workload was changed outside Themis, by %s, and still fails.", by)
 		return movedOn(investigation.Supersede(ctx, w.Store, tx, in, in.Target, reason, actor))
 	})
 }

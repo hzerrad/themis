@@ -71,7 +71,7 @@ func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 		if slices.Contains(w.config().EnrolledNamespaces, ns) {
 			return missing{"access denied in " + ns, "Grant read access in the Role Themis has in " + ns + "."}
 		}
-		return missing{"access denied in " + ns + ", which is not enrolled", "Add " + ns + " to enrolledNamespaces."}
+		return missing{"access denied in " + ns + ", which isn't enrolled", "Add " + ns + " to enrolledNamespaces."}
 	case evidence.GapNotInProfile:
 		if len(in.AlsoMatched) > 0 {
 			return missing{
@@ -81,7 +81,7 @@ func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 		}
 		return missing{"not allowed by the " + in.Profile + " profile", "Add " + g.Template + " to its evidence.allowed."}
 	case evidence.GapExpired:
-		return missing{"incomplete; Kubernetes keeps events for about 1 hour, and the first had expired", ""}
+		return missing{"incomplete. Kubernetes keeps events for about 1 hour, and the earliest had expired", ""}
 	case evidence.GapNotFound:
 		return missing{"the object no longer exists", ""}
 	case evidence.GapBudgetSpent:
@@ -91,11 +91,11 @@ func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 			where = "one of the incident's profiles (" + strings.Join(in.Profiles(), ", ") + ")"
 		}
 		return missing{
-			fmt.Sprintf("not read; all %d evidence requests were used", limit),
+			fmt.Sprintf("not read. The investigation used all %d of its evidence requests", limit),
 			"Raise investigation.maxEvidenceRequests in " + where + ".",
 		}
 	case evidence.GapDataCeiling:
-		return missing{"withheld from the model, which may not see data this sensitive", "Set model.ceiling to sensitive, or use a self-hosted model."}
+		return missing{"not sent to the model, which may not see sensitive data", "Set model.ceiling to sensitive, or use a self-hosted model."}
 	case evidence.GapTimeout:
 		return missing{"Kubernetes didn't answer in time", ""}
 	case evidence.GapAbsent:
@@ -126,7 +126,7 @@ func unavailable(g store.EvidenceGap) missing {
 	if strings.TrimSpace(detail) == "" {
 		return missing{"not read", ""}
 	}
-	return missing{"not read: " + detail, ""}
+	return missing{"not read (" + strings.TrimSuffix(strings.TrimSpace(detail), ".") + ")", ""}
 }
 
 // Message says in one line what g kept from Themis about in, and the change

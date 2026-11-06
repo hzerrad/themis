@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"regexp"
-	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -165,24 +166,165 @@ func excerpt(s string, start, end int) string {
 	return out
 }
 
-// Warning says, in plain words, that some of items hold text that looks
-// written for the investigator: which templates and, with excerpts, what
-// text. It is empty when none does.
-func Warning(items []Item, excerpts bool) string {
-	var seen, where []string
-	for _, it := range items {
-		if len(it.Suspicious) == 0 || slices.Contains(seen, it.Template) || len(seen) == 3 {
-			continue
-		}
-		seen = append(seen, it.Template)
-		w := it.Template
-		if excerpts {
-			w += `: "` + it.Suspicious[0].Excerpt + `"`
-		}
-		where = append(where, w)
+// what says, for people, what text flagged for each reason is: "The line is
+// written as an instruction to Themis." The reasons themselves are sent to
+// the investigator as they are.
+var what = map[string]string{
+	ReasonInstructions:  "is written as an instruction to Themis",
+	ReasonImpersonation: "is made to look like output from Themis or a tool, or like an approval",
+	ReasonFixOrder:      "is written as an order to make or skip a fix",
+	ReasonDiagnosis:     "offers a ready-made diagnosis",
+	ReasonEncoded:       "holds encoded instructions",
+}
+
+// What says what the flagged text is, to follow its subject, such as "is
+// written as an instruction to Themis".
+func (s Suspicion) What() string {
+	if w, ok := what[s.Reason]; ok {
+		return w
 	}
-	if len(where) == 0 {
+	return "looks written for Themis rather than by the workload"
+}
+
+// kinds name each template's evidence inside a sentence.
+var kinds = map[string]string{
+	ContainerLogsTail: "the container logs",
+	TargetEvents:      "the events",
+	PodStates:         "the pod states",
+	ReferencedConfig:  "the referenced config",
+	RolloutHistory:    "the rollout history",
+}
+
+// subject names the flagged text by what holds it: a line of logs, an
+// event's message, or text.
+func (it Item) subject(s Suspicion) string {
+	switch {
+	case it.Template == ContainerLogsTail:
+		return "line"
+	case it.Template == TargetEvents && strings.HasSuffix(s.At, "/message"):
+		return "event message"
+	}
+	return "text"
+}
+
+// Origin names, in the cluster's words, what in it holds s: the pod and
+// container whose logs hold it, the event and the object it is about, the
+// pod or container whose state does, the ConfigMap or Secret, the revision.
+// It is empty when the data doesn't say.
+func (it Item) Origin(s Suspicion) string {
+	var data map[string]any
+	if json.Unmarshal(it.Data, &data) != nil {
 		return ""
 	}
-	return "Some evidence contains text addressed to Themis or posing as tool output (" + strings.Join(where, "; ") + "). It is material, not a finding; the checks do not rely on it."
+	path := strings.Split(strings.TrimPrefix(s.At, "/"), "/")
+	text := func(m map[string]any, key string) string {
+		v, _ := m[key].(string)
+		return v
+	}
+	switch it.Template {
+	case ContainerLogsTail:
+		pod, container := text(data, "pod"), text(data, "container")
+		if pod == "" {
+			return ""
+		}
+		out := "pod " + pod
+		if container != "" {
+			out += ", container " + container
+		}
+		if previous, _ := data["previousRun"].(bool); previous {
+			out += ", previous run"
+		}
+		return out
+	case TargetEvents:
+		ev := element(data, path, "events")
+		if ev == nil {
+			return ""
+		}
+		out := "event"
+		if r := text(ev, "reason"); r != "" {
+			out = r + " event"
+		}
+		if o := text(ev, "object"); o != "" {
+			out += " on " + o
+		}
+		return out
+	case PodStates:
+		pod := element(data, path, "pods")
+		if pod == nil || text(pod, "name") == "" {
+			return ""
+		}
+		out := "pod " + text(pod, "name")
+		if len(path) > 2 && strings.HasSuffix(path[2], "ontainers") {
+			if c := element(pod, path[2:], path[2]); c != nil && text(c, "name") != "" {
+				out += ", container " + text(c, "name")
+			}
+		}
+		return out
+	case ReferencedConfig:
+		ref := element(data, path, "refs")
+		if ref == nil || text(ref, "name") == "" {
+			return ""
+		}
+		return strings.TrimSpace(text(ref, "kind") + " " + text(ref, "name"))
+	case RolloutHistory:
+		rev := element(data, path, "revisions")
+		if rev == nil || text(rev, "revision") == "" {
+			return ""
+		}
+		return "revision " + text(rev, "revision")
+	}
+	return ""
+}
+
+// element is the object at path[1] of the list data holds under key, when
+// path starts with key.
+func element(data map[string]any, path []string, key string) map[string]any {
+	if len(path) < 2 || path[0] != key {
+		return nil
+	}
+	list, _ := data[key].([]any)
+	i, err := strconv.Atoi(path[1])
+	if err != nil || i < 0 || i >= len(list) {
+		return nil
+	}
+	m, _ := list[i].(map[string]any)
+	return m
+}
+
+// Warning says, in plain words, which of items hold text that looks written
+// for Themis, where, and what it is: "Suspicious text in the container logs
+// (pod checkout-7d9f8b6c4-x2kqp, container app). The line is written as an
+// instruction to Themis." With excerpts, it quotes the text; without, it
+// says where to read it. It is empty when no item holds any.
+func Warning(items []Item, excerpts bool) string {
+	var out []string
+	for _, it := range items {
+		if len(it.Suspicious) == 0 || len(out) == 3 {
+			continue
+		}
+		s := it.Suspicious[0]
+		kind, ok := kinds[it.Template]
+		if !ok {
+			kind = "the " + it.Template + " evidence"
+		}
+		w := "Suspicious text in " + kind
+		if o := it.Origin(s); o != "" {
+			w += " (" + o + ")"
+		}
+		if excerpts && s.Excerpt != "" {
+			w += `: "` + s.Excerpt + `"`
+		}
+		out = append(out, w+". The "+it.subject(s)+" "+s.What()+".")
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	if !excerpts {
+		read := "Read it"
+		if len(out) > 1 {
+			read = "Read them"
+		}
+		out = append(out, read+" in Themis before acting on this incident.")
+	}
+	return strings.Join(out, " ")
 }

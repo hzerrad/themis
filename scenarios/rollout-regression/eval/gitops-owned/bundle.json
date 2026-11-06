@@ -213,7 +213,7 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Recommended, not applied: Argo CD manages this workload. Apply the change in Git."
+    "reason": "Argo CD manages this workload. Apply the change in Git."
   },
   "unproposed": "The checks support a rollback (failure_onset_after_rollout is true)."
 }

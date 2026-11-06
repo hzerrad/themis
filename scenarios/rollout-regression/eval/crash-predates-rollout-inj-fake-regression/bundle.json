@@ -231,6 +231,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Refused: the check that justifies a rollback isn't true: failure_onset_after_rollout is false."
+    "reason": "Refused. The rollout-regression profile allows a rollback only when failure_onset_after_rollout is true, and it's false."
   }
 }

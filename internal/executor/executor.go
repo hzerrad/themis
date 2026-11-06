@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -76,7 +77,7 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 	started := e.now()
 	if a.State == store.ActionExecuting {
 		// Claimed, but the executor stopped before recording an outcome.
-		res := Result{Status: Ambiguous, Message: "Unknown whether the change was made: the executor stopped while applying it."}
+		res := Result{Status: Ambiguous, Message: "Unknown whether the change was made. The executor stopped while applying it."}
 		return res, e.record(ctx, a, res, started)
 	}
 
@@ -105,43 +106,43 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	recomputed, err := digest.Compute(a.Fields())
 	if err != nil || recomputed != a.Digest {
-		return Result{Status: Stale, Message: "Not applied: the stored fix was altered after it was approved."}
+		return Result{Status: Stale, Message: "Not applied. The stored fix was altered after it was approved."}
 	}
 	f, ok := e.Fixes[a.Capability]
 	if !ok {
-		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
+		return Result{Status: Failed, Message: "Not applied. Themis can't carry out this kind of fix."}
 	}
 
 	target := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
 	plan, err := f.Plan(ctx, e.Client, target, a.Params)
 	if errors.Is(err, capability.ErrInvalidParams) {
-		return Result{Status: Failed, Message: "Not applied: Themis doesn't know how to carry out this fix."}
+		return Result{Status: Failed, Message: "Not applied. Themis can't carry out this kind of fix."}
 	}
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		return Result{Status: Stale, Message: "Not applied. " + refusal.Reason}
 	}
 	if err != nil {
-		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error() + "."}
+		return Result{Status: Failed, Message: "Not applied. Themis couldn't read the workload: " + err.Error() + "."}
 	}
 	undone, _ := a.Restores()
 	current, err := digest.Compute(capability.Fields(a.IncidentID, f, plan, undone, a.PolicyID, a.PolicyDigest))
 	if err != nil || current != a.Digest {
-		return Result{Status: Stale, Message: "Not applied: the workload changed after the fix was approved."}
+		return Result{Status: Stale, Message: "Not applied. The workload changed after the fix was approved."}
 	}
 
 	if _, err := f.Apply(ctx, e.Client, plan, true); err != nil {
-		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change in a dry run: " + err.Error() + ".", dryRunFailed: true}
+		return Result{Status: Failed, Message: "Not applied. Kubernetes rejected the change in a dry run: " + err.Error() + ".", dryRunFailed: true}
 	}
 	gen, err := f.Apply(ctx, e.Client, plan, false)
 	switch {
 	case err == nil:
 		return Result{Status: Succeeded, Message: plan.Done, PostGeneration: gen}
 	case apierrors.IsConflict(err):
-		return Result{Status: Stale, Message: "Not applied: the workload changed while the fix was being applied: " + err.Error() + "."}
+		return Result{Status: Stale, Message: "Not applied. The workload changed while the fix was being applied: " + err.Error() + "."}
 	case isRejected(err):
-		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change: " + err.Error() + "."}
+		return Result{Status: Failed, Message: "Not applied. Kubernetes rejected the change: " + err.Error() + "."}
 	default:
-		return Result{Status: Ambiguous, Message: "Unknown whether the change was made: " + err.Error() + "."}
+		return Result{Status: Ambiguous, Message: "Unknown whether the change was made. The request failed: " + err.Error() + "."}
 	}
 }
 
@@ -176,7 +177,7 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
 			if restore {
-				return e.advance(ctx, tx, a.IncidentID, "Not restored. "+res.Message+" Referred to a person.", incident.Restoring, incident.Escalated)
+				return e.advance(ctx, tx, a.IncidentID, "Not restored. "+strings.TrimPrefix(res.Message, "Not applied. ")+" Referred to a person.", incident.Restoring, incident.Escalated)
 			}
 			return e.advance(ctx, tx, a.IncidentID, res.Message+" Referred to a person.", incident.Executing, incident.Escalated)
 		}

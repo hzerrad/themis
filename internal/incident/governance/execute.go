@@ -54,7 +54,7 @@ func (w *ExecuteWorker) Execute(ctx context.Context, actionID string) error {
 // executor reached by the last attempt. Nothing was written then.
 func (w *ExecuteWorker) execute(ctx context.Context, actionID string, last bool) error {
 	if w.Executor == nil {
-		return w.cancel(ctx, actionID, "the executor is turned off. Turn it on with executor.enabled=true in the Helm values.")
+		return w.cancel(ctx, actionID, "The executor is turned off. Turn it on with executor.enabled=true in the Helm values.")
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -65,7 +65,7 @@ func (w *ExecuteWorker) execute(ctx context.Context, actionID string, last bool)
 	}
 	if c == codes.FailedPrecondition {
 		// Claimed by an earlier attempt, or refused before anything ran.
-		return w.cancel(ctx, actionID, "the executor refused it: "+status.Convert(err).Message()+".")
+		return w.cancel(ctx, actionID, "The executor refused it: "+status.Convert(err).Message()+".")
 	}
 	// The reply may be lost after the executor acted: its record decides.
 	if _, recErr := w.Store.ActionExecution(ctx, w.Store.DB(), actionID); recErr == nil {
@@ -74,14 +74,15 @@ func (w *ExecuteWorker) execute(ctx context.Context, actionID string, last bool)
 		return recErr
 	}
 	if last {
-		return w.cancel(ctx, actionID, "the executor couldn't be reached: "+err.Error()+".")
+		return w.cancel(ctx, actionID, "The executor couldn't be reached: "+err.Error()+".")
 	}
 	return err
 }
 
 // cancel cancels an action still authorized, with its incident; an action
 // the executor claimed is left to its record. A restore that can't run leaves
-// the fix in place, so a person takes over. why completes "Not applied: ".
+// the fix in place, so a person takes over. why is a sentence, to follow
+// "Not applied."
 func (w *ExecuteWorker) cancel(ctx context.Context, actionID, why string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a, err := w.Store.Action(ctx, tx, actionID)
@@ -91,9 +92,9 @@ func (w *ExecuteWorker) cancel(ctx context.Context, actionID, why string) error 
 		if err := w.Store.SetActionState(ctx, tx, a.ID, store.ActionAuthorized, store.ActionCanceled); err != nil {
 			return nil //nolint:nilerr // claimed or already handled
 		}
-		args := store.TransitionArgs{ID: a.IncidentID, From: incident.Authorized, To: incident.Canceled, Reason: "Not applied: " + why, Actor: "execution"}
+		args := store.TransitionArgs{ID: a.IncidentID, From: incident.Authorized, To: incident.Canceled, Reason: "Not applied. " + why, Actor: "execution"}
 		if _, restore := a.Restores(); restore {
-			args.From, args.To, args.Reason = incident.Restoring, incident.Escalated, "Not restored: "+why+" The fix stays in place. Referred to a person."
+			args.From, args.To, args.Reason = incident.Restoring, incident.Escalated, "Not restored. "+why+" The fix stays in place. Referred to a person."
 		}
 		return w.Store.Transition(ctx, tx, args)
 	})

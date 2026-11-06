@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -51,7 +52,7 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	// Retrying can't make an unsupported target supported.
 	if err != nil && (job.Attempt >= job.MaxAttempts || errors.Is(err, workload.ErrUnsupported)) {
 		// A write happened: never leave the incident in verifying.
-		return w.escalate(ctx, job.Args.ActionID, "Not verified: "+err.Error()+". Referred to a person.")
+		return w.escalate(ctx, job.Args.ActionID, "Not verified. Last error: "+err.Error()+". Referred to a person.")
 	}
 	if err != nil || final {
 		return err
@@ -213,9 +214,9 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	case reading.Changed:
 		reason = "Restored, but the workload was then changed outside Themis. Referred to a person."
 	case reading.Applied:
-		reason = "Restored to the state before Themis acted: " + reading.Facts + " Referred to a person."
+		reason = "Restored to the state before Themis acted. " + reading.Facts + " Referred to a person."
 	case w.now().Sub(args.WindowStart) >= window:
-		reason = "Restore incomplete: Kubernetes didn't finish the rollout within the verification window. " + reading.Facts + " Referred to a person."
+		reason = "Restore incomplete. Kubernetes didn't finish the rollout within " + minutes(window) + ". " + reading.Facts + " Referred to a person."
 	default:
 		return false, nil
 	}
@@ -227,4 +228,16 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 		return err
 	})
 	return err == nil, err
+}
+
+// minutes writes a window as people read it: 10m, 1h, 1h30m.
+func minutes(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }

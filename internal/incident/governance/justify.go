@@ -13,31 +13,31 @@ import (
 
 // justified says why fix isn't justified for an incident whose checks gave
 // predicates: every profile offering it must find one of the checks it names
-// for fix true. ok is set when they all do.
+// for fix true. ok is set when they all do. "Refused. The rollout-regression
+// profile allows a rollback only when failure_onset_after_rollout is true,
+// and it's false."
 func justified(offering config.Matched, fix capability.Capability, predicates map[string]string) (reason string, ok bool) {
 	for _, p := range offering {
 		names := p.JustifiedBy[fix.Name()]
 		if len(names) == 0 {
-			return fmt.Sprintf("Refused: the %s profile names no check that justifies %s.", p.Name, fix.Noun()), false
+			return fmt.Sprintf("Refused. The %s profile names no check that justifies %s.", p.Name, fix.Noun()), false
 		}
 		if len(supporting(names, predicates)) > 0 {
 			continue
 		}
+		if len(names) == 1 {
+			it := "it's " + answer(names[0], predicates)
+			if _, ran := predicates[names[0]]; !ran {
+				it = "it didn't run"
+			}
+			return fmt.Sprintf("Refused. The %s profile allows %s only when %s is true, and %s.", p.Name, fix.Noun(), names[0], it), false
+		}
 		answers := make([]string, 0, len(names))
 		for _, name := range names {
-			answers = append(answers, answer(name, predicates))
+			answers = append(answers, name+" ("+answer(name, predicates)+")")
 		}
-		// Of several profiles offering the fix, the one whose checks refuse it.
-		whose := "the "
-		if len(offering) > 1 {
-			whose = "the " + p.Name + " profile's "
-		}
-		if len(names) == 1 {
-			reason = fmt.Sprintf("Refused: %scheck that justifies %s isn't true: %s.", whose, fix.Noun(), answers[0])
-		} else {
-			reason = fmt.Sprintf("Refused: none of %schecks that justify %s is true: %s.", whose, fix.Noun(), strings.Join(answers, ", "))
-		}
-		return reason, false
+		return fmt.Sprintf("Refused. The %s profile allows %s only when one of these is true: %s.",
+			p.Name, fix.Noun(), strings.Join(answers, ", ")), false
 	}
 	return "", true
 }
@@ -53,13 +53,13 @@ func supporting(names []string, predicates map[string]string) []string {
 	return out
 }
 
-// answer says what a check answered, such as "probe_kills is unknown".
+// answer says what a check answered: false, unknown, or didn't run.
 func answer(name string, predicates map[string]string) string {
 	value, ok := predicates[name]
 	if !ok {
-		return name + " didn't run"
+		return "didn't run"
 	}
-	return name + " is " + value
+	return value
 }
 
 // Unproposed says which fixes the incident's profiles offer that its checks

@@ -103,7 +103,7 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 		p := probe(c, kind)
 		if p == nil {
 			return capability.Plan{}, &capability.Refusal{Reason: fmt.Sprintf(
-				"Container %s has no %s probe. Themis only adjusts probes that exist; adding one is a change for a person.", req.container, kind)}
+				"Container %s has no %s probe. Themis changes only existing probes.", req.container, kind)}
 		}
 		for f, v := range values {
 			*field(p, f) = v
@@ -111,7 +111,7 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 	}
 	edits := diff(w.Template, desired)
 	if len(edits) == 0 {
-		return capability.Plan{}, &capability.Refusal{NoOp: true, Reason: "The probes already have these settings, so there's nothing to change."}
+		return capability.Plan{}, &capability.Refusal{NoOp: true, Reason: "Nothing to change. The probes already have these settings."}
 	}
 	mark, err := workload.TemplateHash(desired)
 	if err != nil {
@@ -169,10 +169,10 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	}
 	w, err := workload.Read(ctx, r, t)
 	if errors.Is(err, workload.ErrGone) {
-		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was deleted."}
+		return "", nil, &capability.Refusal{Reason: "Not restored. The workload was deleted."}
 	}
 	if errors.Is(err, workload.ErrReplaced) {
-		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was replaced by a new one with the same name."}
+		return "", nil, &capability.Refusal{Reason: "Not restored. The workload was replaced by a new one with the same name."}
 	}
 	if err != nil {
 		return "", nil, err
@@ -184,14 +184,14 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 			return "", nil, err
 		}
 		if hash == w.TemplateHash {
-			return "", nil, &capability.Refusal{NoOp: true, Reason: "Nothing to restore: the probes are already as they were before Themis acted."}
+			return "", nil, &capability.Refusal{NoOp: true, Reason: "Nothing to restore. The probes are already as they were before Themis acted."}
 		}
-		return "", nil, &capability.Refusal{Reason: "Not restored: the workload changed after Themis's fix. It stays as it is."}
+		return "", nil, &capability.Refusal{Reason: "Not restored. The workload changed after Themis's fix, so it stays as it is."}
 	}
 	req := request{container: edits[0].container, set: map[string]map[string]int32{}}
 	for _, e := range edits {
 		if e.container != req.container {
-			return "", nil, &capability.Refusal{Reason: "Not restored: the probes of more than one container changed after Themis acted. They stay as they are."}
+			return "", nil, &capability.Refusal{Reason: "Not restored. The probes of more than one container changed after Themis acted, so they stay as they are."}
 		}
 		if req.set[e.kind] == nil {
 			req.set[e.kind] = map[string]int32{}
@@ -270,9 +270,9 @@ func (Capability) Check(ctx context.Context, r client.Reader, t incident.TargetR
 	}
 	switch {
 	case restarts == 1:
-		msg += "; containers restarted once"
+		msg += ". Containers restarted once"
 	case restarts > 1:
-		msg += fmt.Sprintf("; containers restarted %d times", restarts)
+		msg += fmt.Sprintf(". Containers restarted %d times", restarts)
 	}
 	return capability.Reading{
 		Changed: w.TemplateHash != mark, Applied: s.Updated, Health: health,

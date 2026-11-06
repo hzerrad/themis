@@ -116,8 +116,9 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 
 // referDiagnosis hands an incident none of whose profiles offers a fix to a
 // person, saying after conclusion what the checks found, or that they found
-// nothing: "No fix proposed. Finding: an image can't be pulled (…). No fix
-// applies to this kind of incident. Referred to a person." Themis can only
+// nothing: "No fix proposed. The checks found that an image can't be pulled
+// (…). Themis has no fix for this kind of incident. Referred to a person."
+// Themis can only
 // diagnose such an incident: closing it would drop the diagnosis, and nobody
 // can suggest a fix it would take. It reports whether it did; it doesn't for
 // an incident whose profiles are all gone.
@@ -142,17 +143,17 @@ func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID strin
 		if why := strings.TrimSuffix(r.Reason, "."); why != "" {
 			what += " (" + why + ")"
 		}
-		found = append(found, what)
+		found = append(found, "that "+what)
 	}
 	findings := "No check found a cause."
-	switch len(found) {
+	switch n := len(found); n {
 	case 0:
 	case 1:
-		findings = "Finding: " + found[0] + "."
+		findings = "The checks found " + found[0] + "."
 	default:
-		findings = "Findings: " + strings.Join(found, "; ") + "."
+		findings = "The checks found " + strings.Join(found[:n-1], ", ") + " and " + found[n-1] + "."
 	}
-	reason := conclusion + " " + findings + " No fix applies to this kind of incident." + referred
+	reason := conclusion + " " + findings + " Themis has no fix for this kind of incident." + referred
 	return true, l.Store.TransitionPath(ctx, tx, incidentID, reason, investigator, incident.Investigating, incident.Escalated)
 }
 
@@ -184,8 +185,7 @@ const (
 	Internal           Reason = "internal"
 )
 
-// failures say why an investigation failed, to follow "Investigation
-// failed: ".
+// failures say why an investigation failed, to follow "Last error: ".
 var failures = map[Reason]string{
 	Unspecified:        "no reason given",
 	ModelUnavailable:   "the model was unreachable",
@@ -219,10 +219,11 @@ func (r Reason) why() string {
 	return failures[Unspecified]
 }
 
-// gaveUp says why an investigation that won't finish was given up: "Investigation
-// failed after 3 attempts: the model was unreachable."
+// gaveUp says why an investigation that won't finish was given up:
+// "Investigation failed after 3 attempts. Last error: the model was
+// unreachable."
 func gaveUp(why string) string {
-	return fmt.Sprintf("Investigation failed after %d attempts: %s.", store.MaxInvestigationAttempts, why)
+	return fmt.Sprintf("Investigation failed after %d attempts. Last error: %s.", store.MaxInvestigationAttempts, why)
 }
 
 // Fail ends the attempt leaseID holds for reason, saying message, and keeps

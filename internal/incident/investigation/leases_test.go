@@ -262,7 +262,7 @@ func TestCollect(t *testing.T) {
 func TestComplete(t *testing.T) {
 	logs := catalog.Gap{Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, Detail: "logs are sensitive"}
 	noFix := "No proposed fix was accepted."
-	referred := "No fix applies to this kind of incident. Referred to a person."
+	referred := "Themis has no fix for this kind of incident. Referred to a person."
 	for name, tc := range map[string]struct {
 		conclusion string
 		suggested  string
@@ -294,7 +294,7 @@ func TestComplete(t *testing.T) {
 		},
 		"inconclusive, on an incident Themis only diagnoses": {
 			conclusion: investigation.Inconclusive, diagnoses: []string{"oom_killed_new_revision"}, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
-			reason: "No fix proposed. Finding: the new version runs out of memory (checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled). " + referred,
+			reason: "No fix proposed. The checks found that the new version runs out of memory (checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled). " + referred,
 		},
 		"proposed, on an incident Themis only diagnoses, with no cause found": {
 			conclusion: investigation.Proposed, suggested: rejected, diagnoses: []string{"config_changed_before_failure"}, want: []incident.State{incident.Escalated},
@@ -432,7 +432,7 @@ func TestFail_RetriesAfterABackoff(t *testing.T) {
 // over, told why in words. The investigator's own fix, from a lease that
 // didn't finish, isn't used.
 func TestLastAttempt_GivesUp(t *testing.T) {
-	failedThrice := "Investigation failed after 3 attempts: "
+	failedThrice := "Investigation failed after 3 attempts. Last error: "
 	referred := " Referred to a person."
 	checking := " Checking the suggested fix."
 	for name, tc := range map[string]struct {

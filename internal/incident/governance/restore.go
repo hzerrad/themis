@@ -26,7 +26,7 @@ func (w *RestoreWorker) Work(ctx context.Context, job *river.Job[RestoreArgs]) e
 	err := w.Governor.Restore(ctx, job.Args.ActionID)
 	if err != nil && job.Attempt >= job.MaxAttempts {
 		// The fix is still applied: never leave the incident in restoring.
-		return w.Governor.escalateAction(ctx, job.Args.ActionID, "Not restored: "+err.Error()+". The fix stays in place.")
+		return w.Governor.escalateAction(ctx, job.Args.ActionID, fmt.Sprintf("Not restored after %d attempts. Last error: %v. The fix stays in place.", job.MaxAttempts, err))
 	}
 	return err
 }
@@ -63,11 +63,11 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	}
 	matched := w.Config.Current().Matched(in.Profiles())
 	if len(matched) == 0 {
-		return w.escalate(ctx, in.ID, fmt.Sprintf("Not restored: Themis no longer has %s this incident matched. The fix stays in place.", config.Named(in.Profiles())))
+		return w.escalate(ctx, in.ID, fmt.Sprintf("Not restored. Themis no longer has %s this incident matched. The fix stays in place.", config.Named(in.Profiles())))
 	}
 	done, ok := w.Fixes[applied.Capability]
 	if !ok {
-		return w.escalate(ctx, in.ID, "Not restored: Themis has no way to undo this fix. The fix stays in place.")
+		return w.escalate(ctx, in.ID, "Not restored. Themis has no way to undo this fix. The fix stays in place.")
 	}
 	name, params, err := done.Undo(ctx, w.Reader, in.Target, applied.PreState)
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
@@ -78,7 +78,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	}
 	undo, ok := w.Fixes[name]
 	if !ok {
-		return w.escalate(ctx, in.ID, "Not restored: Themis has no way to undo this fix. The fix stays in place.")
+		return w.escalate(ctx, in.ID, "Not restored. Themis has no way to undo this fix. The fix stays in place.")
 	}
 	checks, err := w.Store.Predicates(ctx, in.ID)
 	if err != nil {
@@ -90,7 +90,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	})
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		if refusal.NoOp {
-			return w.escalate(ctx, in.ID, "Nothing to restore: the workload is already as it was before Themis acted.")
+			return w.escalate(ctx, in.ID, "Nothing to restore. The workload is already as it was before Themis acted.")
 		}
 		return w.escalate(ctx, in.ID, "Not restored. "+refusal.Reason)
 	}
@@ -105,7 +105,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 		return err
 	}
 	if live != applied.Mark {
-		return w.escalate(ctx, in.ID, "Not restored: the workload changed after Themis's fix. It stays as it is.")
+		return w.escalate(ctx, in.ID, "Not restored. The workload changed after Themis's fix, so it stays as it is.")
 	}
 
 	switch d.Decision.Outcome {
@@ -122,7 +122,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		a.ID, err = w.Store.InsertAction(ctx, tx, a)
 		if errors.Is(err, store.ErrActiveAction) {
-			return w.escalateTx(ctx, tx, in.ID, "Not restored: another fix is already in progress on this workload. The fix stays in place.")
+			return w.escalateTx(ctx, tx, in.ID, "Not restored. Another fix is already in progress on this workload. The fix stays in place.")
 		}
 		if err != nil {
 			return err

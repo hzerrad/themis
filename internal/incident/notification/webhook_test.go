@@ -156,8 +156,8 @@ func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	notice := escalated(t, s)
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		if err := s.InsertEvidence(t.Context(), tx, notice.IncidentID, "", nil, evidence.Item{
-			ID: "0192f0c1-0000-7000-8000-00000000000b", Template: evidence.TargetEvents, Data: []byte(`{}`), CollectedAt: notice.At,
-			Classification: evidence.ClassificationInternal, Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonFixOrder, Excerpt: "canary-line"}},
+			ID: "0192f0c1-0000-7000-8000-00000000000b", Template: evidence.TargetEvents, Data: []byte(`{"events":[{"reason":"BackOff","object":"Pod/web-1","message":"canary-line"}]}`), CollectedAt: notice.At,
+			Classification: evidence.ClassificationInternal, Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonFixOrder, At: "/events/0/message", Excerpt: "canary-line"}},
 		}); err != nil {
 			return err
 		}
@@ -176,7 +176,8 @@ func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Set model.ceiling to sensitive") {
 		t.Errorf("missing = %v", missing)
 	}
-	if w, _ := inc["evidenceWarning"].(string); !strings.Contains(w, "(target_events)") || strings.Contains(w, "canary-line") {
-		t.Errorf("evidenceWarning = %q, want target_events named and nothing it says", w)
+	want := "Suspicious text in the events (BackOff event on Pod/web-1). The event message is written as an order to make or skip a fix. Read it in Themis before acting on this incident."
+	if w, _ := inc["evidenceWarning"].(string); w != want {
+		t.Errorf("evidenceWarning = %q, want %q", w, want)
 	}
 }

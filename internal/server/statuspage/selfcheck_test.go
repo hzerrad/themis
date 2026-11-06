@@ -162,7 +162,7 @@ func TestChecks_Problems(t *testing.T) {
 		},
 		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
-		}, "Alerts", statuspage.Problem, "Refused: wrong intake token."},
+		}, "Alerts", statuspage.Problem, "Wrong intake token."},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
 		}, "Namespaces", statuspage.Problem, "Not allowed in payments: list pods or read deployments."},
@@ -173,7 +173,7 @@ func TestChecks_Problems(t *testing.T) {
 		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Warn, "No metrics source."},
 		"metrics without history": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes}}
-		}, "Metrics", statuspage.OK, "No history: peak memory and CPU throttling are unknown."},
+		}, "Metrics", statuspage.OK, "No history. Peak memory and CPU throttling are unknown."},
 		"no metrics-server": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: metrics.ErrNotServed}}
 		}, "Metrics", statuspage.Warn, "No metrics source."},
@@ -189,7 +189,7 @@ func TestChecks_Problems(t *testing.T) {
 		}, "Fixes", statuspage.Problem, "Executor unreachable"},
 		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
 		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
-		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "no investigator"},
+		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "No investigator"},
 		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "Port-forward grants admin."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},
 	} {

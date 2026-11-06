@@ -47,15 +47,15 @@ func Evaluate(r capability.Reading, stableFor time.Duration, c Criteria, elapsed
 func Explain(outcome Outcome, r capability.Reading) string {
 	switch outcome {
 	case Resolved:
-		return "Fixed. The workload recovered and held: " + r.Facts
+		return "Fixed. The workload recovered and stayed healthy. " + r.Facts
 	case Contained:
-		return "Partly recovered: " + r.Facts + " Referred to a person."
+		return "Partly recovered. " + r.Facts + " Referred to a person."
 	case Worsened:
-		return "Worse after the fix: " + r.Facts
+		return "Worse after the fix. " + r.Facts
 	case Unchanged:
-		return "The fix didn't help: " + r.Facts
+		return "The fix didn't help. " + r.Facts
 	case Inconclusive:
-		return "Inconclusive: the workload was changed outside Themis while Themis verified the fix. Referred to a person."
+		return "Inconclusive. The workload was changed outside Themis during verification. Referred to a person."
 	default:
 		return string(outcome)
 	}

@@ -197,7 +197,7 @@ func TestExecute_RestoreNotHandedOver_Escalates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if reason := trail[len(trail)-1].Reason; !strings.HasPrefix(reason, "Not restored: ") || !strings.HasSuffix(reason, "The fix stays in place. Referred to a person.") {
+			if reason := trail[len(trail)-1].Reason; !strings.HasPrefix(reason, "Not restored. ") || !strings.HasSuffix(reason, "The fix stays in place. Referred to a person.") {
 				t.Errorf("reason = %q", reason)
 			}
 		})

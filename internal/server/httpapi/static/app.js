@@ -199,7 +199,7 @@ const ACTOR_LABEL = {
 const DECISION_LABEL = { allow: "Allowed by policy", require_approval: "A person must approve", deny: "Refused by policy" };
 const ACTION_LABEL = {
   awaiting_approval: "Waiting for approval", authorized: "Approved", executing: "Applying", succeeded: "Applied",
-  failed: "Not applied: it failed", ambiguous: "Unknown whether it was applied", stale: "Not applied: the workload changed first",
+  failed: "Failed", ambiguous: "Result unknown", stale: "Not applied",
   denied: "Denied", expired: "Approval expired", canceled: "Canceled",
 };
 const OUTCOME_LABEL = {
@@ -210,14 +210,14 @@ const INVESTIGATION_LABEL = { pending: "Waiting to start", leased: "In progress"
 const CAUSE_STATUS = {
   HYPOTHESIS_STATUS_SUPPORTED: "Supported by the evidence", HYPOTHESIS_STATUS_REFUTED: "Ruled out", HYPOTHESIS_STATUS_OPEN: "Open",
 };
-const SUGGESTION_LABEL = { accepted: "Accepted", rejected: "Refused", superseded: "Replaced", deferred: "Waiting: another fix is in progress" };
+const SUGGESTION_LABEL = { accepted: "Accepted", rejected: "Refused", superseded: "Replaced", deferred: "Waiting for another fix" };
 const REJECTION_LABEL = {
-  REJECTION_REASON_TARGET_MISMATCH: "Refused: it names a different workload than the incident's.",
-  REJECTION_REASON_CAPABILITY_NOT_ALLOWED: "Refused: this kind of fix isn't allowed for this incident.",
-  REJECTION_REASON_INVALID_PARAMS: "Refused: its values are invalid.",
-  REJECTION_REASON_UNKNOWN_EVIDENCE: "Refused: it cites evidence Themis didn't collect.",
-  REJECTION_REASON_UNKNOWN_PREDICATE: "Refused: it cites a check that doesn't exist.",
-  REJECTION_REASON_INCIDENT_CLOSED: "Refused: the incident no longer takes suggestions.",
+  REJECTION_REASON_TARGET_MISMATCH: "Refused. It names a different workload than the incident's.",
+  REJECTION_REASON_CAPABILITY_NOT_ALLOWED: "Refused. This kind of fix isn't allowed for this incident.",
+  REJECTION_REASON_INVALID_PARAMS: "Refused. Its values are invalid.",
+  REJECTION_REASON_UNKNOWN_EVIDENCE: "Refused. It cites evidence Themis didn't collect.",
+  REJECTION_REASON_UNKNOWN_PREDICATE: "Refused. It cites a check that didn't run for this incident.",
+  REJECTION_REASON_INCIDENT_CLOSED: "Refused. The incident no longer takes suggestions.",
 };
 
 // Sign-in -----------------------------------------------------------------
@@ -288,7 +288,7 @@ function noAccess() {
   render(h("div", { class: "plate centre" },
     h("h1", {}, "No access"),
     h("p", {}, "Signed in as ", h("b", {}, me.username), ". This account has no role in Themis."),
-    h("p", { class: "quiet" }, "An admin grants access to a person or one of their groups.")));
+    h("p", { class: "quiet" }, "Ask an admin for a role.")));
 }
 
 // password lets someone signed in with an account change its password.
@@ -441,8 +441,7 @@ function alertmanagerSetup() {
   return h("div", { class: "sub" },
     h("h2", {}, "Connect Alertmanager"),
     h("div", { class: "inline" }, field("Alertmanager's namespace", ns)),
-    out,
-    h("p", { class: "quiet small sub" }, "Status records the first crash-loop or out-of-memory alert Themis receives."));
+    out);
 }
 
 // modelSaved says the model was just saved, so Setup says so once.
@@ -521,7 +520,7 @@ async function setup() {
   const tone = { Done: "good", "Action required": "wait" };
   render(
     h("h1", {}, "Setup"),
-    h("p", { class: "lede" }, "A step completes when Themis confirms it. Values set in Helm are read-only here."),
+    h("p", { class: "lede" }, "Values set in Helm are read-only here."),
     steps.map((s, i) => h("section", { class: "plate" },
       h("div", { class: "step-head" },
         h("h2", {}, h("span", { class: "num" }, String(i + 1)), s.title),
@@ -620,7 +619,7 @@ async function list() {
   for (const i of incidents) groups[queueGroup(i)].push(i);
   const n = (k) => groups[k].length;
   const lede = !incidents.length
-    ? ["No incidents on record. One opens when Alertmanager sends an alert about a workload Themis watches. ",
+    ? ["No incidents. One opens when Alertmanager sends an alert about a workload Themis watches. ",
       h("a", { href: "#/status" }, "Status"), " shows whether alerts arrive."]
     : (n("needs") ? plural(n("needs"), "incident needs", "incidents need") + " you. " : "No incident needs you. ")
       + (n("open") ? plural(n("open"), "other is", "others are") + " open." : "");
@@ -660,20 +659,83 @@ function changesTable(changes) {
   ];
 }
 
-// suspicion warns that evidence holds text addressed to Themis, such as
-// instructions or forged tool output. Viewers learn where, not what it says.
-function suspicion(d, approving) {
-  const items = (d.Evidence || []).filter((e) => e.Suspicious && e.Suspicious.length);
-  if (!items.length) return null;
-  const where = items.map((e) => label(EVIDENCE_LABEL, e.Template));
-  const excerpt = items.flatMap((e) => e.Suspicious).map((s) => s.excerpt).find(Boolean);
-  return h("div", { class: "alert", role: "note" },
+// SUSPECT_KIND names each kind of evidence flagged text can be in, and what
+// a check that reads that kind reads.
+const SUSPECT_KIND = {
+  container_logs_tail: { where: "the container logs", reads: "log text" },
+  target_events: { where: "the events", reads: "events" },
+  pod_states: { where: "the pod states", reads: "pod states" },
+  referenced_config: { where: "the referenced config", reads: "the referenced config" },
+  rollout_history: { where: "the rollout history", reads: "the rollout history" },
+};
+// SUSPECT_CHECK flags such text: it reads every kind, to flag it.
+const SUSPECT_CHECK = "evidence_has_instructions";
+
+const lowerFirst = (s) => (/^.[A-Z]/.test(s) ? s : s.charAt(0).toLowerCase() + s.slice(1));
+const and = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(", ") + " and " + xs[xs.length - 1] : xs.join(""));
+
+// flaggedTexts are the texts evidence holds that look written for Themis,
+// each once: rules that flag the same line say it once, the first rule's
+// reason leading, with the longest excerpt. Viewers get no excerpts, so
+// their texts are told apart by where they are.
+function flaggedTexts(d) {
+  const out = [];
+  for (const e of d.Evidence || []) {
+    for (const s of e.Suspicious || []) {
+      const text = String(s.excerpt || "").replace(/^…|…$/g, "");
+      const same = out.find((x) => x.e === e && x.s.at === s.at && (!text || !x.text || x.text.includes(text) || text.includes(x.text)));
+      if (!same) out.push({ e, s, text, excerpt: s.excerpt });
+      else if (text.length > same.text.length) Object.assign(same, { text, excerpt: s.excerpt });
+    }
+  }
+  return out;
+}
+
+// suspect is one flagged text: where it is, the text itself for those who
+// may read it, then what it is, whether the checks read it, and what to do.
+function suspect(d, x, action, noun) {
+  const t = x.e.Template;
+  const kind = SUSPECT_KIND[t] || { where: "the evidence", reads: "this evidence" };
+  const checks = d.Checks || {};
+  const readers = [...new Set((d.Predicates || []).map((p) => p.Name))]
+    .filter((n) => n !== SUSPECT_CHECK && ((checks[n] || {}).reads || []).includes(t));
+  const subject = t === "container_logs_tail" ? "This line"
+    : t === "target_events" && String(x.s.at).endsWith("/message") ? "This event message" : "This text";
+  const what = subject + " " + (x.s.what || "looks written for Themis rather than by the workload") + ".";
+  let effect = "Themis's checks don't read " + kind.reads + ", so it had no effect on them.";
+  if (readers.length) {
+    const topics = readers.slice(0, 3).map((n) => lowerFirst((checks[n] || {}).topic || (checks[n] || {}).true || humanize(n)));
+    if (readers.length > 3) topics.push(plural(readers.length - 3, "other", "others"));
+    effect = "Checks that read " + kind.reads + " may reflect it: " + and(topics) + ".";
+  }
+  const state = d.Incident.state;
+  let todo = "Find out how it got into " + kind.where + ".";
+  if (action && action.State === "awaiting_approval" && can("approver")) {
+    todo = readers.length ? "Approve only after confirming their results in the cluster."
+      : "Approve only if the checks below justify the " + noun + " on their own.";
+  } else if (!action && SUGGESTABLE.includes(state) && can("approver")) {
+    todo = readers.length ? "Confirm their results in the cluster before suggesting a fix."
+      : "Suggest a fix only if the checks below justify it on their own.";
+  } else if (REFERRED.includes(state) && can("responder")) {
+    todo = readers.length ? "Confirm their results in the cluster before acting." : "Base any fix on the checks below and on the cluster.";
+  }
+  return h("div", { class: "alert suspect", role: "note" },
     h("span", { class: "sign", "aria-hidden": "true" }, "!"),
     h("div", {},
-      h("b", {}, where.join(" and ") + (where.length === 1 && !where[0].endsWith("s") ? " contains" : " contain") + " text addressed to Themis"),
-      excerpt ? [": ", h("code", {}, excerpt)] : null, ". ",
-      "It is material, not a finding; the checks do not rely on it.",
-      approving ? " Check the change against the cluster before approving." : ""));
+      h("b", {}, "Suspicious text in " + kind.where),
+      x.excerpt ? h("pre", { class: "quote" }, x.excerpt) : h("p", { class: "quiet small" }, "Responders can read the text."),
+      h("div", { class: "src" }, x.s.origin ? cap(x.s.origin) : [label(EVIDENCE_LABEL, t), " at ", h("code", {}, x.s.at || "/")]),
+      h("p", {}, what + " " + effect + " " + todo)));
+}
+
+// suspicion warns of each text evidence holds that looks written for Themis,
+// such as instructions or forged tool output. Viewers learn where, not what
+// it says. Past three, the rest fold away.
+function suspicion(d, action, noun) {
+  const blocks = flaggedTexts(d).map((x) => suspect(d, x, action, noun));
+  if (!blocks.length) return null;
+  return [blocks.slice(0, 3), blocks.length > 3 ? h("details", { class: "fold sub", "data-key": "suspects" },
+    h("summary", {}, "More suspicious text", h("span", { class: "n" }, blocks.length - 3)), blocks.slice(3)) : null];
 }
 
 // observed is what verifying a change found, such as 2 of 3 pods ready.
@@ -712,7 +774,7 @@ function decision(a, d, ctx, latest, reload) {
     replicas !== undefined ? ["Affects ", h("b", {}, plural(Number(replicas), "pod", "pods")), ". "] : null,
     a.Risk ? ["Risk: ", a.Risk, ". "] : null,
     awaiting && a.ExpiresAt ? ["Approve before ", h("b", {}, when(a.ExpiresAt)), ". "] : null,
-    awaiting ? "Applies exactly this change. Void if " + t.name + " changes before it is applied." : null,
+    awaiting ? "Applies exactly this change, then verifies it. Void if " + t.name + " changes before it is applied." : null,
   ];
   let side;
   if (awaiting && can("approver")) {
@@ -736,8 +798,7 @@ function decision(a, d, ctx, latest, reload) {
       onclick: () => decide("approve", { digest: shown }, approve, cap(fx.noun) + " approved.") }, "Approve the " + fx.noun);
     const deny = h("button", { class: "btn deny", type: "button",
       onclick: () => decide("deny", { reason: reason.value }, deny, cap(fx.noun) + " denied.") }, "Deny the " + fx.noun);
-    side = h("div", { class: "act" }, approve, field("Grounds for denying (optional)", reason), deny,
-      h("p", { class: "fine" }, "Themis applies exactly this change, then verifies it worked."), error);
+    side = h("div", { class: "act" }, approve, field("Reason for denying (optional)", reason), deny, error);
   } else if (awaiting) {
     side = h("div", { class: "act" }, h("p", { class: "quiet" }, "Approving or denying requires the approver role."));
   } else if (gitOps) {
@@ -750,7 +811,7 @@ function decision(a, d, ctx, latest, reload) {
       h("h3", {}, latest ? (gitOps ? "The recommended change" : "The exact change") : cap(fx.short)),
       changesTable(a.Changes),
       h("p", { class: "facts" }, facts),
-      latest ? suspicion(d, awaiting) : null),
+      latest ? suspicion(d, a, fx.noun) : null),
     side);
 }
 
@@ -824,13 +885,13 @@ function findings(d, cited, noun) {
     h("h3", {}, title), items.length ? h("ul", {}, items) : h("p", { class: "empty" }, empty));
   const blind = d.Missing && d.Missing.length ? h("div", { class: "blind" },
     h("b", {}, "Missing evidence"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
-  const weigh = [plural(forFix.length, "finding supports", "findings support") + " the " + noun + ".",
+  const weigh = [plural(forFix.length, "check supports", "checks support") + " the " + noun + ".",
     against.length ? plural(against.length, "is", "are") + " against it." : "None is against it.",
     unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""].filter(Boolean).join(" ");
   return h("section", { class: "findings", "aria-label": "Findings" },
     h("div", { class: "pans" },
-      cited ? pan("for", "Supports the " + noun, forFix, "No finding supports it.") : pan("for", "Found", forFix, "No check came out true."),
-      cited ? pan("against", "Against, or unknown", [...against, ...unknown], "No finding is against it.")
+      cited ? pan("for", "Supports the " + noun, forFix, "No check supports it.") : pan("for", "Found", forFix, "No check came out true."),
+      cited ? pan("against", "Against, or unknown", [...against, ...unknown], "No check is against it.")
         : pan("against", "Unknown, or against", [...against, ...unknown], "Every check has an answer.")),
     cited ? h("p", { class: "weigh" }, weigh) : null,
     blind,
@@ -850,7 +911,7 @@ function sourceRows(p) {
   let claimed = false;
   if (p.LeaseID) {
     row("From", "The investigator");
-    row("Identity", "Verified: it held this incident's investigation.");
+    row("Identity", "Verified. It ran this incident's investigation.");
   } else if (src === "person:setup") {
     row("From", "A person");
     row("Identity", "A person with kubectl access, through port-forward before sign-in was set up. Kubernetes verified the access, not the person.");
@@ -883,10 +944,10 @@ function suggestionText(p, d) {
     return found ? statement(d, found) : statement(d, { Name: c, Value: "true" }) + ": not checked";
   });
   return [
-    p.Rationale ? [h("h3", { class: "sub" }, "Grounds it gave"), h("p", {}, p.Rationale)] : null,
+    p.Rationale ? [h("h3", { class: "sub" }, "Rationale"), h("p", {}, p.Rationale)] : null,
     p.ExpectedEffect ? [h("h3", {}, "Expected effect"), h("p", {}, p.ExpectedEffect)] : null,
     p.Message ? [h("h3", {}, "Message"), h("p", {}, p.Message)] : null,
-    cited.length ? [h("h3", {}, "Checks it cites, with Themis's findings"), h("ul", {}, cited.map((c) => h("li", {}, c)))] : null,
+    cited.length ? [h("h3", {}, "Checks it cites"), h("ul", {}, cited.map((c) => h("li", {}, c)))] : null,
     p.Notes ? h("details", { class: "minor", "data-key": "notes-" + p.ID }, h("summary", {}, "What it says it looked at"), h("pre", {}, p.Notes)) : null,
   ];
 }
@@ -895,7 +956,7 @@ function investigatorNote(inv, p, d) {
   if (!inv || !(inv.Summary || (inv.Hypotheses || []).length || inv.Failure || p)) return null;
   const causes = inv.Hypotheses || [];
   return h("details", { class: "fold", "data-key": "note" },
-    h("summary", {}, "The investigator's note", h("span", { class: "claim" }, "Written by the model, not checked by Themis")),
+    h("summary", {}, "The investigator's note", h("span", { class: "claim" }, "Written by the investigator's model")),
     inv.Failure ? h("p", { class: "fix" }, "Investigation failed. " + inv.Failure) : null,
     inv.Summary ? h("p", {}, inv.Summary) : null,
     p ? suggestionText(p, d) : null,
@@ -922,15 +983,15 @@ function evidenceFold(d) {
   if (!items.length) return null;
   return h("details", { class: "fold", "data-key": "evidence" },
     h("summary", {}, "Evidence", h("span", { class: "n" }, items.length)),
-    h("p", { class: "quiet small" }, "Material read from the cluster. It is not a finding until a check weighs it."),
     items.map((e) => h("details", { class: "item", "data-key": "evidence-" + e.ID },
       h("summary", {}, h("b", {}, label(EVIDENCE_LABEL, e.Template)), " ",
         h("span", { class: "quiet small" }, [when(e.CollectedAt),
           e.Classification === "sensitive" ? "may hold sensitive data" : "",
           e.Truncated ? "shortened" : "", e.Redactions ? plural(e.Redactions, "secret", "secrets") + " hidden" : "",
-          e.Suspicious ? "contains text addressed to Themis" : ""].filter(Boolean).join(" · "))),
+          e.Suspicious ? "suspicious text" : ""].filter(Boolean).join(" · "))),
       e.Suspicious ? h("ul", {}, e.Suspicious.map((s) => h("li", {},
-        cap(s.reason), ", at ", h("code", {}, s.at || "/"), s.excerpt ? [": ", h("code", {}, s.excerpt)] : null))) : null,
+        "Suspicious text at ", h("code", {}, s.at || "/"), s.origin ? " (" + s.origin + ")" : "",
+        ". The text " + (s.what || "looks written for Themis") + "."))) : null,
       e.Data === undefined
         ? h("p", { class: "quiet" }, "Readable by responders only.")
         : h("pre", {}, JSON.stringify(e.Data, null, 2)))));
@@ -1008,7 +1069,7 @@ function suggestForm(inc, evidence, reload) {
     e.preventDefault();
     error.textContent = "";
     if (!why.value.trim()) {
-      error.textContent = "Grounds are required.";
+      error.textContent = "A reason is required.";
       return;
     }
     const body = {
@@ -1024,7 +1085,7 @@ function suggestForm(inc, evidence, reload) {
       const r = await api("/v1/incidents/" + encodeURIComponent(inc.id) + "/proposals", { method: "POST", body: JSON.stringify(body) });
       // A refusal ends its status name with _REJECTED.
       if (r && String(r.status).endsWith("_REJECTED")) {
-        error.textContent = r.message || "Refused.";
+        error.textContent = REJECTION_LABEL[r.rejectionReason] || r.message || "Refused.";
         return;
       }
       flash = "Rollback suggested. Checking it against the cluster and the policy.";
@@ -1038,10 +1099,10 @@ function suggestForm(inc, evidence, reload) {
     h("summary", {}, waiting ? "Suggest a fix" : "Suggest a fix while Themis investigates"),
     h("form", { class: "form", onsubmit: submit },
       field("Roll back to", revision),
-      field("Grounds", why),
+      field("Reason", why),
       field("Expected effect", effect),
       h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Suggest the rollback")),
-      h("p", { class: "quiet small" }, "Checked against the cluster and the policy, as Themis checks its own. Cites the evidence on this page."),
+      h("p", { class: "quiet small" }, "Cites the evidence on this page."),
       error));
 }
 
@@ -1071,10 +1132,9 @@ function headline(d, ctx) {
     return ["Collecting and weighing evidence.", got.length ? "Collected so far: " + got.join(", ") + "." : "Nothing collected yet."];
   }
   if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + fx.short.toLowerCase() + "." : reason];
-  if (s === "awaiting_suggestion") {
-    return ["Waiting for a suggested fix.", "No investigator is installed. A fix suggested by a person or a tool such as HolmesGPT is checked against the cluster and the policy."];
-  }
-  if (s === "inconclusive") return [d.Headline || "No fix proposed.", "A fix suggested by a person or a tool is checked against the cluster and the policy."];
+  const suggest = can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
+  if (s === "awaiting_suggestion") return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
+  if (s === "inconclusive") return [d.Headline || "No fix proposed.", suggest];
   if ((s === "authorized" || s === "executing") && fx) {
     const approved = ts.filter((t) => t.To === "authorized").pop();
     return [fx.doing, approved ? approved.Reason : reason];
@@ -1143,7 +1203,7 @@ async function detail(id) {
     inc.supersededBy ? h("p", { class: "note" }, "The workload changed outside Themis and still fails. A newer incident covers it as it is now: ",
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
 
-    action ? decision(action, d, ctx, true, reload) : suspicion(d, false),
+    action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
     SUGGESTABLE.includes(inc.state) && can("approver") ? h("div", { class: "more" }, suggestForm(inc, d.Evidence || [], reload)) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix"),
@@ -1154,7 +1214,7 @@ async function detail(id) {
         actions.slice(0, -1).reverse().map((a) => decision(a, d, ctx, false, reload))) : null,
       investigatorNote(inv, source && source.LeaseID ? source : null, d),
       fromPerson ? h("details", { class: "fold", "data-key": "suggestion" },
-        h("summary", {}, "The suggested fix", h("span", { class: "claim" }, "Written by the suggester, not checked by Themis")),
+        h("summary", {}, "The suggested fix", h("span", { class: "claim" }, "Written by the suggester")),
         h("dl", { class: "tech" }, sourceRows(fromPerson)), suggestionText(fromPerson, d)) : null,
       others.length ? h("details", { class: "fold", "data-key": "others" },
         h("summary", {}, "Other suggestions", h("span", { class: "n" }, others.length)),

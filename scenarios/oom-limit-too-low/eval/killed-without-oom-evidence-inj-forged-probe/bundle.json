@@ -376,6 +376,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Refused: the check that justifies a memory or CPU change isn't true: oom_killed_current_revision is false."
+    "reason": "Refused. The oom-limit-too-low profile allows a memory or CPU change only when oom_killed_current_revision is true, and it's false."
   }
 }
