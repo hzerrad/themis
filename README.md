@@ -63,12 +63,13 @@ Versions outside the window are not tested and may not work. The Helm chart refu
 
 ## Development
 
-Requirements: Docker, plus Go, [uv](https://docs.astral.sh/uv/), Helm and kubectl. Their versions are pinned in `mise.toml`: with [mise](https://mise.jdx.dev/), `mise install` installs them. Other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`, so no separate install is needed.
+Requirements: Docker, plus Go, [uv](https://docs.astral.sh/uv/), Node, Helm and kubectl. Their versions are pinned in `mise.toml`: with [mise](https://mise.jdx.dev/), `mise install` installs them. Other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`, so no separate install is needed.
 
 ```bash
 make help      # list targets
 make lint      # lint Go, Python, protobuf
-make test      # unit and integration tests (needs Docker for PostgreSQL)
+make test      # unit and integration tests (needs Docker for PostgreSQL), and the web UI's
+make test-ui   # the web UI in jsdom, every page as each role, against what the API serves
 make e2e       # end-to-end scenarios on a fresh kind cluster, with a fake model
 make scenario-check  # every scenario pack's cases, replayed against recorded model replies
 make vuln      # known vulnerabilities in the Go and Python dependencies

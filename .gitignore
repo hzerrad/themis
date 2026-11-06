@@ -21,6 +21,7 @@ __pycache__/
 /web/node_modules/
 /web/dist/
 *.tsbuildinfo
+/test/ui/node_modules/
 
 # Helm
 /deploy/helm/*/charts/
