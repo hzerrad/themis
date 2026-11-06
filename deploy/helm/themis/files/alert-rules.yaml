@@ -17,11 +17,14 @@ groups:
     rules:
       # A container whose last end was an OOM kill, as the pod's status says
       # and Themis's checks read it, and that restarted in the last 10 minutes.
+      # The minute's wait lets the pod's status and events settle: at the
+      # first kill, the checks can't yet say when the failure started.
       - alert: KubePodOOMKilled
         expr: |-
           kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
           and on (namespace, pod, container)
           changes(kube_pod_container_status_restarts_total[10m]) > 0
+        for: 1m
         labels:
           severity: warning
         annotations:
