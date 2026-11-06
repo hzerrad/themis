@@ -118,8 +118,8 @@ type detailView struct {
 	Transitions []store.Transition
 	Evidence    []evidenceView
 	Predicates  []check.Result
-	// Checks describe each check by name, in plain words.
-	Checks map[string]string
+	// Checks say in plain words what each check, by name, finds.
+	Checks map[string]checkWords
 	// Causes describe each root cause the investigation may name, by name,
 	// in its pack's words.
 	Causes        map[string]string
@@ -136,6 +136,16 @@ type detailView struct {
 	// EvidenceWarning says that some evidence looks like instructions or
 	// forged tool output, for whoever approves a fix.
 	EvidenceWarning string `json:",omitempty"`
+}
+
+// checkWords are what a check finds in each answer, in its pack's words.
+type checkWords struct {
+	// True is what it finds when true.
+	True string `json:"true"`
+	// False is what it finds when false; empty when the pack doesn't say.
+	False string `json:"false,omitempty"`
+	// Topic names what it is about, for saying it is unknown.
+	Topic string `json:"topic,omitempty"`
 }
 
 func viewAction(a store.Action, fixes capability.Registry) actionView {

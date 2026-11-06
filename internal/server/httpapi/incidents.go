@@ -44,9 +44,9 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	d := detailView{Incident: viewIncident(in), Checks: map[string]string{}, Causes: map[string]string{}}
+	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}}
 	for _, c := range a.CheckList {
-		d.Checks[c.Name] = c.Description
+		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic}
 	}
 	for _, c := range a.RootCauses.For(in.Profiles()...) {
 		d.Causes[c.Name] = c.Description

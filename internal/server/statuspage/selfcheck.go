@@ -19,7 +19,8 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// State is how a part of the install is doing.
+// State is how a part of the install is doing. People read OK as
+// Operational, Warn as Action required and Problem as Failing.
 type State string
 
 const (
@@ -32,15 +33,17 @@ const (
 	Off State = "off"
 )
 
-// Check is one part of the install, said plainly.
+// Check is one part of the install: a short finding, and the remedy once.
 type Check struct {
 	Name    string `json:"name"`
 	State   State  `json:"state"`
 	Summary string `json:"summary"`
-	// Fix says what to do when the state isn't OK.
+	// Fix is the remedy, as an instruction; empty when there is nothing to do.
 	Fix string `json:"fix,omitempty"`
-	// At is when the part was last heard from, if that's what it rests on.
-	At *time.Time `json:"at,omitempty"`
+	// At is when the part was last heard from, if that's what it rests on,
+	// and Since names that moment, such as "Last request".
+	At    *time.Time `json:"at,omitempty"`
+	Since string     `json:"since,omitempty"`
 }
 
 // Store is what the checks read from the database.
@@ -96,12 +99,12 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 	defer cancel()
 	if err := c.Store.Ping(ctx); err != nil {
 		return []Check{{
-			Name: "Database", State: Problem, Summary: "Themis can't reach its database: " + err.Error() + ".",
-			Fix: "Check the database is running and that DATABASE_URL points at it. Nothing else can be checked until it answers.",
+			Name: "Database", State: Problem, Summary: "Unreachable: " + err.Error() + ". The other parts are not checked until it answers.",
+			Fix: "Check that the database is running and that DATABASE_URL points at it.",
 		}}
 	}
 	return []Check{
-		{Name: "Database", State: OK, Summary: "Themis's database answers."},
+		{Name: "Database", State: OK, Summary: "Reachable."},
 		c.investigator(ctx),
 		c.model(ctx),
 		c.alerts(ctx),
@@ -115,51 +118,54 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 func (c *Checker) investigator(ctx context.Context) Check {
 	ch := Check{Name: "Investigator"}
 	if c.NoInvestigator {
-		ch.State, ch.Summary = Off, "None is installed: each incident waits for a fix suggested by a person or a tool outside Themis, such as HolmesGPT."
-		ch.Fix = "To have Themis diagnose incidents itself, install the investigator with a model: model.enabled=true and the model's address."
+		ch.State, ch.Summary = Off, "Not installed. Incidents wait for a fix suggested by a person or an outside tool, such as HolmesGPT."
+		ch.Fix = installInvestigator
 		return ch
 	}
 	h, err := c.Store.LastHeartbeat(ctx, store.HeartbeatInvestigator)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		ch.State, ch.Summary = Problem, "The investigator hasn't asked Themis for work yet."
-		ch.Fix = "Check that the themis-intelligence pod is running, and read its logs: it should connect to the core within seconds of starting."
+		ch.State, ch.Summary = Problem, "Not connected. No request for work yet."
+		ch.Fix = "Check that the themis-intelligence pod is running, and read its logs."
 	case err != nil:
 		return failed(ch, err)
 	case c.now().Sub(h.SeenAt) > investigatorQuiet:
-		ch.State, ch.Summary, ch.At = Problem, "The investigator has stopped asking Themis for work.", &h.SeenAt
+		ch.State, ch.Summary, ch.At, ch.Since = Problem, "Disconnected.", &h.SeenAt, "Last request"
 		ch.Fix = "Check that the themis-intelligence pod is running, and read its logs."
 	default:
-		ch.State, ch.Summary, ch.At = OK, "The investigator is asking Themis for work.", &h.SeenAt
+		ch.State, ch.Summary, ch.At, ch.Since = OK, "Connected.", &h.SeenAt, "Last request"
 	}
 	return ch
 }
 
+// installInvestigator is the remedy when no investigator is installed.
+const installInvestigator = "Set model.enabled=true and the model's address to have Themis investigate."
+
 // modelFixes say what to do about each way the model can fail.
 var modelFixes = map[string]struct{ summary, fix string }{
 	"model_unavailable": {
-		"The model couldn't be reached during the last investigation.",
-		"Check the model's address (model.baseURL), its key, and that the investigator may reach it: the chart's model.egressCIDR must include the model's address.",
+		"Unreachable in the last investigation.",
+		"Check model.baseURL and the API key, and that model.egressCIDR includes the model's address.",
 	},
 	"invalid_model_output": {
-		"The model's answers weren't in the format Themis asks for during the last investigation.",
-		"OpenAI's models need model.schemaDialect=openai-strict. Otherwise the model may be too small to follow Themis's reply format; try a larger one.",
+		"Answers in the last investigation didn't follow Themis's reply format.",
+		"For OpenAI models, set model.schemaDialect=openai-strict. For others, use a larger model.",
 	},
 	"deadline_exceeded": {
-		"The model was too slow to finish the last investigation in time.",
+		"Too slow: the last investigation ran out of time.",
 		"Use a faster model, or one closer to the cluster.",
 	},
 	"stopped_responding": {
-		"The investigator stopped responding during the last investigation.",
-		"Read the themis-intelligence pod's logs, and check it isn't being restarted, for example for running out of memory.",
+		"The investigator stopped responding in the last investigation.",
+		"Read the themis-intelligence pod's logs, and check whether it restarts, such as for running out of memory.",
 	},
 }
 
 func (c *Checker) model(ctx context.Context) Check {
 	ch := Check{Name: "Model"}
 	if c.NoInvestigator {
-		ch.State, ch.Summary = Off, "None: without an investigator, Themis asks no model."
-		ch.Fix = "The model comes with the investigator: model.enabled=true and the model's address."
+		ch.State, ch.Summary = Off, "Not used: no investigator is installed."
+		ch.Fix = installInvestigator
 		return ch
 	}
 	if c.Model != nil {
@@ -168,30 +174,31 @@ func (c *Checker) model(ctx context.Context) Check {
 			return failed(ch, err)
 		}
 		if !v.Complete {
-			ch.State, ch.Summary = Problem, "No model is set, so incidents aren't investigated."
-			ch.Fix = "Set the model's address and name on the Setup page, or in the chart's model values."
+			ch.State, ch.Summary = Problem, "Not set. Incidents are not investigated."
+			ch.Fix = "Set the model's address and name in Setup, or in the chart's model values."
 			return ch
 		}
 	}
 	o, err := c.Store.LastInvestigationOutcome(ctx)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		ch.State, ch.Summary = Waiting, "Not used yet. Themis asks the model when an incident needs a diagnosis."
+		ch.State, ch.Summary = Waiting, "Not used yet."
 		return ch
 	case err != nil:
 		return failed(ch, err)
 	}
-	ch.At = &o.At
+	ch.At, ch.Since = &o.At, "Last investigation"
 	if o.Completed {
-		ch.State, ch.Summary = OK, "The model answered the last investigation."
+		ch.State, ch.Summary, ch.Since = OK, "Answering.", "Last answer"
 		if o.Model != "" {
-			ch.Summary = fmt.Sprintf("The model, %s, answered the last investigation.", o.Model)
+			// The model's name as written: which model answers is the finding.
+			ch.Summary = o.Model + "."
 		}
 		return ch
 	}
 	if o.FailureKind == "budget_exhausted" {
-		ch.State, ch.Summary = Warn, "The model answered, but the last investigation used up its token budget before it decided."
-		ch.Fix = "If this happens often, raise the incident profile's token budget."
+		ch.State, ch.Summary = Warn, "The last investigation used its token budget before deciding."
+		ch.Fix = "Raise the incident profile's token budget if this recurs."
 		return ch
 	}
 	if f, ok := modelFixes[o.FailureKind]; ok {
@@ -199,7 +206,7 @@ func (c *Checker) model(ctx context.Context) Check {
 		return ch
 	}
 	ch.State, ch.Summary = Problem, strings.TrimSuffix(o.Failure, ".")+"."
-	ch.Fix = "Read the themis-intelligence pod's logs for the details."
+	ch.Fix = "Read the themis-intelligence pod's logs."
 	return ch
 }
 
@@ -214,18 +221,18 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		return failed(ch, rerr)
 	}
 	if rerr == nil && (err != nil || refused.SeenAt.After(got.SeenAt)) {
-		ch.State, ch.Summary, ch.At = Problem, "Alerts refused: they carry the wrong intake token.", &refused.SeenAt
-		ch.Fix = "Give Alertmanager's Themis receiver the intake token from the themis-tokens Secret (key intake)."
+		ch.State, ch.Summary, ch.At, ch.Since = Problem, "Refused: wrong intake token.", &refused.SeenAt, "Last refused"
+		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
 	if err != nil {
-		ch.State, ch.Summary = Waiting, "No alert has arrived from Alertmanager yet."
-		ch.Fix = "Add a webhook receiver to Alertmanager for Themis's /v1/intake/alertmanager, with the intake token from the themis-tokens Secret, and route crash-loop and out-of-memory alerts to it."
+		ch.State, ch.Summary = Waiting, "No alert received."
+		ch.Fix = "Add an Alertmanager webhook receiver for Themis's /v1/intake/alertmanager, with the intake token from the themis-tokens Secret. Route crash-loop and out-of-memory alerts to it."
 		return ch
 	}
-	ch.State, ch.Summary, ch.At = OK, "Alertmanager is sending alerts.", &got.SeenAt
+	ch.State, ch.Summary, ch.At, ch.Since = OK, "Received.", &got.SeenAt, "Last alert"
 	if got.Detail != "" {
-		ch.Summary = fmt.Sprintf("Alertmanager is sending alerts, through its %q receiver.", got.Detail)
+		ch.Summary = fmt.Sprintf("Received through the %q receiver.", got.Detail)
 	}
 	return ch
 }
@@ -249,7 +256,7 @@ func (c *Checker) namespaces(ctx context.Context) Check {
 	ch := Check{Name: "Namespaces"}
 	enrolled := c.Config.Current().EnrolledNamespaces
 	if len(enrolled) == 0 {
-		ch.State, ch.Summary, ch.Fix = Problem, "Themis watches no namespaces.", "List the namespaces to watch in enrolledNamespaces."
+		ch.State, ch.Summary, ch.Fix = Problem, "None watched.", "List the namespaces to watch in enrolledNamespaces."
 		return ch
 	}
 	var problems, warnings []string
@@ -273,21 +280,21 @@ func (c *Checker) namespaces(ctx context.Context) Check {
 			}
 		}
 		if len(missing) > 0 {
-			problems = append(problems, fmt.Sprintf("in %s, Themis can't %s", ns, join(missing, "or")))
+			problems = append(problems, fmt.Sprintf("Not allowed in %s: %s.", ns, join(missing, "or")))
 		}
 		if len(optional) > 0 {
-			warnings = append(warnings, fmt.Sprintf("in %s, Themis can't %s", ns, join(optional, "or")))
+			warnings = append(warnings, fmt.Sprintf("Not allowed in %s: %s.", ns, join(optional, "or")))
 		}
 	}
 	switch {
 	case len(problems) > 0:
-		ch.State, ch.Summary = Problem, upper(strings.Join(append(problems, warnings...), "; "))+"."
-		ch.Fix = "Make sure each namespace exists, then upgrade the chart so it grants Themis access there. If you manage access yourself, give the core's service account get and list on pods, deployments and replica sets."
+		ch.State, ch.Summary = Problem, strings.Join(append(problems, warnings...), " ")
+		ch.Fix = "Check that each namespace exists, then upgrade the chart to grant access there. Where access is managed outside the chart, grant the core's service account get and list on pods, deployments and replica sets."
 	case len(warnings) > 0:
-		ch.State, ch.Summary = Warn, upper(strings.Join(warnings, "; "))+". Investigations there will see less."
-		ch.Fix = "If that isn't on purpose, grant the core's service account get on pods/log and list on events in those namespaces."
+		ch.State, ch.Summary = Warn, strings.Join(warnings, " ")+" Investigations there see less evidence."
+		ch.Fix = "Grant the core's service account get on pods/log and list on events there, unless this is intended."
 	default:
-		ch.State, ch.Summary = OK, fmt.Sprintf("Themis can read %s.", join(enrolled, "and"))
+		ch.State, ch.Summary = OK, "Readable: "+strings.Join(enrolled, ", ")+"."
 	}
 	return ch
 }
@@ -303,40 +310,47 @@ func (c *Checker) metrics(ctx context.Context) Check {
 		cancel()
 	}
 	if len(health) == 0 {
-		ch.State, ch.Summary = Off, "No metrics source is set up, so investigations can't see how much memory and CPU containers use."
-		ch.Fix = "Set a Prometheus address (metrics.prometheus.address), or turn the Kubernetes metrics API back on (metrics.kubernetes)."
+		ch.State, ch.Summary = Warn, "No metrics source."
+		ch.Fix = "Set metrics.prometheus.address, or turn the Kubernetes metrics API back on with metrics.kubernetes."
 		return ch
 	}
 	var using, broken []string
 	history, promBroken := false, false
 	for _, h := range health {
-		if h.Err != nil {
+		switch {
+		case errors.Is(h.Err, metrics.ErrNotServed):
+			// Not a source in this cluster, rather than one that fails.
+		case h.Err != nil:
 			broken = append(broken, upper(strings.TrimSuffix(h.Err.Error(), "."))+".")
 			promBroken = promBroken || h.History
-			continue
+		default:
+			using = append(using, c.sourceText(h.Source))
+			history = history || h.History
 		}
-		using = append(using, c.sourceText(h.Source))
-		history = history || h.History
 	}
 	var says []string
 	if len(using) > 0 {
-		says = append(says, fmt.Sprintf("Memory and CPU use come from %s.", join(using, "and")))
-		if !history {
-			says = append(says, "No peak memory or CPU throttling data: the Kubernetes metrics API keeps no history. Set a Prometheus address (metrics.prometheus.address) to see them.")
-		}
+		says = append(says, fmt.Sprintf("Read from %s.", join(using, "and")))
 	}
 	says = append(says, broken...)
-	ch.Summary = strings.Join(says, " ")
 	switch {
 	case promBroken:
 		ch.State = Problem
-		ch.Fix = "Check metrics.prometheus.address, its token and TLS settings, and that Themis's pod may reach it."
+		ch.Fix = "Check metrics.prometheus.address, its token and TLS settings, and that Themis's pod can reach it."
+	case len(using) == 0 && len(broken) == 0:
+		ch.State, says = Warn, []string{"No metrics source."}
+		ch.Fix = "Install metrics-server, or set metrics.prometheus.address."
 	case len(using) == 0:
 		ch.State = Warn
-		ch.Fix = "Install metrics-server, or set a Prometheus address (metrics.prometheus.address)."
+		ch.Fix = "Install metrics-server, or set metrics.prometheus.address."
+	case !history:
+		ch.State = OK
+		says = append(says, "No history: peak memory and CPU throttling are unknown.")
+		ch.Fix = "Set metrics.prometheus.address to read them."
 	default:
 		ch.State = OK
 	}
+	ch.Summary = strings.Join(says, " ")
 	return ch
 }
 
@@ -359,8 +373,8 @@ func (c *Checker) sourceText(name string) string {
 func (c *Checker) executor(ctx context.Context) Check {
 	ch := Check{Name: "Fixes"}
 	if c.Executor == "" {
-		ch.State, ch.Summary = Off, "Off: Themis diagnoses and suggests fixes, but never applies them."
-		ch.Fix = "To let Themis apply fixes a person approves, install the executor with executor.enabled=true."
+		ch.State, ch.Summary = Off, "Off. Fixes are proposed, never applied."
+		ch.Fix = "Set executor.enabled=true to apply fixes a person approves."
 		return ch
 	}
 	dctx, cancel := context.WithTimeout(ctx, checkTimeout)
@@ -370,11 +384,11 @@ func (c *Checker) executor(ctx context.Context) Check {
 		dial = dialTCP
 	}
 	if err := dial(dctx, c.Executor); err != nil {
-		ch.State, ch.Summary = Problem, fmt.Sprintf("Themis can't reach the executor at %s, so approved fixes can't be applied.", c.Executor)
+		ch.State, ch.Summary = Problem, fmt.Sprintf("Executor unreachable at %s. Approved fixes can't be applied.", c.Executor)
 		ch.Fix = "Check that the themis-executor pod is running and ready."
 		return ch
 	}
-	ch.State, ch.Summary = OK, "On: Themis applies fixes after a person approves them."
+	ch.State, ch.Summary = OK, "Enabled. Applied only after a person approves."
 	return ch
 }
 
@@ -398,27 +412,27 @@ func (c *Checker) signIn(ctx context.Context) Check {
 	}
 	var ways []string
 	if c.OIDC {
-		ways = append(ways, "through your identity provider")
+		ways = append(ways, "the identity provider")
 	}
 	if accounts {
-		ways = append(ways, "with Themis accounts")
+		ways = append(ways, "Themis accounts")
 	}
 	switch {
 	case !finished:
-		ch.State, ch.Summary = Warn, "Setup isn't finished: anyone who can kubectl port-forward to Themis is an admin."
-		ch.Fix = "Create an admin account on the Accounts page and sign in with it, or sign in as an admin through your identity provider."
+		ch.State, ch.Summary = Warn, "Port-forward grants admin."
+		ch.Fix = "Create an admin account and sign in with it, or configure the identity provider."
 	case len(ways) == 0:
 		ch.State, ch.Summary = Warn, "Only the break-glass token signs in."
-		ch.Fix = "Create accounts on the Accounts page, or set up your identity provider, so people sign in as themselves."
+		ch.Fix = "Create accounts, or configure the identity provider."
 	default:
-		ch.State, ch.Summary = OK, "People sign in "+strings.Join(ways, " and ")+"."
+		ch.State, ch.Summary = OK, "Through "+strings.Join(ways, " and ")+"."
 	}
 	return ch
 }
 
 func failed(ch Check, err error) Check {
-	ch.State, ch.Summary = Problem, "Themis couldn't check this: "+err.Error()+"."
-	ch.Fix = "Try again shortly. If it persists, the core's logs have the details."
+	ch.State, ch.Summary = Problem, "Not checked: "+err.Error()+"."
+	ch.Fix = "Check again. If this recurs, read the core's logs."
 	return ch
 }
 

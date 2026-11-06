@@ -9,6 +9,8 @@
 - name: rollout_recent
   version: "1"
   description: A rollout happened recently
+  topic: Recent rollout
+  whenFalse: No recent rollout
   reads: [rollout_history]
   answers:
     - when: rollout_at == null
@@ -26,6 +28,8 @@
 - name: gitops_managed
   version: "1"
   description: Managed by GitOps (Argo CD or Flux)
+  topic: GitOps management
+  whenFalse: Not managed by Argo CD or Flux
   reads: [rollout_history]
   let:
     markers: rollout_history.deployment.ownershipMarkers.map(k, k).sort()
@@ -51,6 +55,8 @@
 - name: evidence_has_instructions
   version: "1"
   description: Some evidence contains text that looks like instructions or forged tool output
+  topic: Text addressed to Themis
+  whenFalse: No evidence contains text that looks like instructions or forged tool output
   reads: [target_events, container_logs_tail, referenced_config, pod_states]
   answers:
     - when: size(suspicious_evidence) > 0

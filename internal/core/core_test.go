@@ -274,9 +274,9 @@ api:
 	// The status page now says alerts arrive, through which receiver, that
 	// no model is set, and that the configured executor can't be reached.
 	if code, body := get("http://" + o.SetupAddr + "/v1/status"); code != http.StatusOK ||
-		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through its \"themis\" receiver`) ||
-		!strings.Contains(body, `"name":"Model","state":"problem","summary":"No model is set`) ||
-		!strings.Contains(body, "can't reach the executor at "+executorAddr) {
+		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through the \"themis\" receiver`) ||
+		!strings.Contains(body, `"name":"Model","state":"problem","summary":"Not set.`) ||
+		!strings.Contains(body, "Executor unreachable at "+executorAddr) {
 		t.Errorf("/v1/status = %d %s", code, body)
 	}
 

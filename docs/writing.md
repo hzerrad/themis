@@ -39,6 +39,9 @@ A judge's manner, not a courtroom costume. Use a legal word only when it is the 
 | Referred to a person | Themis hands the incident over | escalated, needs a human |
 | Closed, no change | Nothing was applied | closed without acting, nothing changed |
 | Recommended | A change Themis may not apply itself (GitOps) | suggested |
+| Operational | A part of the install works (Status) | working, OK, healthy |
+| Action required | A part of the install needs a change by a person (Status) | needs attention, warning |
+| Failing | A part of the install doesn't work (Status) | not working, broken, down |
 
 ## Words
 
@@ -67,4 +70,7 @@ A judge's manner, not a courtroom costume. Use a legal word only when it is the 
 | Some evidence contains text that looks like instructions to Themis. | Some logs contain text addressed to Themis. It is material, not a finding; the checks do not rely on it. |
 | Something it depends on is failing | A dependency is failing |
 | Already connected Alertmanager? This step shows done when the first alert arrives. | Done when Themis receives its first alert. |
+| Managed by GitOps (Argo CD or Flux): No | ✓ Not managed by Argo CD or Flux |
+| A metrics source says how much memory the containers used at their peak — Unknown | ? Peak memory use: unknown — no container memory |
+| Metrics: The Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address. Fix: Install metrics-server, or set a Prometheus address. | Metrics · Action required · No metrics source. Install metrics-server, or set metrics.prometheus.address. |
 | No incidents yet. | No incidents on record. One opens when Alertmanager sends an alert about a workload Themis watches. |

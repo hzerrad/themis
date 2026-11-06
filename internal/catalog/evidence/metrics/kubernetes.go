@@ -23,6 +23,10 @@ const (
 	notMeasured = "the Kubernetes metrics API has no figures for these pods yet"
 )
 
+// ErrNotServed is why the metrics API can't answer when the cluster doesn't
+// serve it, as when metrics-server isn't installed.
+var ErrNotServed = errors.New(notServed)
+
 // metricsAPI reads the metrics API (metrics.k8s.io), which metrics-server
 // serves: what each container uses now, and nothing older.
 type metricsAPI struct {
@@ -87,7 +91,7 @@ func (k metricsAPI) probe(ctx context.Context) error {
 	gv := metricsv1beta1.SchemeGroupVersion.String()
 	resources, err := k.client.Discovery().ServerResourcesForGroupVersionWithContext(ctx, gv)
 	if apierrors.IsNotFound(err) || (err == nil && !slices.ContainsFunc(resources.APIResources, func(r metav1.APIResource) bool { return r.Name == "pods" })) {
-		return errors.New(notServed)
+		return ErrNotServed
 	}
 	return err
 }

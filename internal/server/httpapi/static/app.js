@@ -107,12 +107,12 @@ function moment(t) {
   const d = new Date(t);
   return h("time", { datetime: d.toISOString(), title: when(t) }, sameDay(d, new Date()) ? CLOCK.format(d) : DAY.format(d));
 }
-// ago says how long ago t was.
+// ago says how long ago t was, compactly: 4 s ago, 77 min ago.
 function ago(t) {
   const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
-  if (90 > s) return plural(s, "second", "seconds") + " ago";
-  if (90 * 60 > s) return plural(Math.round(s / 60), "minute", "minutes") + " ago";
-  if (36 * 3600 > s) return plural(Math.round(s / 3600), "hour", "hours") + " ago";
+  if (90 > s) return s + " s ago";
+  if (90 * 60 > s) return Math.round(s / 60) + " min ago";
+  if (36 * 3600 > s) return Math.round(s / 3600) + " h ago";
   return "on " + when(t);
 }
 
@@ -183,7 +183,9 @@ function causeText(name, description) {
   return sentence(description || name.replaceAll("_", " "));
 }
 
-const ANSWER = { true: "Yes", false: "No", unknown: "Unknown" };
+// A finding's mark says what it means for the decision.
+const MARK = { for: "✓", against: "✕", unknown: "?", found: "✓" };
+const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", found: "Found" };
 // AGAINST_WHEN_TRUE are checks whose finding, when true, weighs against a fix.
 const AGAINST_WHEN_TRUE = ["gitops_managed", "config_changed_before_failure", "oom_without_recent_rollout", "evidence_has_instructions"];
 const EVIDENCE_LABEL = {
@@ -201,8 +203,8 @@ const ACTION_LABEL = {
   denied: "Denied", expired: "Approval expired", canceled: "Canceled",
 };
 const OUTCOME_LABEL = {
-  resolved: "It worked", contained: "It helped, not fully", unchanged: "It didn't help",
-  worsened: "It made things worse", inconclusive: "Undetermined",
+  resolved: "Worked", contained: "Partly recovered", unchanged: "Didn't help",
+  worsened: "Made it worse", inconclusive: "Undetermined",
 };
 const INVESTIGATION_LABEL = { pending: "Waiting to start", leased: "In progress", completed: "Finished", failed: "Failed" };
 const CAUSE_STATUS = {
@@ -261,15 +263,15 @@ async function login() {
   };
   const breakGlass = h("details", { class: "minor" }, h("summary", {}, "Use the break-glass token"),
     h("form", { class: "form", onsubmit: submit },
-      h("p", { class: "quiet small" }, "For scripts, and for when sign-in fails. Kept for this browser tab only."),
+      h("p", { class: "quiet small" }, "For scripts and failed sign-ins. Kept for this browser tab only."),
       field("Break-glass token", input),
       h("div", {}, h("button", { class: "btn", type: "submit" }, "Continue"))));
   if (!methods.oidc && !methods.password) {
     render(h("div", { class: "plate centre" },
       h("h1", {}, "Sign-in is not set up"),
-      h("p", {}, "Open Themis through kubectl port-forward to set it up. Admin access lasts until someone signs in with an account."),
+      h("p", {}, "Set it up through kubectl port-forward. Port-forward grants admin until an admin signs in with an account."),
       h("pre", {}, "kubectl -n themis port-forward deploy/themis-core 8090:8083"),
-      h("p", { class: "quiet small" }, "Then open http://localhost:8090. If Themis was installed under another name or namespace, use those."),
+      h("p", { class: "quiet small" }, "Then open http://localhost:8090. For another install name or namespace, adjust the command."),
       breakGlass));
     return;
   }
@@ -286,7 +288,7 @@ function noAccess() {
   render(h("div", { class: "plate centre" },
     h("h1", {}, "No access"),
     h("p", {}, "Signed in as ", h("b", {}, me.username), ". This account has no role in Themis."),
-    h("p", { class: "quiet" }, "A Themis admin can grant access to you or one of your groups.")));
+    h("p", { class: "quiet" }, "An admin grants access to a person or one of their groups.")));
 }
 
 // password lets someone signed in with an account change its password.
@@ -308,7 +310,7 @@ function changePassword() {
   };
   render(h("div", { class: "plate centre" },
     h("h1", {}, "Change your password"),
-    h("p", { class: "quiet" }, "Changing it signs you out everywhere. Sign in again with the new password."),
+    h("p", { class: "quiet" }, "Changing it ends every session, this one included."),
     h("form", { class: "form", onsubmit: submit },
       field("Current password", current), field("New password", next, "12 characters or more."),
       h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Change password")),
@@ -368,12 +370,12 @@ async function accounts() {
   render(
     finish ? h("div", { class: "plate" },
       h("h1", {}, "Sign in with the admin account"),
-      h("p", { class: "quiet" }, "Signing in finishes setup. From then on, kubectl port-forward alone grants no admin access."),
+      h("p", { class: "quiet" }, "Signing in completes setup. Port-forward then grants no admin access."),
       finish.form) : null,
     h("h1", { class: finish ? "sub" : "" }, first ? "Create the admin account" : "Accounts"),
     h("p", { class: "lede" }, first
-      ? "Then sign in with it here. Signing in finishes setup. From then on, kubectl port-forward alone grants no admin access."
-      : "People who sign in with a username and password. People who sign in through your identity provider get their roles from Themis's settings."),
+      ? "Sign in with it here to complete setup. Port-forward then grants no admin access."
+      : "Accounts sign in with a username and password. People signing in through the identity provider take their roles from Themis's settings."),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}, h("span", { class: "quiet" }, "Password and removal")))),
@@ -390,9 +392,23 @@ async function accounts() {
 
 // CHECK_STATE names how each part of the install is doing, and its tone.
 const CHECK_STATE = {
-  ok: ["Working", "good"], warn: ["Needs attention", "wait"], problem: ["Not working", "bad"],
+  ok: ["Operational", "good"], warn: ["Action required", "wait"], problem: ["Failing", "bad"],
   waiting: ["Waiting", ""], off: ["Off", "done"],
 };
+// URGENCY orders parts for acting on: failing first, then what requires action.
+const URGENCY = { problem: 0, warn: 1, waiting: 2, off: 3, ok: 4 };
+const needsAction = (c) => c.state === "problem" || c.state === "warn";
+
+// partFinding is a part's finding, with when it was last heard from.
+function partFinding(c) {
+  return [c.summary, c.at ? " " + (c.since || "Last heard") + " " + ago(c.at) + "." : ""];
+}
+
+// partState is a part's state word, in its tone.
+function partState(c) {
+  const [word, tone] = CHECK_STATE[c.state] || [humanize(c.state), ""];
+  return h("span", { class: "state " + tone }, word);
+}
 
 // copyable is code to copy and run, with a button that copies it.
 function copyable(code) {
@@ -401,7 +417,7 @@ function copyable(code) {
       await navigator.clipboard.writeText(code);
       button.textContent = "Copied";
     } catch {
-      button.textContent = "Select it and copy";
+      button.textContent = "Not copied. Select it.";
     }
   } }, "Copy");
   return h("div", { class: "copyable" }, h("pre", {}, code), button);
@@ -426,7 +442,7 @@ function alertmanagerSetup() {
     h("h2", {}, "Connect Alertmanager"),
     h("div", { class: "inline" }, field("Alertmanager's namespace", ns)),
     out,
-    h("p", { class: "quiet small sub" }, "Status shows alerts arriving once a crash-loop or out-of-memory alert fires."));
+    h("p", { class: "quiet small sub" }, "Status records the first crash-loop or out-of-memory alert Themis receives."));
 }
 
 // modelSaved says the model was just saved, so Setup says so once.
@@ -438,11 +454,11 @@ function modelStep(v) {
   const saved = modelSaved;
   modelSaved = false;
   const byInstall = (name) => v.byInstall.includes(name);
-  const locked = "Set through Helm. Change it in the chart's values.";
+  const locked = "Set in Helm. Read-only here.";
   const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", disabled: byInstall("model.baseURL") });
   const name = h("input", { type: "text", value: v.name, placeholder: "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name") });
   const key = h("input", { type: "password", autocomplete: "off", disabled: byInstall("model.apiKey"),
-    placeholder: v.apiKeySet ? "Set. Leave empty to keep it." : "If the model needs one" });
+    placeholder: v.apiKeySet ? "Set. Leave empty to keep it." : "Optional" });
   const strict = h("input", { type: "checkbox", checked: v.strictOutput, disabled: byInstall("model.strictOutput") });
   const error = h("div", { class: "error", role: "alert" });
   const save = async (e) => {
@@ -461,17 +477,17 @@ function modelStep(v) {
     }
   };
   if (["model.baseURL", "model.name"].every(byInstall)) {
-    return [h("p", {}, "Set through Helm: ", h("code", {}, v.name), " at ", h("code", {}, v.baseURL), ". Change it in the chart's values.")];
+    return [h("p", {}, "Set in Helm: ", h("code", {}, v.name), " at ", h("code", {}, v.baseURL), ".")];
   }
   return [
-    saved ? h("p", { class: "flash", role: "status" }, "Model saved. The investigator uses it from its next investigation. This step shows done once the model has answered.") : null,
-    h("p", { class: "quiet" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. The investigator uses it from its next investigation."),
+    saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation. Done when the model answers.") : null,
+    h("p", { class: "quiet" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. Used from the next investigation."),
     h("form", { class: "form", onsubmit: save },
       field("Address", url, byInstall("model.baseURL") ? locked : null),
       field("Model", name, byInstall("model.name") ? locked : null),
       field("API key", key, byInstall("model.apiKey") ? locked : "Stored encrypted. Never shown again."),
       h("label", { class: "check" }, strict,
-        h("span", {}, "Strict format: the model follows Themis's reply format exactly. For OpenAI, turn it off, or install with ",
+        h("span", {}, "Strict format: the model must follow Themis's reply format exactly. For OpenAI, clear it, or install with ",
           h("code", {}, "model.schemaDialect=openai-strict"), ".", byInstall("model.strictOutput") ? " " + locked : "")),
       h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Save the model")),
       error)];
@@ -486,51 +502,63 @@ async function setup() {
   let model = null;
   try { model = await api("/v1/settings/model"); } catch {}
   const investigatorOff = check("Investigator").state === "off";
+  const signIn = check("Sign-in");
+  const acting = checks.filter(needsAction).length;
   const steps = [
-    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: [
-      h("p", {}, check("Sign-in").summary),
-      done("Sign-in") ? null : h("p", {}, h("a", { href: "#/accounts" }, "Create accounts"), ", or set the chart's oidc values for your identity provider.")] },
+    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
+      h("p", {}, me.setup ? "Incomplete. Port-forward grants admin until an admin account or identity provider is set up." : partFinding(signIn)),
+      h("ul", { class: "remedies" },
+        h("li", {}, h("a", { href: "#/accounts" }, me.setup ? "Create the admin account" : "Create accounts")),
+        h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
       : model ? { title: "The model", status: done("Model") ? "Done" : model.complete ? "Set" : "Not done", body: modelStep(model) } : null,
     { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: [
-      h("p", {}, check("Alerts").summary),
+      h("p", {}, partFinding(check("Alerts"))),
       done("Alerts") ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]] },
-    { title: "Check", status: "", body: [h("p", {}, h("a", { href: "#/status" }, "Status"), " checks each part and says how to fix what doesn't work.")] },
+    { title: "Check", status: acting ? "Action required" : "Done", body: [digest(checks), h("p", { class: "sub" }, h("a", { href: "#/status" }, "Full status"))] },
   ].filter(Boolean);
+  const tone = { Done: "good", "Action required": "wait" };
   render(
     h("h1", {}, "Setup"),
-    h("p", { class: "lede" }, "Each step shows done once it works. Values set through Helm are locked here."),
+    h("p", { class: "lede" }, "A step completes when Themis confirms it. Values set in Helm are read-only here."),
     steps.map((s, i) => h("section", { class: "plate" },
       h("div", { class: "step-head" },
         h("h2", {}, h("span", { class: "num" }, String(i + 1)), s.title),
-        s.status ? h("span", { class: "state " + (s.status === "Done" ? "good" : "done") }, s.status) : null),
+        s.status ? h("span", { class: "state " + (tone[s.status] || "done") }, s.status) : null),
       s.body)));
 }
 
-// status says whether each part of the install works, and how to fix what doesn't.
+// OIDC_DOCS is where the chart's identity provider values are described.
+const OIDC_DOCS = "https://github.com/hzerrad/themis/blob/main/docs/configuration.md#apioidc";
+
+// digest is every part's state in a few lines, what requires action first,
+// each with its finding and remedy.
+function digest(checks) {
+  const parts = [...checks].sort((a, b) => (URGENCY[a.state] ?? 2) - (URGENCY[b.state] ?? 2));
+  return h("ul", { class: "parts" }, parts.map((c) => h("li", {},
+    h("b", {}, c.name), partState(c),
+    needsAction(c) ? h("div", { class: "says" }, partFinding(c), c.fix ? h("div", { class: "fix" }, c.fix) : null) : null)));
+}
+
+// status is each part of the install: its state, its finding, and the remedy once.
 async function status() {
   const { checks } = await api("/v1/status");
-  const broken = checks.filter((c) => c.state === "problem").length;
+  const acting = checks.filter(needsAction).length;
   render(
     h("h1", {}, "Status"),
-    h("p", { class: "lede" }, broken
-      ? plural(broken, "part is", "parts are") + " not working. Each says how to fix it."
-      : "Every part, checked at " + CLOCK.format(new Date()) + "."),
+    h("p", { class: "lede" }, (acting ? plural(acting, "part requires", "parts require") + " action." : "No part requires action.")
+      + " Checked at " + CLOCK.format(new Date()) + "."),
     h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Part"), h("th", {}, "State"), h("th", {}, "Finding"))),
-      h("tbody", {}, checks.map((c) => {
-        const [word, tone] = CHECK_STATE[c.state] || [humanize(c.state), ""];
-        return h("tr", {},
-          h("td", {}, h("b", {}, c.name)),
-          h("td", {}, h("span", { class: "state " + tone }, word)),
-          h("td", {}, c.summary,
-            c.at ? h("div", { class: "quiet small" }, "Last heard " + ago(c.at) + ".") : null,
-            c.fix && c.state !== "ok" ? h("div", { class: "fix" }, c.fix) : null,
-            c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("button", { class: "btn small sub", type: "button", onclick: (e) => {
-              e.target.replaceWith(alertmanagerSetup());
-            } }, "Show how to connect Alertmanager") : null));
-      })))),
+      h("tbody", {}, checks.map((c) => h("tr", {},
+        h("td", {}, h("b", {}, c.name)),
+        h("td", {}, partState(c)),
+        h("td", {}, partFinding(c),
+          c.fix ? h("div", { class: "fix" }, c.fix) : null,
+          c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("button", { class: "btn small sub", type: "button", onclick: (e) => {
+            e.target.replaceWith(alertmanagerSetup());
+          } }, "Connect Alertmanager") : null)))))),
     h("p", { class: "sub" }, h("button", { class: "btn", type: "button", onclick: route }, "Check again")));
 }
 
@@ -618,7 +646,7 @@ function changesTable(changes) {
       h("tbody", {}, changes.map((c) => h("tr", {},
         h("td", {}, h("code", {}, c.container)), h("td", {}, h("code", {}, c.field)),
         h("td", { class: "val from" }, c.before), h("td", { class: "val to" }, c.after))))),
-    h("p", { class: "quiet small sub" }, "Values that look like secrets are hidden. For commands and arguments, only the fact that they change is shown."),
+    h("p", { class: "quiet small sub" }, "Values that look like secrets are hidden. Commands and arguments show only that they change."),
   ];
 }
 
@@ -651,7 +679,7 @@ function result(a) {
   if (a.Verification) {
     const o = a.Verification.Observation;
     const facts = o ? (o.Facts || (o.ReadyReplicas + " of " + o.DesiredReplicas + " pods ready.")) : null;
-    add("Did it work?", a.Verification.Outcome ? label(OUTCOME_LABEL, a.Verification.Outcome) : "Verifying",
+    add("Outcome", a.Verification.Outcome ? label(OUTCOME_LABEL, a.Verification.Outcome) : "Verifying",
       facts ? h("div", { class: "quiet small" }, facts) : null);
   }
   return h("dl", { class: "result" }, rows);
@@ -696,7 +724,7 @@ function decision(a, d, ctx, latest, reload) {
     side = h("div", { class: "act" }, approve, field("Grounds for denying (optional)", reason), deny,
       h("p", { class: "fine" }, "Themis applies exactly this change, then verifies it worked."), error);
   } else if (awaiting) {
-    side = h("div", { class: "act" }, h("p", { class: "quiet" }, "Only approvers can approve or deny this change."));
+    side = h("div", { class: "act" }, h("p", { class: "quiet" }, "Approving or denying requires the approver role."));
   } else if (gitOps) {
     side = h("div", { class: "act" }, h("h3", {}, "Next step"), h("p", {}, "Apply this change in Git."));
   } else {
@@ -711,40 +739,85 @@ function decision(a, d, ctx, latest, reload) {
     side);
 }
 
-// finding is one check: Themis's answer, what it means, and on what grounds.
-function finding(p, d, contrary) {
+// statement is what a check found, as a fact: what it says when true, its
+// negation when false, its topic when unknown. A pack that gives no negation
+// reads as its statement followed by ": no", never a bare "No".
+function statement(d, p) {
+  const w = (d.Checks || {})[p.Name] || {};
+  const said = w.true || humanize(p.Name);
+  if (p.Value === "true") return said;
+  if (p.Value === "false") return w.false || said + ": no";
+  return (w.topic || said) + ": unknown";
+}
+
+// sameFindings joins checks, often of different packs, that found the same
+// fact: the same answer, on the same grounds, from the same evidence, with
+// the same bearing on the fix. The cited one leads.
+function sameFindings(all, cited) {
+  const out = [];
+  const byKey = new Map();
+  for (const p of all) {
+    const ids = [...(p.EvidenceIDs || [])].sort().join(",");
+    const key = p.Value !== "unknown" && p.Reason && ids
+      ? [p.Value, p.Reason, ids, AGAINST_WHEN_TRUE.includes(p.Name)].join("|") : null;
+    const same = key ? byKey.get(key) : null;
+    if (!same) {
+      const g = { p, also: [] };
+      out.push(g);
+      if (key) byKey.set(key, g);
+    } else if (cited && cited.includes(p.Name) && !cited.includes(same.p.Name)) {
+      same.also.push(same.p);
+      same.p = p;
+    } else {
+      same.also.push(p);
+    }
+  }
+  return out;
+}
+
+// finding is one fact Themis found, marked with what it means for the fix,
+// and on what grounds.
+function finding(g, d, side) {
+  const p = g.p;
+  const unknown = p.Value === "unknown";
   return h("li", {},
-    h("span", { class: "k" + (contrary ? " no" : "") }, ANSWER[p.Value] || humanize(p.Value)),
-    h("span", {}, label(d.Checks || {}, p.Name),
-      h("span", { class: "src" }, [p.Reason, sources(d, p.EvidenceIDs)].filter(Boolean).join(" · "))));
+    h("span", { class: "k " + (side || "none"), "aria-hidden": "true" }, side ? MARK[side] : "·"),
+    h("span", {}, side ? h("span", { class: "vh" }, MARK_WORD[side] + ": ") : null,
+      statement(d, p) + (unknown && p.Reason ? " — " + p.Reason : ""),
+      h("span", { class: "src" }, [unknown ? null : p.Reason, sources(d, p.EvidenceIDs),
+        g.also.length ? "Also: " + g.also.map((x) => statement(d, x)).join("; ") : null].filter(Boolean).join(" · "))));
 }
 
 // findings weighs Themis's checks: for and against the fix when there is
-// one, each check once.
+// one, each fact once.
 function findings(d, cited, noun) {
   const all = d.Predicates || [];
   if (!all.length) return null;
-  const forFix = [], against = [], other = [];
-  for (const p of all) {
+  const forFix = [], against = [], unknown = [], other = [];
+  for (const g of sameFindings(all, cited)) {
+    const p = g.p;
     const flips = AGAINST_WHEN_TRUE.includes(p.Name);
     const supports = p.Value === (flips ? "false" : "true");
-    const contrary = p.Value === (flips ? "true" : "false");
-    if (p.Value === "unknown") against.push(finding(p, d, false));
-    else if (cited && cited.includes(p.Name)) (supports ? forFix : against).push(finding(p, d, contrary));
-    else if (contrary && flips) against.push(finding(p, d, true));
-    else if (!cited && p.Value === "true") forFix.push(finding(p, d, false));
-    else other.push(finding(p, d, false));
+    const isCited = cited && [p, ...g.also].some((x) => cited.includes(x.Name));
+    if (p.Value === "unknown") unknown.push(finding(g, d, "unknown"));
+    else if (isCited) (supports ? forFix : against).push(finding(g, d, supports ? "for" : "against"));
+    else if (!supports && flips) against.push(finding(g, d, "against"));
+    else if (!cited && p.Value === "true") forFix.push(finding(g, d, "found"));
+    else other.push(finding(g, d, null));
   }
   const pan = (cls, title, items, empty) => h("div", { class: "pan " + cls },
     h("h3", {}, title), items.length ? h("ul", {}, items) : h("p", { class: "empty" }, empty));
   const blind = d.Missing && d.Missing.length ? h("div", { class: "blind" },
     h("b", {}, "What Themis couldn't see"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
+  const weigh = [plural(forFix.length, "finding supports", "findings support") + " the " + noun + ".",
+    against.length ? plural(against.length, "is", "are") + " against it." : "None is against it.",
+    unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""].filter(Boolean).join(" ");
   return h("section", { class: "findings", "aria-label": "Findings" },
     h("div", { class: "pans" },
       cited ? pan("for", "Supports the " + noun, forFix, "No finding supports it.") : pan("for", "Found", forFix, "No check came out true."),
-      cited ? pan("against", "Against, or unknown", against, "No finding is against it.") : pan("against", "Unknown, or against", against, "Every check has an answer.")),
-    cited ? h("p", { class: "weigh" }, plural(forFix.length, "finding supports", "findings support") + " the " + noun + "; "
-      + against.length + (against.length === 1 ? " is" : " are") + " against or unknown.") : null,
+      cited ? pan("against", "Against, or unknown", [...against, ...unknown], "No finding is against it.")
+        : pan("against", "Unknown, or against", [...against, ...unknown], "Every check has an answer.")),
+    cited ? h("p", { class: "weigh" }, weigh) : null,
     blind,
     other.length ? h("details", { class: "fold sub", "data-key": "other-checks" },
       h("summary", {}, "Other checks", h("span", { class: "n" }, other.length)),
@@ -765,7 +838,7 @@ function sourceRows(p) {
     row("Identity", "Verified: it held this incident's investigation.");
   } else if (src === "person:setup") {
     row("From", "A person");
-    row("Identity", "Someone with kubectl access, through port-forward before sign-in was set up. Kubernetes verified them; Themis doesn't know who.");
+    row("Identity", "A person with kubectl access, through port-forward before sign-in was set up. Kubernetes verified the access, not the person.");
   } else if (src === "admin-token") {
     row("From", "A person");
     row("Identity", "The break-glass token. It proves the token, not the person.");
@@ -792,7 +865,7 @@ function sourceRows(p) {
 function suggestionText(p, d) {
   const cited = (p.CitedPredicates || []).map((c) => {
     const found = (d.Predicates || []).find((x) => x.Name === c);
-    return label(d.Checks || {}, c) + ": " + (found ? (ANSWER[found.Value] || found.Value).toLowerCase() : "not checked");
+    return found ? statement(d, found) : statement(d, { Name: c, Value: "true" }) + ": not checked";
   });
   return [
     p.Rationale ? [h("h3", { class: "sub" }, "Grounds it gave"), h("p", {}, p.Rationale)] : null,
@@ -808,7 +881,7 @@ function investigatorNote(inv, p, d) {
   const causes = inv.Hypotheses || [];
   return h("details", { class: "fold", "data-key": "note" },
     h("summary", {}, "The investigator's note", h("span", { class: "claim" }, "Written by the model, not checked by Themis")),
-    inv.Failure ? h("p", { class: "fix" }, "The investigation failed: " + inv.Failure) : null,
+    inv.Failure ? h("p", { class: "fix" }, "Investigation failed: " + inv.Failure) : null,
     inv.Summary ? h("p", {}, inv.Summary) : null,
     p ? suggestionText(p, d) : null,
     causes.length ? [h("h3", { class: "sub" }, "Causes it considered"), causes.map((x) => h("div", { class: "cause" },
@@ -844,7 +917,7 @@ function evidenceFold(d) {
       e.Suspicious ? h("ul", {}, e.Suspicious.map((s) => h("li", {},
         cap(s.reason), ", at ", h("code", {}, s.at || "/"), s.excerpt ? [": ", h("code", {}, s.excerpt)] : null))) : null,
       e.Data === undefined
-        ? h("p", { class: "quiet" }, "Only responders can read this evidence.")
+        ? h("p", { class: "quiet" }, "Readable by responders only.")
         : h("pre", {}, JSON.stringify(e.Data, null, 2)))));
 }
 
@@ -907,14 +980,14 @@ function suggestForm(inc, evidence, reload) {
     ? h("select", {}, earlier.map((r) => h("option", { value: r.revision },
       "Revision " + r.revision + " · " + (r.containers || []).map((c) => c.image).join(", ") + (r.createdAt ? " · " + when(r.createdAt) : ""))))
     : h("input", { type: "number", min: "1", required: true });
-  const why = h("textarea", { rows: "3", placeholder: "Why this fixes it. The approver reads this." });
+  const why = h("textarea", { rows: "3", placeholder: "Why this fixes it. Shown to the approver." });
   const effect = h("input", { type: "text", placeholder: "For example: pods stop crash-looping" });
   const error = h("div", { class: "error", role: "alert" });
   const submit = async (e) => {
     e.preventDefault();
     error.textContent = "";
     if (!why.value.trim()) {
-      error.textContent = "State the grounds: the approver reads them.";
+      error.textContent = "Grounds are required.";
       return;
     }
     const body = {
@@ -930,10 +1003,10 @@ function suggestForm(inc, evidence, reload) {
       const r = await api("/v1/incidents/" + encodeURIComponent(inc.id) + "/proposals", { method: "POST", body: JSON.stringify(body) });
       // A refusal ends its status name with _REJECTED.
       if (r && String(r.status).endsWith("_REJECTED")) {
-        error.textContent = r.message || "Themis refused this fix.";
+        error.textContent = r.message || "Refused.";
         return;
       }
-      flash = "Rollback suggested. Themis is checking it against the cluster and the policy.";
+      flash = "Rollback suggested. Checking it against the cluster and the policy.";
       reload();
     } catch (err) {
       error.textContent = err.message;
@@ -947,7 +1020,7 @@ function suggestForm(inc, evidence, reload) {
       field("Grounds", why),
       field("Expected effect", effect),
       h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Suggest the rollback")),
-      h("p", { class: "quiet small" }, "Themis checks it against the cluster and the policy, as it checks its own. It cites the evidence on this page."),
+      h("p", { class: "quiet small" }, "Checked against the cluster and the policy, as Themis checks its own. Cites the evidence on this page."),
       error));
 }
 
@@ -970,9 +1043,9 @@ function headline(d, ctx) {
   }
   if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + fx.short.toLowerCase() + "." : reason];
   if (s === "awaiting_suggestion") {
-    return ["Waiting for a suggested fix.", "No investigator is installed. A person, or a tool such as HolmesGPT, can suggest a fix; Themis checks it against the cluster and the policy, as it would its own."];
+    return ["Waiting for a suggested fix.", "No investigator is installed. A fix suggested by a person or a tool such as HolmesGPT is checked against the cluster and the policy."];
   }
-  if (s === "inconclusive") return [d.Headline || "No clear cause found.", "A person can suggest a fix. Themis checks it against the cluster and the policy."];
+  if (s === "inconclusive") return [d.Headline || "No clear cause found.", "A suggested fix is checked against the cluster and the policy."];
   if ((s === "authorized" || s === "executing") && fx) {
     const approved = ts.filter((t) => t.To === "authorized").pop();
     return [fx.doing, approved ? sentence(approved.Reason) : reason];
@@ -981,7 +1054,7 @@ function headline(d, ctx) {
   if (s === "restoring" && fx) return ["The " + fx.noun + " didn't help. Restoring the previous state.", reason];
   if (s === "resolved" && fx) return [fx.done, reason];
   if (s === "escalated" && ctx.restored && fx) return ["The " + fx.noun + " didn't help and was undone.", reason];
-  if (REFERRED.includes(s)) return [reason || "Referred to a person.", "Themis takes no further action on this incident. A person takes over."];
+  if (REFERRED.includes(s)) return [reason || "Referred to a person.", "No further action by Themis. A person takes over."];
   if (s === "closed_no_action") {
     const leading = cause ? "The investigator's leading cause: " + cause.charAt(0).toLowerCase() + cause.slice(1) : null;
     return [d.Headline || "No fix met the checks and policy.", leading || (d.Headline ? "" : reason)];
@@ -1061,7 +1134,7 @@ async function detail(id) {
 function showError(e) {
   if (e.message === "unauthorized") return;
   render(h("div", { class: "alert", role: "alert" }, h("span", { class: "sign", "aria-hidden": "true" }, "!"),
-    h("div", {}, h("b", {}, "This page couldn't be loaded. "), e.message)));
+    h("div", {}, h("b", {}, "Not loaded: "), e.message)));
 }
 
 // whoami asks who's signed in, by the break-glass token or a session cookie.

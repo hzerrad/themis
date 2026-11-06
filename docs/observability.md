@@ -6,17 +6,18 @@ None of it carries workload data. Logs, metric labels and spans never contain ev
 
 ## Status
 
-The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, check each part of an install when asked, and say how to fix what doesn't work:
+The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, check each part of an install when asked. Each part is **Operational**, **Action required** or **Failing** (or **Waiting** or **Off**), with a short finding and, where something must change, the remedy:
 
-| Part | Working when | Otherwise |
+| Part | Operational when | Otherwise |
 |---|---|---|
 | Database | It answers | Nothing else can be checked |
 | Investigator | It asked for work in the last 2 minutes | It never has, or stopped |
 | Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident |
 | Alerts | Alertmanager sent alerts, and through which receiver | None yet, or alerts refused for the wrong intake token |
 | Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
+| Metrics | A metrics source answers: Prometheus, or the Kubernetes metrics API | No metrics source, or one failing; without Prometheus, no history of peak memory or CPU throttling |
 | Fixes | The executor is installed and reachable | Off, or unreachable |
-| Sign-in | People sign in with accounts or an identity provider | Setup isn't finished, or only the break-glass token works |
+| Sign-in | People sign in with accounts or an identity provider | Port-forward still grants admin, or only the break-glass token signs in |
 
 The investigator and Alertmanager are recorded as heard from at most every 30 seconds, in the database, so every core replica sees the same.
 

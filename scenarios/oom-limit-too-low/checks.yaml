@@ -8,6 +8,8 @@
 - name: oom_killed_current_revision
   version: "1"
   description: A container of the current version was OOMKilled
+  topic: OOM kills in the current version
+  whenFalse: No container of the current version was OOMKilled
   reads: [pod_states]
   let:
     pods: pod_states.pods.filter(p, p.revision == current_revision)
@@ -34,6 +36,8 @@
 - name: oom_without_recent_rollout
   version: "1"
   description: The current version is OOMKilled, and it rolled out more than 6 hours ago
+  topic: OOM kills long after the rollout
+  whenFalse: The current version is not OOMKilled, or it rolled out within the last 6 hours
   reads: [pod_states, rollout_history]
   let:
     pods: pod_states.pods.filter(p, p.revision == current_revision)
@@ -65,6 +69,8 @@
 - name: memory_data_available
   version: "1"
   description: A metrics source says how much memory the containers used at their peak
+  topic: Peak memory use
+  whenFalse: No metrics source says how much memory the containers used at their peak
   reads: [container_memory]
   answers:
     - when: container_memory.peak.unavailable != ""
@@ -81,6 +87,8 @@
 - name: memory_at_limit_before_kill
   version: "1"
   description: A container's memory reached its limit at its peak
+  topic: Memory at the limit
+  whenFalse: No container's memory reached its limit at its peak
   reads: [container_memory]
   let:
     limited: container_memory.containers.filter(c, c.limitBytes != null)
@@ -117,6 +125,7 @@
 - name: oom_after_long_run
   version: "1"
   description: Its containers ran an hour or more before each OOM kill
+  topic: Run time before OOM kills
   reads: [pod_states]
   let:
     kills: >-
@@ -152,6 +161,8 @@
 - name: evicted_for_node_memory
   version: "2"
   description: Its pods were evicted because their node was short of memory
+  topic: Evictions for node memory
+  whenFalse: No pod was evicted for its node's memory
   reads: [target_events, pod_states]
   let:
     evicted: >-

@@ -27,6 +27,12 @@ type Definition struct {
 	// Description says in plain words what the check finds when it is
 	// true, for investigators and people.
 	Description string `json:"description"`
+	// WhenFalse says what the check finds when it is false, for people. When
+	// empty, people read the description followed by "no".
+	WhenFalse string `json:"whenFalse,omitempty"`
+	// Topic names what the check is about in a few words, for people reading
+	// that it is unknown, such as "Peak memory use".
+	Topic string `json:"topic,omitempty"`
 	// Reads are the evidence templates the check reads. When one an answer
 	// needs is missing, the check is unknown, without the author saying so.
 	Reads []string `json:"reads"`
@@ -89,6 +95,8 @@ type Check struct {
 	Name        string
 	Version     string
 	Description string
+	WhenFalse   string
+	Topic       string
 	Reads       []string
 
 	lets    map[string]*expr
@@ -194,7 +202,7 @@ func compile(env *cel.Env, d Definition, templates []string) (*Check, error) {
 		return nil, errors.Join(errs...)
 	}
 
-	c := &Check{Name: d.Name, Version: d.Version, Description: d.Description, Reads: d.Reads, lets: map[string]*expr{}}
+	c := &Check{Name: d.Name, Version: d.Version, Description: d.Description, WhenFalse: d.WhenFalse, Topic: d.Topic, Reads: d.Reads, lets: map[string]*expr{}}
 	letNames := slices.Sorted(maps.Keys(d.Let))
 	declared := []cel.EnvOption{}
 	for _, n := range letNames {
