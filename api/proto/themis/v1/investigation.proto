@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package themis.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "themis/v1/common.proto";
 
@@ -13,6 +14,12 @@ service InvestigationService {
   // GetModelSettings returns the model settings made in Themis's setup, for
   // whatever the investigator's own environment leaves unset.
   rpc GetModelSettings(GetModelSettingsRequest) returns (GetModelSettingsResponse);
+  // TakeModelTest waits a few seconds for a test of the model's connection,
+  // asked for on the Setup page. Only the investigator may reach the model,
+  // so it makes the test's request. An empty response means none came.
+  rpc TakeModelTest(TakeModelTestRequest) returns (TakeModelTestResponse);
+  // ReportModelTest returns what a test found.
+  rpc ReportModelTest(ReportModelTestRequest) returns (ReportModelTestResponse);
 }
 
 message GetModelSettingsRequest {}
@@ -23,7 +30,75 @@ message GetModelSettingsResponse {
   string model = 2;
   string api_key = 3;
   optional bool strict_output = 4;
+  // openai or anthropic.
+  string provider = 5;
+  // as-is or openai-strict.
+  string schema_dialect = 6;
 }
+
+message TakeModelTestRequest {}
+
+message TakeModelTestResponse {
+  // Unset when no test came.
+  ModelTest test = 1;
+}
+
+// ModelTest is one small request to the model, with the settings under test.
+message ModelTest {
+  string id = 1;
+  // The settings under test, as setup would hand them, saved or not. The
+  // investigator's own environment wins where it sets them, as in an
+  // investigation. The key is for this test only: it is never kept or logged.
+  GetModelSettingsResponse settings = 2;
+  // How long the model has to answer.
+  google.protobuf.Duration timeout = 3;
+}
+
+enum ModelTestOutcome {
+  MODEL_TEST_OUTCOME_UNSPECIFIED = 0;
+  // The model answered in the reply format.
+  MODEL_TEST_OUTCOME_CONNECTED = 1;
+  // The settings lack what the provider needs, so nothing was sent.
+  MODEL_TEST_OUTCOME_INCOMPLETE = 2;
+  // No connection could be made to the model.
+  MODEL_TEST_OUTCOME_UNREACHABLE = 3;
+  // The model didn't answer within the timeout.
+  MODEL_TEST_OUTCOME_NO_ANSWER = 4;
+  // The provider answered with an HTTP error.
+  MODEL_TEST_OUTCOME_REFUSED = 5;
+  // The model answered, but not in the reply format.
+  MODEL_TEST_OUTCOME_NOT_IN_FORMAT = 6;
+  // The reply stopped at the output limit.
+  MODEL_TEST_OUTCOME_CUT_OFF = 7;
+  // The model declined to answer.
+  MODEL_TEST_OUTCOME_DECLINED = 8;
+  // The request couldn't be made, for a reason in detail.
+  MODEL_TEST_OUTCOME_ERROR = 9;
+}
+
+message ReportModelTestRequest {
+  string id = 1;
+  ModelTestOutcome outcome = 2;
+  // What was tested, once the investigator's own settings applied: openai or
+  // anthropic, the address, empty for Anthropic's own, and the model's name.
+  string provider = 3;
+  string address = 4;
+  string model = 5;
+  // How the reply was asked for.
+  bool strict_output = 6;
+  string schema_dialect = 7;
+  // The model that answered, as the provider names it.
+  string answered_by = 8;
+  // The provider's HTTP status, for REFUSED.
+  int32 status = 9;
+  // What the provider or the connection said, cut short. Never the key.
+  string detail = 10;
+  google.protobuf.Duration latency = 11;
+  // The limit a reply CUT_OFF ran into.
+  int32 output_limit = 12;
+}
+
+message ReportModelTestResponse {}
 
 enum HypothesisStatus {
   HYPOTHESIS_STATUS_UNSPECIFIED = 0;

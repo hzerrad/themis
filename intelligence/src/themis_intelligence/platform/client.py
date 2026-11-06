@@ -3,7 +3,7 @@
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 from opentelemetry.trace import SpanKind, Status, StatusCode
@@ -55,6 +55,23 @@ class Endpoint:
     # temperature but their own, which None leaves them.
     output_limit_field: OutputLimitField = "max_tokens"
     temperature: float | None = 0
+
+    def request(
+        self, messages: list[Message], json_schema: dict[str, Any], max_output_tokens: int
+    ) -> ProviderRequest:
+        """What the endpoint sends its provider: the model, how the reply is asked
+        for, and messages."""
+        return ProviderRequest(
+            model=self.model,
+            messages=messages,
+            max_output_tokens=max_output_tokens,
+            json_schema=json_schema,
+            reasoning_effort=self.reasoning_effort,
+            strict=self.strict_output,
+            schema_dialect=self.schema_dialect,
+            output_limit_field=self.output_limit_field,
+            temperature=self.temperature,
+        )
 
 
 def read_temperature(value: str) -> float | None:
@@ -168,16 +185,10 @@ class ModelClient:
                     used = Usage()
                     try:
                         resp = await self.adapter.send(
-                            ProviderRequest(
-                                model=self.endpoint.model,
-                                messages=messages,
-                                max_output_tokens=max_output,
-                                json_schema=req.json_schema or schema.model_json_schema(),
-                                reasoning_effort=self.endpoint.reasoning_effort,
-                                strict=self.endpoint.strict_output,
-                                schema_dialect=self.endpoint.schema_dialect,
-                                output_limit_field=self.endpoint.output_limit_field,
-                                temperature=self.endpoint.temperature,
+                            self.endpoint.request(
+                                messages,
+                                req.json_schema or schema.model_json_schema(),
+                                max_output,
                             )
                         )
                         used = resp.usage

@@ -20,6 +20,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/modeltest"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -63,6 +64,9 @@ type API struct {
 	// Settings are the model settings made in Themis's setup. Nil means
 	// setup can't change them.
 	Settings ModelSettings
+	// ModelTests test the model's connection through the investigator. Nil
+	// means no test is offered.
+	ModelTests *modeltest.Tests
 	// Checks say whether each part of the install works. Nil means the
 	// status page isn't served.
 	Checks interface {
@@ -111,6 +115,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	if a.Settings != nil {
 		mux.Handle("GET /v1/settings/model", a.authed(config.RoleAdmin, a.modelSettings, nil))
 		mux.Handle("PUT /v1/settings/model", a.authed(config.RoleAdmin, a.setModelSettings, nil))
+		if a.ModelTests != nil {
+			mux.Handle("POST /v1/settings/model/test", a.authed(config.RoleAdmin, a.testModel, nil))
+		}
 	}
 }
 

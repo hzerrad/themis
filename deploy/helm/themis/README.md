@@ -158,7 +158,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |
 | `model.enabled` | `true` | Install the investigator. Off, incidents wait for a suggested fix |
-| `model.provider` | `""` (`openai`) | `openai` for an OpenAI-compatible endpoint, or `anthropic` for Claude models through Anthropic's API, which needs no `baseURL` |
+| `model.provider` | `""` (`openai`) | `openai` for an OpenAI-compatible endpoint, or `anthropic` for Claude models through Anthropic's API, which needs no `baseURL`. Empty with no `baseURL`, it's chosen on the Setup page |
 | `model.baseURL` | `""` | An OpenAI-compatible endpoint. Empty, it's set on the Setup page |
 | `model.name` | `""` | The model the endpoint serves. Empty, it's set on the Setup page |
 | `model.apiKeySecret` | `""` | A Secret with an `apiKey` key, if the endpoint needs one |
@@ -167,8 +167,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `model.tokenBudget` | `200000` | Tokens per investigation |
 | `model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`; for `anthropic`, `low`, `medium`, `high`, `xhigh` or `max`. Empty leaves the provider's default |
 | `model.maxOutputTokens` | `""` (`4096`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
-| `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way |
-| `model.schemaDialect` | `""` (`as-is`) | How the reply schema is sent: `as-is`, as Ollama and vLLM take it, or `openai-strict`, the form OpenAI's strict mode accepts. OpenAI needs `openai-strict` |
+| `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way. Without `baseURL`, the Setup page's reply format sets it |
+| `model.schemaDialect` | `""` (`as-is`) | How the reply schema is sent: `as-is`, as Ollama and vLLM take it, or `openai-strict`, the form OpenAI's strict mode accepts. Empty with no `baseURL`, the Setup page's reply format sets it. OpenAI needs `openai-strict` |
 | `model.outputLimitField` | `""` (`max_tokens`) | The field the output limit is sent in, `max_tokens` or `max_completion_tokens`. OpenAI's newer models need `max_completion_tokens` |
 | `model.temperature` | `""` (`0`) | The temperature sent: a number, or `default` to send none and leave the model's own, as OpenAI's newer models require |
 | `model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |

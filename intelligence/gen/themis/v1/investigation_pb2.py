@@ -22,11 +22,12 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from themis.v1 import common_pb2 as themis_dot_v1_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dthemis/v1/investigation.proto\x12\tthemis.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16themis/v1/common.proto\"\x19\n\x17GetModelSettingsRequest\"\xa0\x01\n\x18GetModelSettingsResponse\x12\x19\n\x08\x62\x61se_url\x18\x01 \x01(\tR\x07\x62\x61seUrl\x12\x14\n\x05model\x18\x02 \x01(\tR\x05model\x12\x17\n\x07\x61pi_key\x18\x03 \x01(\tR\x06\x61piKey\x12(\n\rstrict_output\x18\x04 \x01(\x08H\x00R\x0cstrictOutput\x88\x01\x01\x42\x10\n\x0e_strict_output\"8\n\x19LeaseInvestigationRequest\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\\\n\x1aLeaseInvestigationResponse\x12>\n\rinvestigation\x18\x01 \x01(\x0b\x32\x18.themis.v1.InvestigationR\rinvestigation\".\n\x11RenewLeaseRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\"W\n\x12RenewLeaseResponse\x12\x41\n\x0elease_deadline\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\rleaseDeadline\"\xd9\x02\n\x1c\x43ompleteInvestigationRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12\x42\n\nconclusion\x18\x02 \x01(\x0e\x32\".themis.v1.InvestigationConclusionR\nconclusion\x12\x18\n\x07summary\x18\x03 \x01(\tR\x07summary\x12\x35\n\nhypotheses\x18\x04 \x03(\x0b\x32\x15.themis.v1.HypothesisR\nhypotheses\x12&\n\x05usage\x18\x05 \x01(\x0b\x32\x10.themis.v1.UsageR\x05usage\x12\x35\n\nprovenance\x18\x06 \x01(\x0b\x32\x15.themis.v1.ProvenanceR\nprovenance\x12*\n\x04gaps\x18\x07 \x03(\x0b\x32\x16.themis.v1.EvidenceGapR\x04gaps\"\x1f\n\x1d\x43ompleteInvestigationResponse\"\xba\x01\n\x18\x46\x61ilInvestigationRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12=\n\x06reason\x18\x02 \x01(\x0e\x32%.themis.v1.InvestigationFailureReasonR\x06reason\x12\x18\n\x07message\x18\x03 \x01(\tR\x07message\x12*\n\x04gaps\x18\x04 \x03(\x0b\x32\x16.themis.v1.EvidenceGapR\x04gaps\"t\n\x0b\x45videnceGap\x12\x1a\n\x08template\x18\x01 \x01(\tR\x08template\x12\x31\n\x05\x63\x61use\x18\x02 \x01(\x0e\x32\x1b.themis.v1.EvidenceGapCauseR\x05\x63\x61use\x12\x16\n\x06\x64\x65tail\x18\x03 \x01(\tR\x06\x64\x65tail\"\x1b\n\x19\x46\x61ilInvestigationResponse\"\xd9\x05\n\rInvestigation\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12\x41\n\x0elease_deadline\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\rleaseDeadline\x12\x1f\n\x0bincident_id\x18\x03 \x01(\tR\nincidentId\x12\x18\n\x07profile\x18\x04 \x01(\tR\x07profile\x12,\n\x06target\x18\x05 \x01(\x0b\x32\x14.themis.v1.TargetRefR\x06target\x12\x42\n\x10initial_evidence\x18\x06 \x03(\x0b\x32\x17.themis.v1.EvidenceItemR\x0finitialEvidence\x12G\n\x10initial_failures\x18\x07 \x03(\x0b\x32\x1c.themis.v1.CollectionFailureR\x0finitialFailures\x12:\n\npredicates\x18\x08 \x03(\x0b\x32\x1a.themis.v1.PredicateResultR\npredicates\x12H\n\x11\x61llowed_templates\x18\t \x03(\x0b\x32\x1b.themis.v1.EvidenceTemplateR\x10\x61llowedTemplates\x12\x35\n\x16\x63\x61ndidate_capabilities\x18\n \x03(\tR\x15\x63\x61ndidateCapabilities\x12)\n\x06\x62udget\x18\x0b \x01(\x0b\x32\x11.themis.v1.BudgetR\x06\x62udget\x12\x39\n\x0c\x63\x61pabilities\x18\x0c \x03(\x0b\x32\x15.themis.v1.CapabilityR\x0c\x63\x61pabilities\x12\x35\n\x0broot_causes\x18\r \x03(\x0b\x32\x14.themis.v1.RootCauseR\nrootCauses\x12\x1a\n\x08guidance\x18\x0e \x01(\tR\x08guidance\"\x95\x02\n\nHypothesis\x12(\n\x10root_cause_class\x18\x01 \x01(\tR\x0erootCauseClass\x12\x18\n\x07summary\x18\x02 \x01(\tR\x07summary\x12\x36\n\x17supporting_evidence_ids\x18\x03 \x03(\tR\x15supportingEvidenceIds\x12<\n\x1a\x63ontradicting_evidence_ids\x18\x04 \x03(\tR\x18\x63ontradictingEvidenceIds\x12\x18\n\x07missing\x18\x05 \x03(\tR\x07missing\x12\x33\n\x06status\x18\x06 \x01(\x0e\x32\x1b.themis.v1.HypothesisStatusR\x06status\"`\n\x10\x45videnceTemplate\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\x12\x16\n\x06params\x18\x03 \x03(\tR\x06params\"n\n\x05Usage\x12\x1d\n\nsteps_used\x18\x01 \x01(\x05R\tstepsUsed\x12!\n\x0cinput_tokens\x18\x02 \x01(\x03R\x0binputTokens\x12#\n\routput_tokens\x18\x03 \x01(\x03R\x0coutputTokens*\x91\x01\n\x10HypothesisStatus\x12!\n\x1dHYPOTHESIS_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n\x19HYPOTHESIS_STATUS_REFUTED\x10\x01\x12\x1f\n\x1bHYPOTHESIS_STATUS_SUPPORTED\x10\x02\x12\x1a\n\x16HYPOTHESIS_STATUS_OPEN\x10\x03*\x95\x01\n\x17InvestigationConclusion\x12(\n$INVESTIGATION_CONCLUSION_UNSPECIFIED\x10\x00\x12%\n!INVESTIGATION_CONCLUSION_PROPOSED\x10\x01\x12)\n%INVESTIGATION_CONCLUSION_INCONCLUSIVE\x10\x02*\xc7\x02\n\x1aInvestigationFailureReason\x12,\n(INVESTIGATION_FAILURE_REASON_UNSPECIFIED\x10\x00\x12\x32\n.INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE\x10\x01\x12\x35\n1INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT\x10\x02\x12\x31\n-INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED\x10\x03\x12\x32\n.INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED\x10\x04\x12)\n%INVESTIGATION_FAILURE_REASON_INTERNAL\x10\x05*\xa7\x01\n\x10\x45videnceGapCause\x12\"\n\x1e\x45VIDENCE_GAP_CAUSE_UNSPECIFIED\x10\x00\x12%\n!EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE\x10\x01\x12#\n\x1f\x45VIDENCE_GAP_CAUSE_DATA_CEILING\x10\x02\x12#\n\x1f\x45VIDENCE_GAP_CAUSE_BUDGET_SPENT\x10\x03\x32\xed\x03\n\x14InvestigationService\x12\x61\n\x12LeaseInvestigation\x12$.themis.v1.LeaseInvestigationRequest\x1a%.themis.v1.LeaseInvestigationResponse\x12I\n\nRenewLease\x12\x1c.themis.v1.RenewLeaseRequest\x1a\x1d.themis.v1.RenewLeaseResponse\x12j\n\x15\x43ompleteInvestigation\x12\'.themis.v1.CompleteInvestigationRequest\x1a(.themis.v1.CompleteInvestigationResponse\x12^\n\x11\x46\x61ilInvestigation\x12#.themis.v1.FailInvestigationRequest\x1a$.themis.v1.FailInvestigationResponse\x12[\n\x10GetModelSettings\x12\".themis.v1.GetModelSettingsRequest\x1a#.themis.v1.GetModelSettingsResponseB\x9d\x01\n\rcom.themis.v1B\x12InvestigationProtoP\x01Z3github.com/hzerrad/themis/gen/go/themis/v1;themisv1\xa2\x02\x03TXX\xaa\x02\tThemis.V1\xca\x02\tThemis\\V1\xe2\x02\x15Themis\\V1\\GPBMetadata\xea\x02\nThemis::V1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1dthemis/v1/investigation.proto\x12\tthemis.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16themis/v1/common.proto\"\x19\n\x17GetModelSettingsRequest\"\xe3\x01\n\x18GetModelSettingsResponse\x12\x19\n\x08\x62\x61se_url\x18\x01 \x01(\tR\x07\x62\x61seUrl\x12\x14\n\x05model\x18\x02 \x01(\tR\x05model\x12\x17\n\x07\x61pi_key\x18\x03 \x01(\tR\x06\x61piKey\x12(\n\rstrict_output\x18\x04 \x01(\x08H\x00R\x0cstrictOutput\x88\x01\x01\x12\x1a\n\x08provider\x18\x05 \x01(\tR\x08provider\x12%\n\x0eschema_dialect\x18\x06 \x01(\tR\rschemaDialectB\x10\n\x0e_strict_output\"\x16\n\x14TakeModelTestRequest\"A\n\x15TakeModelTestResponse\x12(\n\x04test\x18\x01 \x01(\x0b\x32\x14.themis.v1.ModelTestR\x04test\"\x91\x01\n\tModelTest\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12?\n\x08settings\x18\x02 \x01(\x0b\x32#.themis.v1.GetModelSettingsResponseR\x08settings\x12\x33\n\x07timeout\x18\x03 \x01(\x0b\x32\x19.google.protobuf.DurationR\x07timeout\"\xa0\x03\n\x16ReportModelTestRequest\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x35\n\x07outcome\x18\x02 \x01(\x0e\x32\x1b.themis.v1.ModelTestOutcomeR\x07outcome\x12\x1a\n\x08provider\x18\x03 \x01(\tR\x08provider\x12\x18\n\x07\x61\x64\x64ress\x18\x04 \x01(\tR\x07\x61\x64\x64ress\x12\x14\n\x05model\x18\x05 \x01(\tR\x05model\x12#\n\rstrict_output\x18\x06 \x01(\x08R\x0cstrictOutput\x12%\n\x0eschema_dialect\x18\x07 \x01(\tR\rschemaDialect\x12\x1f\n\x0b\x61nswered_by\x18\x08 \x01(\tR\nansweredBy\x12\x16\n\x06status\x18\t \x01(\x05R\x06status\x12\x16\n\x06\x64\x65tail\x18\n \x01(\tR\x06\x64\x65tail\x12\x33\n\x07latency\x18\x0b \x01(\x0b\x32\x19.google.protobuf.DurationR\x07latency\x12!\n\x0coutput_limit\x18\x0c \x01(\x05R\x0boutputLimit\"\x19\n\x17ReportModelTestResponse\"8\n\x19LeaseInvestigationRequest\x12\x1b\n\tworker_id\x18\x01 \x01(\tR\x08workerId\"\\\n\x1aLeaseInvestigationResponse\x12>\n\rinvestigation\x18\x01 \x01(\x0b\x32\x18.themis.v1.InvestigationR\rinvestigation\".\n\x11RenewLeaseRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\"W\n\x12RenewLeaseResponse\x12\x41\n\x0elease_deadline\x18\x01 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\rleaseDeadline\"\xd9\x02\n\x1c\x43ompleteInvestigationRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12\x42\n\nconclusion\x18\x02 \x01(\x0e\x32\".themis.v1.InvestigationConclusionR\nconclusion\x12\x18\n\x07summary\x18\x03 \x01(\tR\x07summary\x12\x35\n\nhypotheses\x18\x04 \x03(\x0b\x32\x15.themis.v1.HypothesisR\nhypotheses\x12&\n\x05usage\x18\x05 \x01(\x0b\x32\x10.themis.v1.UsageR\x05usage\x12\x35\n\nprovenance\x18\x06 \x01(\x0b\x32\x15.themis.v1.ProvenanceR\nprovenance\x12*\n\x04gaps\x18\x07 \x03(\x0b\x32\x16.themis.v1.EvidenceGapR\x04gaps\"\x1f\n\x1d\x43ompleteInvestigationResponse\"\xba\x01\n\x18\x46\x61ilInvestigationRequest\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12=\n\x06reason\x18\x02 \x01(\x0e\x32%.themis.v1.InvestigationFailureReasonR\x06reason\x12\x18\n\x07message\x18\x03 \x01(\tR\x07message\x12*\n\x04gaps\x18\x04 \x03(\x0b\x32\x16.themis.v1.EvidenceGapR\x04gaps\"t\n\x0b\x45videnceGap\x12\x1a\n\x08template\x18\x01 \x01(\tR\x08template\x12\x31\n\x05\x63\x61use\x18\x02 \x01(\x0e\x32\x1b.themis.v1.EvidenceGapCauseR\x05\x63\x61use\x12\x16\n\x06\x64\x65tail\x18\x03 \x01(\tR\x06\x64\x65tail\"\x1b\n\x19\x46\x61ilInvestigationResponse\"\xd9\x05\n\rInvestigation\x12\x19\n\x08lease_id\x18\x01 \x01(\tR\x07leaseId\x12\x41\n\x0elease_deadline\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\rleaseDeadline\x12\x1f\n\x0bincident_id\x18\x03 \x01(\tR\nincidentId\x12\x18\n\x07profile\x18\x04 \x01(\tR\x07profile\x12,\n\x06target\x18\x05 \x01(\x0b\x32\x14.themis.v1.TargetRefR\x06target\x12\x42\n\x10initial_evidence\x18\x06 \x03(\x0b\x32\x17.themis.v1.EvidenceItemR\x0finitialEvidence\x12G\n\x10initial_failures\x18\x07 \x03(\x0b\x32\x1c.themis.v1.CollectionFailureR\x0finitialFailures\x12:\n\npredicates\x18\x08 \x03(\x0b\x32\x1a.themis.v1.PredicateResultR\npredicates\x12H\n\x11\x61llowed_templates\x18\t \x03(\x0b\x32\x1b.themis.v1.EvidenceTemplateR\x10\x61llowedTemplates\x12\x35\n\x16\x63\x61ndidate_capabilities\x18\n \x03(\tR\x15\x63\x61ndidateCapabilities\x12)\n\x06\x62udget\x18\x0b \x01(\x0b\x32\x11.themis.v1.BudgetR\x06\x62udget\x12\x39\n\x0c\x63\x61pabilities\x18\x0c \x03(\x0b\x32\x15.themis.v1.CapabilityR\x0c\x63\x61pabilities\x12\x35\n\x0broot_causes\x18\r \x03(\x0b\x32\x14.themis.v1.RootCauseR\nrootCauses\x12\x1a\n\x08guidance\x18\x0e \x01(\tR\x08guidance\"\x95\x02\n\nHypothesis\x12(\n\x10root_cause_class\x18\x01 \x01(\tR\x0erootCauseClass\x12\x18\n\x07summary\x18\x02 \x01(\tR\x07summary\x12\x36\n\x17supporting_evidence_ids\x18\x03 \x03(\tR\x15supportingEvidenceIds\x12<\n\x1a\x63ontradicting_evidence_ids\x18\x04 \x03(\tR\x18\x63ontradictingEvidenceIds\x12\x18\n\x07missing\x18\x05 \x03(\tR\x07missing\x12\x33\n\x06status\x18\x06 \x01(\x0e\x32\x1b.themis.v1.HypothesisStatusR\x06status\"`\n\x10\x45videnceTemplate\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12 \n\x0b\x64\x65scription\x18\x02 \x01(\tR\x0b\x64\x65scription\x12\x16\n\x06params\x18\x03 \x03(\tR\x06params\"n\n\x05Usage\x12\x1d\n\nsteps_used\x18\x01 \x01(\x05R\tstepsUsed\x12!\n\x0cinput_tokens\x18\x02 \x01(\x03R\x0binputTokens\x12#\n\routput_tokens\x18\x03 \x01(\x03R\x0coutputTokens*\xe6\x02\n\x10ModelTestOutcome\x12\"\n\x1eMODEL_TEST_OUTCOME_UNSPECIFIED\x10\x00\x12 \n\x1cMODEL_TEST_OUTCOME_CONNECTED\x10\x01\x12!\n\x1dMODEL_TEST_OUTCOME_INCOMPLETE\x10\x02\x12\"\n\x1eMODEL_TEST_OUTCOME_UNREACHABLE\x10\x03\x12 \n\x1cMODEL_TEST_OUTCOME_NO_ANSWER\x10\x04\x12\x1e\n\x1aMODEL_TEST_OUTCOME_REFUSED\x10\x05\x12$\n MODEL_TEST_OUTCOME_NOT_IN_FORMAT\x10\x06\x12\x1e\n\x1aMODEL_TEST_OUTCOME_CUT_OFF\x10\x07\x12\x1f\n\x1bMODEL_TEST_OUTCOME_DECLINED\x10\x08\x12\x1c\n\x18MODEL_TEST_OUTCOME_ERROR\x10\t*\x91\x01\n\x10HypothesisStatus\x12!\n\x1dHYPOTHESIS_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n\x19HYPOTHESIS_STATUS_REFUTED\x10\x01\x12\x1f\n\x1bHYPOTHESIS_STATUS_SUPPORTED\x10\x02\x12\x1a\n\x16HYPOTHESIS_STATUS_OPEN\x10\x03*\x95\x01\n\x17InvestigationConclusion\x12(\n$INVESTIGATION_CONCLUSION_UNSPECIFIED\x10\x00\x12%\n!INVESTIGATION_CONCLUSION_PROPOSED\x10\x01\x12)\n%INVESTIGATION_CONCLUSION_INCONCLUSIVE\x10\x02*\xc7\x02\n\x1aInvestigationFailureReason\x12,\n(INVESTIGATION_FAILURE_REASON_UNSPECIFIED\x10\x00\x12\x32\n.INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE\x10\x01\x12\x35\n1INVESTIGATION_FAILURE_REASON_INVALID_MODEL_OUTPUT\x10\x02\x12\x31\n-INVESTIGATION_FAILURE_REASON_BUDGET_EXHAUSTED\x10\x03\x12\x32\n.INVESTIGATION_FAILURE_REASON_DEADLINE_EXCEEDED\x10\x04\x12)\n%INVESTIGATION_FAILURE_REASON_INTERNAL\x10\x05*\xa7\x01\n\x10\x45videnceGapCause\x12\"\n\x1e\x45VIDENCE_GAP_CAUSE_UNSPECIFIED\x10\x00\x12%\n!EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE\x10\x01\x12#\n\x1f\x45VIDENCE_GAP_CAUSE_DATA_CEILING\x10\x02\x12#\n\x1f\x45VIDENCE_GAP_CAUSE_BUDGET_SPENT\x10\x03\x32\x9b\x05\n\x14InvestigationService\x12\x61\n\x12LeaseInvestigation\x12$.themis.v1.LeaseInvestigationRequest\x1a%.themis.v1.LeaseInvestigationResponse\x12I\n\nRenewLease\x12\x1c.themis.v1.RenewLeaseRequest\x1a\x1d.themis.v1.RenewLeaseResponse\x12j\n\x15\x43ompleteInvestigation\x12\'.themis.v1.CompleteInvestigationRequest\x1a(.themis.v1.CompleteInvestigationResponse\x12^\n\x11\x46\x61ilInvestigation\x12#.themis.v1.FailInvestigationRequest\x1a$.themis.v1.FailInvestigationResponse\x12[\n\x10GetModelSettings\x12\".themis.v1.GetModelSettingsRequest\x1a#.themis.v1.GetModelSettingsResponse\x12R\n\rTakeModelTest\x12\x1f.themis.v1.TakeModelTestRequest\x1a .themis.v1.TakeModelTestResponse\x12X\n\x0fReportModelTest\x12!.themis.v1.ReportModelTestRequest\x1a\".themis.v1.ReportModelTestResponseB\x9d\x01\n\rcom.themis.v1B\x12InvestigationProtoP\x01Z3github.com/hzerrad/themis/gen/go/themis/v1;themisv1\xa2\x02\x03TXX\xaa\x02\tThemis.V1\xca\x02\tThemis\\V1\xe2\x02\x15Themis\\V1\\GPBMetadata\xea\x02\nThemis::V1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,44 +35,56 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'themis.v1.investigation_pb2
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\rcom.themis.v1B\022InvestigationProtoP\001Z3github.com/hzerrad/themis/gen/go/themis/v1;themisv1\242\002\003TXX\252\002\tThemis.V1\312\002\tThemis\\V1\342\002\025Themis\\V1\\GPBMetadata\352\002\nThemis::V1'
-  _globals['_HYPOTHESISSTATUS']._serialized_start=2520
-  _globals['_HYPOTHESISSTATUS']._serialized_end=2665
-  _globals['_INVESTIGATIONCONCLUSION']._serialized_start=2668
-  _globals['_INVESTIGATIONCONCLUSION']._serialized_end=2817
-  _globals['_INVESTIGATIONFAILUREREASON']._serialized_start=2820
-  _globals['_INVESTIGATIONFAILUREREASON']._serialized_end=3147
-  _globals['_EVIDENCEGAPCAUSE']._serialized_start=3150
-  _globals['_EVIDENCEGAPCAUSE']._serialized_end=3317
-  _globals['_GETMODELSETTINGSREQUEST']._serialized_start=101
-  _globals['_GETMODELSETTINGSREQUEST']._serialized_end=126
-  _globals['_GETMODELSETTINGSRESPONSE']._serialized_start=129
-  _globals['_GETMODELSETTINGSRESPONSE']._serialized_end=289
-  _globals['_LEASEINVESTIGATIONREQUEST']._serialized_start=291
-  _globals['_LEASEINVESTIGATIONREQUEST']._serialized_end=347
-  _globals['_LEASEINVESTIGATIONRESPONSE']._serialized_start=349
-  _globals['_LEASEINVESTIGATIONRESPONSE']._serialized_end=441
-  _globals['_RENEWLEASEREQUEST']._serialized_start=443
-  _globals['_RENEWLEASEREQUEST']._serialized_end=489
-  _globals['_RENEWLEASERESPONSE']._serialized_start=491
-  _globals['_RENEWLEASERESPONSE']._serialized_end=578
-  _globals['_COMPLETEINVESTIGATIONREQUEST']._serialized_start=581
-  _globals['_COMPLETEINVESTIGATIONREQUEST']._serialized_end=926
-  _globals['_COMPLETEINVESTIGATIONRESPONSE']._serialized_start=928
-  _globals['_COMPLETEINVESTIGATIONRESPONSE']._serialized_end=959
-  _globals['_FAILINVESTIGATIONREQUEST']._serialized_start=962
-  _globals['_FAILINVESTIGATIONREQUEST']._serialized_end=1148
-  _globals['_EVIDENCEGAP']._serialized_start=1150
-  _globals['_EVIDENCEGAP']._serialized_end=1266
-  _globals['_FAILINVESTIGATIONRESPONSE']._serialized_start=1268
-  _globals['_FAILINVESTIGATIONRESPONSE']._serialized_end=1295
-  _globals['_INVESTIGATION']._serialized_start=1298
-  _globals['_INVESTIGATION']._serialized_end=2027
-  _globals['_HYPOTHESIS']._serialized_start=2030
-  _globals['_HYPOTHESIS']._serialized_end=2307
-  _globals['_EVIDENCETEMPLATE']._serialized_start=2309
-  _globals['_EVIDENCETEMPLATE']._serialized_end=2405
-  _globals['_USAGE']._serialized_start=2407
-  _globals['_USAGE']._serialized_end=2517
-  _globals['_INVESTIGATIONSERVICE']._serialized_start=3320
-  _globals['_INVESTIGATIONSERVICE']._serialized_end=3813
+  _globals['_MODELTESTOUTCOME']._serialized_start=3304
+  _globals['_MODELTESTOUTCOME']._serialized_end=3662
+  _globals['_HYPOTHESISSTATUS']._serialized_start=3665
+  _globals['_HYPOTHESISSTATUS']._serialized_end=3810
+  _globals['_INVESTIGATIONCONCLUSION']._serialized_start=3813
+  _globals['_INVESTIGATIONCONCLUSION']._serialized_end=3962
+  _globals['_INVESTIGATIONFAILUREREASON']._serialized_start=3965
+  _globals['_INVESTIGATIONFAILUREREASON']._serialized_end=4292
+  _globals['_EVIDENCEGAPCAUSE']._serialized_start=4295
+  _globals['_EVIDENCEGAPCAUSE']._serialized_end=4462
+  _globals['_GETMODELSETTINGSREQUEST']._serialized_start=133
+  _globals['_GETMODELSETTINGSREQUEST']._serialized_end=158
+  _globals['_GETMODELSETTINGSRESPONSE']._serialized_start=161
+  _globals['_GETMODELSETTINGSRESPONSE']._serialized_end=388
+  _globals['_TAKEMODELTESTREQUEST']._serialized_start=390
+  _globals['_TAKEMODELTESTREQUEST']._serialized_end=412
+  _globals['_TAKEMODELTESTRESPONSE']._serialized_start=414
+  _globals['_TAKEMODELTESTRESPONSE']._serialized_end=479
+  _globals['_MODELTEST']._serialized_start=482
+  _globals['_MODELTEST']._serialized_end=627
+  _globals['_REPORTMODELTESTREQUEST']._serialized_start=630
+  _globals['_REPORTMODELTESTREQUEST']._serialized_end=1046
+  _globals['_REPORTMODELTESTRESPONSE']._serialized_start=1048
+  _globals['_REPORTMODELTESTRESPONSE']._serialized_end=1073
+  _globals['_LEASEINVESTIGATIONREQUEST']._serialized_start=1075
+  _globals['_LEASEINVESTIGATIONREQUEST']._serialized_end=1131
+  _globals['_LEASEINVESTIGATIONRESPONSE']._serialized_start=1133
+  _globals['_LEASEINVESTIGATIONRESPONSE']._serialized_end=1225
+  _globals['_RENEWLEASEREQUEST']._serialized_start=1227
+  _globals['_RENEWLEASEREQUEST']._serialized_end=1273
+  _globals['_RENEWLEASERESPONSE']._serialized_start=1275
+  _globals['_RENEWLEASERESPONSE']._serialized_end=1362
+  _globals['_COMPLETEINVESTIGATIONREQUEST']._serialized_start=1365
+  _globals['_COMPLETEINVESTIGATIONREQUEST']._serialized_end=1710
+  _globals['_COMPLETEINVESTIGATIONRESPONSE']._serialized_start=1712
+  _globals['_COMPLETEINVESTIGATIONRESPONSE']._serialized_end=1743
+  _globals['_FAILINVESTIGATIONREQUEST']._serialized_start=1746
+  _globals['_FAILINVESTIGATIONREQUEST']._serialized_end=1932
+  _globals['_EVIDENCEGAP']._serialized_start=1934
+  _globals['_EVIDENCEGAP']._serialized_end=2050
+  _globals['_FAILINVESTIGATIONRESPONSE']._serialized_start=2052
+  _globals['_FAILINVESTIGATIONRESPONSE']._serialized_end=2079
+  _globals['_INVESTIGATION']._serialized_start=2082
+  _globals['_INVESTIGATION']._serialized_end=2811
+  _globals['_HYPOTHESIS']._serialized_start=2814
+  _globals['_HYPOTHESIS']._serialized_end=3091
+  _globals['_EVIDENCETEMPLATE']._serialized_start=3093
+  _globals['_EVIDENCETEMPLATE']._serialized_end=3189
+  _globals['_USAGE']._serialized_start=3191
+  _globals['_USAGE']._serialized_end=3301
+  _globals['_INVESTIGATIONSERVICE']._serialized_start=4465
+  _globals['_INVESTIGATIONSERVICE']._serialized_end=5132
 # @@protoc_insertion_point(module_scope)

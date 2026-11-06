@@ -29,6 +29,7 @@ import (
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/modeltest"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 
@@ -61,6 +62,9 @@ type Server struct {
 	Settings interface {
 		Model(ctx context.Context) (settings.Model, error)
 	}
+	// ModelTests are the tests of the model's connection asked for on the
+	// Setup page, which the investigator makes. Nil means none are.
+	ModelTests *modeltest.Tests
 
 	// Fixes are the fixes Themis can carry out, described to suggesters.
 	Fixes capability.Registry
