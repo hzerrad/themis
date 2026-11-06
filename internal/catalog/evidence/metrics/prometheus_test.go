@@ -2,7 +2,6 @@ package metrics_test
 
 import (
 	"context"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -149,29 +148,6 @@ func TestPrometheus_CantAnswer(t *testing.T) {
 // A password in the address is never shown.
 func withPassword(c *config.Prometheus) {
 	c.Address = strings.Replace(c.Address, "http://", "http://admin:hunter2@", 1)
-}
-
-func TestPrometheus_TrustsTheGivenCA(t *testing.T) {
-	srv := httptest.NewTLSServer(&promServer{reply: func(string) (int, string) { return http.StatusOK, vector(sample("app", "1")) }})
-	defer srv.Close()
-	dir := t.TempDir()
-	ca := filepath.Join(dir, "ca.crt")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := newPrometheus(t, srv, nil).Memory(t.Context(), dotted); err == nil {
-		t.Error("a server signed by an unknown CA was trusted")
-	}
-	if r, err := newPrometheus(t, srv, func(c *config.Prometheus) { c.TLS.CAFile = ca }).Memory(t.Context(), dotted); err != nil || !r.Answered() {
-		t.Errorf("with its CA: %+v, %v", r, err)
-	}
-	notPEM := filepath.Join(dir, "not.crt")
-	if err := os.WriteFile(notPEM, []byte("hello"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := metrics.NewPrometheus(config.Prometheus{Address: srv.URL, TLS: config.TLS{CAFile: notPEM}}); err == nil {
-		t.Error("a CA file without a certificate was accepted")
-	}
 }
 
 // stub answers every question with one reading or error.

@@ -83,6 +83,13 @@ type Checker struct {
 	Model interface {
 		View(ctx context.Context) (settings.ModelView, error)
 	}
+	// Alertmanager is the Alertmanager Themis reads, every ReadEvery. Nil
+	// means alerts come only through the webhook.
+	Alertmanager interface {
+		View(ctx context.Context) (settings.AlertmanagerView, error)
+		LastRead(ctx context.Context) (store.AlertRead, error)
+	}
+	ReadEvery time.Duration
 	// Metrics are the sources Themis reads containers' memory and CPU use
 	// from. Nil means none is set up.
 	Metrics interface {
@@ -222,6 +229,17 @@ func (c *Checker) model(ctx context.Context) Check {
 
 func (c *Checker) alerts(ctx context.Context) Check {
 	ch := Check{Name: "Alerts"}
+	reading := false
+	if c.Alertmanager != nil {
+		v, err := c.Alertmanager.View(ctx)
+		if err != nil {
+			return failed(ch, err)
+		}
+		if v.Address != "" {
+			return c.reading(ctx, ch, v.Address)
+		}
+		reading = v.Reading
+	}
 	got, err := c.Store.LastHeartbeat(ctx, store.HeartbeatAlertmanager)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return failed(ch, err)
@@ -241,6 +259,11 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
+	if err != nil && reading {
+		ch.State, ch.Summary = Warn, "No Alertmanager address."
+		ch.Fix = "Set Alertmanager's address on the Setup page."
+		return ch
+	}
 	if err != nil {
 		ch.State, ch.Summary = Waiting, "No alert received."
 		ch.Fix = "Add an Alertmanager webhook receiver for Themis's /v1/intake/alertmanager, with the intake token from the themis-tokens Secret. Route crash-loop and out-of-memory alerts to it."
@@ -251,6 +274,50 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		ch.Summary = fmt.Sprintf("Received through the %q receiver.", got.Detail)
 	}
 	return ch
+}
+
+// readFixes say what to do about each way reading Alertmanager fails.
+var readFixes = map[string]string{
+	store.ReadUnreachable: "Check the address on the Setup page.",
+	store.ReadRefused:     "Set Alertmanager's token or basic auth, with its address, in the alerting.alertmanager values.",
+	store.ReadUnexpected:  "Check that the address on the Setup page is Alertmanager's.",
+}
+
+// reading says how reading Alertmanager at address goes.
+func (c *Checker) reading(ctx context.Context, ch Check, address string) Check {
+	every := c.ReadEvery
+	r, err := c.Alertmanager.LastRead(ctx)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return failed(ch, err)
+	}
+	if !r.ReadAt.IsZero() {
+		ch.At, ch.Since = &r.ReadAt, "Last read"
+	}
+	says := fmt.Sprintf("Reading from %s every %s.", address, seconds(every))
+	switch {
+	case r.FailedAt.After(r.ReadAt):
+		ch.State, ch.Summary, ch.Fix = Problem, upper(r.Failure)+".", readFixes[r.FailureKind]
+		if ch.Fix == "" {
+			ch.Fix = readFixes[store.ReadUnexpected]
+		}
+	case r.ReadAt.IsZero() || r.Address != address:
+		ch.State, ch.Summary, ch.At, ch.Since = Waiting, says+" Not read yet.", nil, ""
+	// Reads stopped: three missed, and some leeway for a slow one.
+	case c.now().Sub(r.ReadAt) > 3*every+30*time.Second:
+		ch.State, ch.Summary = Problem, fmt.Sprintf("Reading from %s stopped.", address)
+		ch.Fix = "Read the core's logs."
+	default:
+		ch.State, ch.Summary = OK, says
+	}
+	return ch
+}
+
+// seconds writes an interval as people read it: 15 s, or 2 min.
+func seconds(d time.Duration) string {
+	if d >= time.Minute && d%time.Minute == 0 {
+		return fmt.Sprintf("%d min", int(d/time.Minute))
+	}
+	return fmt.Sprintf("%d s", int(d.Round(time.Second)/time.Second))
 }
 
 // needs is what Themis reads in each namespace it watches, and what's lost

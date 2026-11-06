@@ -33,6 +33,16 @@ var (
 		Name: "themis_intake_refused_total",
 		Help: "Intake requests refused before their alerts were read, by source and reason (no_admin_account).",
 	}, []string{"source", "reason"})
+
+	reads = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_intake_reads_total",
+		Help: "Reads of a source Themis reads alerts from, by source and result (ok, or why it failed: unreachable, refused, unexpected).",
+	}, []string{"source", "result"})
+
+	alertsTaken = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_intake_alerts_taken_total",
+		Help: "Alerts taken from a source Themis reads, by source and status: firing when one starts, or again while it fires, and resolved when it ends.",
+	}, []string{"source", "status"})
 )
 
 // Why an intake request is refused before its alerts are read.
@@ -53,7 +63,23 @@ const (
 )
 
 func init() {
-	metrics.Registry.MustRegister(requests, alertsReceived, truncatedAlerts, alertsProcessed, refused)
+	metrics.Registry.MustRegister(requests, alertsReceived, truncatedAlerts, alertsProcessed, refused, reads, alertsTaken)
+}
+
+// ReadResultOK is the result of a read that succeeded.
+const ReadResultOK = "ok"
+
+// ObserveRead counts a read of source with result: ReadResultOK, or why it
+// failed.
+func ObserveRead(source, result string) {
+	reads.WithLabelValues(source, result).Inc()
+}
+
+// ObserveTaken counts n alerts taken from source with status.
+func ObserveTaken(source string, status AlertStatus, n int) {
+	if n > 0 {
+		alertsTaken.WithLabelValues(source, string(status)).Add(float64(n))
+	}
 }
 
 // ObserveRefused counts an intake request refused for reason before its

@@ -74,7 +74,15 @@ spec:
             {{- if include "themis.prometheusSecrets" . | trim }}
             - {name: prometheus, mountPath: /var/run/secrets/themis-prometheus, readOnly: true}
             {{- end }}
+            {{- if include "themis.alertmanagerSecrets" . | trim }}
+            - {name: alertmanager, mountPath: /var/run/secrets/themis-alertmanager, readOnly: true}
+            {{- end }}
       volumes:
+        {{- with include "themis.alertmanagerSecrets" . | trim }}
+        - name: alertmanager
+          projected:
+            sources: {{- . | nindent 14 }}
+        {{- end }}
         {{- with include "themis.prometheusSecrets" . | trim }}
         - name: prometheus
           projected:

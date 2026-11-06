@@ -560,9 +560,80 @@ function alertmanagerSetup() {
   ns.addEventListener("change", show);
   show();
   return h("div", { class: "sub" },
-    h("h2", {}, "Connect Alertmanager"),
     h("div", { class: "inline" }, field("Alertmanager's namespace", ns)),
     out);
+}
+
+// alertmanagerSaved says the address was just saved, so Setup says so once.
+let alertmanagerSaved = false;
+
+// ADDRESS_FROM says where the Alertmanager address in use comes from.
+const ADDRESS_FROM = {
+  install: "Set in Helm. Read-only here.",
+  found: "Found in the cluster at install.",
+  setup: "Set on this page.",
+};
+
+// testFinding says what Alertmanager listed when tested.
+function testFinding(r) {
+  const firing = r.firing.map((f) => f.name + " (" + f.count + ")").join(", ");
+  return [
+    "Alertmanager" + (r.version ? " " + r.version : "") + " answered. ",
+    r.active === 1 ? "1 alert is active. " : r.active + " alerts are active. ",
+    firing ? "Of the alerts Themis answers, these fire now: " + firing + "." : "None of the alerts Themis answers fires now.",
+  ];
+}
+
+// alertsStep reads alerts from Alertmanager: the address in use, where it
+// comes from, and a test. Sending them to Themis is the other way.
+function alertsStep(v, check) {
+  const saved = alertmanagerSaved;
+  alertmanagerSaved = false;
+  const webhook = h("details", { class: "fold sub", "data-key": "alerts-webhook" },
+    h("summary", {}, "Or let Alertmanager send alerts to Themis"), alertmanagerSetup());
+  if (!v.reading) {
+    return [h("p", {}, partFinding(check)),
+      check.state === "ok" ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]];
+  }
+  const locked = v.from === "install";
+  const address = h("input", { type: "text", value: v.address, placeholder: "http://alertmanager-operated.monitoring:9093", autocapitalize: "none", disabled: locked });
+  const from = v.from === "setup" && v.found ? ADDRESS_FROM.setup + " Empty it to go back to " + v.found + "."
+    : ADDRESS_FROM[v.from] || "Not found in the cluster at install.";
+  const error = h("div", { class: "error", role: "alert" });
+  const result = h("p", { role: "status" });
+  const save = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    try {
+      await api("/v1/settings/alertmanager", { method: "PUT", body: JSON.stringify({ address: address.value.trim() }) });
+      alertmanagerSaved = true;
+      route();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  const test = async () => {
+    error.textContent = "";
+    result.replaceChildren("Testing.");
+    try {
+      const r = await api("/v1/setup/alertmanager/test", { method: "POST", body: JSON.stringify({ address: locked ? "" : address.value.trim() }) });
+      result.replaceChildren(...testFinding(r));
+    } catch (err) {
+      result.replaceChildren();
+      error.textContent = err.message;
+    }
+  };
+  return [
+    saved ? h("p", { class: "flash", role: "status" }, "Address saved. Used from the next read.") : null,
+    h("p", {}, partFinding(check)),
+    h("p", { class: "quiet" }, "Done when Themis reads from Alertmanager."),
+    h("form", { class: "form", onsubmit: save },
+      field("Alertmanager's address", address, from),
+      h("div", { class: "inline" },
+        locked ? null : h("button", { class: "btn primary", type: "submit" }, "Save the address"),
+        h("button", { class: "btn", type: "button", onclick: test }, "Test")),
+      error, result),
+    webhook];
 }
 
 // modelSaved says the model was just saved, so Setup says so once.
@@ -687,6 +758,8 @@ async function setup() {
   const done = (name) => check(name).state === "ok";
   let model = null;
   try { model = await api("/v1/settings/model"); } catch {}
+  let alertmanager = { reading: false };
+  try { alertmanager = await api("/v1/settings/alertmanager"); } catch {}
   const investigatorOff = check("Investigator").state === "off";
   const signIn = check("Sign-in");
   const acting = checks.filter(needsAction).length;
@@ -699,9 +772,7 @@ async function setup() {
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
       : model ? { title: "The model", status: model.complete ? "Done" : "Not done", body: modelStep(model) } : null,
-    { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: [
-      h("p", {}, partFinding(check("Alerts"))),
-      done("Alerts") ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]] },
+    { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: alertsStep(alertmanager, check("Alerts")) },
     { title: "Check", status: acting ? "Action required" : "Done", body: [digest(checks), h("p", { class: "sub" }, h("a", { href: "#/status" }, "Full status"))] },
   ].filter(Boolean);
   const tone = { Done: "good", "Action required": "wait" };
@@ -742,9 +813,7 @@ async function status() {
         h("td", {}, partState(c)),
         h("td", {}, partFinding(c),
           c.fix ? h("div", { class: "fix" }, c.fix) : null,
-          c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("button", { class: "btn small sub", type: "button", onclick: (e) => {
-            e.target.replaceWith(alertmanagerSetup());
-          } }, "Connect Alertmanager") : null)))))),
+          c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("p", { class: "sub" }, h("a", { href: "#/setup" }, "Connect Alertmanager on the Setup page")) : null)))))),
     h("p", { class: "sub" }, h("button", { class: "btn", type: "button", onclick: route }, "Check again")));
 }
 

@@ -112,6 +112,9 @@ func (c Config) Validate() error {
 	}
 
 	c.Metrics.validate(add)
+	if !c.Alerting.Alertmanager.Disabled {
+		c.Alerting.Alertmanager.validate(add)
+	}
 	c.ExternalProposals.validate(func(sub, format string, args ...any) { add("externalProposals."+sub, format, args...) })
 	switch {
 	case c.Resources != nil && c.Resources.Namespace == "":

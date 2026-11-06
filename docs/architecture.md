@@ -3,7 +3,7 @@
 Themis is three processes and a database. They are separated by what each may do, not by feature.
 
 ```
- Alertmanager ──webhook──▶ themis-core ◀──gRPC── themis-intelligence ──▶ your model
+ Alertmanager ◀──reads─── themis-core ◀──gRPC── themis-intelligence ──▶ your model
                              │    ▲                (no cluster or DB access)
                   reads      │    │ HTTP API, UI
                              ▼    │
@@ -15,11 +15,11 @@ Themis is three processes and a database. They are separated by what each may do
 
 | Component | May | May not |
 |---|---|---|
-| `themis-core` | Read enrolled workloads, pods, logs and events, and their memory and CPU use from the metrics API or Prometheus; list nodes, and ResourceQuotas and LimitRanges in enrolled namespaces, to tell whether a resource change can run; run governance, approvals, verification; serve the API and UI | Read Secrets in workload namespaces; write to workloads |
+| `themis-core` | Read the active alerts from Alertmanager's API; read enrolled workloads, pods, logs and events, and their memory and CPU use from the metrics API or Prometheus; list nodes, and ResourceQuotas and LimitRanges in enrolled namespaces, to tell whether a resource change can run; run governance, approvals, verification; serve the API and UI | Read Secrets in workload namespaces; write to workloads |
 | `themis-intelligence` | Call the model; ask the core for evidence by template name; submit proposals | Reach the cluster or the database: it has no service account token, and a NetworkPolicy allows only the core and the model |
 | `themis-executor` | Get and patch Deployments in enrolled namespaces | Anything else; it acts only on an action ID, and rechecks everything itself |
 
-Each API is behind its own bearer token: Alertmanager's, the investigator's, the executor's, and the admin token for the API and UI. The tokens are files, read on every request, so rotation needs no restart. People can also sign in to the UI through an OIDC provider, with a role each, so an approval records who gave it; see [People and roles](configuration.md#people-and-roles).
+Each API is behind its own bearer token: the alert webhook's, the investigator's, the executor's, and the admin token for the API and UI. The tokens are files, read on every request, so rotation needs no restart. People can also sign in to the UI through an OIDC provider, with a role each, so an approval records who gave it; see [People and roles](configuration.md#people-and-roles).
 
 ## An incident's life
 
