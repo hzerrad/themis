@@ -161,3 +161,28 @@ func podless(t *testing.T) incident.TargetRef {
 	d := k8s.NewDeployment(t, ns, "idle")
 	return incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: ns, Name: d.Name, UID: string(d.UID)}
 }
+
+// History names the source of the figures over a window, as people know it,
+// and only when one gave them.
+func TestHistory(t *testing.T) {
+	item := func(template string, view any) evidence.Item {
+		data, err := json.Marshal(view)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return evidence.Item{Template: template, Data: data}
+	}
+	for name, tc := range map[string]struct {
+		it   evidence.Item
+		want string
+	}{
+		"throttling from Prometheus": {item(evidence.ContainerCPU, evidence.ContainerCPUView{Window: "1h", Throttling: evidence.ReadingView{Source: "prometheus"}}), "Prometheus's container CPU history over 1h"},
+		"peaks from Prometheus":      {item(evidence.ContainerMemory, evidence.ContainerMemoryView{Window: "15m", Peak: evidence.ReadingView{Source: "prometheus"}}), "Prometheus's container memory history over 15m"},
+		"no peaks":                   {item(evidence.ContainerMemory, evidence.ContainerMemoryView{Window: "15m", Peak: evidence.ReadingView{Unavailable: "no metrics source is set up"}}), ""},
+		"no window to its figures":   {item(evidence.PodStates, evidence.PodStatesView{}), ""},
+	} {
+		if got := tc.it.History(); got != tc.want {
+			t.Errorf("%s: History = %q, want %q", name, got, tc.want)
+		}
+	}
+}

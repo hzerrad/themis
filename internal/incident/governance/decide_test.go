@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -211,8 +212,11 @@ func TestDecide(t *testing.T) {
 			if tt.reason != "" && d.Decision.Reason != tt.reason {
 				t.Errorf("reason = %q, want %q", d.Decision.Reason, tt.reason)
 			}
-			// With several profiles, the reason says whose profile decided.
-			if len(tt.also) > 0 && !regexp.MustCompile(` of the [a-z-]+ profile |[Tt]he [a-z-]+ profile('s| allows) `).MatchString(d.Decision.Reason) {
+			// However many profiles matched, a profile's decision says which
+			// profile it was: only GitOps, and a fix none offers, are no
+			// profile's.
+			byProfile := d.Decision.PolicyID != governance.GitOpsRule && !strings.HasPrefix(d.Decision.Reason, "Refused. None of the incident's profiles")
+			if byProfile && !regexp.MustCompile(` of the [a-z-]+ profile |[Tt]he [a-z-]+ profile('s| allows) `).MatchString(d.Decision.Reason) {
 				t.Errorf("reason %q doesn't say which profile's policy decided", d.Decision.Reason)
 			}
 			a := d.Action

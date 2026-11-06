@@ -130,9 +130,9 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 		Before: before, After: after,
 		ManagedBy:   w.ManagedBy,
 		Risk:        "medium",
-		BlastRadius: map[string]any{"replicas": int64(w.Replicas.Desired)},
+		BlastRadius: capability.Rollout(w),
 		Facts:       facts(edits, req.container),
-		Done:        done(edits, req.container),
+		Done:        Capability{}.Words(t.Name, req.params(), before, after).Done,
 		Mark:        mark,
 		State:       state{workload: w, desired: desired},
 	}, nil

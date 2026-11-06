@@ -134,28 +134,15 @@ const ROLES = ["viewer", "responder", "approver", "admin"];
 const ROLE_LABEL = { viewer: "Viewer", responder: "Responder", approver: "Approver", admin: "Admin" };
 const can = (role) => me && ROLES.indexOf(me.role) >= ROLES.indexOf(role);
 
-// A fix, in the words of each thing a page says about it.
+// A fix, in the words of each thing a page says about it, as the fix words
+// the change: an action's, a suggestion's, or an incident's in brief. The
+// button "Approve the raise" makes "Raise approved.", and so on for each.
 const ROLLBACK = "deployment.rollback-to-revision";
-function fixWords(name, params, target) {
-  const p = params || {};
-  if (p.restores) {
-    return { noun: "restore", short: "Restore the previous state", question: "Restore the previous state of " + target + "?",
-      doing: "Restoring the previous state of " + target + ".", done: "Restored the previous state of " + target + "." };
-  }
-  if (name === ROLLBACK) {
-    return { noun: "rollback", short: "Roll back to revision " + p.revision, question: "Roll " + target + " back to revision " + p.revision + "?",
-      doing: "Rolling " + target + " back to revision " + p.revision + ".", done: "Rolled " + target + " back to revision " + p.revision + "." };
-  }
-  if (name === "deployment.set-probes") {
-    return { noun: "probe change", short: "Change the probe timing", question: "Change the probe timing of " + target + "?",
-      doing: "Changing the probe timing of " + target + ".", done: "Changed the probe timing of " + target + "." };
-  }
-  if (name === "deployment.set-resources") {
-    return { noun: "memory and CPU change", short: "Change the memory and CPU settings", question: "Change the memory and CPU settings of " + target + "?",
-      doing: "Changing the memory and CPU settings of " + target + ".", done: "Changed the memory and CPU settings of " + target + "." };
-  }
-  return { noun: "change", short: "Apply a change", question: "Apply this change to " + target + "?",
-    doing: "Applying a change to " + target + ".", done: "Changed " + target + "." };
+function fixWords(x) {
+  const w = (x && (x.Words || x.words)) || {};
+  const act = w.act || "Apply a change";
+  return { noun: w.noun || "change", short: act, question: act + "?", doing: w.doing || "Applying the change.",
+    done: w.done || "Changed.", verifies: w.verifies || "" };
 }
 
 // REFERRAL ends what Themis says when it hands an incident to a person: one
@@ -937,9 +924,8 @@ function listHow(i) {
 // rowWhat is one plain sentence of what happened and what Themis proposes.
 function rowWhat(i) {
   const s = i.summary || {};
-  const t = workload(i.target);
   const cause = s.cause ? causeText(s.cause.name, s.cause.description) : null;
-  const fx = s.fix ? fixWords(s.fix.capability, s.fix.params, t.name) : null;
+  const fx = s.fix ? fixWords(s.fix) : null;
   const em = (text) => (text ? h("em", {}, text) : null);
   if (i.supersededBy) return ["Changed outside Themis and still failing. ", em("A newer incident covers it.")];
   if (i.state === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(fx.short + "?")];
@@ -996,15 +982,27 @@ const evidenceName = (d, id) => {
 };
 const sources = (d, ids) => [...new Set((ids || []).map((id) => evidenceName(d, id)))].join(", ");
 
+// withheld says why some of a change's values aren't shown, when some aren't:
+// they look like secrets, or they show only that they change.
+function withheld(changes) {
+  const summed = changes.filter((c) => c.withheld === "summary").map((c) => c.field);
+  return [
+    changes.some((c) => c.withheld === "secret") ? "Values that look like secrets are hidden." : "",
+    !summed.length ? "" : summed.every((f) => f === "command" || f === "args") ? "Commands and arguments show only that they change."
+      : "Fields marked changed show only that they change.",
+  ].filter(Boolean).join(" ");
+}
+
 function changesTable(changes) {
   if (!changes || changes.length === 0) return h("p", { class: "quiet" }, "No field of the pod template changes.");
+  const note = withheld(changes);
   return [
     h("table", { class: "diff" },
       h("thead", {}, h("tr", {}, h("th", {}, "Container"), h("th", {}, "Field"), h("th", {}, "Now"), h("th", {}, "After"))),
       h("tbody", {}, changes.map((c) => h("tr", {},
         h("td", {}, h("code", {}, c.container)), h("td", {}, h("code", {}, c.field)),
         h("td", { class: "val from" }, c.before), h("td", { class: "val to" }, c.after))))),
-    h("p", { class: "quiet small sub" }, "Values that look like secrets are hidden. Commands and arguments show only that they change."),
+    note ? h("p", { class: "quiet small sub" }, note) : null,
   ];
 }
 
@@ -1087,10 +1085,13 @@ function suspicion(d, action, noun) {
     h("summary", {}, "More suspicious text", h("span", { class: "n" }, blocks.length - 3)), blocks.slice(3)) : null];
 }
 
-// observed is what verifying a change found, such as 2 of 3 pods ready.
+// observed is what verifying a change found, such as "2 of 3 pods are
+// ready.", or null when it recorded nothing to say.
 function observed(a) {
-  const o = a && a.Verification && a.Verification.Observation;
-  return o ? (o.Facts || (o.ReadyReplicas + " of " + o.DesiredReplicas + " pods ready.")) : null;
+  const o = (a && a.Verification && a.Verification.Observation) || {};
+  if (o.Facts) return o.Facts;
+  const n = (v) => typeof v === "number";
+  return n(o.ReadyReplicas) && n(o.DesiredReplicas) ? o.ReadyReplicas + " of " + o.DesiredReplicas + " pods are ready." : null;
 }
 
 // result says what became of a change once decided.
@@ -1111,19 +1112,32 @@ function result(a) {
   return h("dl", { class: "result" }, rows);
 }
 
+// restarts says how many pods a change restarts, and how many at a time,
+// from its blast radius: replicas, and atOnce as its rollout strategy has it.
+function restarts(radius) {
+  const r = radius || {};
+  if (typeof r.replicas !== "number") return null;
+  const n = r.replicas;
+  const pods = h("b", {}, plural(n, "pod", "pods"));
+  if (n === 0) return "No pod runs, so none restarts. ";
+  if (n === 1 || typeof r.atOnce !== "number") return ["Restarts ", pods, ". "];
+  if (r.atOnce >= n) return ["Restarts all ", pods, " at once. "];
+  return ["Restarts ", pods, r.atOnce === 1 ? ", one at a time. " : ", up to " + r.atOnce + " at a time. "];
+}
+
 // decision is a change: exactly what it does, and the decision on it, or
 // what became of it.
 function decision(a, d, ctx, latest, reload) {
   const t = workload(d.Incident.target);
-  const fx = fixWords(a.Capability, a.Params, t.name);
+  const fx = fixWords(a);
   const awaiting = a.State === "awaiting_approval";
   const gitOps = a.PolicyID === GITOPS;
-  const replicas = a.BlastRadius && a.BlastRadius.replicas;
   const facts = [
-    replicas !== undefined ? ["Affects ", h("b", {}, plural(Number(replicas), "pod", "pods")), ". "] : null,
-    a.Risk ? ["Risk: ", a.Risk, ". "] : null,
+    awaiting || gitOps ? restarts(a.BlastRadius) : null,
     awaiting && a.ExpiresAt ? ["Approve before ", h("b", {}, when(a.ExpiresAt)), ". "] : null,
-    awaiting ? "Applies exactly this change, then verifies it. Void if " + t.name + " changes before it is applied." : null,
+    awaiting ? "Applies exactly this change. " : null,
+    awaiting && fx.verifies ? "Then checks that " + fx.verifies + ". " : null,
+    awaiting ? "Void if " + t.name + " changes first." : null,
   ];
   let side;
   if (awaiting && can("approver")) {
@@ -1167,7 +1181,7 @@ function decision(a, d, ctx, latest, reload) {
     h("div", {},
       h("h3", {}, latest ? (gitOps ? "The recommended change" : "The exact change") : cap(fx.short)),
       changesTable(a.Changes),
-      h("p", { class: "facts" }, facts),
+      facts.some(Boolean) ? h("p", { class: "facts" }, facts) : null,
       latest ? suspicion(d, a, fx.noun) : null),
     side);
 }
@@ -1220,13 +1234,29 @@ function finding(g, d, side) {
       h("span", { class: "src" }, [unknown ? null : p.Reason, sources(d, p.EvidenceIDs)].filter(Boolean).join(" · "))));
 }
 
+// basis says once what the checks rest on, from the checks that say only
+// whether the figures they need are there: "Based on Prometheus's container
+// CPU history over 1h.", or what such a check found otherwise.
+function basis(d) {
+  const checks = d.Checks || {};
+  const lines = (d.Predicates || []).filter((p) => (checks[p.Name] || {}).availability).map((p) => {
+    const on = p.Value === "true" && (d.Basis || {})[p.Name];
+    return on ? "Based on " + on + "." : sentence(statement(d, p));
+  });
+  return [...new Set(lines)].join(" ");
+}
+
 // findings weighs Themis's checks: for and against fix, the fix weighed,
 // when there is one, each fact once. Without one, a fact against any fix
 // the incident offers, such as no earlier revision to roll back to, is
-// against, and what the checks found true is found.
+// against, and what the checks found true is found. A check that says only
+// whether figures are there is neither: it shows once, as what the others
+// rest on.
 function findings(d, cited, noun, fix) {
-  const all = d.Predicates || [];
-  if (!all.length) return null;
+  const checks = d.Checks || {};
+  const all = (d.Predicates || []).filter((p) => !(checks[p.Name] || {}).availability);
+  const based = basis(d);
+  if (!all.length && !based) return null;
   const fixes = cited ? [fix] : (d.Fixes || []).map((f) => f.name);
   const forFix = [], againstFix = [], unknown = [], other = [];
   for (const g of sameFindings(all, cited)) {
@@ -1251,6 +1281,7 @@ function findings(d, cited, noun, fix) {
       cited ? pan("against", "Against, or unknown", [...againstFix, ...unknown], "No check is against it.")
         : pan("against", "Unknown, or against", [...againstFix, ...unknown], "Every check has an answer.")),
     cited ? h("p", { class: "weigh" }, weigh) : null,
+    based ? h("p", { class: "quiet small" }, based) : null,
     blind,
     other.length ? h("details", { class: "fold sub", "data-key": "other-checks" },
       h("summary", {}, "Other checks", h("span", { class: "n" }, other.length)),
@@ -1332,7 +1363,7 @@ function investigatorNote(inv, p, d) {
 
 function otherSuggestion(p, d) {
   return h("div", { class: "cause" },
-    h("b", {}, fixWords(p.Capability, p.Params, workload(d.Incident.target).name).short), " ",
+    h("b", {}, fixWords(p).short), " ",
     h("span", { class: "state " + (p.Status === "rejected" ? "bad" : "done") }, label(SUGGESTION_LABEL, p.Status)),
     p.RejectionReason ? h("p", {}, label(REJECTION_LABEL, p.RejectionReason)) : null,
     h("dl", { class: "tech sub" }, sourceRows(p)),
@@ -1417,11 +1448,10 @@ function technical(d, action) {
 // of its values. Each form's params() returns the fix's values, or throws
 // what to correct.
 
-// fixNoun names a fix the incident's profiles offer: in this page's words
-// when it has them, or in the fix's own.
+// fixNoun names a kind of fix the incident's profiles offer, in the fix's own
+// words: "a probe change" reads "probe change".
 function fixNoun(f) {
-  const noun = fixWords(f.name, {}, "").noun;
-  return noun !== "change" ? noun : String(f.noun || f.name).replace(/^an? /, "");
+  return String(f.noun || f.name).replace(/^an? /, "");
 }
 
 const NO_CHANGE = "Change at least one value.";
@@ -1797,7 +1827,7 @@ function headline(d, ctx) {
     const got = [...new Set((d.Evidence || []).map((e) => label(EVIDENCE_LABEL, e.Template).toLowerCase()))];
     return ["Collecting and weighing evidence.", got.length ? "Collected so far: " + got.join(", ") + "." : "Nothing collected yet."];
   }
-  if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + fx.short.toLowerCase() + "." : reason];
+  if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + lowerFirst(fx.short) + "." : reason];
   const suggest = !(d.Fixes || []).length ? "Themis has no fix for this kind of incident."
     : can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
   if (s === "awaiting_suggestion") return waitingFor(d, last, fx, suggest);
@@ -1846,7 +1876,7 @@ function waitingFor(d, last, fx, suggest) {
     // policy refused.
     const p = (d.Proposals || []).filter((x) => x.Message && reason.startsWith(x.Message)).pop()
       || (d.Actions || []).filter((a) => a.DecisionReason && reason.startsWith(a.DecisionReason)).pop();
-    const noun = p ? fixWords(p.Capability, p.Params, workload(d.Incident.target).name).noun : "suggested fix";
+    const noun = p ? fixWords(p).noun : "suggested fix";
     return [cap(noun) + " refused." + next, [reason.replace(/^Refused\. /, ""), referred ? suggest : ""].filter(Boolean).join(" ")];
   }
   if (referred) {
@@ -1894,13 +1924,13 @@ async function detail(id) {
   const action = actions[actions.length - 1] || null;
   const accepted = proposals.filter((p) => p.Status === "accepted").pop() || null;
   const fixed = action || accepted;
-  const fx = fixed ? fixWords(fixed.Capability, fixed.Params, t.name) : null;
+  const fx = fixed ? fixWords(fixed) : null;
   // The fix a restore undoes, for saying what didn't help.
   const undone = actions.filter((a) => !(a.Params || {}).restores).pop();
   const lead = leadCause(inv);
   const ctx = {
     fx, action,
-    undone: undone ? fixWords(undone.Capability, undone.Params, t.name) : fx,
+    undone: undone ? fixWords(undone) : fx,
     cause: lead ? causeText(lead.rootCauseClass, (d.Causes || {})[lead.rootCauseClass]) : null,
     restored: actions.some((a) => (a.Params || {}).restores && a.Execution && a.Execution.Status === "succeeded"),
     recommended: actions.some((a) => a.PolicyID === GITOPS),

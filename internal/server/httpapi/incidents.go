@@ -5,6 +5,7 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
@@ -35,7 +36,7 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 	out := make([]incidentView, 0, len(incidents))
 	for _, in := range incidents {
 		v := viewIncident(in)
-		v.Summary = viewSummary(summaries[in.ID], a.RootCauses.For(in.Profiles()...))
+		v.Summary = viewSummary(summaries[in.ID], in.Target.Name, a.RootCauses.For(in.Profiles()...), a.Fixes)
 		out = append(out, v)
 	}
 	a.reply(w, r, out)
@@ -127,15 +128,19 @@ func (a *API) record(ctx context.Context, id string) (incidentRecord, error) {
 func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 	in := rec.incident
 	d := detailView{
-		Incident: viewIncident(in), Transitions: rec.transitions, Predicates: rec.predicates, Proposals: rec.proposals,
+		Incident: viewIncident(in), Transitions: rec.transitions, Predicates: rec.predicates,
 		Checks: map[string]checkWords{}, Causes: map[string]string{}, AnotherApprover: a.anotherApprover(),
 	}
 	if rec.again.Offered {
 		d.InvestigateAgain = &againView{Refused: rec.again.Refused}
 	}
-	for _, c := range a.CheckList {
-		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads}
+	for _, p := range rec.proposals {
+		d.Proposals = append(d.Proposals, proposalView{Proposal: p, Words: a.Fixes.Words(p.Capability, p.Target.Name, p.Params, nil, nil)})
 	}
+	for _, c := range a.CheckList {
+		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads, Availability: c.Availability}
+	}
+	d.Basis = a.basis(rec)
 	for _, c := range a.RootCauses.For(in.Profiles()...) {
 		d.Causes[c.Name] = c.Description
 	}
@@ -172,6 +177,24 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		d.Actions = append(d.Actions, v)
 	}
 	return d
+}
+
+// basis says, by name, what each check that only says whether figures are
+// there, and found them, rests on: the history its evidence holds, such as
+// "Prometheus's container CPU history over 1h".
+func (a *API) basis(rec incidentRecord) map[string]string {
+	out := map[string]string{}
+	for _, p := range rec.predicates {
+		if c, ok := a.CheckList.Get(p.Name); !ok || !c.Availability || p.Value != check.True {
+			continue
+		}
+		for _, it := range rec.evidence {
+			if h := it.History(); h != "" && slices.Contains(p.EvidenceIDs, it.ID) {
+				out[p.Name] = h
+			}
+		}
+	}
+	return out
 }
 
 // offered are the fixes the incident's profiles still configured offer, as

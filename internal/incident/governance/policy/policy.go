@@ -47,9 +47,9 @@ type Decision struct {
 // noRule opens the reason for a decision no rule gave.
 const noRule = "No policy rule matched"
 
-// Of names, in d's reason, the profile whose policy gave d, for an incident
-// several profiles govern: "Policy rule rollback-needs-approval of the
-// rollout-regression profile requires a person's approval."
+// Of names, in d's reason, the profile whose policy gave d: "Policy rule
+// rollback-needs-approval of the rollout-regression profile requires a
+// person's approval."
 func (d Decision) Of(profile string) Decision {
 	of := " of the " + profile + " profile"
 	rule := "olicy rule " + d.PolicyID

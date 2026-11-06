@@ -190,6 +190,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule probe-change-cannot-fix-a-crash forbids this fix."
+    "reason": "Policy rule probe-change-cannot-fix-a-crash of the probe-restart-storm profile forbids this fix."
   }
 }

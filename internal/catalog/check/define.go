@@ -33,6 +33,11 @@ type Definition struct {
 	// Topic names what the check is about in a few words, for people reading
 	// that it is unknown, such as "Peak memory use".
 	Topic string `json:"topic,omitempty"`
+	// Availability marks a check that says only whether figures other
+	// checks need are there, such as a metrics source's history. People
+	// read it as what the other checks rest on, never as for or against a
+	// fix.
+	Availability bool `json:"availability,omitempty"`
 	// Reads are the evidence templates the check reads. When one an answer
 	// needs is missing, the check is unknown, without the author saying so.
 	Reads []string `json:"reads"`
@@ -97,7 +102,10 @@ type Check struct {
 	Description string
 	WhenFalse   string
 	Topic       string
-	Reads       []string
+	// Availability is the definition's: the check says only whether
+	// figures other checks need are there.
+	Availability bool
+	Reads        []string
 
 	lets    map[string]*expr
 	answers []answer
@@ -202,7 +210,7 @@ func compile(env *cel.Env, d Definition, templates []string) (*Check, error) {
 		return nil, errors.Join(errs...)
 	}
 
-	c := &Check{Name: d.Name, Version: d.Version, Description: d.Description, WhenFalse: d.WhenFalse, Topic: d.Topic, Reads: d.Reads, lets: map[string]*expr{}}
+	c := &Check{Name: d.Name, Version: d.Version, Description: d.Description, WhenFalse: d.WhenFalse, Topic: d.Topic, Availability: d.Availability, Reads: d.Reads, lets: map[string]*expr{}}
 	letNames := slices.Sorted(maps.Keys(d.Let))
 	declared := []cel.EnvOption{}
 	for _, n := range letNames {

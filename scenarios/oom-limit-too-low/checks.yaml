@@ -40,6 +40,7 @@
   description: A metrics source says how much memory the containers used at their peak
   topic: Peak memory use
   whenFalse: No metrics source says how much memory the containers used at their peak
+  availability: true
   reads: [container_memory]
   answers:
     - when: container_memory.peak.unavailable != ""

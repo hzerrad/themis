@@ -214,7 +214,7 @@
       }
     },
     "outcome": "require_approval",
-    "reason": "Policy rule lenient-readiness-keeps-traffic-on-failing-pods requires a person's approval."
+    "reason": "Policy rule lenient-readiness-keeps-traffic-on-failing-pods of the probe-restart-storm profile requires a person's approval."
   },
   "unproposed": "The checks support a probe change (the kubelet restarts a container because its liveness or startup probe fails, and probes fail by running out of time, not by an error answer)."
 }

@@ -200,7 +200,7 @@
       }
     },
     "outcome": "require_approval",
-    "reason": "Policy rule probe-change-needs-approval requires a person's approval."
+    "reason": "Policy rule probe-change-needs-approval of the probe-restart-storm profile requires a person's approval."
   },
   "unproposed": "The checks support a probe change (the kubelet restarts a container because its liveness or startup probe fails)."
 }

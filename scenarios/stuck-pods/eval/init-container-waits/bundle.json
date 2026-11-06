@@ -201,6 +201,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Policy rule diagnosis-only forbids this fix."
+    "reason": "Policy rule diagnosis-only of the stuck-pods profile forbids this fix."
   }
 }

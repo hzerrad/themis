@@ -209,7 +209,7 @@
       }
     },
     "outcome": "require_approval",
-    "reason": "Policy rule raise-needs-approval requires a person's approval."
+    "reason": "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."
   },
   "unproposed": "The checks support a memory or CPU change (a container is throttled at its CPU limit)."
 }

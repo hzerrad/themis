@@ -19,6 +19,13 @@ type rolloutStart struct {
 	Restarts int32 `json:"restarts"`
 }
 
+// Rollout is the BlastRadius of a fix that rolls out a new pod template to
+// w: replicas, the pods it replaces, and atOnce, how many of them its
+// rollout strategy replaces at a time.
+func Rollout(w *workload.Workload) map[string]any {
+	return map[string]any{"replicas": int64(w.Replicas.Desired), "atOnce": int64(w.AtOnce())}
+}
+
 // ReadRollout is Check for a fix that rolls out a new pod template: it reads
 // the current revision's pods. The fix cured its symptom when the rollout is
 // complete, every replica is ready, and no container has restarted or run

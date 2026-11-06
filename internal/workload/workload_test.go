@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -134,6 +135,34 @@ func TestRead_Facts(t *testing.T) {
 	}
 	if w.Object().UID != "d-1" {
 		t.Error("Object is not the Deployment read")
+	}
+}
+
+// A rollout replaces pods as many at a time as its strategy lets it, as
+// Kubernetes rounds the strategy's shares, and at least one.
+func TestAtOnce(t *testing.T) {
+	share := func(s string) *intstr.IntOrString { v := intstr.Parse(s); return &v }
+	for name, tc := range map[string]struct {
+		replicas int32
+		strategy appsv1.DeploymentStrategy
+		want     int32
+	}{
+		"Kubernetes' defaults, 3 pods":  {3, appsv1.DeploymentStrategy{}, 1},
+		"Kubernetes' defaults, 10 pods": {10, appsv1.DeploymentStrategy{}, 5},
+		"recreated":                     {4, appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}, 4},
+		"two above, none below":         {6, appsv1.DeploymentStrategy{RollingUpdate: &appsv1.RollingUpdateDeployment{MaxSurge: share("2"), MaxUnavailable: share("0")}}, 2},
+		"no more than it runs":          {2, appsv1.DeploymentStrategy{RollingUpdate: &appsv1.RollingUpdateDeployment{MaxSurge: share("100%"), MaxUnavailable: share("100%")}}, 2},
+		"neither, still one":            {3, appsv1.DeploymentStrategy{RollingUpdate: &appsv1.RollingUpdateDeployment{MaxSurge: share("0"), MaxUnavailable: share("0")}}, 1},
+	} {
+		d := deployment()
+		d.Spec.Replicas, d.Spec.Strategy = ptr.To(tc.replicas), tc.strategy
+		w, err := workload.Read(t.Context(), reader(d), target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := w.AtOnce(); got != tc.want {
+			t.Errorf("%s: AtOnce = %d, want %d", name, got, tc.want)
+		}
 	}
 }
 
