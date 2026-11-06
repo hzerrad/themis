@@ -92,8 +92,8 @@ type Directory struct {
 	// means no one does.
 	Accounts Accounts
 	// Setup is the install's first run: an admin signing in with an account
-	// or through OIDC finishes it, which retires the initial admin password.
-	// Nil means no one signs in with that password.
+	// and a password of their own finishes it, which retires the initial
+	// admin password. Nil means no one signs in with that password.
 	Setup *Setup
 	Now   func() time.Time
 }

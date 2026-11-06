@@ -37,10 +37,15 @@ type PasswordStore interface {
 	PasswordSucceeded(ctx context.Context, username string) error
 }
 
+// SessionStore keeps the sessions people start.
+type SessionStore interface {
+	CreateSession(ctx context.Context, id string, se store.Session) error
+}
+
 // AccountStore keeps accounts and the sessions they start.
 type AccountStore interface {
 	PasswordStore
-	CreateSession(ctx context.Context, id string, se store.Session) error
+	SessionStore
 }
 
 // Verify's errors, besides store.ErrNotFound for an unknown username.
@@ -123,15 +128,24 @@ func (p *Passwords) signIn(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, err)
 		return
 	}
-	id := random()
-	se := store.Session{Subject: store.AccountSubjectPrefix + a.Username, Username: a.Username, CreatedAt: now, ExpiresAt: now.Add(accountSessionTTL)}
-	if err := p.Store.CreateSession(ctx, id, se); err != nil {
+	if err := startAccountSession(w, r, p.Store, p.logger(), a.Username, now); err != nil {
 		p.fail(w, r, err)
 		return
 	}
-	p.logger().InfoContext(ctx, "a person signed in", "username", a.Username, "with", "password")
-	http.SetCookie(w, sessionCookie(r, id, accountSessionTTL))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// startAccountSession signs r's sender in as username's account, at now: the
+// session, its cookie on w, and the log line of a password sign-in.
+func startAccountSession(w http.ResponseWriter, r *http.Request, s SessionStore, log *slog.Logger, username string, now time.Time) error {
+	id := random()
+	se := store.Session{Subject: store.AccountSubjectPrefix + username, Username: username, CreatedAt: now, ExpiresAt: now.Add(accountSessionTTL)}
+	if err := s.CreateSession(r.Context(), id, se); err != nil {
+		return err
+	}
+	log.InfoContext(r.Context(), "a person signed in", "username", username, "with", "password")
+	http.SetCookie(w, sessionCookie(r, id, accountSessionTTL))
+	return nil
 }
 
 func (p *Passwords) refuse(w http.ResponseWriter, r *http.Request, username, why string) {

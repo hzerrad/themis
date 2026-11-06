@@ -104,6 +104,15 @@ func newFirstRun(t *testing.T) *firstRunRig {
 	return r
 }
 
+// identify is who a request with session's cookie comes from.
+func (r *firstRunRig) identify(t *testing.T, session string) (identity.Identity, error) {
+	t.Helper()
+	d := &identity.Directory{Sessions: r.store, Accounts: r.store, Access: bindings, Setup: r.setup, Now: func() time.Time { return now }}
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
+	req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: session, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	return d.Identify(req)
+}
+
 func (r *firstRunRig) signIn(t *testing.T, password string, header bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://localhost:8090/auth/initial-admin", strings.NewReader(`{"password":"`+password+`"}`))
@@ -128,13 +137,7 @@ func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
 		t.Fatalf("sign-in = %d %q", rec.Code, rec.Body)
 	}
 	first := cookieNamed(t, rec, identity.SessionCookie)
-	d := &identity.Directory{Sessions: r.store, Accounts: r.store, Access: bindings, Setup: r.setup, Now: func() time.Time { return now }}
-	identify := func(session string) (identity.Identity, error) {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
-		req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: session, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-		return d.Identify(req)
-	}
-	if who, err := identify(first.Value); err != nil || who.Username != identity.InitialAdminUser || who.Role != config.RoleAdmin || !who.InitialAdmin {
+	if who, err := r.identify(t, first.Value); err != nil || who.Username != identity.InitialAdminUser || who.Role != config.RoleAdmin || !who.InitialAdmin {
 		t.Fatalf("identity = %+v, %v; want the initial admin", who, err)
 	}
 
@@ -144,7 +147,7 @@ func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
 	r.store.sessions["account-root"] = store.Session{Subject: store.AccountSubjectPrefix + "root", Username: "root", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
 	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin, TemporaryPassword: true}
 	for _, session := range []string{"oidc-root", "account-root"} {
-		if who, err := identify(session); err != nil || who.Role != config.RoleAdmin {
+		if who, err := r.identify(t, session); err != nil || who.Role != config.RoleAdmin {
 			t.Fatalf("%s = %+v, %v", session, who, err)
 		}
 	}
@@ -155,10 +158,10 @@ func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
 		t.Errorf("the password once an admin account exists = %d %q, want 403", rec.Code, rec.Body)
 	}
 	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin}
-	if _, err := identify("account-root"); err != nil {
+	if _, err := r.identify(t, "account-root"); err != nil {
 		t.Fatal(err)
 	}
-	if who, err := identify(first.Value); !errors.Is(err, identity.ErrSignedOut) {
+	if who, err := r.identify(t, first.Value); !errors.Is(err, identity.ErrSignedOut) {
 		t.Errorf("the initial admin's session once retired = %+v, %v; want signed out", who, err)
 	}
 	if rec := r.signIn(t, initialPassword, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "retired") {
@@ -175,6 +178,37 @@ func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
 	_, _ = r.setup.Open(t.Context())
 	if r.store.asked != asked {
 		t.Error("Themis asks the store again after setup finished; setup never reopens")
+	}
+}
+
+// Creating the first admin account signs its creator in as it, as a password
+// sign-in does. That finishes setup at once, whether or not the caller keeps
+// the cookie, so the initial admin password and its sessions are retired.
+func TestSetup_SignInFirstAdmin(t *testing.T) {
+	r := newFirstRun(t)
+	first := cookieNamed(t, r.signIn(t, initialPassword, true), identity.SessionCookie)
+	root := store.Account{Username: "root", Role: config.RoleAdmin}
+	r.store.accounts["root"] = root
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://localhost:8090/v1/accounts", nil)
+	if err := r.setup.SignInFirstAdmin(rec, req, root, now); err != nil {
+		t.Fatal(err)
+	}
+	if open, _ := r.setup.Open(t.Context()); open {
+		t.Error("setup is open once the first admin account's creator is signed in")
+	}
+	c := cookieNamed(t, rec, identity.SessionCookie)
+	if c.Secure || !c.HttpOnly || c.MaxAge != int((8*time.Hour).Seconds()) {
+		t.Errorf("cookie = %+v, want a password sign-in's on localhost", c)
+	}
+	if who, err := r.identify(t, c.Value); err != nil || who.Username != "root" || !who.Account || who.TemporaryPassword || who.Role != config.RoleAdmin {
+		t.Errorf("identity = %+v, %v; want root's account", who, err)
+	}
+	if who, err := r.identify(t, first.Value); !errors.Is(err, identity.ErrSignedOut) {
+		t.Errorf("the initial admin's session = %+v, %v; want signed out", who, err)
+	}
+	if logs := r.logs.String(); !strings.Contains(logs, `"a person signed in" username=root`) || !strings.Contains(logs, `"initial admin password retired" by=root`) {
+		t.Errorf("logs = %s, want root's sign-in and the retirement by root", logs)
 	}
 }
 
