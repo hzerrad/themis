@@ -121,6 +121,7 @@ func TestValidate_Errors(t *testing.T) {
 			c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus", TLS: config.TLS{CertFile: "/c"}}
 		}, "metrics.prometheus.tls"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
+		{"initial admin without its password", func(c *config.Config) { c.API.InitialAdmin = &config.InitialAdmin{} }, "api.initialAdmin.passwordFile"},
 		{"no investigator token file", func(c *config.Config) { c.Investigators.BearerTokenFile = "" }, "investigators.bearerTokenFile"},
 		{"invalid profile name", func(c *config.Config) { c.Profiles[0].Name = "Rollout Regression" }, "profiles[0].name"},
 		{"duplicate profile name", func(c *config.Config) { c.Profiles[1].Name = c.Profiles[0].Name }, "profiles[1].name"},

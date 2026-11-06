@@ -33,6 +33,9 @@ data:
     {{- end }}
     api:
       bearerTokenFile: /var/run/secrets/themis/admin
+      initialAdmin:
+        passwordFile: /var/run/secrets/themis-initial-admin/password
+        secret: {{ include "themis.initialAdminSecret" . }}
       {{- with .Values.oidc }}
       {{- if .issuerURL }}
       oidc:

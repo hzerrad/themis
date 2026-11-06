@@ -2,24 +2,23 @@ Themis is running in namespace {{ .Release.Namespace }}.
 
 Open it:
 
-  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-core 8090:{{ if (include "themis.setupEnabled" .) }}8083{{ else }}8080{{ end }}
+  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-core 8090:8080
 
 then go to http://localhost:8090.
-{{- if (include "themis.setupEnabled" .) }}
 
-Opening Themis this way makes you an admin until an admin signs in for
-real: Kubernetes has already checked that you may port-forward to it.
-{{- if not .Values.oidc.issuerURL }}
+Until an admin signs in with an account or through the identity provider,
+the first admin signs in with the initial admin password:
 
-Create your admin account there and sign in with it, or set the oidc
-values to sign in through your identity provider.
-{{- end }}
-{{- else }}
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.initialAdminSecret" . }} -o jsonpath='{.data.password}' | base64 -d
 
-Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or {{ end }}with the admin token:
-
-  kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.tokensSecret" . }} -o jsonpath='{.data.admin}' | base64 -d
-{{- end }}
+{{ if .Values.oidc.issuerURL -}}
+Then sign in through {{ .Values.oidc.issuerURL }} as an admin, or create
+your admin account and sign in with it.
+{{- else -}}
+Then create your admin account and sign in with it, or set the oidc values
+to sign in through your identity provider.
+{{- end }} The initial admin password then
+stops working.
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}
 Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis never applies a fix{{ end }}

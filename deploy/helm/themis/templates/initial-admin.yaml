@@ -1,0 +1,16 @@
+{{- if not (.Values.initialAdmin | default dict).existingSecret }}
+{{- /* Generated once; an upgrade keeps it. It signs the first admin in until
+an admin signs in with an account or through OIDC, and no one after that. */ -}}
+{{- $name := include "themis.initialAdminSecret" . -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $name -}}
+{{- $data := dict -}}
+{{- if $existing }}{{ $data = $existing.data | default dict }}{{ end -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels: {{- include "themis.labels" . | nindent 4 }}
+type: Opaque
+data:
+  password: {{ get $data "password" | default (randAlphaNum 32 | b64enc) }}
+{{- end }}

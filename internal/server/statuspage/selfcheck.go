@@ -69,6 +69,9 @@ type Checker struct {
 	Executor string
 	// OIDC says whether people can sign in through an identity provider.
 	OIDC bool
+	// InitialAdmin says whether the first admin signs in with the initial
+	// admin password.
+	InitialAdmin bool
 	// NoInvestigator says no investigator is installed, by choice.
 	NoInvestigator bool
 	// Model says what model the install and setup set. Nil means only the
@@ -418,14 +421,17 @@ func (c *Checker) signIn(ctx context.Context) Check {
 		ways = append(ways, "Themis accounts")
 	}
 	switch {
-	case !finished:
-		ch.State, ch.Summary = Warn, "Port-forward grants admin."
-		ch.Fix = "Create an admin account and sign in with it, or configure the identity provider."
+	case !finished && c.InitialAdmin:
+		ch.State, ch.Summary = Warn, "The initial admin password grants admin."
+		ch.Fix = "Create an admin account and sign in with it, or configure the identity provider. The initial admin password then stops working."
 	case len(ways) == 0:
 		ch.State, ch.Summary = Warn, "Only the break-glass token signs in."
 		ch.Fix = "Create accounts, or configure the identity provider."
 	default:
 		ch.State, ch.Summary = OK, "Through "+strings.Join(ways, " and ")+"."
+	}
+	if finished && c.InitialAdmin {
+		ch.Summary += " The initial admin password is retired."
 	}
 	return ch
 }

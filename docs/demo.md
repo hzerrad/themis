@@ -56,7 +56,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it. You're an admin because you came in through `kubectl port-forward`; there's no password to find. The list is empty for now.
+Open it and sign in with the initial admin password; `make ui` prints the command that reads it. The list is empty for now.
 
 ## 5. Break the rollout
 
@@ -129,7 +129,6 @@ make demo-alert                           # once a checkout pod is crash looping
 | | 9090 | gRPC for the investigator |
 | | 8081 | `/healthz`, `/readyz` |
 | | 8082 | `/metrics` |
-| | 8083 | setup: the UI without sign-in, until an admin first signs in |
 | themis-executor | 9091 | gRPC for themis-core |
 | | 8091 | `/healthz`, `/readyz` |
 | | 8092 | `/metrics` |

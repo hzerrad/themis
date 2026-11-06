@@ -11,12 +11,27 @@ type API struct {
 	// in through OIDC, as a way in if the identity provider is down.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
 
+	// InitialAdmin lets the first admin sign in with a generated password,
+	// until an admin signs in with an account or through OIDC.
+	InitialAdmin *InitialAdmin `json:"initialAdmin,omitempty"`
+
 	// OIDC lets people sign in to the UI through an identity provider.
 	OIDC *OIDC `json:"oidc,omitempty"`
 
 	// Access gives people roles, by username or group. Someone signed in who
 	// matches no binding can't see anything.
 	Access []AccessBinding `json:"access,omitempty"`
+}
+
+// InitialAdmin is the password the first admin signs in with.
+type InitialAdmin struct {
+	// PasswordFile holds the password. It is read at each try, and never
+	// stored.
+	PasswordFile string `json:"passwordFile" jsonschema:"minLength=1"`
+
+	// Secret names the Secret, in Themis's namespace, whose password key
+	// holds it, for the command the sign-in page shows. The chart sets it.
+	Secret string `json:"secret,omitempty"`
 }
 
 // OIDC is an identity provider people sign in with.

@@ -47,6 +47,7 @@ trap finish EXIT
 # --- API helpers -------------------------------------------------------------
 
 token() { $K -n themis get secret themis-tokens -o jsonpath="{.data.$1}" | base64 -d; }
+initial_password() { $K -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d; }
 api() { curl -sf -H "Authorization: Bearer $ADMIN" "$API$1"; }
 post() { curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $ADMIN" "$API$1" -d "$2"; }
 # field evaluates an expression written in this script over the JSON on stdin.
@@ -162,6 +163,8 @@ code() { curl -s -o /dev/null -w '%{http_code}' -X POST "$API/v1/intake/alertman
 check "a webhook without a token is refused" [ "$(code -d '{}')" = 401 ]
 check "an unknown payload version is refused" [ "$(code -H "Authorization: Bearer $INTAKE" -d '{"version":"3","alerts":[]}')" = 400 ]
 check "the API needs the admin token" [ "$(curl -s -o /dev/null -w '%{http_code}' "$API/v1/incidents")" = 401 ]
+check "the initial admin password in the chart's Secret signs in" [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'X-Themis-Request: 1' \
+  "$API/auth/initial-admin" -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
 # No profile matches this alert, so it is ignored.
 CANARY_ALERT=$(python3 -c '
 import json, sys, datetime

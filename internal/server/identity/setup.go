@@ -2,93 +2,220 @@ package identity
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/json/v2"
+	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
+	"github.com/hzerrad/themis/internal/platform/token"
+	"github.com/hzerrad/themis/internal/store"
 )
 
-// SetupUser is the username of whoever comes in through the setup door. No
-// one may sign in as it.
+// InitialAdminUser is the username of whoever signs in with the initial admin
+// password. It proves the password, not who.
+const InitialAdminUser = "initial-admin"
+
+// SetupUser named whoever came in through kubectl port-forward before setup
+// finished, in versions of Themis that let them in as admin. Records still
+// carry it.
 const SetupUser = "setup"
+
+// reserved reports whether username names one of Themis's own ways in, which
+// records use, so no one may sign in as it.
+func reserved(username string) bool {
+	return username == TokenUser || username == InitialAdminUser || username == SetupUser
+}
 
 // SetupStore says whether setup has finished, and records when it does.
 type SetupStore interface {
 	SetupFinished(ctx context.Context) (bool, error)
-	FinishSetup(ctx context.Context, by string, at time.Time) error
+	FinishSetup(ctx context.Context, by string, at time.Time) (bool, error)
 }
 
-// Door serves Themis on a port bound to the pod's loopback address, which only
-// kubectl port-forward reaches. Kubernetes has already decided who may
-// port-forward to Themis, so until an admin has signed in through a real
-// sign-in, whoever comes in this way is an admin. After that, it serves Themis
-// like any other address.
-type Door struct {
+// Setup is an install's first run. It is open until an admin signs in with a
+// Themis account or through the identity provider. While it is open, the
+// initial admin password signs in as an admin; once it finishes, the password
+// and the sessions it started are retired for good.
+type Setup struct {
 	Store  SetupStore
-	Next   http.Handler
 	Logger *slog.Logger
 
 	finished atomic.Bool
 }
 
-func (d *Door) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// A page on another site that points its own name at 127.0.0.1 sends
-	// that name, not localhost, so it can't use the door from a browser.
-	if !loopbackHost(r.Host) {
-		http.Error(w, "Open Themis at the localhost address kubectl port-forward printed.", http.StatusMisdirectedRequest)
-		return
-	}
-	open, err := d.open(r.Context())
-	if err != nil {
-		d.logger().ErrorContext(r.Context(), "cannot check whether setup has finished", telemetry.FieldError, err)
-		http.Error(w, "Themis can't check sign-ins right now. Try again shortly.", http.StatusServiceUnavailable)
-		return
-	}
-	if open {
-		r = r.WithContext(context.WithValue(r.Context(), setupKey{}, true))
-	}
-	d.Next.ServeHTTP(w, r)
-}
-
-func (d *Door) open(ctx context.Context) (bool, error) {
-	if d.finished.Load() {
+// Open reports whether setup is open.
+func (s *Setup) Open(ctx context.Context) (bool, error) {
+	if s.finished.Load() {
 		return false, nil
 	}
-	finished, err := d.Store.SetupFinished(ctx)
+	finished, err := s.Store.SetupFinished(ctx)
 	if err != nil {
 		return false, err
 	}
-	// Setup never reopens, so once finished, the door stops asking.
-	d.finished.Store(finished)
+	// Setup never reopens, so once finished, it stops asking.
+	s.finished.Store(finished)
 	return !finished, nil
 }
 
-func (d *Door) logger() *slog.Logger {
-	if d.Logger != nil {
-		return d.Logger
+// finish ends setup once who is an admin signed in with an account or through
+// the identity provider: an admin can now sign in without the initial admin
+// password, which is retired.
+func (s *Setup) finish(ctx context.Context, who Identity, at time.Time) {
+	if who.Token || who.InitialAdmin || who.Role != config.RoleAdmin || s.finished.Load() {
+		return
+	}
+	done, err := s.Store.FinishSetup(ctx, who.Username, at)
+	if err != nil {
+		s.logger().ErrorContext(ctx, "cannot record that setup finished", telemetry.FieldError, err)
+		return
+	}
+	s.finished.Store(true)
+	if done {
+		s.logger().InfoContext(ctx, "initial admin password retired", "by", who.Username)
+	}
+}
+
+func (s *Setup) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
 	}
 	return slog.Default()
 }
 
-func loopbackHost(hostport string) bool {
-	host, _, err := net.SplitHostPort(hostport)
-	if err != nil {
-		host = hostport
-	}
-	switch host {
-	case "localhost", "127.0.0.1", "::1", "[::1]":
-		return true
-	}
-	return false
+// InitialAdminStore counts wrong initial admin passwords, and keeps the
+// sessions the right one starts.
+type InitialAdminStore interface {
+	InitialAdminLockedUntil(ctx context.Context) (time.Time, error)
+	InitialAdminPasswordFailed(ctx context.Context, now time.Time, maxFailures int, lockFor time.Duration) error
+	InitialAdminPasswordSucceeded(ctx context.Context) error
+	CreateSession(ctx context.Context, id string, se store.Session) error
 }
 
-type setupKey struct{}
+// initialAdminSessionTTL is how long a sign-in with the initial admin
+// password lasts: long enough to set up, short enough not to linger.
+const initialAdminSessionTTL = time.Hour
 
-// throughSetup reports whether r came in through the door while setup is open.
-func throughSetup(r *http.Request) bool {
-	open, _ := r.Context().Value(setupKey{}).(bool)
-	return open
+// InitialAdmin signs the first admin in with the initial admin password while
+// setup is open. The password is read from PasswordFile at each try, compared
+// in constant time, and never stored, logged or shown.
+type InitialAdmin struct {
+	PasswordFile string
+	Setup        *Setup
+	Store        InitialAdminStore
+	Logger       *slog.Logger
+	Now          func() time.Time
+}
+
+// Register serves the initial admin sign-in on mux.
+func (i *InitialAdmin) Register(mux *http.ServeMux) {
+	mux.HandleFunc("POST /auth/initial-admin", i.signIn)
+}
+
+// What a refused sign-in says. The password is the only one of its kind, so
+// saying it is locked or retired reveals nothing about anyone's account.
+const (
+	wrongInitialPassword   = "Wrong password. After 10 wrong tries in a row, the initial admin password is locked for 15 minutes."
+	retiredInitialPassword = "The initial admin password is retired: an admin has signed in with an account or the identity provider. Sign in with one of those."
+)
+
+func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if r.Header.Get(RequestHeader) == "" {
+		http.Error(w, "Sign in from the Themis page.", http.StatusForbidden)
+		return
+	}
+	var in struct {
+		Password string `json:"password"`
+	}
+	if err := json.UnmarshalRead(http.MaxBytesReader(w, r.Body, 4<<10), &in); err != nil {
+		http.Error(w, "Enter the initial admin password.", http.StatusBadRequest)
+		return
+	}
+	now := i.now()
+	open, err := i.Setup.Open(ctx)
+	if err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	if !open {
+		i.refuse(w, r, "retired", http.StatusForbidden, retiredInitialPassword)
+		return
+	}
+	until, err := i.Store.InitialAdminLockedUntil(ctx)
+	if err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	if until.After(now) {
+		i.refuse(w, r, "locked", http.StatusUnauthorized, fmt.Sprintf(
+			"The initial admin password is locked after 10 wrong tries, until %s UTC. The break-glass token still signs in.", until.UTC().Format("15:04")))
+		return
+	}
+	want, err := token.Read(i.PasswordFile)
+	if err != nil {
+		i.logger().ErrorContext(ctx, "cannot read the initial admin password", telemetry.FieldError, err)
+		http.Error(w, "Themis can't read the initial admin password. The core's logs have the details.", http.StatusServiceUnavailable)
+		return
+	}
+	// The password is random letters and digits: space around it is from
+	// copying it.
+	if !samePassword(strings.TrimSpace(in.Password), want) {
+		if err := i.Store.InitialAdminPasswordFailed(ctx, now, maxWrongPasswords, lockFor); err != nil {
+			i.fail(w, r, err)
+			return
+		}
+		i.refuse(w, r, "wrong password", http.StatusUnauthorized, wrongInitialPassword)
+		return
+	}
+	if err := i.Store.InitialAdminPasswordSucceeded(ctx); err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	id := random()
+	se := store.Session{Subject: store.InitialAdminSubject, Username: InitialAdminUser, CreatedAt: now, ExpiresAt: now.Add(initialAdminSessionTTL)}
+	if err := i.Store.CreateSession(ctx, id, se); err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	i.logger().InfoContext(ctx, "signed in with the initial admin password")
+	http.SetCookie(w, sessionCookie(r, id, initialAdminSessionTTL))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// samePassword compares in constant time. Comparing hashes keeps the length
+// from showing too.
+func samePassword(got string, want []byte) bool {
+	g, w := sha256.Sum256([]byte(got)), sha256.Sum256(want)
+	return subtle.ConstantTimeCompare(g[:], w[:]) == 1
+}
+
+func (i *InitialAdmin) refuse(w http.ResponseWriter, r *http.Request, why string, code int, message string) {
+	i.logger().WarnContext(r.Context(), "an initial admin password sign-in failed", "reason", why)
+	http.Error(w, message, code)
+}
+
+func (i *InitialAdmin) fail(w http.ResponseWriter, r *http.Request, err error) {
+	i.logger().ErrorContext(r.Context(), "cannot check the initial admin password", telemetry.FieldError, err)
+	http.Error(w, "Themis can't sign you in right now. Try again shortly.", http.StatusServiceUnavailable)
+}
+
+func (i *InitialAdmin) now() time.Time {
+	if i.Now != nil {
+		return i.Now()
+	}
+	return time.Now()
+}
+
+func (i *InitialAdmin) logger() *slog.Logger {
+	if i.Logger != nil {
+		return i.Logger
+	}
+	return slog.Default()
 }

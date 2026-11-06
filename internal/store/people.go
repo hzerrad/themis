@@ -246,7 +246,8 @@ func (s *Store) EndSession(ctx context.Context, id string) error {
 	return nil
 }
 
-// SetupFinished reports whether an admin has signed in through a real sign-in.
+// SetupFinished reports whether an admin has signed in with an account or
+// through the identity provider.
 func (s *Store) SetupFinished(ctx context.Context) (bool, error) {
 	var finished bool
 	if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM setup)`).Scan(&finished); err != nil {
@@ -255,11 +256,48 @@ func (s *Store) SetupFinished(ctx context.Context) (bool, error) {
 	return finished, nil
 }
 
-// FinishSetup records that by, an admin, signed in at at. Setup finishes once:
-// later calls change nothing.
-func (s *Store) FinishSetup(ctx context.Context, by string, at time.Time) error {
-	if _, err := s.pool.Exec(ctx, `INSERT INTO setup (finished_at, finished_by) VALUES ($1, $2) ON CONFLICT DO NOTHING`, at, by); err != nil {
-		return fmt.Errorf("finish setup: %w", err)
+// FinishSetup records that by, an admin, signed in at at, and reports whether
+// this call finished it. Setup finishes once: later calls change nothing.
+func (s *Store) FinishSetup(ctx context.Context, by string, at time.Time) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `INSERT INTO setup (finished_at, finished_by) VALUES ($1, $2) ON CONFLICT DO NOTHING`, at, by)
+	if err != nil {
+		return false, fmt.Errorf("finish setup: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+// InitialAdminSubject is the session subject of whoever signed in with the
+// initial admin password.
+const InitialAdminSubject = "initial-admin"
+
+// InitialAdminLockedUntil is when wrong tries stop locking the initial admin
+// password: a time in the past while they don't.
+func (s *Store) InitialAdminLockedUntil(ctx context.Context) (time.Time, error) {
+	var until time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT coalesce(locked_until, 'epoch') FROM initial_admin`).Scan(&until); err != nil {
+		return time.Time{}, fmt.Errorf("read the initial admin lock: %w", err)
+	}
+	return until, nil
+}
+
+// InitialAdminPasswordFailed counts a wrong initial admin password, locking
+// it until now+lockFor once it reaches maxFailures, as PasswordFailed does
+// for an account.
+func (s *Store) InitialAdminPasswordFailed(ctx context.Context, now time.Time, maxFailures int, lockFor time.Duration) error {
+	if _, err := s.pool.Exec(ctx, `
+	UPDATE initial_admin SET
+	  failed_attempts = CASE WHEN failed_attempts + 1 >= $2 THEN 0 ELSE failed_attempts + 1 END,
+	  locked_until    = CASE WHEN failed_attempts + 1 >= $2 THEN $1::timestamptz + $3::interval ELSE locked_until END
+`, now, maxFailures, lockFor); err != nil {
+		return fmt.Errorf("count a wrong initial admin password: %w", err)
+	}
+	return nil
+}
+
+// InitialAdminPasswordSucceeded forgets wrong initial admin passwords.
+func (s *Store) InitialAdminPasswordSucceeded(ctx context.Context) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE initial_admin SET failed_attempts = 0, locked_until = NULL`); err != nil {
+		return fmt.Errorf("forget wrong initial admin passwords: %w", err)
 	}
 	return nil
 }

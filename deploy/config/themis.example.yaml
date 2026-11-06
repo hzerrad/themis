@@ -15,6 +15,10 @@ investigators:
 
 api:
   bearerTokenFile: /var/run/secrets/themis/admin-token
+  # Optional: the first admin signs in with this password, until an admin
+  # signs in with an account or through OIDC.
+  # initialAdmin:
+  #   passwordFile: /var/run/secrets/themis-initial-admin/password
   # Optional: people sign in through an OIDC provider, each with a role.
   # oidc:
   #   issuerURL: https://idp.example.com

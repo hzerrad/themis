@@ -104,7 +104,7 @@ func CheckUsername(username string) error {
 	if !usernamePattern.MatchString(username) {
 		return errors.New("a username is 2 to 64 lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit")
 	}
-	if username == TokenUser || username == SetupUser {
+	if reserved(username) {
 		return fmt.Errorf("the username %q is kept for Themis's own use", username)
 	}
 	return nil

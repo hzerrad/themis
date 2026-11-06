@@ -56,14 +56,6 @@ missing key means on.
 {{- end }}
 
 {{/*
-Whether the setup port is on. A missing key means on, as above.
-*/}}
-{{- define "themis.setupEnabled" -}}
-{{- $setup := .Values.setup | default dict -}}
-{{- if not (and (hasKey $setup "enabled") (eq (toString $setup.enabled) "false")) }}true{{ end -}}
-{{- end }}
-
-{{/*
 Whether the core reads the Kubernetes metrics API. A missing key means on, as
 above.
 */}}
@@ -99,4 +91,12 @@ generates, or one the install provides, as GitOps tools need.
 */}}
 {{- define "themis.tokensSecret" -}}
 {{- (.Values.tokens | default dict).existingSecret | default (printf "%s-tokens" .Release.Name) -}}
+{{- end }}
+
+{{/*
+The Secret holding the initial admin password: the one the chart generates,
+or one the install provides, as GitOps tools need.
+*/}}
+{{- define "themis.initialAdminSecret" -}}
+{{- (.Values.initialAdmin | default dict).existingSecret | default (printf "%s-initial-admin" .Release.Name) -}}
 {{- end }}

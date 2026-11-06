@@ -19,12 +19,15 @@ import (
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
-// fresh is a new install as the core serves it: the API, password sign-in
-// and sign-out, behind the setup door, which tests reach as localhost.
+// fresh is a new install as the core serves it, which tests reach as
+// localhost, as kubectl port-forward does: the API, the initial admin
+// password, password sign-in and sign-out.
 type fresh struct {
-	t    *testing.T
-	door http.Handler
+	t       *testing.T
+	handler http.Handler
 }
+
+const initialPassword = "a long initial password"
 
 func newFresh(t *testing.T) *fresh {
 	t.Helper()
@@ -33,16 +36,26 @@ func newFresh(t *testing.T) *fresh {
 	if err := os.WriteFile(file, []byte(token), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	password := filepath.Join(t.TempDir(), "initial-admin")
+	if err := os.WriteFile(password, []byte(initialPassword), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	log := slog.New(slog.DiscardHandler)
+	clock := func() time.Time { return now }
+	setup := &identity.Setup{Store: s, Logger: log}
 	mux := http.NewServeMux()
-	(&httpapi.API{Store: s, TokenFile: file, Sessions: s, Accounts: s, Setup: s, Logger: log, Now: func() time.Time { return now }}).Register(mux)
-	(&identity.Passwords{Store: s, Logger: log, Now: func() time.Time { return now }}).Register(mux)
+	(&httpapi.API{
+		Store: s, TokenFile: file, Sessions: s, Accounts: s, Logger: log, Now: clock, Namespace: "themis",
+		Setup: setup, InitialAdmin: &config.InitialAdmin{PasswordFile: password, Secret: "themis-initial-admin"},
+	}).Register(mux)
+	(&identity.InitialAdmin{PasswordFile: password, Setup: setup, Store: s, Logger: log, Now: clock}).Register(mux)
+	(&identity.Passwords{Store: s, Logger: log, Now: clock}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
-	return &fresh{t: t, door: &identity.Door{Store: s, Next: mux, Logger: log}}
+	return &fresh{t: t, handler: mux}
 }
 
-// send sends a request through the door, with session's cookie if any, and
-// the header the UI adds.
+// send sends a request from localhost, with session's cookie if any, and the
+// header the UI adds.
 func (f *fresh) send(method, path string, session *http.Cookie, body any) *httptest.ResponseRecorder {
 	f.t.Helper()
 	var b bytes.Buffer
@@ -57,15 +70,25 @@ func (f *fresh) send(method, path string, session *http.Cookie, body any) *httpt
 		req.AddCookie(session)
 	}
 	rec := httptest.NewRecorder()
-	f.door.ServeHTTP(rec, req)
+	f.handler.ServeHTTP(rec, req)
 	return rec
 }
 
 func (f *fresh) signIn(username, password string) *http.Cookie {
 	f.t.Helper()
-	rec := f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": username, "password": password})
+	return f.session(username, f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": username, "password": password}))
+}
+
+func (f *fresh) signInFirst() *http.Cookie {
+	f.t.Helper()
+	return f.session("the initial admin", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}))
+}
+
+// session is the session rec started, as who.
+func (f *fresh) session(who string, rec *httptest.ResponseRecorder) *http.Cookie {
+	f.t.Helper()
 	if rec.Code != http.StatusNoContent {
-		f.t.Fatalf("%s signing in = %d %q", username, rec.Code, rec.Body)
+		f.t.Fatalf("%s signing in = %d %q", who, rec.Code, rec.Body)
 	}
 	for _, c := range rec.Result().Cookies() {
 		if c.Name == identity.SessionCookie {
@@ -93,32 +116,39 @@ func expect(t *testing.T, what string, rec *httptest.ResponseRecorder, code int)
 
 const rootPassword = "a long root password"
 
-// A new user comes in through port-forward, makes the first admin account,
-// signs in with it, and from then on port-forward alone lets no one in.
+// Reaching a new install from localhost, as kubectl port-forward does, grants
+// nothing. The first admin signs in with the initial admin password, makes
+// their admin account and signs in with it, which retires the password.
 func TestAccounts_SetupFlow(t *testing.T) {
 	f := newFresh(t)
-	if code, me := f.me(nil); code != http.StatusOK || me["setup"] != true {
-		t.Fatalf("me through the door = %d %v, want the setup admin", code, me)
+	if code, me := f.me(nil); code != http.StatusUnauthorized {
+		t.Fatalf("me from localhost, signed out = %d %v, want 401", code, me)
 	}
-	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); !strings.Contains(rec.Body.String(), `"password":false`) {
-		t.Errorf("sign-in methods before any account = %q", rec.Body)
+	want := `{"oidc":false,"password":false,"token":true,"initialAdmin":{"command":"kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"}}`
+	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != want {
+		t.Errorf("sign-in methods on a new install = %s, want %s", rec.Body, want)
 	}
-	expect(t, "creating the first admin", f.send(http.MethodPost, "/v1/accounts", nil, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
-	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); !strings.Contains(rec.Body.String(), `"password":true`) {
-		t.Errorf("sign-in methods after an account = %q", rec.Body)
+	first := f.signInFirst()
+	if code, me := f.me(first); code != http.StatusOK || me["username"] != "initial-admin" || me["role"] != config.RoleAdmin || me["initialAdmin"] != true {
+		t.Fatalf("me as the initial admin = %d %v", code, me)
 	}
+	expect(t, "creating the first admin", f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
 	root := f.signIn("root", rootPassword)
 	if code, me := f.me(root); code != http.StatusOK || me["username"] != "root" || me["role"] != config.RoleAdmin || me["account"] != true {
 		t.Fatalf("me as root = %d %v", code, me)
 	}
-	if code, _ := f.me(nil); code != http.StatusUnauthorized {
-		t.Errorf("me through the door after setup = %d, want 401", code)
+	if code, _ := f.me(first); code != http.StatusUnauthorized {
+		t.Errorf("the initial admin's session once root signed in = %d, want 401", code)
+	}
+	expect(t, "the initial admin password once root signed in", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}), http.StatusForbidden)
+	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != `{"oidc":false,"password":true,"token":true}` {
+		t.Errorf("sign-in methods once set up = %s", rec.Body)
 	}
 }
 
 func TestAccounts_AdminsManageThem(t *testing.T) {
 	f := newFresh(t)
-	expect(t, "creating root", f.send(http.MethodPost, "/v1/accounts", nil, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	expect(t, "creating root", f.send(http.MethodPost, "/v1/accounts", f.signInFirst(), map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
 	root := f.signIn("root", rootPassword)
 
 	bob := map[string]string{"username": "bob", "role": "approver", "password": "bob's long password"}
@@ -174,7 +204,7 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 // stolen session can't be used to guess the password.
 func TestAccounts_ChangingYourPasswordLocksAfterWrongTries(t *testing.T) {
 	f := newFresh(t)
-	expect(t, "creating root", f.send(http.MethodPost, "/v1/accounts", nil, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	expect(t, "creating root", f.send(http.MethodPost, "/v1/accounts", f.signInFirst(), map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
 	root := f.signIn("root", rootPassword)
 	change := func(current string) *httptest.ResponseRecorder {
 		return f.send(http.MethodPost, "/v1/me/password", root, map[string]string{"current": current, "new": "root's new long password"})

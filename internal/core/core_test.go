@@ -191,6 +191,37 @@ func waitReady(o core.Options, exited <-chan error) (bool, error) {
 	return false, errors.New("timed out")
 }
 
+// asInitialAdmin signs in to the core at addr with the initial admin
+// password, then GETs path with that session.
+func asInitialAdmin(t *testing.T, addr, password, path string) (int, string) {
+	t.Helper()
+	signIn, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/auth/initial-admin", strings.NewReader(`{"password":"`+password+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signIn.Header.Set("X-Themis-Request", "1")
+	resp, err := http.DefaultClient.Do(signIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent || len(resp.Cookies()) == 0 {
+		t.Fatalf("signing in with the initial admin password = %d", resp.StatusCode)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(resp.Cookies()[0])
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
 func get(url string) (int, string) {
 	resp, err := http.Get(url) //nolint:gosec,noctx // a test request to a local server
 	if err != nil {
@@ -207,17 +238,21 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	_, pod := k8s.NewRollout(t, ns, "checkout")
 	dbURL := pgtest.NewDatabase(t)
-	// The executor is configured but not running. People sign in through an
-	// identity provider, and the model is set in setup, where none is yet.
+	// The executor is configured but not running. The first admin signs in
+	// with the initial admin password, people through an identity provider,
+	// and the model is set in setup, where none is yet.
 	executorAddr := freeAddr(t)
+	const initialPassword = "initial-admin-password"
 	configPath := writeFile(t, "with-executor.yaml", strings.Replace(readFile(t, writeConfig(t, ns)), "\napi:\n", fmt.Sprintf(`
 api:
+  initialAdmin:
+    passwordFile: %s
   oidc:
     issuerURL: https://idp.example
     clientID: themis
     clientSecretFile: %s
     redirectURL: https://themis.example/auth/callback
-`, writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("executor:\n  address: %s\n  bearerTokenFile: %s\nsettings:\n  keyFile: %s\n",
+`, writeFile(t, "initial-admin", initialPassword+"\n"), writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("executor:\n  address: %s\n  bearerTokenFile: %s\nsettings:\n  keyFile: %s\n",
 		executorAddr, writeFile(t, "executor-token", "executor-secret\n"), writeFile(t, "settings-key", "settings-key\n")))
 	o, exited, cancel := start(t, func() core.Options {
 		return core.Options{
@@ -225,7 +260,6 @@ api:
 			DatabaseURL: dbURL,
 			Kubernetes:  k8s.Config,
 			HTTPAddr:    freeAddr(t),
-			SetupAddr:   freeAddr(t),
 			ProbeAddr:   freeAddr(t),
 			MetricsAddr: freeAddr(t),
 			GRPCAddr:    freeAddr(t),
@@ -236,21 +270,17 @@ api:
 	if code, _ := get("http://" + o.ProbeAddr + "/healthz"); code != http.StatusOK {
 		t.Errorf("/healthz = %d, want 200", code)
 	}
-	// Before anyone has signed in, kubectl port-forward to the setup port is
-	// the way in; the API port asks who you are.
-	if code, body := get("http://" + o.SetupAddr + "/v1/me"); code != http.StatusOK || !strings.Contains(body, `"setup":true`) {
-		t.Errorf("/v1/me through the setup port = %d %q, want the setup admin", code, body)
-	}
+	// Reaching Themis, from localhost as kubectl port-forward does, proves
+	// nothing. The sign-in page offers the identity provider and the initial
+	// admin password, which signs in an admin, who can set the model.
 	if code, _ := get("http://" + o.HTTPAddr + "/v1/me"); code != http.StatusUnauthorized {
-		t.Errorf("/v1/me through the API port = %d, want 401", code)
+		t.Errorf("/v1/me, signed out = %d, want 401", code)
 	}
-	// The sign-in page offers the identity provider, and the admin can set
-	// the model.
-	if code, body := get("http://" + o.HTTPAddr + "/v1/sign-in"); code != http.StatusOK || !strings.Contains(body, `"oidc":true`) {
-		t.Errorf("/v1/sign-in = %d %s, want the identity provider offered", code, body)
+	if code, body := get("http://" + o.HTTPAddr + "/v1/sign-in"); code != http.StatusOK || !strings.Contains(body, `"oidc":true`) || !strings.Contains(body, `"initialAdmin":{}`) {
+		t.Errorf("/v1/sign-in = %d %s, want the identity provider and the initial admin password offered", code, body)
 	}
-	if code, _ := get("http://" + o.SetupAddr + "/v1/settings/model"); code != http.StatusOK {
-		t.Errorf("/v1/settings/model = %d, want 200", code)
+	if code, body := asInitialAdmin(t, o.HTTPAddr, initialPassword, "/v1/settings/model"); code != http.StatusOK {
+		t.Errorf("/v1/settings/model as the initial admin = %d %s, want 200", code, body)
 	}
 
 	payload := fmt.Sprintf(`{"version":"4","status":"firing","receiver":"themis","alerts":[{
@@ -273,7 +303,7 @@ api:
 	}
 	// The status page now says alerts arrive, through which receiver, that
 	// no model is set, and that the configured executor can't be reached.
-	if code, body := get("http://" + o.SetupAddr + "/v1/status"); code != http.StatusOK ||
+	if code, body := asInitialAdmin(t, o.HTTPAddr, initialPassword, "/v1/status"); code != http.StatusOK ||
 		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through the \"themis\" receiver`) ||
 		!strings.Contains(body, `"name":"Model","state":"problem","summary":"Not set.`) ||
 		!strings.Contains(body, "Executor unreachable at "+executorAddr) {
@@ -507,8 +537,6 @@ func TestRun_RefusesToStart(t *testing.T) {
 		"profile naming an unknown template": {func(t *testing.T, o *core.Options) {
 			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
 		}, `unknown evidence template "pod_state"`},
-		"setup address others can reach": {func(_ *testing.T, o *core.Options) { o.SetupAddr = "0.0.0.0:8083" }, "must be a loopback address"},
-		"setup address without a port":   {func(_ *testing.T, o *core.Options) { o.SetupAddr = "localhost" }, `setup address "localhost"`},
 		"unreadable executor token": {func(t *testing.T, o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
 			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n")

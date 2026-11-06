@@ -17,6 +17,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `model.baseURL`, `model.name`, `model.apiKey` | no | What the install set for the investigator's model; the chart sets them from its values. The Setup page can't change these, and sets only what's left. Which provider the investigator speaks to is the chart's `model.provider`: `openai` (the default) for any OpenAI-compatible API, or `anthropic` for Claude models through Anthropic's own API, which needs no address; the Setup page's address doesn't apply to it, but its model name and key do. How an OpenAI-compatible API is asked for its reply is the chart's too: `model.outputLimitField`, `max_tokens` (the default) or `max_completion_tokens`; `model.temperature`, a number (`0` by default) or `default` to send none; and `model.schemaDialect`, `as-is` (the default) or `openai-strict`, which sends the reply schema in the form OpenAI's strict mode accepts: every object closed, every field required, an optional one allowed to be null, and a map such as a fix's containers as a list of entries. Themis turns each reply back and checks it against its own schema. For OpenAI's newer models, set all three: `max_completion_tokens`, `default` and `openai-strict`. Ollama and vLLM take the defaults. |
 | `investigators.disabled` | no | No investigator is installed. Themis collects evidence and runs its checks, then each incident waits (`awaiting_suggestion`) for a fix suggested by a person or a tool outside Themis, and closes without action if none comes within `externalProposals.window`. The chart sets it with `model.enabled: false`. |
 | `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
+| `api.initialAdmin.passwordFile` | no | File holding the initial admin password, which signs the first admin in until an admin signs in with an account or through OIDC; see [People and roles](#people-and-roles). The chart generates it. |
+| `api.initialAdmin.secret` | no | The Secret, in Themis's namespace, whose `password` key holds it, for the command the sign-in page shows. The chart sets it. |
 | `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |
 | `api.access` | no | Roles for people who sign in, by username or group. |
 | `executor.address`, `executor.bearerTokenFile` | no | Where `themis-executor` listens, and the token it requires. Without `executor`, approved actions are canceled, never executed. |
@@ -31,11 +33,17 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 
 ## People and roles
 
-**Before anyone signs in,** whoever opens Themis through `kubectl port-forward` to the core's setup port (8083) is an admin, recorded as `setup`. Kubernetes has already checked that they may port-forward to Themis, and the port listens only on the pod's own loopback address, so nothing else reaches it; the chart's NetworkPolicy blocks it too. The first time someone with the `admin` role signs in, with a Themis account or through OIDC, setup finishes for good: the port then serves Themis like any other address, with sign-in. The core refuses to start if `--setup-addr` isn't a loopback address. Turn the port off with the chart's `setup.enabled: false`.
+**The first admin** signs in with the initial admin password. The chart generates it once, in the `themis-initial-admin` Secret, and keeps it across upgrades:
+
+```bash
+kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
+```
+
+The sign-in page offers it while setup is incomplete. It signs in as `initial-admin`, an admin, for an hour at a time. Setup completes the first time someone with the `admin` role signs in with a Themis account or through OIDC: the initial admin password is then retired for good, and the sessions it started end. Ten wrong tries in a row lock it for 15 minutes. Themis reads it from `api.initialAdmin.passwordFile` at each try, compares it in constant time, and never stores, logs or shows it. The core logs `signed in with the initial admin password` at each use, and `initial admin password retired` with the admin who retired it. Reaching Themis grants nothing by itself, through `kubectl port-forward` or otherwise. Anyone who can read Secrets in Themis's namespace can read the password, as they can the break-glass token. Under GitOps, create the Secret yourself; see the [chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
 
 **Themis accounts** are for teams without an identity provider. An admin makes them on the **Accounts** page, or during setup, where the first one is your own admin account. Each has a username, a password of at least 12 characters, and a role, which applies at once when changed. Passwords are kept only as argon2id hashes. Ten wrong passwords in a row lock an account for 15 minutes, and a failed sign-in never says whether the username exists. A new password ends the account's sessions everywhere. Admins can't change their own role or delete themselves, so no one locks themselves out by accident. Sign-in with a password needs HTTPS everywhere but `localhost`: its cookie is secure, so plain HTTP over a network can't sign in.
 
-Without `api.oidc` or accounts, the UI and the API otherwise take only the emergency (admin) token, and every approval made with it is recorded as `admin`. With it, people sign in through your identity provider, and each approval and suggestion records who made it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
+Without `api.oidc` or accounts, people sign in only with the break-glass (admin) token or, during setup, the initial admin password, and every approval made with the token is recorded as `admin`. With it, people sign in through your identity provider, and each approval and suggestion records who made it. Any OIDC provider works, such as Dex, Google, Okta, Keycloak or Entra ID.
 
 ```yaml
 api:
@@ -85,7 +93,7 @@ Each entry gives a role to `users` (usernames), `groups`, or both. When someone 
 
 **The admin token** still works with OIDC on, and acts as an admin. Keep it as a way in when the provider is down. What it does is still recorded as `admin`, since anyone holding it looks the same.
 
-**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, `person:setup` for someone who came in through port-forward before setup finished, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Each person has their own limit on suggestions.
+**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, `person:initial-admin` for the initial admin password, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Records from versions before the initial admin password may name `person:setup`: someone who came in through port-forward before setup finished. Each person has their own limit on suggestions.
 
 ## Configuration resources
 

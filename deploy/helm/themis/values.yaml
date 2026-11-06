@@ -108,15 +108,17 @@ notifications:
 tokens:
   existingSecret: ""
 
-# Opening Themis with kubectl port-forward to the core's setup port. Until an
-# admin signs in through a real sign-in, whoever comes in this way is an admin:
-# Kubernetes has already checked they may port-forward to Themis. Nothing else
-# can reach the port. Turn it off to sign in only with OIDC or the admin token.
-setup:
-  enabled: true
+# The password the first admin signs in with, until an admin signs in with an
+# account or through OIDC; from then on it signs no one in. The chart
+# generates it once, in the <release>-initial-admin Secret, and keeps it across
+# upgrades with Helm's lookup, as it does the tokens. Under GitOps, create a
+# Secret with a password key yourself, a random string of at least 32
+# characters, and name it here.
+initialAdmin:
+  existingSecret: ""
 
 # Sign-in through an OIDC provider, such as Dex, Google, Okta, Keycloak or
-# Entra ID. Off while issuerURL is empty: only the admin token signs in.
+# Entra ID. Off while issuerURL is empty.
 oidc:
   # The provider's issuer, for example https://accounts.google.com.
   issuerURL: ""

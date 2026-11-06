@@ -80,7 +80,7 @@ func healthy() (*statuspage.Checker, *fakeStore) {
 		Store: s, Access: fakeAccess{},
 		Metrics:  fakeMetrics{{Source: metrics.Prometheus, History: true}, {Source: metrics.Kubernetes}},
 		Executor: "themis-executor:9091", Dial: func(context.Context, string) error { return nil },
-		Now: func() time.Time { return now },
+		InitialAdmin: true, Now: func() time.Time { return now },
 	}, s
 }
 
@@ -190,7 +190,8 @@ func TestChecks_Problems(t *testing.T) {
 		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
 		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
 		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "no investigator"},
-		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "Port-forward grants admin."},
+		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "The initial admin password grants admin."},
+		"setup finished":  {func(*statuspage.Checker, *fakeStore) {}, "Sign-in", statuspage.OK, "Through Themis accounts. The initial admin password is retired."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},
 	} {
 		t.Run(name, func(t *testing.T) {

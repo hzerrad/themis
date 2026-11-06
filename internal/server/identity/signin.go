@@ -178,10 +178,15 @@ func (s *SignIn) exchange(ctx context.Context, code string, in store.SignIn) (st
 	if strings.TrimSpace(username) == "" {
 		return store.Session{}, fmt.Errorf("the ID token has no %s claim", cfg.UsernameClaim)
 	}
-	// Records name the admin token's holder and setup by these, so no one may
-	// sign in as them.
-	if username == TokenUser || username == SetupUser {
+	// Records name Themis's own ways in by these, so no one may sign in as
+	// them.
+	if reserved(username) {
 		return store.Session{}, fmt.Errorf("the username %q is kept for Themis's own use", username)
+	}
+	// Sessions of accounts and of the initial admin password are told apart
+	// by their subject, so no provider's subject may look like one.
+	if idt.Subject == store.InitialAdminSubject || strings.HasPrefix(idt.Subject, store.AccountSubjectPrefix) {
+		return store.Session{}, fmt.Errorf("the subject %q is kept for Themis's own use", idt.Subject)
 	}
 	// An address the provider hasn't verified could be anyone's.
 	if verified, ok := claims["email_verified"].(bool); cfg.UsernameClaim == "email" && ok && !verified {

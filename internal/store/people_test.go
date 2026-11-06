@@ -171,11 +171,11 @@ func TestSetup_FinishesOnce(t *testing.T) {
 	if finished, err := s.SetupFinished(t.Context()); err != nil || finished {
 		t.Fatalf("SetupFinished on a new install = %v, %v; want false", finished, err)
 	}
-	if err := s.FinishSetup(t.Context(), "alice@example.com", t0); err != nil {
-		t.Fatal(err)
+	if done, err := s.FinishSetup(t.Context(), "alice@example.com", t0); err != nil || !done {
+		t.Fatalf("first FinishSetup = %v, %v; want it to finish setup", done, err)
 	}
-	if err := s.FinishSetup(t.Context(), "bob@example.com", t0.Add(time.Hour)); err != nil {
-		t.Fatal(err)
+	if done, err := s.FinishSetup(t.Context(), "bob@example.com", t0.Add(time.Hour)); err != nil || done {
+		t.Fatalf("second FinishSetup = %v, %v; want no change", done, err)
 	}
 	if finished, err := s.SetupFinished(t.Context()); err != nil || !finished {
 		t.Fatalf("SetupFinished = %v, %v; want true", finished, err)
@@ -183,5 +183,36 @@ func TestSetup_FinishesOnce(t *testing.T) {
 	var by string
 	if err := pool.QueryRow(t.Context(), `SELECT finished_by FROM setup`).Scan(&by); err != nil || by != "alice@example.com" {
 		t.Errorf("finished_by = %q, %v; want the first admin", by, err)
+	}
+}
+
+// Wrong initial admin passwords lock it as an account's do, and the right one
+// forgets them.
+func TestInitialAdmin_LocksAfterWrongPasswords(t *testing.T) {
+	s, _ := newStore(t)
+	locked := func() time.Time {
+		t.Helper()
+		until, err := s.InitialAdminLockedUntil(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return until
+	}
+	if until := locked(); until.After(t0) {
+		t.Fatalf("a new install's initial admin password is locked until %s", until)
+	}
+	for range 3 {
+		if err := s.InitialAdminPasswordFailed(t.Context(), t0, 3, 15*time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if until := locked(); !until.Equal(t0.Add(15 * time.Minute)) {
+		t.Fatalf("after 3 wrong passwords: locked until %s, want 15 minutes", until)
+	}
+	if err := s.InitialAdminPasswordSucceeded(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if until := locked(); until.After(t0) {
+		t.Errorf("after the right password: locked until %s, want unlocked", until)
 	}
 }

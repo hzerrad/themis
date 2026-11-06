@@ -45,6 +45,9 @@ func (c Config) Validate() error {
 	if c.API.BearerTokenFile == "" {
 		add("api.bearerTokenFile", "is required")
 	}
+	if ia := c.API.InitialAdmin; ia != nil && ia.PasswordFile == "" {
+		add("api.initialAdmin.passwordFile", "is required")
+	}
 	if o := c.API.OIDC; o != nil {
 		if !IsHTTPURL(o.IssuerURL) {
 			add("api.oidc.issuerURL", "%q is not an http or https URL", o.IssuerURL)

@@ -10,8 +10,8 @@ const POLL_MS = 3000;
 const main = document.getElementById("main");
 let timer = null;
 // me is who's signed in, from /v1/me: a person, whoever holds the break-glass
-// token, or, until setup finishes, whoever opened Themis through kubectl
-// port-forward.
+// token, or, until setup finishes, whoever signed in with the initial admin
+// password.
 let me = null;
 // flash is what the last action did, said once on the page it came from.
 let flash = null;
@@ -241,7 +241,7 @@ function passwordForm(primary) {
       return;
     }
     // Signing in during setup finishes it: Setup shows what's left.
-    if (me && me.setup) location.hash = "#/setup";
+    if (me && me.initialAdmin) location.hash = "#/setup";
     me = null;
     route();
   };
@@ -250,6 +250,34 @@ function passwordForm(primary) {
     h("div", {}, h("button", { class: "btn" + (primary ? " primary" : ""), type: "submit" }, "Sign in")),
     error);
   return { form, focus: () => username.focus() };
+}
+
+// initialAdminForm signs the first admin in with the initial admin password,
+// while setup is incomplete. where says how to read it, when Themis knows.
+function initialAdminForm(where) {
+  const password = h("input", { type: "password", autocomplete: "off", required: true });
+  const error = h("div", { class: "error", role: "alert" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const resp = await fetch("/auth/initial-admin", { method: "POST", headers: headers(), body: JSON.stringify({ password: password.value }) });
+    password.value = "";
+    if (!resp.ok) {
+      error.textContent = (await resp.text()).trim();
+      return;
+    }
+    location.hash = "#/setup";
+    me = null;
+    route();
+  };
+  const section = [
+    h("p", {}, "Setup is incomplete. The initial admin password signs in as admin until an admin signs in with an account or the identity provider."),
+    where.command ? [h("p", { class: "quiet small" }, "Read it with kubectl:"), copyable(where.command)] : null,
+    h("form", { class: "form", onsubmit: submit },
+      field("Initial admin password", password),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Sign in")),
+      error)];
+  return { section, focus: () => password.focus() };
 }
 
 async function login() {
@@ -261,27 +289,30 @@ async function login() {
     try { sessionStorage.setItem(TOKEN_KEY, input.value.trim()); } catch {}
     route();
   };
-  const breakGlass = h("details", { class: "minor" }, h("summary", {}, "Use the break-glass token"),
+  const first = methods.initialAdmin ? initialAdminForm(methods.initialAdmin) : null;
+  const breakGlass = h("details", { class: "minor", open: !methods.oidc && !methods.password && !first },
+    h("summary", {}, "Use the break-glass token"),
     h("form", { class: "form", onsubmit: submit },
       h("p", { class: "quiet small" }, "For scripts and failed sign-ins. Kept for this browser tab only."),
       field("Break-glass token", input),
       h("div", {}, h("button", { class: "btn", type: "submit" }, "Continue"))));
-  if (!methods.oidc && !methods.password) {
+  if (!methods.oidc && !methods.password && !first) {
     render(h("div", { class: "plate centre" },
       h("h1", {}, "Sign-in is not set up"),
-      h("p", {}, "Set it up through kubectl port-forward. Port-forward grants admin until an admin signs in with an account."),
-      h("pre", {}, "kubectl -n themis port-forward deploy/themis-core 8090:8083"),
-      h("p", { class: "quiet small" }, "Then open http://localhost:8090. For another install name or namespace, adjust the command."),
+      h("p", {}, "No accounts or identity provider. Sign in with the break-glass token, then create accounts or configure the identity provider."),
       breakGlass));
     return;
   }
-  const pw = methods.password ? passwordForm(!methods.oidc) : null;
+  const pw = methods.password ? passwordForm(!methods.oidc && !first) : null;
   render(h("div", { class: "plate centre" },
     h("h1", {}, "Sign in"),
-    methods.oidc ? h("p", {}, h("a", { class: "btn primary", href: "/auth/login" }, "Sign in with your identity provider")) : null,
-    pw ? [methods.oidc ? h("p", { class: "or" }, "Or with a Themis account") : null, pw.form] : null,
+    first ? first.section : null,
+    methods.oidc ? [first ? h("p", { class: "or" }, "Or through the identity provider") : null,
+      h("p", {}, h("a", { class: "btn" + (first ? "" : " primary"), href: "/auth/login" }, "Sign in with your identity provider"))] : null,
+    pw ? [methods.oidc || first ? h("p", { class: "or" }, "Or with a Themis account") : null, pw.form] : null,
     breakGlass));
-  if (pw && !methods.oidc) pw.focus();
+  if (first) first.focus();
+  else if (pw && !methods.oidc) pw.focus();
 }
 
 function noAccess() {
@@ -336,7 +367,7 @@ async function accounts() {
   };
   const roleSelect = (value, name) => h("select", { "aria-label": name }, ROLES.map((r) => h("option", { value: r, selected: r === value }, ROLE_LABEL[r])));
   const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
-  const role = roleSelect(me.setup && !list.length ? "admin" : "approver", "Role");
+  const role = roleSelect(me.initialAdmin && !list.length ? "admin" : "approver", "Role");
   const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const create = (e) => {
     e.preventDefault();
@@ -344,9 +375,9 @@ async function accounts() {
     act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) }, "Account " + name + " created.");
   };
   const hasAdmin = list.some((a) => a.role === "admin");
-  const first = me.setup && !hasAdmin;
+  const first = me.initialAdmin && !hasAdmin;
   // During setup, once an admin account exists, signing in with it finishes setup.
-  const finish = me.setup && hasAdmin ? passwordForm(true) : null;
+  const finish = me.initialAdmin && hasAdmin ? passwordForm(true) : null;
   const path = (a) => "/v1/accounts/" + encodeURIComponent(a.username);
   const rows = list.map((a) => {
     const self = me.account && me.username === a.username;
@@ -370,11 +401,11 @@ async function accounts() {
   render(
     finish ? h("div", { class: "plate" },
       h("h1", {}, "Sign in with the admin account"),
-      h("p", { class: "quiet" }, "Signing in completes setup. Port-forward then grants no admin access."),
+      h("p", { class: "quiet" }, "Signing in completes setup. The initial admin password then stops working."),
       finish.form) : null,
     h("h1", { class: finish ? "sub" : "" }, first ? "Create the admin account" : "Accounts"),
     h("p", { class: "lede" }, first
-      ? "Sign in with it here to complete setup. Port-forward then grants no admin access."
+      ? "Sign in with it here to complete setup. The initial admin password then stops working."
       : "Accounts sign in with a username and password. People signing in through the identity provider take their roles from Themis's settings."),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
@@ -506,9 +537,9 @@ async function setup() {
   const acting = checks.filter(needsAction).length;
   const steps = [
     { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
-      h("p", {}, me.setup ? "Incomplete. Port-forward grants admin until an admin account or identity provider is set up." : partFinding(signIn)),
+      h("p", {}, me.initialAdmin ? "Incomplete. The initial admin password grants admin until an admin signs in with an account or the identity provider." : partFinding(signIn)),
       h("ul", { class: "remedies" },
-        h("li", {}, h("a", { href: "#/accounts" }, me.setup ? "Create the admin account" : "Create accounts")),
+        h("li", {}, h("a", { href: "#/accounts" }, me.initialAdmin ? "Create the admin account" : "Create accounts")),
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
@@ -836,6 +867,9 @@ function sourceRows(p) {
   if (p.LeaseID) {
     row("From", "The investigator");
     row("Identity", "Verified: it held this incident's investigation.");
+  } else if (src === "person:initial-admin") {
+    row("From", "A person");
+    row("Identity", "The initial admin password. It proves the password, not the person.");
   } else if (src === "person:setup") {
     row("From", "A person");
     row("Identity", "A person with kubectl access, through port-forward before sign-in was set up. Kubernetes verified the access, not the person.");
@@ -1164,12 +1198,11 @@ async function route() {
   }
   const who = document.getElementById("whoami");
   who.textContent = !me ? ""
-    : me.setup ? "Admin through kubectl port-forward"
+    : me.initialAdmin ? "Signed in with the initial admin password"
     : me.token ? "Signed in with the break-glass token"
     : me.username + (me.role ? " · " + ROLE_LABEL[me.role] : "");
-  document.getElementById("setup").hidden = !(me && me.setup);
-  // Coming in through port-forward isn't a sign-in, so there's nothing to sign out of.
-  document.getElementById("logout").hidden = !me || me.setup;
+  document.getElementById("setup").hidden = !(me && me.initialAdmin);
+  document.getElementById("logout").hidden = !me;
   document.querySelector(".bar nav").hidden = !me || !me.role;
   if (!me) return login();
   if (!me.role) return noAccess();
@@ -1182,7 +1215,7 @@ async function route() {
   if (m) [run, nav] = [() => detail(m[1]), "nav-incidents"];
   else if (hash === "#/accounts" && can("admin")) [run, nav] = [accounts, "nav-accounts"];
   else if (hash === "#/status") [run, nav] = [status, "nav-status"];
-  else if ((hash === "#/setup" || (hash === "" && me.setup)) && can("admin")) [run, nav] = [setup, "nav-setup"];
+  else if ((hash === "#/setup" || (hash === "" && me.initialAdmin)) && can("admin")) [run, nav] = [setup, "nav-setup"];
   else if (hash === "#/password" && me.account) [run, nav] = [async () => changePassword(), "nav-password"];
   else [run, nav] = [async () => { await list(); timer = setTimeout(route, POLL_MS); }, "nav-incidents"];
   markNav(nav);

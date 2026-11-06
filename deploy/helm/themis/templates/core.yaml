@@ -42,8 +42,6 @@ spec:
           args:
             - --config=/etc/themis/themis.yaml
             - --log-level={{ .Values.logLevel }}
-            # Bound to the pod's loopback address, so only kubectl port-forward reaches it.
-            - --setup-addr={{ if (include "themis.setupEnabled" .) }}127.0.0.1:8083{{ end }}
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
@@ -62,6 +60,7 @@ spec:
           volumeMounts:
             - {name: config, mountPath: /etc/themis, readOnly: true}
             - {name: tokens, mountPath: /var/run/secrets/themis, readOnly: true}
+            - {name: initial-admin, mountPath: /var/run/secrets/themis-initial-admin, readOnly: true}
             {{- if .Values.notifications.webhookSecret }}
             - {name: webhook, mountPath: /var/run/secrets/themis-webhook, readOnly: true}
             {{- end }}
@@ -91,6 +90,13 @@ spec:
         {{- end }}
         - name: config
           configMap: {name: {{ .Release.Name }}-config}
+        # Optional, so the core starts without it: once an admin has signed
+        # in, the password signs no one in anyway.
+        - name: initial-admin
+          secret:
+            secretName: {{ include "themis.initialAdminSecret" . }}
+            items: [{key: password, path: password}]
+            optional: true
         - name: tokens
           secret:
             secretName: {{ include "themis.tokensSecret" . }}

@@ -17,7 +17,7 @@ The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, 
 | Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
 | Metrics | A metrics source answers: Prometheus, or the Kubernetes metrics API | No metrics source, or one failing; without Prometheus, no history of peak memory or CPU throttling |
 | Fixes | The executor is installed and reachable | Off, or unreachable |
-| Sign-in | People sign in with accounts or an identity provider | Port-forward still grants admin, or only the break-glass token signs in |
+| Sign-in | People sign in with accounts or an identity provider | The initial admin password still grants admin, or only the break-glass token signs in |
 
 The investigator and Alertmanager are recorded as heard from at most every 30 seconds, in the database, so every core replica sees the same.
 

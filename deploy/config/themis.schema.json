@@ -60,6 +60,25 @@
           "minLength": 1,
           "description": "BearerTokenFile holds the admin token. It stays usable when people sign\nin through OIDC, as a way in if the identity provider is down."
         },
+        "initialAdmin": {
+          "properties": {
+            "passwordFile": {
+              "type": "string",
+              "minLength": 1,
+              "description": "PasswordFile holds the password. It is read at each try, and never\nstored."
+            },
+            "secret": {
+              "type": "string",
+              "description": "Secret names the Secret, in Themis's namespace, whose password key\nholds it, for the command the sign-in page shows. The chart sets it."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "passwordFile"
+          ],
+          "description": "InitialAdmin lets the first admin sign in with a generated password,\nuntil an admin signs in with an account or through OIDC."
+        },
         "oidc": {
           "properties": {
             "issuerURL": {

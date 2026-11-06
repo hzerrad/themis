@@ -19,6 +19,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -40,15 +41,16 @@ func signedIn(t *testing.T) *env {
 		}
 	}
 	mux := http.NewServeMux()
+	log := telemetry.NewLogger(&e.logs, "core", slog.LevelDebug)
 	(&httpapi.API{
-		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: &identity.Setup{Store: s, Logger: log}, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},
 			{Role: config.RoleApprover, Groups: []string{"approvers"}},
 			{Role: config.RoleAdmin, Users: []string{"admin@example.com"}},
 		},
-		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
+		Logger: log,
 	}).Register(mux)
 	e.handler = mux
 	return e
@@ -199,7 +201,8 @@ func TestPeople_Me(t *testing.T) {
 	}
 }
 
-// Setup finishes when an admin signs in for real: not with the token, and
+// Setup finishes, retiring the initial admin password, when an admin signs in
+// through the identity provider or with an account: not with the token, and
 // not as anyone less trusted.
 func TestPeople_AnAdminSigningInFinishesSetup(t *testing.T) {
 	e := signedIn(t)
@@ -222,8 +225,8 @@ func TestPeople_AnAdminSigningInFinishesSetup(t *testing.T) {
 	if !finished() {
 		t.Error("setup still open after an admin signed in")
 	}
-	if !strings.Contains(e.logs.String(), "setup finished") {
-		t.Errorf("no log says setup finished: %s", e.logs.String())
+	if logs := e.logs.String(); !strings.Contains(logs, `"msg":"initial admin password retired"`) || !strings.Contains(logs, `"by":"admin@example.com"`) {
+		t.Errorf("no log says admin@example.com retired the initial admin password: %s", e.logs.String())
 	}
 }
 

@@ -235,7 +235,9 @@ themis-down: ## Uninstall Themis from kind
 .PHONY: ui
 ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	@echo "UI: http://localhost:8090"
-	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8083
+	@echo "Until an admin signs in, the initial admin password signs in:"
+	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
+	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-cluster Themis
@@ -304,7 +306,7 @@ dev-tokens:
 run: dev-tokens ## Run themis-core locally against the kind cluster and the dev-db database
 	$(DEV_DB_ENV) go run ./cmd/themis-core --config scripts/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
 		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 \
-		--metrics-addr 127.0.0.1:8082 --setup-addr 127.0.0.1:8083
+		--metrics-addr 127.0.0.1:8082
 
 .PHONY: run-executor
 run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and the dev-db database

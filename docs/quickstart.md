@@ -131,10 +131,16 @@ make ui   # serves the UI on http://localhost:8090
 **Your cluster:**
 
 ```bash
-kubectl -n themis port-forward deploy/themis-core 8090:8083
+kubectl -n themis port-forward deploy/themis-core 8090:8080
 ```
 
-Open <http://localhost:8090>. There's no password: until an admin signs in for real, whoever opens Themis through `kubectl port-forward` is an admin, since Kubernetes already checked they may port-forward to it. Nothing else can reach that port. The first page is **Setup**, in order: create your admin account and sign in with it, which finishes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+Open <http://localhost:8090> and sign in with the initial admin password. The chart generated it at install; on kind, add `--context kind-themis-dev`:
+
+```bash
+kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
+```
+
+It signs in as an admin until an admin signs in with an account or through your identity provider; then it stops working. Opening Themis grants nothing by itself. The first page is **Setup**, in order: create your admin account and sign in with it, which completes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 
@@ -206,7 +212,7 @@ Themis accounts, on the **Accounts** page, are enough for a small team. With an 
 | `approver` | Also suggest, approve and deny fixes |
 | `admin` | Everything |
 
-Once someone with the `admin` role signs in, port-forward no longer makes anyone an admin; it opens the sign-in page like any other address. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
+Once someone with the `admin` role signs in, the initial admin password stops working. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
 
 ## Clean up
 

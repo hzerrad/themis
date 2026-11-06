@@ -272,6 +272,7 @@ func TestSignIn_Refused(t *testing.T) {
 		"an unverified address":             {claims: map[string]any{"email_verified": false}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 		"no username":                       {claims: map[string]any{"email": ""}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 		"the admin token's name":            {claims: map[string]any{"email": "admin"}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
+		"the initial admin's subject":       {claims: map[string]any{"sub": "initial-admin"}, want: http.StatusUnauthorized, message: "didn't confirm who you are"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t)

@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"slices"
 	"time"
@@ -166,6 +167,18 @@ func sessionCookie(r *http.Request, id string, ttl time.Duration) *http.Cookie {
 		Name: SessionCookie, Value: id, Path: "/", MaxAge: int(ttl.Seconds()),
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: !loopbackHost(r.Host),
 	}
+}
+
+func loopbackHost(hostport string) bool {
+	host, _, err := net.SplitHostPort(hostport)
+	if err != nil {
+		host = hostport
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	}
+	return false
 }
 
 // SignOut ends whatever session the browser holds, however it started.

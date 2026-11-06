@@ -180,7 +180,7 @@ func TestPassword_HashAndRules(t *testing.T) {
 		"too short":       identity.CheckNewPassword("alice", "short"),
 		"the username":    identity.CheckNewPassword("alice-in-wonderland", "Alice-in-Wonderland"),
 		"uppercase name":  identity.CheckUsername("Alice"),
-		"reserved name":   identity.CheckUsername("setup"),
+		"reserved name":   identity.CheckUsername("initial-admin"),
 		"an email":        identity.CheckUsername("alice@example.com"),
 		"one letter name": identity.CheckUsername("a"),
 	} {
