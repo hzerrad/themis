@@ -114,7 +114,6 @@ To work on Themis itself, run the three components on your machine against the k
 
 ```bash
 make kind-up dev-db demo-up
-export DATABASE_URL='postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable'
 make run                                  # themis-core, in one terminal
 make run-executor                         # themis-executor, in another
 make run-intelligence                     # the investigator, against Ollama on 127.0.0.1:11434
@@ -122,4 +121,27 @@ make demo-break
 make demo-alert                           # once a checkout pod is crash looping: posts the alert Alertmanager would
 ```
 
-The UI is on <http://127.0.0.1:8080>, with the token in `bin/dev/admin-token`. Use `OLLAMA_URL=...` with `run-intelligence` to point it at another endpoint.
+`make run` and `make run-executor` use the `make dev-db` database; set `DATABASE_URL` to use another.
+
+| Process | Port | Serves |
+|---|---|---|
+| themis-core | 8080 | UI, API and alert intake |
+| | 9090 | gRPC for the investigator |
+| | 8081 | `/healthz`, `/readyz` |
+| | 8082 | `/metrics` |
+| | 8083 | setup: the UI without sign-in, until an admin first signs in |
+| themis-executor | 9091 | gRPC for themis-core |
+| | 8091 | `/healthz`, `/readyz` |
+| | 8092 | `/metrics` |
+| investigator | none | its `/metrics` is off locally |
+| PostgreSQL (`make dev-db`) | 5432 | |
+
+The UI is on <http://127.0.0.1:8080>, with the token in `bin/dev/admin-token`.
+
+`make run-intelligence` reads the same `MODEL_*` settings as the investigator in the cluster. Without them it uses Ollama: `OLLAMA_URL=...` points it at another Ollama, `MODEL_NAME=...` picks the model. For a hosted model, put the API key in a file:
+
+```bash
+make run-intelligence MODEL_PROVIDER=anthropic MODEL_NAME=claude-haiku-5-5 MODEL_API_KEY_FILE=$HOME/.config/themis/anthropic.key
+make run-intelligence MODEL_BASE_URL=https://api.openai.com/v1 MODEL_NAME=<model> MODEL_API_KEY_FILE=$HOME/.config/themis/openai.key \
+  MODEL_OUTPUT_LIMIT_FIELD=max_completion_tokens MODEL_TEMPERATURE=default MODEL_SCHEMA_DIALECT=openai-strict
+```
