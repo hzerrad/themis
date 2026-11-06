@@ -44,6 +44,7 @@ Between the three commits, Themis changed how it reads replies (over-long notes 
 
 ## Limits
 
+- **Scored before the right fix and the tested fix were told apart.** `oom-after-rollout` puts a raise to policy, to see it refused, and calls a rollback right. Until scoring version 7 the case named only the raise, so a model that rolled back there was counted wrong. The table above was scored that way; the case now names the rollback as its right fix in `truth.fix`.
 - **One run per case.** The intervals in each model's report are wide; a difference of a case or two between models is not meaningful.
 - **Synthetic cases.** They are written to be realistic, and include look-alikes and attacks, but they are not production incidents.
 - **qwen3 14B was not at its best:** part of it ran on the CPU, which made it slow and may have cost it some answers. A run with a smaller context, entirely on the GPU, is still to do.

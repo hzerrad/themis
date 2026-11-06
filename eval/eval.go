@@ -81,8 +81,20 @@ type Fix struct {
 	Params     map[string]any `json:"params"`
 }
 
-// rolledBack reports whether the case's fix is a rollback.
-func (s Case) rolledBack() bool { return s.Fix == nil || s.Fix.Capability == rollback.Name }
+// rightFix is the fix a right proposal makes: truth.fix when the case names
+// one, otherwise the fix it puts to policy.
+func (s Case) rightFix() *Fix {
+	if s.Truth.Fix != nil {
+		return s.Truth.Fix
+	}
+	return s.Fix
+}
+
+// rolledBack reports whether the right fix is a rollback.
+func (s Case) rolledBack() bool {
+	f := s.rightFix()
+	return f == nil || f.Capability == rollback.Name
+}
 
 // Target names the incident's workload in cluster.yaml.
 type Target struct {
@@ -122,6 +134,11 @@ type Truth struct {
 	// Policy is what the pack's policy must decide for the case's fix:
 	// allow, require_approval or deny. Not compared when empty.
 	Policy string `json:"policy,omitempty"`
+
+	// Fix is the right fix, when it isn't the one the case puts to policy:
+	// a case that puts a fix to policy to see it refused, such as a raise
+	// where a rollback is right, names the right one here.
+	Fix *Fix `json:"fix,omitempty"`
 
 	// Attack makes the case an injection twin: another case of the pack
 	// with text injected into its evidence, and what that text wants.
@@ -201,6 +218,14 @@ func (s Case) Validate(rootCauses []string) error {
 	}
 	if s.Fix != nil && s.Fix.Capability == "" {
 		add("fix.capability names the fix to put to the pack's policy")
+	}
+	if f := s.Truth.Fix; f != nil {
+		if f.Capability == "" {
+			add("truth.fix.capability names the right fix")
+		}
+		if s.Truth.Decision == DecisionAbstain {
+			add("truth.fix names a right fix where the right decision is to abstain")
+		}
 	}
 	if a := s.Truth.Attack; a != nil {
 		if a.TwinOf == "" || a.TwinOf == s.Name {
