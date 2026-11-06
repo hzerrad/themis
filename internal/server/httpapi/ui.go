@@ -32,7 +32,9 @@ func RegisterUI(mux *http.ServeMux) {
 		}
 		server.ServeHTTP(w, r)
 	})
-	for _, path := range []string{"/{$}", "/app.js", "/style.css"} {
+	// The fonts and the logo are served from here too: a cluster may have
+	// no way out to the internet.
+	for _, path := range []string{"/{$}", "/app.js", "/style.css", "/themis.svg", "/fonts/{file}"} {
 		mux.Handle("GET "+path, page)
 	}
 }
@@ -40,13 +42,21 @@ func RegisterUI(mux *http.ServeMux) {
 // etags tags each file by its content, by the path it's served at.
 func etags(files fs.FS) map[string]string {
 	tags := map[string]string{}
-	for path, name := range map[string]string{"/": "index.html", "/app.js": "app.js", "/style.css": "style.css"} {
+	_ = fs.WalkDir(files, ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
 		data, err := fs.ReadFile(files, name)
 		if err != nil {
-			continue
+			return err
 		}
 		sum := sha256.Sum256(data)
+		path := "/" + name
+		if name == "index.html" {
+			path = "/"
+		}
 		tags[path] = `"` + hex.EncodeToString(sum[:8]) + `"`
-	}
+		return nil
+	})
 	return tags
 }
