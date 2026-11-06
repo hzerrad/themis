@@ -1,6 +1,7 @@
-// Package hint tells operators, in plain words, what Themis could not see,
-// why, and what would let it see next time. The words are written here from
-// the cause and the configuration, never by the model.
+// Package hint tells operators, in plain words, what evidence Themis was
+// missing, and what would let it see that evidence next time. The words are
+// written here from the cause and the configuration, never by the model, and
+// never reach it.
 package hint
 
 import (
@@ -9,14 +10,15 @@ import (
 	"strings"
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/store"
 )
 
 // Headlines open a stop without a conclusion: which kind of stop it was.
 const (
-	HeadlineBlind     = "No decision: Themis couldn't see everything it needed:"
-	HeadlineAmbiguous = "No decision: the evidence doesn't point to one cause."
+	HeadlineBlind     = "No fix proposed. Some evidence was missing."
+	HeadlineAmbiguous = "No fix proposed. The evidence doesn't point to one cause."
 )
 
 // Writer writes messages for one configuration.
@@ -31,85 +33,153 @@ func (w Writer) config() config.Config {
 	return w.Config.Current()
 }
 
-// noun names a template's evidence, singular or plural, for a sentence.
-type noun struct {
-	name   string
-	plural bool
+// names name each template's evidence as the incident page does.
+var names = map[string]string{
+	evidence.RolloutHistory:    "Rollout history",
+	evidence.PodStates:         "Pod states",
+	evidence.TargetEvents:      "Events",
+	evidence.ContainerLogsTail: "Container logs",
+	evidence.ReferencedConfig:  "Referenced config",
+	evidence.ContainerMemory:   "Container memory",
+	evidence.ContainerCPU:      "Container CPU",
 }
 
-var nouns = map[string]noun{
-	evidence.RolloutHistory:    {"The rollout history", false},
-	evidence.PodStates:         {"The pod states", true},
-	evidence.TargetEvents:      {"The events", true},
-	evidence.ContainerLogsTail: {"Container logs", true},
-	evidence.ReferencedConfig:  {"The list of referenced configuration", false},
-	evidence.ContainerMemory:   {"Containers' memory use", false},
-	evidence.ContainerCPU:      {"Containers' CPU use", false},
-}
-
-func nounOf(template string) noun {
-	if n, ok := nouns[template]; ok {
+func nameOf(template string) string {
+	if n, ok := names[template]; ok {
 		return n
 	}
-	return noun{"Evidence " + template, false}
+	return "Evidence " + template
 }
 
-// pick returns one or many, by the noun's number.
-func (n noun) pick(one, many string) string {
-	if n.plural {
-		return many
-	}
-	return one
+// Remedies for a cluster without a metrics source.
+const (
+	installMetrics = "Install metrics-server, or set metrics.prometheus.address."
+	enableMetrics  = "Set metrics.prometheus.address, or turn the Kubernetes metrics API back on with metrics.kubernetes."
+)
+
+// missing is what one gap kept from Themis: the finding, and the change that
+// lets Themis see it next time, if there is one.
+type missing struct {
+	finding, remedy string
 }
 
-// Message says what Themis could not see about in, why, and the change that
-// lets it see next time, when there is one.
-func (w Writer) Message(in store.Incident, g store.EvidenceGap) string {
-	n := nounOf(g.Template)
-	name, it := n.name, n.pick("it", "them")
+// missed says what g kept from Themis about in.
+func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 	ns := in.Target.Namespace
 	switch g.Cause {
 	case evidence.GapForbidden:
 		if slices.Contains(w.config().EnrolledNamespaces, ns) {
-			return fmt.Sprintf("%s couldn't be read: Themis isn't allowed to read %s in %s, though %s is enrolled. Check the Role Themis has in %s.", name, it, ns, ns, ns)
+			return missing{"access denied in " + ns, "Grant read access in the Role Themis has in " + ns + "."}
 		}
-		return fmt.Sprintf("%s couldn't be read: Themis isn't allowed to read %s in %s. To allow it, add %s to enrolledNamespaces.", name, it, ns, ns)
+		return missing{"access denied in " + ns + ", which isn't enrolled", "Add " + ns + " to enrolledNamespaces."}
 	case evidence.GapNotInProfile:
 		if len(in.AlsoMatched) > 0 {
-			return fmt.Sprintf("%s could have helped, but none of this incident's profiles (%s) allows %s. To allow %s, add %s to one of their evidence.allowed.", name, strings.Join(in.Profiles(), ", "), it, it, g.Template)
+			return missing{
+				"not allowed by the incident's profiles (" + strings.Join(in.Profiles(), ", ") + ")",
+				"Add " + g.Template + " to the evidence.allowed of one of them.",
+			}
 		}
-		return fmt.Sprintf("%s could have helped, but the %s profile doesn't allow %s. To allow %s, add %s to that profile's evidence.allowed.", name, in.Profile, it, it, g.Template)
+		return missing{"not allowed by the " + in.Profile + " profile", "Add " + g.Template + " to its evidence.allowed."}
 	case evidence.GapExpired:
-		return fmt.Sprintf("%s %s incomplete: Kubernetes keeps events for about an hour, and this problem started earlier, so the first ones were already gone.", name, n.pick("was", "were"))
+		return missing{"incomplete. Kubernetes keeps events for about 1 hour, and the earliest had expired", ""}
 	case evidence.GapNotFound:
-		return fmt.Sprintf("%s couldn't be read: the object %s about no longer exists.", name, n.pick("it's", "they're"))
+		return missing{"the object no longer exists", ""}
 	case evidence.GapBudgetSpent:
 		limit := w.config().Matched(in.Profiles()).InvestigationBudget().MaxEvidenceRequests
 		where := "the " + in.Profile + " profile"
 		if len(in.AlsoMatched) > 0 {
-			where = "one of this incident's profiles (" + strings.Join(in.Profiles(), ", ") + ")"
+			where = "one of the incident's profiles (" + strings.Join(in.Profiles(), ", ") + ")"
 		}
-		return fmt.Sprintf("%s %s read: the investigation had used all %d of its evidence requests. To allow more, raise investigation.maxEvidenceRequests in %s.", name, n.pick("wasn't", "weren't"), limit, where)
+		return missing{
+			fmt.Sprintf("not read. The investigation used all %d of its evidence requests", limit),
+			"Raise investigation.maxEvidenceRequests in " + where + ".",
+		}
 	case evidence.GapDataCeiling:
-		return fmt.Sprintf("%s %s shown to the model, because it isn't allowed to see data this sensitive. To allow it, set model.ceiling to sensitive, or use a self-hosted model.", name, n.pick("wasn't", "weren't"))
+		return missing{"not sent to the model, which may not see sensitive data", "Set model.ceiling to sensitive, or use a self-hosted model."}
 	case evidence.GapTimeout:
-		return fmt.Sprintf("%s couldn't be read: Kubernetes took too long to answer.", name)
+		return missing{"Kubernetes didn't answer in time", ""}
 	case evidence.GapAbsent:
-		return fmt.Sprintf("%s held nothing to read.", name)
+		return missing{"nothing to read", ""}
 	case evidence.GapUnavailable:
-		return fmt.Sprintf("%s couldn't be read: %s.", name, strings.TrimSuffix(g.Detail, "."))
+		return unavailable(g)
 	default:
-		return fmt.Sprintf("%s couldn't be read.", name)
+		return missing{"not read", ""}
 	}
 }
 
-// Messages says what each gap kept from Themis, once each.
+// unavailable says what a reading that failed for another reason kept from
+// Themis. Metrics read without a source, or without history, say which.
+func unavailable(g store.EvidenceGap) missing {
+	detail := g.Detail
+	switch {
+	case strings.Contains(detail, metrics.NoSource):
+		return missing{"no metrics source", enableMetrics}
+	case strings.Contains(detail, metrics.ErrNotServed.Error()):
+		return missing{"no metrics source", installMetrics}
+	case strings.Contains(detail, metrics.NoHistory):
+		return missing{"no history in the Kubernetes metrics API", "Set metrics.prometheus.address."}
+	}
+	// Themis's own wrapping goes; what the reader said, which the
+	// investigator may have reported, stays as it was said.
+	detail = strings.TrimPrefix(detail, "collect "+g.Template+": ")
+	detail = strings.TrimPrefix(detail, evidence.ErrNoMetrics.Error()+": ")
+	if strings.TrimSpace(detail) == "" {
+		return missing{"not read", ""}
+	}
+	return missing{"not read (" + strings.TrimSuffix(strings.TrimSpace(detail), ".") + ")", ""}
+}
+
+// Message says in one line what g kept from Themis about in, and the change
+// that lets it see next time: "Events: access denied in shop. Grant read
+// access in the Role Themis has in shop."
+func (w Writer) Message(in store.Incident, g store.EvidenceGap) string {
+	return line([]string{nameOf(g.Template)}, w.missed(in, g), true)
+}
+
+// Messages say what the gaps kept from Themis, one line per finding: evidence
+// missing for the same finding and remedy shares a line, and a remedy is said
+// once.
 func (w Writer) Messages(in store.Incident, gaps []store.EvidenceGap) []string {
-	var out []string
+	var (
+		order []missing
+		by    = map[missing][]string{}
+	)
 	for _, g := range gaps {
-		if m := w.Message(in, g); !slices.Contains(out, m) {
-			out = append(out, m)
+		m := w.missed(in, g)
+		if _, ok := by[m]; !ok {
+			order = append(order, m)
 		}
+		if name := nameOf(g.Template); !slices.Contains(by[m], name) {
+			by[m] = append(by[m], name)
+		}
+	}
+	out := make([]string, 0, len(order))
+	var said []string
+	for _, m := range order {
+		out = append(out, line(by[m], m, !slices.Contains(said, m.remedy)))
+		said = append(said, m.remedy)
+	}
+	return out
+}
+
+// line writes what is missing of the evidence named, then the remedy, when
+// it is to be said: "Container memory and container CPU: no metrics source.
+// Install metrics-server, or set metrics.prometheus.address."
+func line(named []string, m missing, remedy bool) string {
+	what := named[0]
+	for i, n := range named[1:] {
+		sep := ", "
+		if i == len(named)-2 {
+			sep = " and "
+		}
+		what += sep + strings.ToLower(n[:1]) + n[1:]
+	}
+	out := what + ": " + m.finding
+	if !strings.HasSuffix(out, ".") {
+		out += "."
+	}
+	if remedy && m.remedy != "" {
+		out += " " + m.remedy
 	}
 	return out
 }

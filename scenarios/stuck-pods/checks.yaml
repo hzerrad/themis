@@ -13,6 +13,8 @@
 - name: scheduler_rejected_pods
   version: "2"
   description: No node can take a pod
+  topic: Scheduling
+  whenFalse: Every pod was scheduled
   reads: [pod_states, target_events]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
@@ -47,6 +49,8 @@
 - name: image_pull_failing
   version: "1"
   description: An image can't be pulled
+  topic: Image pulls
+  whenFalse: Every image is pulled
   reads: [pod_states]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
@@ -78,6 +82,8 @@
 - name: volume_not_bound
   version: "2"
   description: A volume can't be bound or mounted
+  topic: Volumes
+  whenFalse: No volume fails to bind or mount
   reads: [pod_states, target_events]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
@@ -112,6 +118,8 @@
 - name: init_container_stuck
   version: "1"
   description: An init container fails or never finishes
+  topic: Init containers
+  whenFalse: Every init container finishes
   reads: [pod_states]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
@@ -154,6 +162,8 @@
 - name: config_error_on_start
   version: "1"
   description: A container can't start because its configuration is missing
+  topic: Configuration at start
+  whenFalse: No container lacks its configuration at start
   reads: [pod_states, referenced_config]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)
@@ -191,6 +201,8 @@
 - name: quota_refused_pods
   version: "2"
   description: A namespace quota refuses new pods
+  topic: Namespace quota
+  whenFalse: No namespace quota refuses new pods
   reads: [target_events, rollout_history]
   let:
     refused: target_events.events.filter(e, e.reason == "FailedCreate" && e.message.contains("exceeded quota"))
@@ -216,6 +228,7 @@
 - name: stuck_pods_new_revision_only
   version: "1"
   description: Only the new version's pods are stuck, and the version before it runs
+  topic: Stuck pods by version
   reads: [rollout_history, pod_states]
   let:
     stuck: pod_states.pods.filter(p, !p.ready)

@@ -8,6 +8,8 @@ This is one of them:
 - name: oom_killed_new_revision
   version: "1"
   description: The new version runs out of memory
+  topic: OOM kills in the new version
+  whenFalse: The new version doesn't run out of memory
   reads: [pod_states]
   let:
     pods: pod_states.pods.filter(p, p.revision == current_revision)
@@ -35,6 +37,8 @@ This is one of them:
 | `name` | How policy (`predicates.<name>`), profiles and investigators refer to it. Lowercase letters, digits and `_`. |
 | `version` | Changes when its meaning changes, so a recorded answer says which version gave it. |
 | `description` | What the check finds when it is true, in plain words. Investigators and the UI show it. |
+| `whenFalse` | Optional. What the check finds when it is false, in plain words, such as "Not managed by Argo CD or Flux". The UI shows it instead of the description followed by "no". |
+| `topic` | Optional. What the check is about, in a few words, such as "Peak memory use". The UI says "Peak memory use: unknown" rather than repeating the description. |
 | `reads` | The evidence templates it reads. |
 | `let` | Optional named expressions the answers share. Each is worked out once, when an answer first uses it. |
 | `answers` | Tried in order: the first whose `when` holds decides. The last has no `when`, and answers when none did. |

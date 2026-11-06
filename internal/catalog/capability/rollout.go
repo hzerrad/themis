@@ -67,10 +67,14 @@ func rolloutFacts(s workload.State, base rolloutStart, restarts int32) string {
 		msg += fmt.Sprintf(", down from %d", base.Ready)
 	}
 	if restarts > 0 {
-		msg += "; containers restarted " + times(int(restarts))
+		msg += ". Containers restarted " + times(int(restarts))
 	}
 	if s.OOMKills > 0 {
-		msg += "; containers ran out of memory " + times(s.OOMKills)
+		if restarts > 0 {
+			msg += " and ran out of memory " + times(s.OOMKills)
+		} else {
+			msg += ". Containers ran out of memory " + times(s.OOMKills)
+		}
 	}
 	return msg + "."
 }

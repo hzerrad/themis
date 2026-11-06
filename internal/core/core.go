@@ -247,7 +247,7 @@ func Run(ctx context.Context, o Options) error {
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, Setup: s}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: s}
 	api.Sessions, api.Accounts = s, s
 	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled, Metrics: usage}
 	if cfg.Executor != nil {

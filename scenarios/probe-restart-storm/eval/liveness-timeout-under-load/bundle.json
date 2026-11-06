@@ -195,5 +195,5 @@
     "outcome": "require_approval",
     "reason": "Policy rule lenient-readiness-keeps-traffic-on-failing-pods requires a person's approval."
   },
-  "unproposed": "Themis's checks support a probe change (probe_kills is true, probe_timeouts is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a probe change (probe_kills is true, probe_timeouts is true)."
 }

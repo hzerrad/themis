@@ -4,6 +4,7 @@ import (
 	"encoding/json/jsontext"
 	"time"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
@@ -22,6 +23,51 @@ type incidentView struct {
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
 	SupersededBy    string    `json:"supersededBy,omitempty"`
+	// Summary says in brief what happened and what Themis proposes. Only
+	// the list carries it: the detail has the whole record.
+	Summary *summaryView `json:"summary,omitempty"`
+}
+
+// summaryView is an incident in brief, for a list of incidents.
+type summaryView struct {
+	// Cause is the root cause the investigation leads with, by name and in
+	// its pack's words.
+	Cause *causeView `json:"cause,omitempty"`
+	// Fix is the latest fix for the incident.
+	Fix *fixView `json:"fix,omitempty"`
+	// Rule is the policy rule that decided the latest change, such as
+	// gitops-owns-the-target for one Themis only recommends.
+	Rule string `json:"rule,omitempty"`
+	// Reason is why the incident last changed state, and From the state it
+	// left.
+	Reason string `json:"reason,omitempty"`
+	From   string `json:"from,omitempty"`
+}
+
+type causeView struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+type fixView struct {
+	Capability string         `json:"capability"`
+	Params     map[string]any `json:"params"`
+}
+
+func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryView {
+	v := &summaryView{Reason: s.Reason, From: string(s.From), Rule: s.Rule}
+	if s.Cause != "" {
+		v.Cause = &causeView{Name: s.Cause}
+		for _, c := range causes {
+			if c.Name == s.Cause {
+				v.Cause.Description = c.Description
+			}
+		}
+	}
+	if s.Capability != "" {
+		v.Fix = &fixView{Capability: s.Capability, Params: s.Params}
+	}
+	return v
 }
 
 func viewIncident(in store.Incident) incidentView {
@@ -37,6 +83,22 @@ type evidenceView struct {
 	evidence.Item
 	// Data is left out for people who may not see raw evidence.
 	Data jsontext.Value `json:",omitzero"`
+	// Suspicious says, for each flagged text, what in the item holds it and
+	// what it is, in plain words.
+	Suspicious []suspicionView `json:",omitempty"`
+}
+
+// suspicionView is text flagged in an item, as people read it.
+type suspicionView struct {
+	Reason string `json:"reason"`
+	At     string `json:"at"`
+	// Excerpt is left out for people who may not see raw evidence.
+	Excerpt string `json:"excerpt,omitempty"`
+	// Origin names what holds the text, such as a pod and container.
+	Origin string `json:"origin,omitempty"`
+	// What says what the text is, such as "is written as an instruction to
+	// Themis".
+	What string `json:"what"`
 }
 
 // actionView lists its fields rather than embedding store.Action: the
@@ -75,8 +137,11 @@ type detailView struct {
 	Transitions []store.Transition
 	Evidence    []evidenceView
 	Predicates  []check.Result
-	// Checks describe each check by name, in plain words.
-	Checks        map[string]string
+	// Checks say in plain words what each check, by name, finds.
+	Checks map[string]checkWords
+	// Causes describe each root cause the investigation may name, by name,
+	// in its pack's words.
+	Causes        map[string]string
 	Investigation *store.InvestigationRecord `json:",omitempty"`
 	Proposals     []store.Proposal
 	Actions       []actionView
@@ -90,6 +155,18 @@ type detailView struct {
 	// EvidenceWarning says that some evidence looks like instructions or
 	// forged tool output, for whoever approves a fix.
 	EvidenceWarning string `json:",omitempty"`
+}
+
+// checkWords are what a check finds in each answer, in its pack's words.
+type checkWords struct {
+	// True is what it finds when true.
+	True string `json:"true"`
+	// False is what it finds when false; empty when the pack doesn't say.
+	False string `json:"false,omitempty"`
+	// Topic names what it is about, for saying it is unknown.
+	Topic string `json:"topic,omitempty"`
+	// Reads are the evidence templates it reads.
+	Reads []string `json:"reads,omitempty"`
 }
 
 func viewAction(a store.Action, fixes capability.Registry) actionView {

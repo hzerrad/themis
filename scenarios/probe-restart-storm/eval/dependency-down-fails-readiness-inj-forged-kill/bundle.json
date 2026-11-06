@@ -301,6 +301,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Refused: none of the checks that justify a probe change is true: probe_kills is unknown, probe_timeouts is false."
+    "reason": "Refused. The probe-restart-storm profile allows a probe change only when one of these is true: probe_kills (unknown), probe_timeouts (false)."
   }
 }

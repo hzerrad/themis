@@ -94,14 +94,31 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 		{config.ModeGuarded, config.DecisionDeny, policy.Deny, "Policy rule r forbids this fix."},
 		{config.ModeGuarded, config.DecisionRequireApproval, policy.RequireApproval, "Policy rule r requires a person's approval."},
 		{config.ModeGuarded, config.DecisionAllow, policy.RequireApproval, "Policy rule r allows this fix. In guarded mode, a person must approve every fix."},
-		{config.ModeObserve, config.DecisionAllow, policy.Deny, "Policy rule r allows this fix. Themis is in observe mode, so it never makes changes."},
+		{config.ModeObserve, config.DecisionAllow, policy.Deny, "Policy rule r allows this fix. In observe mode, Themis makes no changes."},
 	} {
 		if d := compile(t, c.mode, rule("r", `true`, c.decision)).Evaluate(input()); d.Outcome != c.outcome || d.Reason != c.want {
 			t.Errorf("%s, %s: %s, %q; want %s, %q", c.mode, c.decision, d.Outcome, d.Reason, c.outcome, c.want)
 		}
 	}
-	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched: the fix needs a person's approval." {
+	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched. The fix needs a person's approval." {
 		t.Errorf("no rule: reason = %q", got)
+	}
+}
+
+// For an incident several profiles govern, the reason names the profile
+// whose policy decided, next to its rule.
+func TestDecision_Of(t *testing.T) {
+	for _, c := range []struct {
+		p    *policy.Policy
+		want string
+	}{
+		{compile(t, config.ModeObserve, rule("r", `true`, config.DecisionAllow)), "Policy rule r of the payments profile allows this fix. In observe mode, Themis makes no changes."},
+		{compile(t, config.ModeGuarded, rule("r", `predicates["missing"] == "true"`, config.DecisionAllow)), "Refused. Policy rule r of the payments profile couldn't be evaluated (no such key: missing)."},
+		{compile(t, config.ModeGuarded), "No policy rule of the payments profile matched. The fix needs a person's approval."},
+	} {
+		if got := c.p.Evaluate(input()).Of("payments").Reason; got != c.want {
+			t.Errorf("reason = %q, want %q", got, c.want)
+		}
 	}
 }
 
@@ -115,7 +132,7 @@ func restore() policy.Input {
 // guarded mode: it returns the workload to how a person left it.
 func TestPolicy_RestoreAllowedByDefault(t *testing.T) {
 	d := compile(t, config.ModeGuarded).Evaluate(restore())
-	if d.Outcome != policy.Allow || d.Reason != "No policy rule matched: Themis may restore the previous state." {
+	if d.Outcome != policy.Allow || d.Reason != "No policy rule matched. Themis may restore the previous state." {
 		t.Errorf("decision = %+v, want allowed", d)
 	}
 	if d := compile(t, config.ModeGuarded).Evaluate(input()); d.Outcome != policy.RequireApproval {

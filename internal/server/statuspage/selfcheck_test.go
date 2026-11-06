@@ -92,7 +92,9 @@ func byName(t *testing.T, c *statuspage.Checker) map[string]statuspage.Check {
 		if ch.State != statuspage.OK && ch.Fix == "" && ch.State != statuspage.Waiting {
 			t.Errorf("%s is %s but says no fix", ch.Name, ch.State)
 		}
-		if !strings.HasSuffix(ch.Summary, ".") || ch.Summary[0] < 'A' || ch.Summary[0] > 'Z' {
+		// A model's name opens its finding as it is written, in any case.
+		upper := ch.Name == "Model" && ch.State == statuspage.OK || ch.Summary[0] >= 'A' && ch.Summary[0] <= 'Z'
+		if !strings.HasSuffix(ch.Summary, ".") || !upper {
 			t.Errorf("%s's summary %q isn't a sentence", ch.Name, ch.Summary)
 		}
 	}
@@ -110,10 +112,10 @@ func TestChecks_Healthy(t *testing.T) {
 	if s := got["Model"].Summary; !strings.Contains(s, "qwen3:8b") {
 		t.Errorf("model summary %q doesn't name the model", s)
 	}
-	if s := got["Namespaces"].Summary; s != "Themis can read shop and payments." {
+	if s := got["Namespaces"].Summary; s != "Readable: shop, payments." {
 		t.Errorf("namespaces summary = %q", s)
 	}
-	if s := got["Metrics"].Summary; s != "Memory and CPU use come from Prometheus at http://prometheus:9090 and the Kubernetes metrics API." {
+	if s := got["Metrics"].Summary; s != "Read from Prometheus at http://prometheus:9090 and the Kubernetes metrics API." {
 		t.Errorf("metrics summary = %q", s)
 	}
 }
@@ -136,15 +138,15 @@ func TestChecks_Problems(t *testing.T) {
 	}{
 		"investigator never seen": {
 			func(_ *statuspage.Checker, s *fakeStore) { delete(s.heartbeats, store.HeartbeatInvestigator) },
-			"Investigator", statuspage.Problem, "hasn't asked",
+			"Investigator", statuspage.Problem, "Not connected",
 		},
 		"investigator gone quiet": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatInvestigator] = store.Heartbeat{SeenAt: now.Add(-5 * time.Minute)}
-		}, "Investigator", statuspage.Problem, "stopped"},
+		}, "Investigator", statuspage.Problem, "Disconnected"},
 		"model never used": {func(_ *statuspage.Checker, s *fakeStore) { s.outcome = nil }, "Model", statuspage.Waiting, "Not used yet"},
 		"model unreachable": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "model_unavailable", At: now}
-		}, "Model", statuspage.Problem, "couldn't be reached"},
+		}, "Model", statuspage.Problem, "Unreachable"},
 		"model's format": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "invalid_model_output", At: now}
 		}, "Model", statuspage.Problem, "format"},
@@ -152,7 +154,7 @@ func TestChecks_Problems(t *testing.T) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "budget_exhausted", At: now}
 		}, "Model", statuspage.Warn, "budget"},
 		"unknown failure": {func(_ *statuspage.Checker, s *fakeStore) {
-			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "The investigation failed because the investigator hit an internal error: boom", At: now}
+			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "An internal error in the investigator: boom", At: now}
 		}, "Model", statuspage.Problem, "internal error"},
 		"no alerts yet": {
 			func(_ *statuspage.Checker, s *fakeStore) { delete(s.heartbeats, store.HeartbeatAlertmanager) },
@@ -160,32 +162,35 @@ func TestChecks_Problems(t *testing.T) {
 		},
 		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
-		}, "Alerts", statuspage.Problem, "Alerts refused: they carry the wrong intake token."},
+		}, "Alerts", statuspage.Problem, "Wrong intake token."},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
-		}, "Namespaces", statuspage.Problem, "In payments, Themis can't list pods or read deployments."},
+		}, "Namespaces", statuspage.Problem, "Not allowed in payments: list pods or read deployments."},
 		"no logs": {
 			func(c *statuspage.Checker, _ *fakeStore) { c.Access = fakeAccess{"shop/get pods/log": true} },
 			"Namespaces", statuspage.Warn, "read container logs",
 		},
-		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Off, "No metrics source"},
+		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Warn, "No metrics source."},
 		"metrics without history": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes}}
-		}, "Metrics", statuspage.OK, "No peak memory or CPU throttling data"},
+		}, "Metrics", statuspage.OK, "No history. Peak memory and CPU throttling are unknown."},
 		"no metrics-server": {func(c *statuspage.Checker, _ *fakeStore) {
-			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: errors.New("the Kubernetes metrics API isn't served")}}
-		}, "Metrics", statuspage.Warn, "The Kubernetes metrics API isn't served."},
+			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: metrics.ErrNotServed}}
+		}, "Metrics", statuspage.Warn, "No metrics source."},
+		"metrics API failing": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: errors.New("list pod metrics in shop: forbidden")}}
+		}, "Metrics", statuspage.Warn, "List pod metrics in shop: forbidden."},
 		"prometheus down": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Prometheus, History: true, Err: errors.New("prometheus at http://prometheus:9090 answered 502")}, {Source: metrics.Kubernetes}}
-		}, "Metrics", statuspage.Problem, "Memory and CPU use come from the Kubernetes metrics API. No peak memory or CPU throttling data: the Kubernetes metrics API keeps no history. Set a Prometheus address (metrics.prometheus.address) to see them. Prometheus at http://prometheus:9090 answered 502."},
-		"fixes off": {func(c *statuspage.Checker, _ *fakeStore) { c.Executor = "" }, "Fixes", statuspage.Off, "never applies"},
+		}, "Metrics", statuspage.Problem, "Read from the Kubernetes metrics API. Prometheus at http://prometheus:9090 answered 502."},
+		"fixes off": {func(c *statuspage.Checker, _ *fakeStore) { c.Executor = "" }, "Fixes", statuspage.Off, "never applied"},
 		"executor down": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Dial = func(context.Context, string) error { return errors.New("refused") }
-		}, "Fixes", statuspage.Problem, "can't reach the executor"},
-		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "No model is set"},
-		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "waits for a fix suggested"},
-		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "asks no model"},
-		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "port-forward"},
+		}, "Fixes", statuspage.Problem, "Executor unreachable"},
+		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
+		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
+		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "No investigator"},
+		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "Port-forward grants admin."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},
 	} {
 		t.Run(name, func(t *testing.T) {

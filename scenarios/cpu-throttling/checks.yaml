@@ -8,6 +8,8 @@
 - name: throttling_data_available
   version: "1"
   description: A metrics source says how often the containers were throttled
+  topic: CPU throttling data
+  whenFalse: No metrics source says how often the containers were throttled
   reads: [container_cpu]
   answers:
     - when: container_cpu.throttling.unavailable != ""
@@ -24,6 +26,8 @@
 - name: cpu_throttled_at_limit
   version: "1"
   description: A container is throttled at its CPU limit
+  topic: Throttling at the CPU limit
+  whenFalse: No container is throttled at its CPU limit
   reads: [container_cpu]
   let:
     limited: container_cpu.containers.filter(c, c.limitCores != null)
@@ -58,6 +62,8 @@
 - name: cpu_usage_near_limit
   version: "1"
   description: A container uses 80% or more of its CPU limit
+  topic: CPU use near the limit
+  whenFalse: No container uses 80% or more of its CPU limit
   reads: [container_cpu]
   let:
     limited: container_cpu.containers.filter(c, c.limitCores != null)

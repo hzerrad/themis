@@ -9,6 +9,8 @@
 - name: failure_onset_after_rollout
   version: "2"
   description: The failures started after the rollout
+  topic: When the failures started
+  whenFalse: Some failures started before the rollout
   reads: [rollout_history, pod_states, target_events]
   let:
     early: failures.filter(f, f.at != null && f.at < rollout_at)
@@ -47,6 +49,8 @@
 - name: prior_revision_was_healthy
   version: "1"
   description: The previous version was healthy
+  topic: Health of the previous version
+  whenFalse: The previous version was not healthy
   reads: [rollout_history, pod_states]
   let:
     pods: pod_states.pods.filter(p, p.revision == prior.revision)
@@ -81,6 +85,8 @@
 - name: oom_killed_new_revision
   version: "1"
   description: The new version runs out of memory
+  topic: OOM kills in the new version
+  whenFalse: The new version doesn't run out of memory
   reads: [pod_states]
   let:
     pods: pod_states.pods.filter(p, p.revision == current_revision)
@@ -112,6 +118,8 @@
 - name: config_changed_before_failure
   version: "2"
   description: Its config changed before the failures began
+  topic: Config changes before the failures
+  whenFalse: Its config didn't change before the failures began
   reads: [referenced_config, rollout_history, pod_states]
   let:
     absent: referenced_config.refs.filter(r, r.kind == "ConfigMap" && r.missing && !r.optional)

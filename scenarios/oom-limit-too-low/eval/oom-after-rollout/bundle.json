@@ -316,7 +316,7 @@
       }
     },
     "outcome": "deny",
-    "reason": "Policy rule raise-needs-oom-kills-on-a-version-that-has-run forbids this fix. It is the oom-limit-too-low profile's policy."
+    "reason": "Policy rule raise-needs-oom-kills-on-a-version-that-has-run of the oom-limit-too-low profile forbids this fix."
   },
-  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a rollback (failure_onset_after_rollout is true)."
 }

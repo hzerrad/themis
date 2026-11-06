@@ -44,7 +44,7 @@ func Explain(err error, revision int64) string {
 	case errors.Is(err, ErrNoSuchRevision):
 		return fmt.Sprintf("Revision %d no longer exists, so Themis can't roll back to it.", revision)
 	case errors.Is(err, ErrAlreadyCurrent):
-		return fmt.Sprintf("The workload already runs revision %d, so there's nothing to roll back.", revision)
+		return fmt.Sprintf("Nothing to roll back. The workload already runs revision %d.", revision)
 	default:
 		return err.Error()
 	}

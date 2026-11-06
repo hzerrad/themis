@@ -15,7 +15,11 @@ import (
 func TestServesThePage(t *testing.T) {
 	mux := http.NewServeMux()
 	httpapi.RegisterUI(mux)
-	for path, want := range map[string]string{"/": "<title>Themis</title>", "/app.js": "/v1/incidents", "/style.css": "--accent"} {
+	pages := map[string]string{
+		"/": "<title>Themis</title>", "/app.js": "/v1/incidents", "/style.css": "--verdigris",
+		"/themis.svg": "<svg", "/fonts/public-sans-latin-400-normal.woff2": "wOF2",
+	}
+	for path, want := range pages {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), want) {
@@ -35,6 +39,17 @@ func TestServesThePage(t *testing.T) {
 		if rec.Code != http.StatusNotModified {
 			t.Errorf("GET %s with its own tag = %d, want 304", path, rec.Code)
 		}
+	}
+}
+
+// The fonts are served one by one: their folder is not a listing.
+func TestServesNoFolderListing(t *testing.T) {
+	mux := http.NewServeMux()
+	httpapi.RegisterUI(mux)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/fonts/", nil))
+	if rec.Code == http.StatusOK {
+		t.Errorf("GET /fonts/ = %d, want no listing", rec.Code)
 	}
 }
 

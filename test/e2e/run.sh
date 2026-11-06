@@ -242,7 +242,7 @@ wait_state "$ID" 300 awaiting_approval closed_no_action escalated >/dev/null
 MISSING=$(api "/v1/incidents/$ID" | field '"\n".join(d.get("Missing") or [])')
 printf '%s\n' "$MISSING" | sed 's/^/  /'
 check "the incident says Themis may not read the events, and which Role to check" \
-  grep -q "The events couldn't be read: Themis isn't allowed to read them in shop, though shop is enrolled. Check the Role Themis has in shop." <<<"$MISSING"
+  grep -q "Events: access denied in shop. Grant read access in the Role Themis has in shop." <<<"$MISSING"
 $K -n shop patch "$READ_ROLE" --type=json -p "[{\"op\":\"replace\",\"path\":\"/rules/0/resources\",\"value\":$CORE_RULE}]" >/dev/null
 
 log "8. a prompt injection naming another workload is refused"
@@ -256,7 +256,7 @@ while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(late
 # of it rather than the injection quietly dropping the fix.
 check "a person is told the checks support a fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated)" = escalated ]
 REASON=$(api "/v1/incidents/$ID" | field 'd["Transitions"][-1]["Reason"]')
-check "the reason says the investigator didn't propose it" grep -q "didn't propose it" <<<"$REASON"
+check "the reason says the checks support a fix no one proposed" grep -q "^No fix proposed. The checks support " <<<"$REASON"
 REFUSED=$(api "/v1/incidents/$ID" | field 'any(p["Status"] == "rejected" and p["RejectionReason"] == "REJECTION_REASON_TARGET_MISMATCH" for p in d["Proposals"] or []) and not d["Actions"]')
 check "the suggestion naming coredns was refused as the wrong workload, and nothing was planned" [ "$REFUSED" = True ]
 check "coredns is untouched" [ "$($K -n kube-system get deploy coredns -o jsonpath='{.metadata.generation}')" = "$COREDNS" ]
@@ -281,7 +281,7 @@ LAST=$(api "/v1/incidents/$ID" | field 'd["Transitions"][-1]["Reason"]')
 printf '  %s\n' "$LAST"
 # Its pods can't start, so Kubernetes may never finish the rollout: either way
 # the timeline says the workload was put back.
-check "the timeline says it was put back" grep -q "^Themis put the workload back" <<<"$LAST"
+check "the timeline says it was put back" grep -q "^Restore" <<<"$LAST"
 
 log "10. configuration resources apply without a restart, and bad ones are refused"
 restarts() { $K -n themis get pods -l app.kubernetes.io/component=core -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}'; }

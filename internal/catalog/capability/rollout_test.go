@@ -81,7 +81,7 @@ func TestReadRollout(t *testing.T) {
 		"healthy": {start: nil, want: capability.Healthy, applied: true, facts: "3 of 3 pods are ready."},
 		"ready, but restarting": {change: func(_ *appsv1.Deployment, pods []*corev1.Pod) {
 			pods[0].Status.ContainerStatuses[0].RestartCount = 2
-		}, start: allReady, want: capability.Improved, applied: true, facts: "containers restarted 2 times"},
+		}, start: allReady, want: capability.Improved, applied: true, facts: "Containers restarted 2 times"},
 		"fewer ready than at the start": {change: func(d *appsv1.Deployment, _ []*corev1.Pod) {
 			d.Status.ReadyReplicas, d.Status.AvailableReplicas = 1, 1
 		}, start: allReady, want: capability.Worse, applied: true, facts: "1 of 3 pods are ready, down from 3"},

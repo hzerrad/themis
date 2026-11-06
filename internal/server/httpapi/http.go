@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
@@ -49,6 +50,9 @@ type API struct {
 	Fixes capability.Registry
 	// CheckList is the checks Themis runs, which say what each answer means.
 	CheckList check.List
+	// RootCauses are what each pack's investigations may name as a cause,
+	// which say what each means.
+	RootCauses catalog.RootCauses
 	// Config is Themis's live configuration, for the alerts its profiles
 	// handle.
 	Config config.Provider
@@ -254,7 +258,7 @@ func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, store.ErrAlreadyDecided), errors.Is(err, store.ErrStateConflict):
 		http.Error(w, "This fix was already approved, denied or canceled.", http.StatusConflict)
 	case errors.Is(err, store.ErrExpired):
-		http.Error(w, "The time to approve this fix has run out.", http.StatusGone)
+		http.Error(w, "Approval expired. This fix can no longer be approved.", http.StatusGone)
 	default:
 		a.logger().ErrorContext(r.Context(), "API request failed", telemetry.FieldError, err)
 		http.Error(w, "Something went wrong in Themis. The core's logs have the details.", http.StatusInternalServerError)

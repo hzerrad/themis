@@ -261,8 +261,8 @@ func TestCollect(t *testing.T) {
 // timeline says what Themis saw, never the investigator's summary.
 func TestComplete(t *testing.T) {
 	logs := catalog.Gap{Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, Detail: "logs are sensitive"}
-	noFix := "The investigation suggested no fix that Themis could accept."
-	referred := "Themis has no fix for this kind of incident, so it refers it to a person."
+	noFix := "No proposed fix was accepted."
+	referred := "Themis has no fix for this kind of incident. Referred to a person."
 	for name, tc := range map[string]struct {
 		conclusion string
 		suggested  string
@@ -283,21 +283,22 @@ func TestComplete(t *testing.T) {
 		},
 		"inconclusive, though the checks support a fix": {
 			conclusion: investigation.Inconclusive, justified: true, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
-			reason: "The investigator couldn't decide. Themis's checks support a rollback (oom_killed_new_revision is true), but the investigator didn't propose it.",
+			reason: "No fix proposed. The checks support a rollback (oom_killed_new_revision is true). Referred to a person.",
 		},
 		"inconclusive, with time for a suggestion": {
 			conclusion: investigation.Inconclusive, window: true, want: []incident.State{incident.Inconclusive}, abstained: "ambiguous",
 		},
 		"inconclusive, with a suggestion from outside": {
 			conclusion: investigation.Inconclusive, suggested: outside, want: []incident.State{incident.Inconclusive, incident.Diagnosed}, abstained: "ambiguous",
+			reason: "No fix proposed. Checking the suggested fix.",
 		},
 		"inconclusive, on an incident Themis only diagnoses": {
 			conclusion: investigation.Inconclusive, diagnoses: []string{"oom_killed_new_revision"}, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
-			reason: "The investigator couldn't decide. The new version runs out of memory: checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled. " + referred,
+			reason: "No fix proposed. The checks found that the new version runs out of memory (checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled). " + referred,
 		},
 		"proposed, on an incident Themis only diagnoses, with no cause found": {
 			conclusion: investigation.Proposed, suggested: rejected, diagnoses: []string{"config_changed_before_failure"}, want: []incident.State{incident.Escalated},
-			reason: noFix + " Themis's checks found no cause. " + referred,
+			reason: noFix + " No check found a cause. " + referred,
 		},
 		"proposed": {conclusion: investigation.Proposed, suggested: own, want: []incident.State{incident.Diagnosed}},
 		"proposed, with no fix accepted": {
@@ -334,9 +335,9 @@ func TestComplete(t *testing.T) {
 			states, reason := e.path(t, inv.IncidentID)
 			because := tc.reason
 			if because == "" && tc.conclusion == investigation.Inconclusive {
-				because = "The investigator couldn't decide."
+				because = "No fix proposed."
 			} else if because == "" {
-				because = "The investigator suggested a fix."
+				because = "Fix proposed."
 			}
 			if reason != because || !equal(states, tc.want) {
 				t.Errorf("went %v because %q, want %v because %q", states, reason, tc.want, because)
@@ -408,7 +409,7 @@ func TestFail_RetriesAfterABackoff(t *testing.T) {
 	if err := e.pool.QueryRow(t.Context(), `SELECT failure, failure_kind FROM investigations WHERE incident_id = $1`, inv.IncidentID).Scan(&failure, &kind); err != nil {
 		t.Fatal(err)
 	}
-	if want := "The investigation failed because the model couldn't be reached: connection refused"; failure != want || kind != "model_unavailable" {
+	if want := "The model was unreachable: connection refused"; failure != want || kind != "model_unavailable" {
 		t.Errorf("failure = %q (%s), want %q", failure, kind, want)
 	}
 	gaps, err := e.store.EvidenceGaps(t.Context(), inv.IncidentID)
@@ -431,7 +432,9 @@ func TestFail_RetriesAfterABackoff(t *testing.T) {
 // over, told why in words. The investigator's own fix, from a lease that
 // didn't finish, isn't used.
 func TestLastAttempt_GivesUp(t *testing.T) {
-	failedThrice := "The investigation failed 3 times. The last time, "
+	failedThrice := "Investigation failed after 3 attempts. Last error: "
+	referred := " Referred to a person."
+	checking := " Checking the suggested fix."
 	for name, tc := range map[string]struct {
 		reason    investigation.Reason // "" lets every lease expire
 		suggested string
@@ -439,17 +442,17 @@ func TestLastAttempt_GivesUp(t *testing.T) {
 		why       string
 		outcome   string
 	}{
-		"no reason":           {investigation.Unspecified, nobody, incident.Escalated, failedThrice + "the investigator gave no reason.", "failed"},
-		"the model is down":   {investigation.ModelUnavailable, nobody, incident.Escalated, failedThrice + "the model couldn't be reached.", "failed"},
-		"bad model output":    {investigation.InvalidModelOutput, nobody, incident.Escalated, failedThrice + "the model's answers weren't in the required format.", "failed"},
-		"the token budget":    {investigation.BudgetExhausted, nobody, incident.Escalated, failedThrice + "it used up its token budget.", "budget_exhausted"},
-		"the time budget":     {investigation.DeadlineExceeded, nobody, incident.Escalated, failedThrice + "it ran out of time.", "budget_exhausted"},
-		"an internal error":   {investigation.Internal, nobody, incident.Escalated, failedThrice + "the investigator hit an internal error.", "failed"},
-		"with an outside fix": {investigation.ModelUnavailable, outside, incident.Diagnosed, failedThrice + "the model couldn't be reached. A fix was suggested from outside, so Themis is checking that.", "failed"},
-		"with its own fix":    {investigation.ModelUnavailable, own, incident.Escalated, failedThrice + "the model couldn't be reached.", "failed"},
-		"stopped responding":  {"", nobody, incident.Escalated, "The investigator stopped responding during its last attempt.", "lease_lost"},
+		"no reason":           {investigation.Unspecified, nobody, incident.Escalated, failedThrice + "no reason given." + referred, "failed"},
+		"the model is down":   {investigation.ModelUnavailable, nobody, incident.Escalated, failedThrice + "the model was unreachable." + referred, "failed"},
+		"bad model output":    {investigation.InvalidModelOutput, nobody, incident.Escalated, failedThrice + "the model's answers didn't follow the reply format." + referred, "failed"},
+		"the token budget":    {investigation.BudgetExhausted, nobody, incident.Escalated, failedThrice + "the token budget ran out." + referred, "budget_exhausted"},
+		"the time budget":     {investigation.DeadlineExceeded, nobody, incident.Escalated, failedThrice + "the time limit was reached." + referred, "budget_exhausted"},
+		"an internal error":   {investigation.Internal, nobody, incident.Escalated, failedThrice + "an internal error in the investigator." + referred, "failed"},
+		"with an outside fix": {investigation.ModelUnavailable, outside, incident.Diagnosed, failedThrice + "the model was unreachable." + checking, "failed"},
+		"with its own fix":    {investigation.ModelUnavailable, own, incident.Escalated, failedThrice + "the model was unreachable." + referred, "failed"},
+		"stopped responding":  {"", nobody, incident.Escalated, failedThrice + "the investigator stopped responding." + referred, "lease_lost"},
 		"stopped responding, with an outside fix": {
-			"", outside, incident.Diagnosed, "The investigator stopped responding during its last attempt. A fix was suggested from outside, so Themis is checking that.", "lease_lost",
+			"", outside, incident.Diagnosed, failedThrice + "the investigator stopped responding." + checking, "lease_lost",
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

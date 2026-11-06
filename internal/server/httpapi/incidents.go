@@ -19,9 +19,20 @@ func (a *API) list(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	ids := make([]string, 0, len(incidents))
+	for _, in := range incidents {
+		ids = append(ids, in.ID)
+	}
+	summaries, err := a.Store.IncidentSummaries(r.Context(), ids)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
 	out := make([]incidentView, 0, len(incidents))
 	for _, in := range incidents {
-		out = append(out, viewIncident(in))
+		v := viewIncident(in)
+		v.Summary = viewSummary(summaries[in.ID], a.RootCauses.For(in.Profiles()...))
+		out = append(out, v)
 	}
 	a.reply(w, r, out)
 }
@@ -33,9 +44,12 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	d := detailView{Incident: viewIncident(in), Checks: map[string]string{}}
+	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}}
 	for _, c := range a.CheckList {
-		d.Checks[c.Name] = c.Description
+		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads}
+	}
+	for _, c := range a.RootCauses.For(in.Profiles()...) {
+		d.Causes[c.Name] = c.Description
 	}
 	if d.Transitions, err = a.Store.Transitions(ctx, in.ID); err != nil {
 		a.fail(w, r, err)
@@ -54,11 +68,13 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		v := evidenceView{Item: it}
 		if raw {
 			v.Data = it.Data
-		} else {
-			v.Suspicious = nil
-			for _, s := range it.Suspicious {
-				v.Suspicious = append(v.Suspicious, evidence.Suspicion{Reason: s.Reason, At: s.At})
+		}
+		for _, s := range it.Suspicious {
+			sv := suspicionView{Reason: s.Reason, At: s.At, Origin: it.Origin(s), What: s.What()}
+			if raw {
+				sv.Excerpt = s.Excerpt
 			}
+			v.Suspicious = append(v.Suspicious, sv)
 		}
 		d.Evidence = append(d.Evidence, v)
 	}

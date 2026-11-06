@@ -49,7 +49,8 @@ func newEnv(t *testing.T) *env {
 	mux := http.NewServeMux()
 	(&httpapi.API{
 		Store: s, TokenFile: file, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
-		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
+		RootCauses: catalog.RootCauses{"rollout-regression": {{Name: "new_version_broken", Description: "a recent rollout brought a version that fails"}}},
+		Logger:     telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
 	}).Register(mux)
 	e.handler = mux
 	return e
@@ -211,16 +212,43 @@ func TestIncidentDetail_SeparatesProposalAndDerivedAction(t *testing.T) {
 	}
 }
 
+// The list says of each incident, in brief, what happened and what Themis
+// proposes: the cause the investigation leads with, in its pack's words,
+// the fix, and why it last changed state.
 func TestListIncidents(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
+	if _, err := e.pool.Exec(t.Context(), `UPDATE investigations SET hypotheses = $2 WHERE incident_id = $1`, a.IncidentID,
+		`[{"rootCauseClass":"memory_limit_regression","status":"HYPOTHESIS_STATUS_REFUTED"},{"rootCauseClass":"new_version_broken","status":"HYPOTHESIS_STATUS_SUPPORTED"}]`); err != nil {
+		t.Fatal(err)
+	}
 	rec := e.do(t, http.MethodGet, "/v1/incidents", token, nil)
-	var list []struct{ ID, State string }
+	var list []struct {
+		ID, State string
+		Summary   struct {
+			Cause struct{ Name, Description string }
+			Fix   struct {
+				Capability string
+				Params     map[string]any
+			}
+			Rule, Reason, From string
+		}
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
 	if len(list) != 1 || list[0].ID != a.IncidentID || list[0].State != "awaiting_approval" {
-		t.Errorf("list = %+v", list)
+		t.Fatalf("list = %+v", list)
+	}
+	sum := list[0].Summary
+	if sum.Cause.Name != "new_version_broken" || sum.Cause.Description != "a recent rollout brought a version that fails" {
+		t.Errorf("cause = %+v, want the first not ruled out, in its pack's words", sum.Cause)
+	}
+	if sum.Fix.Capability != "deployment.rollback-to-revision" || sum.Fix.Params["revision"] != float64(1) {
+		t.Errorf("fix = %+v", sum.Fix)
+	}
+	if sum.From != "proposed" || sum.Reason != "test" || sum.Rule != a.PolicyID {
+		t.Errorf("last change = %q from %q, decided by %q", sum.Reason, sum.From, sum.Rule)
 	}
 }
 
@@ -298,7 +326,8 @@ func (e *env) detail(t *testing.T, id string) map[string]any {
 	return d
 }
 
-// The page tells the operator what Themis couldn't see, and how to let it.
+// The page tells the operator what evidence was missing, and how to let
+// Themis read it.
 func TestIncidentDetail_ShowsWhatWasMissingWithRemedies(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
@@ -309,7 +338,7 @@ func TestIncidentDetail_ShowsWhatWasMissingWithRemedies(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing, _ := e.detail(t, a.IncidentID)["Missing"].([]any)
-	if len(missing) != 1 || !strings.Contains(missing[0].(string), "add shop to enrolledNamespaces") {
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Add shop to enrolledNamespaces.") {
 		t.Errorf("Missing = %v", missing)
 	}
 }

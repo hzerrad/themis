@@ -7,6 +7,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
+	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
@@ -55,21 +56,6 @@ func TestMessages_UsePlainWords(t *testing.T) {
 	}
 }
 
-// Plural evidence takes plural words: "Container logs ... them", never "it".
-func TestMessages_AgreeInNumber(t *testing.T) {
-	for _, c := range evidence.GapCauses() {
-		if m := message(c, evidence.ContainerLogsTail); strings.Contains(m, "read it") || strings.Contains(m, " was ") || strings.Contains(m, "wasn't") {
-			t.Errorf("%s: %q treats the logs as one thing", c, m)
-		}
-		if c == evidence.GapExpired {
-			continue // only events expire; that message speaks of them
-		}
-		if m := message(c, evidence.RolloutHistory); strings.Contains(m, "them") || strings.Contains(m, "weren't") || strings.Contains(m, " were ") {
-			t.Errorf("%s: %q treats the history as many", c, m)
-		}
-	}
-}
-
 // Each message tells the operator what to change, in their own settings.
 func TestRemedy(t *testing.T) {
 	away := checkout
@@ -81,25 +67,43 @@ func TestRemedy(t *testing.T) {
 		template string
 		want     string
 	}{
-		{"forbidden, not enrolled", away, evidence.GapForbidden, evidence.RolloutHistory, "add billing to enrolledNamespaces"},
-		{"forbidden, enrolled", checkout, evidence.GapForbidden, evidence.RolloutHistory, "Check the Role Themis has in shop"},
-		{"not in the profile names the profile", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "rollout-regression profile"},
-		{"not in the profile names the template", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "add container_logs_tail to that profile's evidence.allowed"},
-		{"budget uses the profile's limit", checkout, evidence.GapBudgetSpent, evidence.ContainerLogsTail, "all 2 of its evidence requests"},
+		{"forbidden, not enrolled", away, evidence.GapForbidden, evidence.RolloutHistory, "Rollout history: access denied in billing, which isn't enrolled. Add billing to enrolledNamespaces."},
+		{"forbidden, enrolled", checkout, evidence.GapForbidden, evidence.TargetEvents, "Events: access denied in shop. Grant read access in the Role Themis has in shop."},
+		{"not in the profile", checkout, evidence.GapNotInProfile, evidence.ContainerLogsTail, "Container logs: not allowed by the rollout-regression profile. Add container_logs_tail to its evidence.allowed."},
+		{"budget uses the profile's limit", checkout, evidence.GapBudgetSpent, evidence.ContainerLogsTail, "Container logs: not read. The investigation used all 2 of its evidence requests. Raise investigation.maxEvidenceRequests in the rollout-regression profile."},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if m := writer.Message(tt.incident, store.EvidenceGap{Template: tt.template, Cause: tt.cause}); !strings.Contains(m, tt.want) {
-				t.Errorf("%q, want it to say %q", m, tt.want)
+			if m := writer.Message(tt.incident, store.EvidenceGap{Template: tt.template, Cause: tt.cause}); m != tt.want {
+				t.Errorf("%q, want %q", m, tt.want)
 			}
 		})
 	}
 }
 
-// One message per thing missed, however often it was recorded.
-func TestMessages_OncePerMessage(t *testing.T) {
-	g := store.EvidenceGap{Template: evidence.PodStates, Cause: evidence.GapTimeout}
-	if got := writer.Messages(checkout, []store.EvidenceGap{g, g}); len(got) != 1 {
-		t.Errorf("got %v", got)
+// One line per finding, however often it was recorded: evidence missing for
+// the same reason shares a line, and a remedy is said once. Metrics read
+// without a source say so, rather than repeat what the source said.
+func TestMessages_OneLinePerFinding(t *testing.T) {
+	notServed := "collect container_memory: no figures: " + metrics.ErrNotServed.Error() + "; " + metrics.NoHistory
+	gaps := []store.EvidenceGap{
+		{Template: evidence.PodStates, Cause: evidence.GapTimeout},
+		{Template: evidence.PodStates, Cause: evidence.GapTimeout},
+		{Template: evidence.ContainerMemory, Cause: evidence.GapUnavailable, Detail: notServed},
+		{Template: evidence.ContainerCPU, Cause: evidence.GapUnavailable, Detail: "collect container_cpu: no figures: " + metrics.ErrNotServed.Error()},
+		{Template: evidence.ContainerLogsTail, Cause: evidence.GapUnavailable, Detail: "collect container_logs_tail: " + metrics.ErrNotServed.Error()},
+		{Template: evidence.ReferencedConfig, Cause: evidence.GapUnavailable, Detail: "collect referenced_config: connection refused."},
+	}
+	want := []string{
+		"Pod states: Kubernetes didn't answer in time.",
+		"Container memory, container CPU and container logs: no metrics source. Install metrics-server, or set metrics.prometheus.address.",
+		"Referenced config: not read (connection refused).",
+	}
+	if got := writer.Messages(checkout, gaps); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	budget := []store.EvidenceGap{{Template: evidence.PodStates, Cause: evidence.GapBudgetSpent}, {Template: evidence.TargetEvents, Cause: evidence.GapForbidden}, {Template: evidence.ContainerLogsTail, Cause: evidence.GapBudgetSpent}}
+	if got := writer.Messages(checkout, budget); len(got) != 2 || !strings.HasPrefix(got[0], "Pod states and container logs: not read. ") {
+		t.Errorf("got %q, want the budget once, for both", got)
 	}
 }

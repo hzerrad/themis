@@ -85,11 +85,11 @@ func TestCheck(t *testing.T) {
 		"healthy": {start: nil, want: capability.Healthy, applied: true, facts: "2 of 2 pods are ready."},
 		"ready, but restarted once": {change: func(_ *appsv1.Deployment, pods []*corev1.Pod) {
 			pods[0].Status.ContainerStatuses[0].RestartCount = 1
-		}, start: allReady, want: capability.Improved, applied: true, facts: "containers restarted once"},
+		}, start: allReady, want: capability.Improved, applied: true, facts: "Containers restarted once"},
 		"fewer ready than at the start": {change: func(d *appsv1.Deployment, pods []*corev1.Pod) {
 			d.Status.ReadyReplicas, d.Status.AvailableReplicas = 0, 0
 			pods[1].Status.ContainerStatuses[0].RestartCount = 4
-		}, start: allReady, want: capability.Worse, applied: true, facts: "0 of 2 pods are ready, down from 2; containers restarted 4 times"},
+		}, start: allReady, want: capability.Worse, applied: true, facts: "0 of 2 pods are ready, down from 2. Containers restarted 4 times"},
 		"not rolled out yet": {change: func(d *appsv1.Deployment, _ []*corev1.Pod) {
 			d.Status.UpdatedReplicas = 1
 		}, start: allReady, want: capability.Unchanged, facts: "2 of 2 pods are ready."},

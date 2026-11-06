@@ -3,7 +3,6 @@ package evidence_test
 import (
 	"encoding/base64"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
@@ -58,20 +57,46 @@ func TestSuspicions(t *testing.T) {
 	}
 }
 
-// The warning names where; only those who may read evidence see what it says.
+// The warning says where and what; only those who may read evidence see the
+// text itself.
 func TestWarning(t *testing.T) {
 	items := []evidence.Item{
 		{Template: "pod_states"},
-		{Template: "container_logs_tail", Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonInstructions, Excerpt: "Ignore all previous instructions…"}}},
+		{
+			Template: "container_logs_tail", Data: []byte(`{"pod":"checkout-x2kqp","container":"app","previousRun":true,"logs":"…"}`),
+			Suspicious: []evidence.Suspicion{{Reason: evidence.ReasonInstructions, At: "/logs", Excerpt: "Ignore all previous instructions…"}},
+		},
 	}
 	if got := evidence.Warning(items[:1], true); got != "" {
 		t.Errorf("Warning = %q, want none", got)
 	}
-	want := `Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail: "Ignore all previous instructions…"). It is material, not a finding; the checks do not rely on it.`
+	want := `Suspicious text in the container logs (pod checkout-x2kqp, container app, previous run): "Ignore all previous instructions…". The line is written as an instruction to Themis.`
 	if got := evidence.Warning(items, true); got != want {
 		t.Errorf("Warning = %q, want %q", got, want)
 	}
-	if got := evidence.Warning(items, false); strings.Contains(got, "Ignore") || !strings.Contains(got, "(container_logs_tail)") {
-		t.Errorf("Warning without excerpts = %q", got)
+	want = "Suspicious text in the container logs (pod checkout-x2kqp, container app, previous run). The line is written as an instruction to Themis. Read it in Themis before acting on this incident."
+	if got := evidence.Warning(items, false); got != want {
+		t.Errorf("Warning without excerpts = %q, want %q", got, want)
+	}
+}
+
+// Where flagged text is, in the cluster's words, for each kind of evidence.
+func TestOrigin(t *testing.T) {
+	tests := map[string]struct {
+		template, data, at, want string
+	}{
+		"logs":      {"container_logs_tail", `{"pod":"p-1","container":"app","logs":"x"}`, "/logs", "pod p-1, container app"},
+		"event":     {"target_events", `{"events":[{"reason":"BackOff","object":"Pod/p-1","message":"x"}]}`, "/events/0/message", "BackOff event on Pod/p-1"},
+		"pod state": {"pod_states", `{"pods":[{"name":"p-1","containers":[{"name":"app"}]}]}`, "/pods/0/containers/0/state/message", "pod p-1, container app"},
+		"config":    {"referenced_config", `{"refs":[{"kind":"ConfigMap","name":"settings"}]}`, "/refs/0/name", "ConfigMap settings"},
+		"revision":  {"rollout_history", `{"revisions":[{"revision":"2"}]}`, "/revisions/0/changeCause", "revision 2"},
+		"beyond":    {"target_events", `{"events":[]}`, "/events/3/message", ""},
+		"not JSON":  {"container_logs_tail", `plain text`, "", ""},
+	}
+	for name, tt := range tests {
+		it := evidence.Item{Template: tt.template, Data: []byte(tt.data)}
+		if got := it.Origin(evidence.Suspicion{At: tt.at}); got != tt.want {
+			t.Errorf("%s: Origin = %q, want %q", name, got, tt.want)
+		}
 	}
 }

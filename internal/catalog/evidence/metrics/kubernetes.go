@@ -18,10 +18,15 @@ const Kubernetes = "kubernetes"
 
 // Why the metrics API can't answer.
 const (
-	noHistory   = "the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them"
+	// NoHistory is why it has no peaks or throttling.
+	NoHistory   = "the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them"
 	notServed   = "the Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address"
 	notMeasured = "the Kubernetes metrics API has no figures for these pods yet"
 )
+
+// ErrNotServed is why the metrics API can't answer when the cluster doesn't
+// serve it, as when metrics-server isn't installed.
+var ErrNotServed = errors.New(notServed)
 
 // metricsAPI reads the metrics API (metrics.k8s.io), which metrics-server
 // serves: what each container uses now, and nothing older.
@@ -47,11 +52,11 @@ func (k metricsAPI) CPU(ctx context.Context, pods Pods) (Reading, error) {
 }
 
 func (metricsAPI) PeakMemory(context.Context, Pods, time.Duration) (Reading, error) {
-	return Reading{Unavailable: noHistory}, nil
+	return Reading{Unavailable: NoHistory}, nil
 }
 
 func (metricsAPI) Throttling(context.Context, Pods, time.Duration) (Reading, error) {
-	return Reading{Unavailable: noHistory}, nil
+	return Reading{Unavailable: NoHistory}, nil
 }
 
 // read lists the namespace's pod metrics, keeping the highest value of each
@@ -87,7 +92,7 @@ func (k metricsAPI) probe(ctx context.Context) error {
 	gv := metricsv1beta1.SchemeGroupVersion.String()
 	resources, err := k.client.Discovery().ServerResourcesForGroupVersionWithContext(ctx, gv)
 	if apierrors.IsNotFound(err) || (err == nil && !slices.ContainsFunc(resources.APIResources, func(r metav1.APIResource) bool { return r.Name == "pods" })) {
-		return errors.New(notServed)
+		return ErrNotServed
 	}
 	return err
 }
