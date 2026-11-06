@@ -112,20 +112,20 @@ async def test_anthropic_needs_only_a_model() -> None:
 async def test_setup_chooses_the_provider_and_the_dialect() -> None:
     s, made = source(NOTHING, SetupCore(provider="anthropic", base_url="http://x/v1", model="m"))
     assert await s.ready()
-    s.new_model()
+    s.new_model(Budget(1))
     assert isinstance(made.adapter, AnthropicAdapter) and made.adapter.base_url is None
 
     core = SetupCore(base_url="http://a/v1", model="m", schema_dialect="openai-strict")
     s, made = source(NOTHING, core)
     assert await s.ready()
-    s.new_model()
+    s.new_model(Budget(1))
     assert made.endpoint is not None and made.endpoint.schema_dialect == "openai-strict"
 
     installed = Installed(base_url="http://ollama:11434/v1", model=None, api_key=None)
     core = SetupCore(provider="anthropic", model="m", schema_dialect="openai-strict")
     s, made = source(installed, core)
     assert await s.ready()
-    s.new_model()
+    s.new_model(Budget(1))
     assert made.adapter is not None and made.adapter.base_url == "http://ollama:11434/v1"
     assert made.endpoint is not None and made.endpoint.schema_dialect == "as-is"
 
