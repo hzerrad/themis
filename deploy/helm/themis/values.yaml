@@ -161,6 +161,11 @@ oidc:
 #   - {role: approver, groups: [sre]}
 access: []
 
+approvals:
+  # true: the person who suggested a fix can't approve it; someone else must.
+  # false lets them, and the timeline says they suggested and approved it.
+  requireAnotherApprover: false
+
 # HolmesGPT as a source of fixes: each incident waiting for a suggestion, or
 # that Themis couldn't decide, is put to an existing HolmesGPT install. A
 # rollback it finds is suggested to Themis, which checks it like any other:

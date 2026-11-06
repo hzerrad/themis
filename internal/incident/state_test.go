@@ -105,7 +105,10 @@ func TestCanTransition(t *testing.T) {
 		{incident.AwaitingSuggestion, incident.Authorized, false},
 		{incident.AwaitingSuggestion, incident.Investigating, true}, // a person asked to investigate again
 		{incident.AwaitingSuggestion, incident.AwaitingApproval, false},
-		{incident.Investigating, incident.AwaitingSuggestion, false},
+		{incident.Investigating, incident.AwaitingSuggestion, true}, // found nothing a person can use
+		{incident.Diagnosed, incident.AwaitingSuggestion, true},     // a person's fix refused
+		{incident.Proposed, incident.AwaitingSuggestion, true},      // a person's fix refused by policy
+		{incident.Inconclusive, incident.AwaitingSuggestion, false},
 		// A fix that didn't help is put back, and the incident then goes to a
 		// person. While Themis is putting it back, a write is in flight:
 		// nothing cancels it.

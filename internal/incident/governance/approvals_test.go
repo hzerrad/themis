@@ -129,12 +129,12 @@ func (e *env) says(t *testing.T, incidentID, actor, reason string) {
 	}
 }
 
-// suggestedBy makes the fix awaiting approval one that source suggested from
-// outside Themis.
-func (e *env) suggestedBy(t *testing.T, a store.Action, source string) {
+// suggestedBy makes the proposal one that source suggested from outside
+// Themis.
+func (e *env) suggestedBy(t *testing.T, proposalID, source string) {
 	t.Helper()
 	const sql = `UPDATE proposals SET lease_id = NULL, provenance = jsonb_build_object('source', $2::text) WHERE id = $1`
-	if _, err := e.pool.Exec(t.Context(), sql, a.ProposalID, source); err != nil {
+	if _, err := e.pool.Exec(t.Context(), sql, proposalID, source); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -144,7 +144,7 @@ func (e *env) suggestedBy(t *testing.T, a store.Action, source string) {
 func TestApprove_OwnSuggestion(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
-	e.suggestedBy(t, a, "person:alice")
+	e.suggestedBy(t, a.ProposalID, "person:alice")
 	if _, err := governance.Approve(t.Context(), e.store, a.ID, a.Digest, "alice", now, false); err != nil {
 		t.Fatalf("Approve: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestApprove_OwnSuggestion(t *testing.T) {
 func TestApprove_AnotherApprover(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
-	e.suggestedBy(t, a, "person:alice")
+	e.suggestedBy(t, a.ProposalID, "person:alice")
 	if _, err := governance.Approve(t.Context(), e.store, a.ID, a.Digest, "alice", now, true); !errors.Is(err, governance.ErrOwnSuggestion) {
 		t.Fatalf("approving her own suggestion: %v, want refused", err)
 	}
@@ -176,7 +176,7 @@ func TestApprove_AnotherApprover(t *testing.T) {
 		other := newEnv(t)
 		b := other.awaiting(t)
 		if source != "" {
-			other.suggestedBy(t, b, source)
+			other.suggestedBy(t, b.ProposalID, source)
 		}
 		if _, err := governance.Approve(t.Context(), other.store, b.ID, b.Digest, "admin", now, true); err != nil {
 			t.Errorf("approving a fix from %q: %v", source, err)

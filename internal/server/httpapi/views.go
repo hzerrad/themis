@@ -161,7 +161,7 @@ type detailView struct {
 
 	// InvestigateAgain is set while a person can have the incident
 	// investigated again, and says why it can't be, if it can't.
-	InvestigateAgain *againView `json:",omitempty"`
+	InvestigateAgain *againView `json:",omitzero"`
 	// AnotherApprover is set when a fix needs an approver other than the
 	// person who suggested it.
 	AnotherApprover bool `json:",omitempty"`

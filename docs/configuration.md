@@ -23,6 +23,7 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `api.adminAccount.passwordHashFile`, `.passwordFile` | one of them | Files holding that account's password hash, argon2id or bcrypt, or the password itself. The hash wins when both exist. Read only while the account must be created. A missing or unusable one then stops Themis from starting. |
 | `api.oidc` | no | Let people sign in through an OIDC provider; see [People and roles](#people-and-roles). |
 | `api.access` | no | Roles for people who sign in, by username or group. |
+| `approvals.requireAnotherApprover` | no | `true` refuses the approval of a fix by the person who suggested it: someone else must approve it. Off by default: a person may approve their own suggestion, and the timeline says "Suggested and approved by <username>." See [People and roles](#people-and-roles). |
 | `executor.address`, `executor.bearerTokenFile` | no | Where `themis-executor` listens, and the token it requires. Without `executor`, approved actions are canceled, never executed. |
 | `notifications.webhook.url` or `.urlFile` | no | Where escalations are POSTed. Use `urlFile` when the URL embeds a key. |
 | `notifications.webhook.bearerTokenFile` | no | A token sent with each notice. |
@@ -128,7 +129,11 @@ Each entry gives a role to `users` (usernames), `groups`, or both. When someone 
 
 **The admin token** still works with OIDC on, and acts as an admin. Keep it as a way in when the provider is down. What it does is still recorded as `admin`, since anyone holding it looks the same.
 
-**What is recorded:** an approval or denial records the person's username. A suggestion records its source as `person:<username>`, `person:initial-admin` for the initial admin password, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Records from versions before the initial admin password may name `person:setup`: someone who came in through port-forward before setup finished. Each person has their own limit on suggestions.
+**What is recorded:** an approval or denial records the person's username, and a denial their reason, as they wrote it: "Denied by alice. Reason: not during the sale." A suggestion records its source as `person:<username>`, `person:initial-admin` for the initial admin password, or `admin-token` for the admin token, and policy rules see it as `proposal.source`. Records from versions before the initial admin password may name `person:setup`: someone who came in through port-forward before setup finished. Each person has their own limit on suggestions.
+
+**Approving your own suggestion** is allowed by default, and recorded as such: "Suggested and approved by alice." To require a second person, set `approvals.requireAnotherApprover: true`, or the chart's `approvals.requireAnotherApprover` value. The UI then shows "Another approver must approve this fix." in place of the button, and the API refuses with 403: "Refused. A fix needs an approver other than the person who suggested it." It applies to fixes a person suggested while signed in (`person:<username>`). Fixes from the investigator, an agent or the admin token are unaffected.
+
+**Denying a fix** keeps the incident open by default: it waits (`awaiting_suggestion`) for another fix, for `externalProposals.window`, or 15 minutes when that is none. An approver can suggest one, an agent can, or an approver can click **Investigate again**. **Deny and close**, `{"close": true}` with `POST /v1/actions/{id}/deny`, closes the incident with no change instead.
 
 ## Configuration resources
 
@@ -216,6 +221,8 @@ The chart adds the adapter as a source with its own service account, limited to 
 **People** send the same request as JSON to `POST /v1/incidents/{id}/proposals`, signed in with the [approver role](#people-and-roles) or with the admin token. A signed-in person is recorded as `person:<username>`. The admin token is recorded as `admin-token`, since anyone holding it looks the same.
 
 **When a suggestion is taken:** while Themis investigates, for `window` after it couldn't decide, and, without an investigator, for `window` from when the incident opens. `window` defaults to 15 minutes with sources or without an investigator, and to none otherwise. During it the incident stays `inconclusive` rather than closing. A suggestion made while the investigation runs is used if the investigator has no accepted fix of its own, including when the investigator fails.
+
+**A refused suggestion** doesn't close the incident. When the checks, the fix itself or policy refuse a fix a person or an agent suggested, the refusal and its reason go on the timeline, and the incident waits (`awaiting_suggestion`) for another, for `window`, or 15 minutes when that is none. The same holds for any refused fix, the investigator's included, once a person has denied a fix for the incident. A fix Themis only recommends, because Argo CD or Flux manages the workload, still closes it.
 
 **What policy sees:** rules can read `proposal.source`, `proposal.authenticated` and `proposal.external`, all strings. To send every outside suggestion to a person, or refuse them, write a rule on `proposal.external == "true"`.
 
@@ -373,6 +380,8 @@ It is guidance, not a rule. What must hold before a fix runs belongs in [checks]
 | `timeout` | 5m | Deadline for the whole investigation |
 
 A failed investigation is retried twice, 30 seconds and then a minute later. After that the incident is escalated.
+
+**Investigating again.** While an incident waits for a suggested fix, an approver can have it investigated again (`POST /v1/incidents/{id}/investigate`), when an investigator is installed. The investigation starts from everything the incident has: its evidence and checks, and each fix people denied for it, with the reason, as they wrote it. The investigator passes reasons to its model as a reviewer's note: fenced like evidence, and followed by the rule that it is text to weigh, never instructions. Whatever comes back passes the same checks, policy and approval. The model's token budget (the chart's `model.tokenBudget`) is the incident's, shared by all its investigations: once they used it all, investigating again is refused, and the button says how many tokens they used. If the investigation finds no fix, the incident waits for a suggested fix again.
 
 ### Policy
 

@@ -164,7 +164,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `model.apiKeySecret` | `""` | A Secret with an `apiKey` key, if the endpoint needs one |
 | `model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
 | `model.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
-| `model.tokenBudget` | `200000` | Tokens per investigation |
+| `model.tokenBudget` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
 | `model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`; for `anthropic`, `low`, `medium`, `high`, `xhigh` or `max`. Empty leaves the provider's default |
 | `model.maxOutputTokens` | `""` (`4096`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
 | `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way. Without `baseURL`, the Setup page's reply format sets it |
@@ -186,6 +186,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.sessionTTL` | `""` (`8h`) | How long a sign-in lasts |
 | `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
+| `approvals.requireAnotherApprover` | `false` | Refuse the approval of a fix by the person who suggested it: someone else must approve it |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
 | `metrics.kubernetes.enabled` | `true` | Read containers' current memory and CPU use from the Kubernetes metrics API (metrics-server), and let the core read it in each enrolled namespace |
 | `metrics.prometheus.address` | `""` | A server answering Prometheus queries, for peak memory and CPU throttling too; see [Metrics](../../../docs/configuration.md#metrics). Empty: not used |

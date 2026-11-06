@@ -104,6 +104,10 @@ _Avoid_: default policy, built-in rule
 A person's yes to one action, valid only for that action as it was when approved and only for a while.
 _Avoid_: sign-off, consent
 
+**Denial**:
+A person's no to one action, with their reason as they wrote it. The incident then waits for another fix, one suggested or one found by investigating it again, unless the person closes it.
+_Avoid_: rejection, veto
+
 **Verification**:
 Watching a target for a while after an action to tell whether the incident is resolved, contained, unchanged or worse.
 _Avoid_: health check, validation

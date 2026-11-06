@@ -76,6 +76,10 @@ data:
       {{- with .Values.access }}
       access: {{- toYaml . | nindent 8 }}
       {{- end }}
+    {{- if (.Values.approvals | default dict).requireAnotherApprover }}
+    approvals:
+      requireAnotherApprover: true
+    {{- end }}
     {{- if .Values.executor.enabled }}
     executor:
       address: {{ .Release.Name }}-executor:9091

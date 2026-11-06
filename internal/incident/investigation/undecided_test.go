@@ -78,25 +78,35 @@ func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
 	}
 }
 
-// Without an investigator and with no window set, people still get the
-// default window to suggest a fix.
-func TestCloseUndecided_WithoutAnInvestigatorPeopleGetTheDefaultWindow(t *testing.T) {
-	e := newEnv(t)
-	id := e.waiting(t)
-	cfg := config.Config{Investigators: config.Investigators{Disabled: true}}
-	soon := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(time.Minute) }}
-	if err := soon.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.AwaitingSuggestion {
-		t.Fatalf("state = %s a minute in, want it still waiting", got)
-	}
-	later := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(config.DefaultProposalWindow + time.Minute) }}
-	if err := later.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s after the default window, want closed", got)
+// An incident waiting for a person to suggest a fix gets the default window
+// when none is set: without an investigator, and with one, after a person
+// denied its fix.
+func TestCloseUndecided_PeopleGetTheDefaultWindow(t *testing.T) {
+	for name, cfg := range map[string]config.Config{
+		"without an investigator": {Investigators: config.Investigators{Disabled: true}},
+		"after a denial":          {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id := e.waiting(t)
+			soon := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(time.Minute) }}
+			if err := soon.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.state(t, id); got != incident.AwaitingSuggestion {
+				t.Fatalf("state = %s a minute in, want it still waiting", got)
+			}
+			later := &investigation.CloseUndecidedWorker{Config: cfg, Store: e.store, Now: func() time.Time { return time.Now().Add(config.DefaultProposalWindow + time.Minute) }}
+			if err := later.Close(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.state(t, id); got != incident.ClosedNoAction {
+				t.Errorf("state = %s after the default window, want closed", got)
+			}
+			if _, reason := e.path(t, id); reason != "No fix was suggested within 15m." {
+				t.Errorf("reason = %q", reason)
+			}
+		})
 	}
 }
 

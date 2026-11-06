@@ -257,6 +257,16 @@ func (s *Store) Deny(ctx context.Context, tx pgx.Tx, actionID, denier, reason st
 	return a, nil
 }
 
+// Denied reports whether a person denied a fix for the incident.
+func (s *Store) Denied(ctx context.Context, q Querier, incidentID string) (bool, error) {
+	var denied bool
+	err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM denials d JOIN actions a ON a.id = d.action_id WHERE a.incident_id = $1)`, incidentID).Scan(&denied)
+	if err != nil {
+		return false, fmt.Errorf("denials of incident %s: %w", incidentID, err)
+	}
+	return denied, nil
+}
+
 // Denials returns the denials of an incident's actions, oldest first.
 func (s *Store) Denials(ctx context.Context, q Querier, incidentID string) ([]Denial, error) {
 	rows, err := q.Query(ctx, `
