@@ -155,13 +155,13 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "revision 3 has no pods left to judge"
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "revision 4 rolled out 126h0m0s ago, beyond 6h0m0s",
       "evidence_ids": [

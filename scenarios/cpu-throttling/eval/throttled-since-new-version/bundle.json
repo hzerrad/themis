@@ -141,7 +141,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "api was throttled in 58% of its CPU periods over 1h, at its limit of 0.5 CPU",
       "evidence_ids": [
@@ -159,7 +159,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "true",
       "reason": "revision 3 rolled out 40m0s ago",
       "evidence_ids": [
@@ -168,7 +168,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "revision 2 has no pods left to judge"
     },

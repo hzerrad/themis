@@ -3,8 +3,8 @@
     {
       "content": "{\"kind\":\"request_evidence\",\"template\":\"container_logs_tail\",\"params\":{\"pod\":\"search-84f6d9c2b-d3e4f\",\"container\":\"api\",\"previous\":\"\"}}",
       "usage": {
-        "input_tokens": 3634,
-        "output_tokens": 596
+        "input_tokens": 3637,
+        "output_tokens": 577
       },
       "model": "qwen3:8b-16k",
       "truncated": false,

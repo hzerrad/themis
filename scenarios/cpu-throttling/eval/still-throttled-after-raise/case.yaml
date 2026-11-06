@@ -1,0 +1,43 @@
+name: still-throttled-after-raise
+version: 1
+description: Themis raised search's CPU limit from 200m to 300m for an earlier incident 4 minutes ago, and its new pod is
+  still throttled in 57% of its CPU periods, using nearly all of the 300m. The rollout was Themis's own fix, and revision 1
+  was throttled before it, so no new version brought this; raising the limit again is right.
+tags: [cpu, throttling, follow-up]
+source: synthetic
+difficulty: medium
+incident_class: cpu_throttling
+now: '2026-11-06T21:53:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+themis_fix:
+  incident: 019a5b3c-7d10-7e21-9a4b-2c8d6e0f1a35
+  fix: deployment.set-resources
+  done: Raised search's CPU limit from 200m to 300m.
+  appliedAt: '2026-11-06T21:48:13Z'
+  replaced: '1'
+  outcome: unchanged
+  found:
+    - check: cpu_throttled_at_limit
+      reason: app was throttled in 63% of its CPU periods over 1h, at its limit of 0.2 CPU
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          cpu: 450m
+truth:
+  root_causes: [cpu_limit_too_low]
+  decision: propose
+  required_citations: [container_cpu]
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    rollout_recent: 'true'
+    earlier_revision_healthy: 'false'
+    gitops_managed: 'false'
+  policy: require_approval

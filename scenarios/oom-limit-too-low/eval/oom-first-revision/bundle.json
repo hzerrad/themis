@@ -188,7 +188,7 @@
   "predicates": [
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "there is no revision before revision 1, so no rollout replaced one",
       "evidence_ids": [
@@ -206,7 +206,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "catalog has no earlier revision to roll back to",
       "evidence_ids": [

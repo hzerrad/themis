@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"No evidence of sustained CPU throttling or usage near limits. Throttling is below 25% threshold, and CPU usage is 40% of limit. No logs or node events indicate issues.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling ratio (11%) below 25% threshold and CPU usage (40% of limit) don't indicate sustained throttling or node contention.\",\"supporting\":[\"ev-container_cpu\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"node_cpu_contention\",\"summary\":\"No evidence of node-level CPU usage or events to suggest contention.\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[\"ev-container_cpu\"],\"missing\":[\"node_cpu_usage\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3599,
+        "output_tokens": 986
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

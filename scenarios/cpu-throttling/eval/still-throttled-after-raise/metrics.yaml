@@ -1,0 +1,9 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  search-5d9c7f6b8-q2w4e:
+    app:
+      memory: 2Mi
+      peakMemory: 2Mi
+      cpu: 280m
+      throttled: 0.57

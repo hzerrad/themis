@@ -140,7 +140,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "no throttling figures: the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them",
       "evidence_ids": [
@@ -158,7 +158,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "revision 2 rolled out 220h0m0s ago, beyond 6h0m0s",
       "evidence_ids": [
@@ -167,7 +167,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "revision 1 has no pods left to judge"
     },

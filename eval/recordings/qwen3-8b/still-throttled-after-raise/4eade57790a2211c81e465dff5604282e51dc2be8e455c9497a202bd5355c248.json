@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"The new version's CPU usage exceeds the current limit, causing persistent throttling. Increase the CPU limit to 450m to resolve the issue.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"The current revision's CPU usage (280m/300m) and previous revision's unhealthy state (63% throttling at 200m) indicate the new version uses more CPU.\",\"supporting\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-themis_fix\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"The current CPU limit of 300m is insufficient for the new version's demand, as evidenced by sustained throttling and delayed work processing.\",\"supporting\":[\"ev-container_cpu\",\"ev-container_logs_tail\"],\"contradicting\":[\"ev-themis_fix\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"cpu\":\"450m\"}}}},\"expected_effect\":\"Raises the CPU limit to 450m (1.5x current 300m), addressing throttling from the new version's increased CPU demand.\",\"rationale\":\"Logs show consistent CPU delays (2s-14s behind), and metrics confirm 280m/300m usage. The previous revision (200m limit) was unhealthy, indicating the new version uses more CPU. Raising the limit to 450m clears throttling without affecting memory.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-themis_fix\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"rollout_recent\",\"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 4019,
+        "output_tokens": 808
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

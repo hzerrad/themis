@@ -206,7 +206,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "revision 15 rolled out 115h20m30s ago, beyond 6h0m0s",
       "evidence_ids": [
