@@ -64,6 +64,8 @@ type API struct {
 	// Settings are the model settings made in Themis's setup. Nil means
 	// setup can't change them.
 	Settings ModelSettings
+	// Alertmanager is the Alertmanager Themis reads. Nil means none.
+	Alertmanager AlertmanagerConnection
 	// ModelTests test the model's connection through the investigator. Nil
 	// means no test is offered.
 	ModelTests *modeltest.Tests
@@ -118,6 +120,11 @@ func (a *API) Register(mux *http.ServeMux) {
 		if a.ModelTests != nil {
 			mux.Handle("POST /v1/settings/model/test", a.authed(config.RoleAdmin, a.testModel, nil))
 		}
+	}
+	if a.Alertmanager != nil && a.Config != nil {
+		mux.Handle("GET /v1/settings/alertmanager", a.authed(config.RoleAdmin, a.alertmanagerSettings, nil))
+		mux.Handle("PUT /v1/settings/alertmanager", a.authed(config.RoleAdmin, a.setAlertmanager, nil))
+		mux.Handle("POST /v1/setup/alertmanager/test", a.authed(config.RoleAdmin, a.testAlertmanager, nil))
 	}
 }
 

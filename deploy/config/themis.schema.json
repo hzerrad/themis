@@ -32,7 +32,91 @@
       "required": [
         "bearerTokenFile"
       ],
-      "description": "Intake configures how alerts reach Themis."
+      "description": "Intake configures the webhook Alertmanager can send alerts to."
+    },
+    "alerting": {
+      "properties": {
+        "alertmanager": {
+          "properties": {
+            "disabled": {
+              "type": "boolean",
+              "description": "Disabled stops reading: alerts arrive only through the webhook."
+            },
+            "address": {
+              "type": "string",
+              "description": "Address is Alertmanager's base URL, under which /api/v2/alerts is\nserved, for example http://alertmanager-operated.monitoring:9093."
+            },
+            "found": {
+              "type": "boolean",
+              "description": "Found says the chart found Address in the cluster at install, rather\nthan the install setting it, so the Setup page may replace it."
+            },
+            "bearerTokenFile": {
+              "type": "string",
+              "description": "BearerTokenFile holds a token sent as a bearer token, if Alertmanager\nneeds one. Read on every request, so rotation needs no restart."
+            },
+            "basicAuth": {
+              "properties": {
+                "username": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "passwordFile": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "PasswordFile is read on every request, so rotation needs no restart."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "username",
+                "passwordFile"
+              ],
+              "description": "BasicAuth is a username and password, if Alertmanager needs them."
+            },
+            "tls": {
+              "properties": {
+                "caFile": {
+                  "type": "string",
+                  "description": "CAFile holds the certificates that sign the server's, when the system's\ndon't."
+                },
+                "certFile": {
+                  "type": "string",
+                  "description": "CertFile and KeyFile are a client certificate, for a server that asks\nfor one. Set both or neither."
+                },
+                "keyFile": {
+                  "type": "string"
+                },
+                "insecureSkipVerify": {
+                  "type": "boolean",
+                  "description": "InsecureSkipVerify accepts any certificate. Only for trying Themis."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "TLS configures an https address."
+            },
+            "matchers": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "description": "Matchers narrow the alerts read, beyond the names the profiles answer,\nsuch as cluster=\"prod-eu\" for an Alertmanager several clusters share."
+            },
+            "interval": {
+              "type": "string",
+              "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$",
+              "description": "Interval is how often Alertmanager is read. Defaults to 15s."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Alertmanager is the Alertmanager whose active alerts Themis reads."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Alerting says where Themis reads alerts: Alertmanager's API."
     },
     "investigators": {
       "properties": {

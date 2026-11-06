@@ -243,13 +243,9 @@ ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
 .PHONY: monitoring-up monitoring-down
-monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-cluster Themis
-	$(KUBECTL) create namespace monitoring --dry-run=client -o yaml | $(KUBECTL) apply -f -
-	$(KUBECTL) -n themis get secret themis-tokens -o jsonpath='{.data.intake}' | base64 -d | \
-		$(KUBECTL) -n monitoring create secret generic themis-intake-token --from-file=token=/dev/stdin \
-		--dry-run=client -o yaml | $(KUBECTL) apply -f -
+monitoring-up: ## Install Prometheus and Alertmanager on kind; Themis installed after finds Alertmanager and reads it
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring prometheus-community/prometheus \
-		--version $(PROMETHEUS_CHART) -n monitoring -f scripts/dev/monitoring/values.yaml --wait --timeout 5m
+		--version $(PROMETHEUS_CHART) -n monitoring --create-namespace -f scripts/dev/monitoring/values.yaml --wait --timeout 5m
 
 monitoring-down: ## Uninstall the monitoring stack from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall monitoring -n monitoring

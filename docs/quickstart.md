@@ -11,7 +11,7 @@ Each step has a **kind** path and a **your cluster** path. The kind path uses th
 - Docker, Helm and kubectl. The kind path also needs Go: kind runs through `go tool`.
 - A clone of this repository, for the chart and the sample workload. The images are published for amd64 and arm64, so there's nothing to build.
 - A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM, or Claude through Anthropic's API. You can also set it after install, on the Setup page, or run Themis without one and suggest fixes yourself or through HolmesGPT.
-- For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and an Alertmanager you can configure.
+- For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and Prometheus with Alertmanager.
 
 If the model needs a key, put it in a Secret first:
 
@@ -24,7 +24,14 @@ On kind, run `make kind-up` before this, and add `--context kind-themis-dev` to 
 
 ## 1. Install Themis
 
-On kind, create the cluster first with `make kind-up` (skip it if you did above), and add `--context kind-themis-dev` to `kubectl` and `--kube-context kind-themis-dev` to `helm` below.
+On kind, create the cluster first with `make kind-up` (skip it if you did above), then install Prometheus and Alertmanager, so the chart finds Alertmanager at install. `KubePodCrashLooping` fires after 30 seconds there, instead of 15 minutes:
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+make monitoring-up
+```
+
+Add `--context kind-themis-dev` to `kubectl` and `--kube-context kind-themis-dev` to `helm` below.
 
 Create the namespace you'll enroll, then install the chart. Themis gets its access in each enrolled namespace at install, so the namespace must already exist:
 
@@ -91,45 +98,13 @@ kubectl -n shop rollout status deployment/checkout
 
 The chart's built-in profile handles this kind of incident: a Deployment whose new pods crash or run out of memory after a rollout, fixed by rolling back. It needs approval for every rollback.
 
-## 3. Point Alertmanager at Themis
+## 3. Connect Alertmanager
 
-Alertmanager posts alerts to `http://themis-core.themis.svc:8080/v1/intake/alertmanager`, with the `intake` key of the `themis-tokens` Secret as a bearer token.
+Nothing to do when Alertmanager runs in the cluster. The chart found it at install, and Themis reads its active alerts every 15 seconds. `helm install` printed the address it reads, and the **Setup** page shows it, with a **Test** button.
 
-**kind:** this installs Prometheus and Alertmanager, already wired to Themis, with `KubePodCrashLooping` firing after 30 seconds instead of 15 minutes:
+When the chart found none, as under Argo CD or Flux, which don't let it look, or when Alertmanager runs elsewhere, set its address on the **Setup** page, or install with `--set alerting.alertmanager.address=http://alertmanager-operated.monitoring:9093`. For an Alertmanager several clusters share, add `--set 'alerting.alertmanager.matchers={cluster="prod-eu"}'` to read only this cluster's alerts.
 
-```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-make monitoring-up
-```
-
-**Your cluster:** the **Setup** page (step 4) shows these steps filled in for your install, for kube-prometheus-stack or any other Alertmanager, ready to copy. By hand: copy the intake token into a Secret Alertmanager can mount. This assumes Alertmanager runs in `monitoring`:
-
-```bash
-kubectl -n themis get secret themis-tokens -o jsonpath='{.data.intake}' | base64 -d | \
-  kubectl -n monitoring create secret generic themis-intake-token --from-file=token=/dev/stdin
-```
-
-Mount it in Alertmanager, at `/etc/alertmanager/themis` for example, then add a receiver and a route:
-
-```yaml
-receivers:
-  - name: themis
-    webhook_configs:
-      - url: http://themis-core.themis.svc:8080/v1/intake/alertmanager
-        send_resolved: true
-        http_config:
-          authorization:
-            type: Bearer
-            credentials_file: /etc/alertmanager/themis/token
-route:
-  routes:
-    - receiver: themis
-      matchers: [alertname=~"KubePodCrashLooping|KubePodOOMKilled"]
-      group_by: [alertname, namespace, pod]
-      continue: true
-```
-
-With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. More in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
+With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. More, and how to have Alertmanager send alerts to Themis instead, in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
 
 ## 4. See an incident
 
@@ -153,9 +128,9 @@ Open <http://localhost:8090> and sign in with the initial admin password. The ch
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Themis starts once an admin account exists, and serves nothing else until then. Alerts sent before are refused, and Alertmanager sends them again later. The initial admin password only creates that account. Create your admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
+Themis starts once an admin account exists, and serves nothing else until then. It reads no alerts before. The initial admin password only creates that account. Create your admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
 
-The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, with **Test the connection** to check it, and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, with **Test the connection** to check it, and the Alertmanager Themis reads. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 
@@ -171,7 +146,7 @@ kubectl -n shop set env deployment/checkout MODE=leak
 
 | After | You see |
 |---|---|
-| about 1 minute on kind | A checkout pod crash-loops, Alertmanager posts the alert, and an incident appears, **investigating** |
+| about 1 minute on kind | A checkout pod crash-loops, Themis reads the alert from Alertmanager, and an incident appears, **investigating** |
 | 1 to 5 minutes more | Themis and the model read the evidence and suggest a rollback. The incident **needs your approval**. |
 
 Open the incident. It shows what Themis found, what the model suggested, and the exact change Themis would make, read from the live cluster: the workload, the pods it affects, the policy rule that decided, and every field the rollback changes.

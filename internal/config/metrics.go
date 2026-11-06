@@ -1,5 +1,12 @@
 package config
 
+import (
+	"crypto/tls"
+	"crypto/x509"
+	"fmt"
+	"os"
+)
+
 // Metrics says where Themis reads how much memory and CPU containers use.
 // Prometheus is asked first, when it has an address; the Kubernetes metrics
 // API answers what Prometheus can't.
@@ -46,6 +53,30 @@ type TLS struct {
 	KeyFile  string `json:"keyFile,omitempty"`
 	// InsecureSkipVerify accepts any certificate. Only for trying Themis.
 	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
+// ClientConfig is how Themis connects to the server. The CA is read now; the
+// client certificate on every handshake, so a renewed one needs no restart.
+func (t TLS) ClientConfig() (*tls.Config, error) {
+	//nolint:gosec // InsecureSkipVerify is the operator's explicit choice
+	out := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: t.InsecureSkipVerify}
+	if t.CAFile != "" {
+		pem, err := os.ReadFile(t.CAFile)
+		if err != nil {
+			return nil, err
+		}
+		out.RootCAs = x509.NewCertPool()
+		if !out.RootCAs.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("%s holds no PEM certificate", t.CAFile)
+		}
+	}
+	if t.CertFile != "" {
+		out.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			cert, err := tls.LoadX509KeyPair(t.CertFile, t.KeyFile)
+			return &cert, err
+		}
+	}
+	return out, nil
 }
 
 func (m Metrics) validate(add func(path, format string, args ...any)) {

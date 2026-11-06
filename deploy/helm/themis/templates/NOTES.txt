@@ -22,6 +22,19 @@ signs you in, and the initial admin password stops working.
 {{- end }}
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}
+{{- $am := include "themis.alertmanagerValues" . | fromJson }}
+{{- if not (include "themis.alertmanagerEnabled" .) }}
+Alerts:   Sent by Alertmanager to Themis's webhook.
+{{- else if $am.address }}
+Alerts:   Read from {{ $am.address }} every {{ $am.interval | default "15s" }}.
+{{- else }}
+{{- with include "themis.alertmanagerFound" . }}
+Alerts:   Read from {{ . }} every {{ $am.interval | default "15s" }}.
+          Found in the cluster at install.
+{{- else }}
+Alerts:   No Alertmanager found in the cluster. Set its address on the Setup page.
+{{- end }}
+{{- end }}
 Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
 {{- $model := .Values.model }}

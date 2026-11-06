@@ -32,32 +32,40 @@ func (r *Receiver) Receive(ctx context.Context, alerts []Alert, invalid []Invali
 	if len(alerts) == 0 && len(invalid) == 0 {
 		return Received{}, nil
 	}
+	var got Received
+	err := r.store.InTx(ctx, func(tx pgx.Tx) error {
+		var err error
+		got, err = r.ReceiveTx(ctx, tx, alerts, invalid)
+		return err
+	})
+	if err != nil {
+		return Received{}, err
+	}
+	return got, nil
+}
 
+// ReceiveTx stores alerts as Receive does, in the caller's transaction.
+func (r *Receiver) ReceiveTx(ctx context.Context, tx pgx.Tx, alerts []Alert, invalid []InvalidAlert) (Received, error) {
 	jobs := make([]river.JobArgs, len(alerts))
 	for i, a := range alerts {
 		jobs[i] = ProcessAlertArgs{Alert: a}
 	}
-
-	err := r.store.InTx(ctx, func(tx pgx.Tx) error {
-		if err := r.store.EnqueueManyTx(ctx, tx, jobs); err != nil {
-			return err
-		}
-		for _, a := range invalid {
-			if _, err := r.store.InsertRejectedAlert(ctx, tx, rejectionOf(a)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
+	if err := r.store.EnqueueManyTx(ctx, tx, jobs); err != nil {
 		return Received{}, fmt.Errorf("store received alerts: %w", err)
 	}
-	for _, a := range alerts {
-		alertsReceived.WithLabelValues(a.Source, "accepted").Inc()
-	}
 	for _, a := range invalid {
-		alertsReceived.WithLabelValues(a.Source, "invalid").Inc()
+		if _, err := r.store.InsertRejectedAlert(ctx, tx, rejectionOf(a)); err != nil {
+			return Received{}, fmt.Errorf("store received alerts: %w", err)
+		}
 	}
+	store.AfterCommit(tx, func() {
+		for _, a := range alerts {
+			alertsReceived.WithLabelValues(a.Source, "accepted").Inc()
+		}
+		for _, a := range invalid {
+			alertsReceived.WithLabelValues(a.Source, "invalid").Inc()
+		}
+	})
 	return Received{Accepted: len(alerts), Rejected: len(invalid)}, nil
 }
 

@@ -30,8 +30,11 @@ type Config struct {
 	// are rejected.
 	EnrolledNamespaces []string `json:"enrolledNamespaces" jsonschema:"minItems=1,uniqueItems=true"`
 
-	// Intake configures how alerts reach Themis.
+	// Intake configures the webhook Alertmanager can send alerts to.
 	Intake Intake `json:"intake"`
+
+	// Alerting says where Themis reads alerts: Alertmanager's API.
+	Alerting Alerting `json:"alerting,omitzero"`
 
 	// Investigators configures access to the gRPC API.
 	Investigators Investigators `json:"investigators"`

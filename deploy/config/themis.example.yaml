@@ -10,6 +10,16 @@ enrolledNamespaces:
 intake:
   bearerTokenFile: /var/run/secrets/themis/intake-token
 
+# Themis reads the active alerts the profiles answer from Alertmanager's API.
+# Without an address, the Setup page sets one.
+alerting:
+  alertmanager:
+    address: http://alertmanager-operated.monitoring:9093
+    # For an Alertmanager several clusters share, only this one's alerts:
+    # matchers: ['cluster="prod-eu"']
+    # bearerTokenFile: /var/run/secrets/themis-alertmanager/token
+    # interval: 15s
+
 investigators:
   bearerTokenFile: /var/run/secrets/themis/investigator-token
 

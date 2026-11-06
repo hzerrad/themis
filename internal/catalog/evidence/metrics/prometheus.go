@@ -2,8 +2,6 @@ package metrics
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -11,7 +9,6 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -51,7 +48,7 @@ func NewPrometheus(cfg config.Prometheus) (Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metrics.prometheus.address: %w", err)
 	}
-	tlsConfig, err := clientTLS(cfg.TLS)
+	tlsConfig, err := cfg.TLS.ClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("metrics.prometheus.tls: %w", err)
 	}
@@ -63,30 +60,6 @@ func NewPrometheus(cfg config.Prometheus) (Source, error) {
 		tokenFile: cfg.BearerTokenFile,
 		client:    &http.Client{Transport: transport},
 	}, nil
-}
-
-// clientTLS reads the CA at start; the client certificate is read on every
-// handshake, so a renewed one needs no restart.
-func clientTLS(cfg config.TLS) (*tls.Config, error) {
-	//nolint:gosec // InsecureSkipVerify is the operator's explicit choice
-	out := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: cfg.InsecureSkipVerify}
-	if cfg.CAFile != "" {
-		pem, err := os.ReadFile(cfg.CAFile)
-		if err != nil {
-			return nil, err
-		}
-		out.RootCAs = x509.NewCertPool()
-		if !out.RootCAs.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("%s holds no PEM certificate", cfg.CAFile)
-		}
-	}
-	if cfg.CertFile != "" {
-		out.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
-			return &cert, err
-		}
-	}
-	return out, nil
 }
 
 func (promQL) Name() string { return Prometheus }
