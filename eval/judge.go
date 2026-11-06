@@ -23,16 +23,16 @@ type Proposal struct {
 }
 
 // Verdict is what Themis's core does with a proposal, and whether it is the
-// case's fix.
+// case's right fix.
 type Verdict struct {
 	// Outcome is allow, require_approval or deny. A fix the incident's
 	// profiles don't offer, or one that can't go ahead, reaches nobody: deny.
 	Outcome string `json:"outcome"`
 	Reason  string `json:"reason"`
-	// SameChange is set when the proposal changes what the case's fix
+	// SameChange is set when the proposal changes what the case's right fix
 	// changes, the same way: the same fields of the same containers, each
-	// raised or lowered as the case's fix does. Values are the
-	// investigator's to choose.
+	// raised or lowered as the right fix does. Values are the investigator's
+	// to choose. The right fix is truth.fix, or else the case's fix.
 	SameChange bool `json:"same_change"`
 }
 
@@ -91,7 +91,7 @@ func Judge(ctx context.Context, root string, proposals []Proposal) ([]Verdict, e
 }
 
 // judge decides p as the core decides a suggestion for this incident, and
-// compares it with the case's fix.
+// compares it with the case's right fix.
 func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
 	fix, ok := f.cat.Fixes[p.Capability]
 	if !ok || len(f.matched.Offering(p.Capability)) == 0 {
@@ -109,9 +109,11 @@ func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
 		return Verdict{}, err
 	}
 	v := Verdict{Outcome: decided.Outcome, Reason: decided.Reason}
-	want, err := f.caseFix(ctx, s)
-	if err != nil {
-		return Verdict{}, err
+	want := s.Truth.Fix
+	if want == nil {
+		if want, err = f.caseFix(ctx, s); err != nil {
+			return Verdict{}, err
+		}
 	}
 	if want != nil && want.Capability == p.Capability {
 		v.SameChange = f.sameChange(ctx, fix, want.Params, params)

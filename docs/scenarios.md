@@ -136,6 +136,21 @@ truth:
 
 In a case where acting is right, that fix is also the answer: a proposal is right when it changes what the fix changes, the same way, such as raising the CPU limit of the same container. Its values are the investigator's to choose, and aren't scored. A rollback must also go back to one of `acceptable_revisions`.
 
+A case may put one fix to policy to see it refused where another is right, such as a raise where a new version brought the OOM kills and a rollback is the fix. It names the right one in `truth.fix`, and a proposal is then right when it changes what that fix changes:
+
+```yaml
+fix:
+  capability: deployment.set-resources
+  params: {containers: {app: {limits: {memory: 512Mi}}}}
+truth:
+  decision: propose
+  policy: deny
+  fix:
+    capability: deployment.rollback-to-revision
+    params: {revision: 1}
+  acceptable_revisions: [1]
+```
+
 A case that needs metrics adds a `metrics.yaml`, saying what the install's metrics source reads; see [eval/README.md](../eval/README.md). Without one, the install has no metrics source.
 
 A pack needs both kinds of case, or only look-alikes if its profile allows no fix:
