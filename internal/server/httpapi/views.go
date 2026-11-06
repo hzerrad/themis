@@ -155,6 +155,19 @@ type detailView struct {
 	// EvidenceWarning says that some evidence looks like instructions or
 	// forged tool output, for whoever approves a fix.
 	EvidenceWarning string `json:",omitempty"`
+	// Fixes are the fixes the incident's profiles offer, each once, primary
+	// profile first: what a person may suggest for it.
+	Fixes []offeredFix `json:",omitempty"`
+}
+
+// offeredFix is a fix as a person suggests it: what it does, and the JSON
+// Schema of its parameters.
+type offeredFix struct {
+	Name string `json:"name"`
+	// Noun is the fix in a few plain words, such as "a rollback".
+	Noun        string         `json:"noun"`
+	Description string         `json:"description"`
+	Schema      jsontext.Value `json:"schema"`
 }
 
 // checkWords are what a check finds in each answer, in its pack's words.

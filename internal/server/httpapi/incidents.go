@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json/jsontext"
 	"errors"
 	"net/http"
 
@@ -99,6 +100,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Missing = a.Remedy.Messages(in, gaps)
+	d.Fixes = a.offered(in)
 	if d.Proposals, err = a.Store.Proposals(ctx, a.Store.DB(), in.ID); err != nil {
 		a.fail(w, r, err)
 		return
@@ -119,6 +121,21 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		d.Actions = append(d.Actions, v)
 	}
 	a.reply(w, r, d)
+}
+
+// offered are the fixes the incident's profiles still configured offer, as
+// its investigator and agents get them. Without the configuration, none.
+func (a *API) offered(in store.Incident) []offeredFix {
+	if a.Config == nil {
+		return nil
+	}
+	var out []offeredFix
+	for _, name := range a.Config.Current().Matched(in.Profiles()).Capabilities() {
+		if f, ok := a.Fixes[name]; ok {
+			out = append(out, offeredFix{Name: f.Name(), Noun: f.Noun(), Description: f.Description(), Schema: jsontext.Value(f.Schema())})
+		}
+	}
+	return out
 }
 
 // changes lists what an action changes, as its fix describes it, and says so

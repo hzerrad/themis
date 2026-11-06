@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,8 +17,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/capability/probes"
+	"github.com/hzerrad/themis/internal/catalog/capability/resources"
+	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
@@ -364,5 +369,52 @@ func TestIncidentDetail_HeadlineForAStopWithoutConclusion(t *testing.T) {
 		if got := e.detail(t, a.IncidentID)["Headline"]; got != hint.HeadlineBlind {
 			t.Errorf("%s: Headline = %v, want %q", state, got, hint.HeadlineBlind)
 		}
+	}
+}
+
+// A person may suggest any fix the incident's profiles offer: each once,
+// primary profile first, with what it does and the schema of its values. A
+// profile no longer configured offers nothing.
+func TestIncidentDetail_OffersEveryFixOfItsProfiles(t *testing.T) {
+	e := newEnv(t)
+	cfg := config.Config{Profiles: []config.Profile{
+		{Name: "rollout-regression", Capabilities: []string{rollback.Name}},
+		{Name: "oom-limit-too-low", Capabilities: []string{resources.Name, rollback.Name}},
+		{Name: "probe-restart-storm", Capabilities: []string{probes.Name}},
+	}}
+	mux := http.NewServeMux()
+	(&httpapi.API{Store: e.store, TokenFile: tokenFile(t), Fixes: catalog.Fixes(), Config: cfg}).Register(mux)
+	e.handler = mux
+	var id string
+	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		var err error
+		id, _, err = e.store.CreateOrJoinIncident(t.Context(), tx, store.IncidentArgs{
+			Fingerprint: "fp", Profile: "rollout-regression", AlsoMatched: []string{"oom-limit-too-low", "gone", "probe-restart-storm"},
+			Target: target, Payload: []byte(`{}`),
+		})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := e.do(t, http.MethodGet, "/v1/incidents/"+id, token, nil)
+	var d struct {
+		Fixes []struct {
+			Name, Noun, Description string
+			Schema                  struct{ Type string }
+		}
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil {
+		t.Fatalf("detail: %v: %s", err, rec.Body)
+	}
+	var names []string
+	for _, f := range d.Fixes {
+		names = append(names, f.Name)
+		if f.Noun == "" || f.Description == "" || f.Schema.Type != "object" {
+			t.Errorf("%s: %+v, want its noun, description and schema", f.Name, f)
+		}
+	}
+	if want := []string{rollback.Name, resources.Name, probes.Name}; !slices.Equal(names, want) {
+		t.Errorf("fixes = %v, want %v", names, want)
 	}
 }
