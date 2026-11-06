@@ -31,7 +31,7 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 make monitoring-up
 ```
 
-Add `--context kind-themis-dev` to `kubectl` and `--kube-context kind-themis-dev` to `helm` below.
+Add `--context kind-themis-dev` to `kubectl` and `--kube-context kind-themis-dev` to `helm` below. Add `--set metrics.prometheus.address=http://monitoring-prometheus-server.monitoring.svc` to `helm install` too: Themis then reads the containers' memory and CPU figures, such as peaks and throttling, from that Prometheus.
 
 Create the namespace you'll enroll, then install the chart. Themis gets its access in each enrolled namespace at install, so the namespace must already exist:
 
@@ -86,7 +86,7 @@ Put a workload there that you can break. The sample one is a Deployment named `c
 **kind:**
 
 ```bash
-make demo-up
+make demo-up   # also catalog and search, for the other scenario packs in the demo
 ```
 
 **Your cluster:**

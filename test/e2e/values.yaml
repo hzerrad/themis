@@ -18,7 +18,7 @@ profiles:
   - name: rollout-regression
     priority: 100
     match:
-      alertNames: [KubePodCrashLooping]
+      alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
       targetKinds: [Deployment.apps]
     evidence:
       initial: [rollout_history, pod_states, target_events, referenced_config]

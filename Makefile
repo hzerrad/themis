@@ -16,7 +16,7 @@ HAS_PROTO := $(shell find api/proto -name '*.proto' -print -quit 2>/dev/null)
 
 .PHONY: help
 help: ## Show available targets
-	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 # Dependencies
 
@@ -219,9 +219,13 @@ kind-down: ## Delete the local kind cluster
 MODEL_URL        ?=
 MODEL_KEY_SECRET ?=
 PROMETHEUS_CHART := 29.39.0
+# The Prometheus server monitoring-up installs, as Themis reaches it: Themis
+# reads the containers' memory and CPU figures, such as peaks and throttling,
+# from it.
+PROMETHEUS_URL   := http://monitoring-prometheus-server.monitoring.svc
 
 .PHONY: themis-up themis-down
-themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_URL and MODEL_NAME, or MODEL_PROVIDER=anthropic and MODEL_NAME
+themis-up: kind-load ## Install Themis on kind with the executor, reading monitoring-up's Prometheus, using MODEL_URL and MODEL_NAME, or MODEL_PROVIDER=anthropic and MODEL_NAME
 	@test -n "$(MODEL_URL)" || test "$(MODEL_PROVIDER)" = anthropic || { echo "Set MODEL_URL and MODEL_NAME for an OpenAI-compatible endpoint, or MODEL_PROVIDER=anthropic and MODEL_NAME for Claude."; exit 1; }
 	@# Themis gets its access in each enrolled namespace at install, so it must exist.
 	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
@@ -229,18 +233,19 @@ themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_UR
 		--set image.repository= --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=IfNotPresent \
 		--set executor.enabled=true --set model.provider=$(MODEL_PROVIDER) \
 		$(if $(MODEL_URL),--set model.baseURL=$(MODEL_URL)) --set model.name=$(MODEL_NAME) \
-		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) --wait --timeout 5m
+		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) \
+		--set metrics.prometheus.address=$(PROMETHEUS_URL) --wait --timeout 5m
 
 themis-down: ## Uninstall Themis from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall themis -n themis
 
 .PHONY: ui
-ui: ## Open the in-cluster Themis UI on http://localhost:8090
+ui: ## Open the in-cluster Themis UI on http://localhost:8090, reconnecting whenever the core restarts
 	@echo "UI: http://localhost:8090"
 	@echo "Until an admin account exists, the initial admin password signs in to create it:"
 	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
 	@echo "Creating the admin account signs you in with it."
-	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
+	KIND_CLUSTER=$(KIND_CLUSTER) scripts/dev/ui.sh
 
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind; Themis installed after finds Alertmanager and reads it
@@ -250,23 +255,70 @@ monitoring-up: ## Install Prometheus and Alertmanager on kind; Themis installed 
 monitoring-down: ## Uninstall the monitoring stack from kind
 	helm --kube-context kind-$(KIND_CLUSTER) uninstall monitoring -n monitoring
 
-# Scenario 1 on the kind cluster. Every command names the kind context, so the
-# current kubectl context, which may be a real cluster, is never touched.
+# A sample workload in namespace shop for each scenario pack, on the kind
+# cluster. Every command names the kind context, so the current kubectl
+# context, which may be a real cluster, is never touched.
 KUBECTL := kubectl --context kind-$(KIND_CLUSTER)
+DEMO    := scripts/dev/demo
 
-.PHONY: demo-up demo-break demo-fix demo-down
-demo-up: ## Deploy the healthy checkout workload (revision 1) to kind
-	$(KUBECTL) apply -f scripts/dev/demo/checkout.yaml
-	$(KUBECTL) -n shop rollout status deployment/checkout --timeout=120s
+.PHONY: demo-up demo-down
+demo-up: ## Deploy the healthy checkout, catalog and search workloads to kind
+	$(KUBECTL) apply -f $(DEMO)/checkout.yaml -f $(DEMO)/catalog.yaml -f $(DEMO)/search.yaml
+	for d in checkout catalog-feed catalog search-feed search; do \
+		$(KUBECTL) -n shop rollout status deployment/$$d --timeout=120s || exit 1; \
+	done
 
-demo-break: ## Roll out a revision of checkout that is OOMKilled on every start
+demo-down: ## Remove every sample workload, and namespace shop
+	$(KUBECTL) delete -f $(DEMO) --ignore-not-found
+
+# Only checkout.yaml holds namespace shop: deleting another file leaves it.
+.PHONY: demo-namespace
+demo-namespace:
+	@$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
+
+# rollout-regression, and stuck-pods: checkout. demo-fix undoes either break.
+.PHONY: demo-break demo-break-stuck demo-fix
+demo-break: ## rollout-regression: roll out a revision of checkout that is OOMKilled on every start
 	$(KUBECTL) -n shop set env deployment/checkout MODE=leak
+
+demo-break-stuck: ## stuck-pods: roll checkout out to an image tag that doesn't exist
+	$(KUBECTL) -n shop set image deployment/checkout app=busybox:1.73
 
 demo-fix: ## Roll checkout back to its previous revision
 	$(KUBECTL) -n shop rollout undo deployment/checkout
 
-demo-down: ## Remove the checkout workload
-	$(KUBECTL) delete -f scripts/dev/demo/checkout.yaml --ignore-not-found
+# oom-limit-too-low: catalog. The pods restart to load the larger catalog;
+# deleting them, unlike a rollout restart, leaves the revision as it was.
+.PHONY: demo-break-oom demo-fix-oom
+demo-break-oom: demo-namespace ## oom-limit-too-low: double catalog's data, past its memory limit, with no rollout
+	$(KUBECTL) apply -f $(DEMO)/catalog.yaml
+	$(KUBECTL) -n shop set env deployment/catalog-feed SIZE_MI=64
+	$(KUBECTL) -n shop rollout status deployment/catalog-feed --timeout=120s
+	$(KUBECTL) -n shop delete pods -l app=catalog
+
+demo-fix-oom: ## Shrink catalog's data back under its memory limit
+	$(KUBECTL) -n shop set env deployment/catalog-feed SIZE_MI=32
+	$(KUBECTL) -n shop rollout status deployment/catalog-feed --timeout=120s
+	$(KUBECTL) -n shop delete pods -l app=catalog
+
+# cpu-throttling: search.
+.PHONY: demo-break-cpu demo-fix-cpu
+demo-break-cpu: demo-namespace ## cpu-throttling: send search more CPU work than its limit allows, with no rollout
+	$(KUBECTL) apply -f $(DEMO)/search.yaml
+	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=250
+	$(KUBECTL) -n shop rollout status deployment/search-feed --timeout=120s
+
+demo-fix-cpu: ## Stop search's CPU work
+	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=0
+
+# probe-restart-storm: inventory.
+.PHONY: demo-break-probes demo-fix-probes
+demo-break-probes: demo-namespace ## probe-restart-storm: deploy inventory, whose liveness probe gives up before its health check answers
+	$(KUBECTL) apply -f $(DEMO)/inventory.yaml
+
+demo-fix-probes: ## Give inventory's liveness probe the 3 seconds its health check needs
+	$(KUBECTL) -n shop patch deployment inventory --type=json \
+		-p '[{"op": "replace", "path": "/spec/template/spec/containers/0/livenessProbe/timeoutSeconds", "value": 3}]'
 
 # Running locally
 

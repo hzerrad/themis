@@ -1,0 +1,56 @@
+# A workload for the local kind cluster that reproduces the
+# probe-restart-storm pack's incident. inventory's health check answers in 2
+# seconds, and its liveness probe gives it 1: the kubelet restarts a container
+# that works, again and again. `make demo-break-probes` deploys it. A probe
+# timeout above 2 seconds is the fix; `make demo-fix-probes` sets 3.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: shop
+  labels:
+    app: inventory
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory
+    spec:
+      # httpd ignores SIGTERM: the kubelet kills it 5 seconds after asking.
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: ["sh", "-c"]
+          # httpd serves /healthz from a CGI script that takes 2 seconds.
+          args:
+            - |
+              mkdir -p /www/cgi-bin
+              cat > /www/cgi-bin/healthz <<'EOF'
+              #!/bin/sh
+              sleep 2
+              echo "inventory: health check answered in 2s" >&2
+              printf 'Content-Type: text/plain\r\n\r\nok\n'
+              EOF
+              chmod +x /www/cgi-bin/healthz
+              echo "inventory: serving on :8080"
+              exec httpd -f -p 8080 -h /www
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /cgi-bin/healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 4Mi
+            limits:
+              memory: 16Mi
