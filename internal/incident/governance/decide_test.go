@@ -70,8 +70,8 @@ func facts(onset check.Truth) []check.Result {
 		{Name: check.GitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
 		{Name: "failure_onset_after_rollout", Version: "1", Value: onset, Reason: "x"},
 		{Name: "config_changed_before_failure", Version: "1", Value: check.False, Reason: "x"},
-		{Name: "rollout_recent", Version: "1", Value: check.True, Reason: "x"},
-		{Name: "earlier_revision_healthy", Version: "1", Value: check.True, Reason: "x"},
+		{Name: "failures_came_with_rollout", Version: "1", Value: check.True, Reason: "x"},
+		{Name: "earlier_revision_healthy", Version: "2", Value: check.True, Reason: "x"},
 	}
 }
 
@@ -145,14 +145,12 @@ func TestDecide(t *testing.T) {
 		// rolling back wouldn't undo it.
 		{name: "config changed before the failure", checks: set(facts(check.True), 3, check.True), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		{name: "config change unknown", checks: set(facts(check.True), 3, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		// A failure long after the rollout isn't blamed on it.
-		{name: "old rollout", checks: set(facts(check.True), 4, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		// No memory kill and no healthy version to go back to.
-		{name: "no sign of a bad revision", checks: set(set(facts(check.True), 0, check.False), 5, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		{name: "earlier revision's health unknown", checks: set(set(facts(check.True), 0, check.False), 5, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		// No earlier revision, or one that failed too: nothing healthy to go
-		// back to, though the new version runs out of memory.
-		{name: "no healthy earlier revision", checks: set(facts(check.True), 5, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		// The rollout didn't bring the failures: the version before it failed
+		// too, or the current one ran without failing as long as it did.
+		{name: "the rollout didn't bring them", checks: set(facts(check.True), 4, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		// Nothing shows how the version before it ran, as with its pods gone
+		// and no metrics history: no rollback, however recent the rollout.
+		{name: "whether the rollout brought them is unknown", checks: set(facts(check.True), 4, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		// Themis never changes a workload GitOps manages, or may manage, before
 		// any profile's policy, which here would ask for approval: it only
 		// recommends the fix. Ownership is read live too, so a stale check
