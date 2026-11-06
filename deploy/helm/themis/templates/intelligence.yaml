@@ -57,6 +57,12 @@ spec:
             {{- with .Values.model.maxOutputTokens }}
             - {name: MODEL_MAX_OUTPUT_TOKENS, value: {{ . | quote }}}
             {{- end }}
+            {{- with .Values.model.outputLimitField }}
+            - {name: MODEL_OUTPUT_LIMIT_FIELD, value: {{ . | quote }}}
+            {{- end }}
+            {{- with .Values.model.temperature }}
+            - {name: MODEL_TEMPERATURE, value: {{ . | quote }}}
+            {{- end }}
             {{- if not .Values.model.strictOutput }}
             - {name: MODEL_STRICT_OUTPUT, value: "false"}
             {{- end }}

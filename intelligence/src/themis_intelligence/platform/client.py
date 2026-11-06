@@ -18,6 +18,7 @@ from themis_intelligence.platform.contract import (
     Message,
     ModelRequest,
     ModelResult,
+    OutputLimitField,
     ProviderError,
     ProviderRequest,
     ProviderResponse,
@@ -45,6 +46,21 @@ class Endpoint:
     # off for providers that refuse Themis's schema in strict mode, such as
     # OpenAI: replies are still checked, and repaired once.
     strict_output: bool = True
+    # output_limit_field and temperature say how an OpenAI-compatible API is
+    # asked for its reply. OpenAI's newer models refuse max_tokens, and any
+    # temperature but their own, which None leaves them.
+    output_limit_field: OutputLimitField = "max_tokens"
+    temperature: float | None = 0
+
+
+def read_temperature(value: str) -> float | None:
+    """A temperature setting: a number, or "default" to send none."""
+    if value.strip().lower() == "default":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        raise ValueError(f'the temperature must be a number or "default", not {value}') from None
 
 
 @dataclass(frozen=True)
@@ -155,6 +171,8 @@ class ModelClient:
                                 json_schema=req.json_schema or schema.model_json_schema(),
                                 reasoning_effort=self.endpoint.reasoning_effort,
                                 strict=self.endpoint.strict_output,
+                                output_limit_field=self.endpoint.output_limit_field,
+                                temperature=self.endpoint.temperature,
                             )
                         )
                         used = resp.usage
