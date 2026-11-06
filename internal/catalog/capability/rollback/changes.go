@@ -56,10 +56,10 @@ func containerChanges(pre, desired corev1.PodTemplateSpec) []Change {
 		add("limits", quantitiesJSON(b.Resources.Limits), quantitiesJSON(a.Resources.Limits))
 		add("requests", quantitiesJSON(b.Resources.Requests), quantitiesJSON(a.Resources.Requests))
 		if !slices.Equal(b.Command, a.Command) {
-			out = append(out, Change{Container: name, Field: "command", Before: "changed", After: "changed"})
+			out = append(out, Change{Container: name, Field: "command", Before: "changed", After: "changed", Withheld: capability.Summary})
 		}
 		if !slices.Equal(b.Args, a.Args) {
-			out = append(out, Change{Container: name, Field: "args", Before: "changed", After: "changed"})
+			out = append(out, Change{Container: name, Field: "args", Before: "changed", After: "changed", Withheld: capability.Summary})
 		}
 		out = append(out, envChanges(name, b.Env, a.Env)...)
 	}
@@ -69,16 +69,24 @@ func containerChanges(pre, desired corev1.PodTemplateSpec) []Change {
 func envChanges(container string, before, after []corev1.EnvVar) []Change {
 	b, a := envByName(before), envByName(after)
 	var out []Change
+	add := func(name string, bv, av envShown) {
+		c := Change{Container: container, Field: "env " + name, Before: bv.value, After: av.value}
+		if bv.hidden || av.hidden {
+			c.Withheld = capability.Secret
+		}
+		out = append(out, c)
+	}
+	unset := envShown{value: "not set"}
 	for _, e := range before {
 		if v, ok := a[e.Name]; !ok {
-			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: envValue(e), After: "not set"})
+			add(e.Name, envValue(e), unset)
 		} else if !sameEnv(e, v) {
-			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: envValue(e), After: envValue(v)})
+			add(e.Name, envValue(e), envValue(v))
 		}
 	}
 	for _, e := range after {
 		if _, ok := b[e.Name]; !ok {
-			out = append(out, Change{Container: container, Field: "env " + e.Name, Before: "not set", After: envValue(e)})
+			add(e.Name, unset, envValue(e))
 		}
 	}
 	return out
@@ -90,37 +98,44 @@ var sensitiveName = regexp.MustCompile(`(?i)pass|secret|token|key|credential|aut
 // maxShown bounds a value shown to an approver.
 const maxShown = 120
 
+// envShown is an env value as the approver sees it, and whether it is
+// hidden.
+type envShown struct {
+	value  string
+	hidden bool
+}
+
 // envValue shows an env value unless it looks secret; a reference is shown
 // as the reference, never resolved.
-func envValue(e corev1.EnvVar) string {
+func envValue(e corev1.EnvVar) envShown {
 	if r := e.ValueFrom; r != nil {
 		switch {
 		case r.SecretKeyRef != nil:
-			return "from secret " + r.SecretKeyRef.Name + "/" + r.SecretKeyRef.Key
+			return envShown{value: "from secret " + r.SecretKeyRef.Name + "/" + r.SecretKeyRef.Key}
 		case r.ConfigMapKeyRef != nil:
-			return "from configmap " + r.ConfigMapKeyRef.Name + "/" + r.ConfigMapKeyRef.Key
+			return envShown{value: "from configmap " + r.ConfigMapKeyRef.Name + "/" + r.ConfigMapKeyRef.Key}
 		case r.FieldRef != nil:
-			return "from field " + r.FieldRef.FieldPath
+			return envShown{value: "from field " + r.FieldRef.FieldPath}
 		case r.ResourceFieldRef != nil:
-			return "from resource " + r.ResourceFieldRef.Resource
+			return envShown{value: "from resource " + r.ResourceFieldRef.Resource}
 		}
-		return "from a reference"
+		return envShown{value: "from a reference"}
 	}
 	if sensitiveName.MatchString(e.Name) {
-		return "hidden (sensitive name)"
+		return envShown{value: "hidden (sensitive name)", hidden: true}
 	}
 	return shown(e.Value)
 }
 
 // shown is s, unless the redaction rules find a secret in it.
-func shown(s string) string {
+func shown(s string) envShown {
 	if s == "" {
-		return `""`
+		return envShown{value: `""`}
 	}
 	if _, n := redact.Apply([]byte(strconv.Quote(s)), redact.DefaultRules); n > 0 || random(s) {
-		return "hidden (looks like a secret)"
+		return envShown{value: "hidden (looks like a secret)", hidden: true}
 	}
-	return truncate(s)
+	return envShown{value: truncate(s)}
 }
 
 // random reports a long, unbroken value with high entropy, as tokens and
@@ -224,7 +239,7 @@ func otherChanges(path string, a, b any) []Change {
 		if reflect.DeepEqual(a, b) {
 			return nil
 		}
-		return []Change{{Field: path, Before: "changed", After: "changed"}}
+		return []Change{{Field: path, Before: "changed", After: "changed", Withheld: capability.Summary}}
 	}
 	keys := make([]string, 0, len(ma)+len(mb))
 	for k := range ma {

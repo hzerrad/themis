@@ -137,7 +137,7 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 	records := uiIncidents(t)
 	for _, rec := range records {
 		v := viewIncident(rec.incident)
-		v.Summary = viewSummary(uiSummary(rec), api.RootCauses.For(rec.incident.Profiles()...))
+		v.Summary = viewSummary(uiSummary(rec), rec.incident.Target.Name, api.RootCauses.For(rec.incident.Profiles()...), api.Fixes)
 		f.Incidents = append(f.Incidents, v)
 		raw, plain := api.viewDetail(rec, true), api.viewDetail(rec, false)
 		if rec.incident.ID == uiID(4) {
@@ -224,6 +224,7 @@ func uiSummary(rec incidentRecord) store.IncidentSummary {
 	if n := len(rec.actions); n > 0 {
 		a := rec.actions[n-1].action
 		s.Capability, s.Params, s.Rule = a.Capability, a.Params, a.PolicyID
+		s.PreState, s.Desired = a.PreState, a.Desired
 	}
 	if inv := rec.investigation; inv != nil {
 		var hs []struct{ RootCauseClass, Status string }
@@ -344,6 +345,42 @@ func uiEvidence(t *testing.T, instructions bool) []evidence.Item {
 	return out
 }
 
+// uiThrottled is the evidence with app throttled at its CPU limit, as
+// Prometheus reads it over an hour.
+func uiThrottled(t *testing.T, items []evidence.Item) []evidence.Item {
+	t.Helper()
+	cores := func(f float64) *float64 { return &f }
+	data, err := json.Marshal(evidence.ContainerCPUView{
+		Window: "1h", Usage: evidence.ReadingView{Source: "prometheus"}, Throttling: evidence.ReadingView{Source: "prometheus"},
+		Containers: []evidence.CPUUseView{{Name: "app", LimitCores: cores(0.2), UsageCores: cores(0.19), UsageOfLimit: cores(0.95), ThrottledRatio: cores(0.62)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := append([]evidence.Item(nil), items...)
+	for i := range out {
+		if out[i].Template == evidence.ContainerCPU {
+			out[i].Data = data
+		}
+	}
+	return out
+}
+
+// uiThrottling are the checks of a container throttled at its CPU limit,
+// with the figures from Prometheus.
+func uiThrottling() []check.Result {
+	r := func(name string, v check.Truth, reason, id string) check.Result {
+		return check.Result{Name: name, Version: "1", Value: v, Reason: reason, EvidenceIDs: []string{id}}
+	}
+	return []check.Result{
+		r("throttling_data_available", check.True, "prometheus says how often each container was throttled over 1h", evCPU),
+		r("cpu_throttled_at_limit", check.True, "app was throttled in 62% of its CPU periods over 1h, at its limit of 0.2 CPU", evCPU),
+		r("cpu_usage_near_limit", check.True, "app uses 0.19 CPU of its limit of 0.2", evCPU),
+		r("rollout_recent", check.False, "Revision 2 rolled out 3 days ago.", evRollout),
+		r("gitops_managed", check.False, "No Argo CD or Flux marker.", evRollout),
+	}
+}
+
 // uiPredicates are the rollout's checks: the failure began with it, the
 // earlier revision was healthy, and one check couldn't answer.
 func uiPredicates(instructions bool) []check.Result {
@@ -445,6 +482,16 @@ const (
 	resourcesDesired = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"memory":"512Mi"},"requests":{"memory":"256Mi"}}}]}}`
 	probesPre        = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","livenessProbe":{"httpGet":{"path":"/healthz","port":8080},"timeoutSeconds":1}}]}}`
 	probesDesired    = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","livenessProbe":{"httpGet":{"path":"/healthz","port":8080},"timeoutSeconds":3}}]}}`
+	// Two fields of one probe.
+	probesBothDesired = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","livenessProbe":{"httpGet":{"path":"/healthz","port":8080},"timeoutSeconds":3,"failureThreshold":5}}]}}`
+	// The CPU limit of the only container, raised.
+	cpuPre    = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"cpu":"200m"}}}]}}`
+	cpuRaised = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"cpu":"300m"}}}]}}`
+	// The CPU request of one container of two, lowered.
+	twoPre     = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"requests":{"cpu":"100m"}}},{"name":"proxy","image":"envoyproxy/envoy:v1.36.2"}]}}`
+	twoLowered = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"requests":{"cpu":"50m"}}},{"name":"proxy","image":"envoyproxy/envoy:v1.36.2"}]}}`
+	// The memory limit of the only container, raised.
+	memoryRaised = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"memory":"512Mi"}},"env":[{"name":"DB_PASSWORD","value":"s3cret-now"}]}]}}`
 )
 
 // investigatorProposal is the investigator's rollback to revision 1.
@@ -464,7 +511,7 @@ func uiRollback(id, proposal string, state store.ActionState) store.Action {
 	return store.Action{
 		ID: id, ProposalID: proposal, Capability: rollback.Name, CapabilityVersion: "1", Target: uiIdentity,
 		Params: map[string]any{"revision": int64(1), "templateHash": "sha256:t1"}, PreState: []byte(rollbackPre), Desired: []byte(rollbackDesired),
-		BlastRadius: map[string]any{"replicas": int64(3)}, Risk: "medium",
+		BlastRadius: map[string]any{"replicas": int64(3), "atOnce": int64(1)}, Risk: "medium",
 		Decision: "require_approval", DecisionReason: "A rollback in shop needs a person's approval.", PolicyID: "approve-in-shop", PolicyDigest: "sha256:p",
 		Digest: "sha256:9b2f", State: state, ExpiresAt: uiAtPtr(34), CreatedAt: uiAt(4),
 	}
@@ -501,8 +548,26 @@ func uiIncidents(t *testing.T) []incidentRecord {
 			Provenance: map[string]string{"source": "person:" + who, "claimedSource": ""}, Authenticated: true, Status: status, CreatedAt: uiAt(5),
 		}
 	}
+	oneValue := func(container, kind, res, value string) map[string]any {
+		return map[string]any{"containers": map[string]any{container: map[string]any{kind: map[string]any{res: value}}}}
+	}
 	resourcesParams := map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "512Mi"}, "requests": map[string]any{"memory": "256Mi"}}}}
+	cpuParams, lowerParams, memoryParams := oneValue("app", "limits", "cpu", "300m"), oneValue("app", "requests", "cpu", "50m"), oneValue("app", "limits", "memory", "512Mi")
 	probesParams := map[string]any{"container": "app", "liveness": map[string]any{"timeoutSeconds": int64(3)}}
+	probesBothParams := map[string]any{"container": "app", "liveness": map[string]any{"timeoutSeconds": int64(3), "failureThreshold": int64(5)}}
+	// throttled is an incident of a container throttled at its CPU limit.
+	throttled := func(n int, state incident.State) store.Incident {
+		in := inc(n, state)
+		in.Profile = "cpu-throttling"
+		return in
+	}
+	// investigatorFix is the investigator's suggestion of a fix, citing checks.
+	investigatorFix := func(id, capability string, params map[string]any, cited ...string) store.Proposal {
+		p := uiInvestigatorProposal(id, store.ProposalAccepted)
+		p.Capability, p.Params, p.CitedPredicates, p.CitedEvidenceIDs = capability, params, cited, []string{evCPU}
+		p.Rationale, p.ExpectedEffect = "app is throttled at its 200m CPU limit in 62% of its periods.", "Throttling falls below 25%."
+		return p
+	}
 	const p1, p2, p3 = "0192f0c1-3000-7000-8000-000000000001", "0192f0c1-3000-7000-8000-000000000002", "0192f0c1-3000-7000-8000-000000000003"
 	const a1, a2 = "0192f0c1-4000-7000-8000-000000000001", "0192f0c1-4000-7000-8000-000000000002"
 
@@ -520,12 +585,12 @@ func uiIncidents(t *testing.T) []incidentRecord {
 			proposals:   []store.Proposal{uiInvestigatorProposal(p1, store.ProposalAccepted)},
 			actions:     []actionRecord{{action: rb(a1, p1, store.ActionAwaitingApproval)}},
 		},
-		// Waiting for approval of a memory and CPU change alice suggested,
-		// which another approver must approve.
+		// Waiting for approval of a change to two memory values alice
+		// suggested, which another approver must approve.
 		{
 			incident: inc(3, incident.AwaitingApproval, "oom-limit-too-low"), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
 			transitions: append(uiOpened(), uiPath(2,
-				uiStep(incident.Investigating, incident.Proposed, "alice suggests changing the memory and CPU settings."),
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:alice."),
 				uiStep(incident.Proposed, incident.AwaitingApproval, "A memory change in shop needs a person's approval."))...),
 			proposals: []store.Proposal{person(p2, "alice", resources.Name, resourcesParams, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
@@ -564,7 +629,7 @@ func uiIncidents(t *testing.T) []incidentRecord {
 		{
 			incident: inc(6, incident.AwaitingSuggestion, "probe-restart-storm"), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
 			transitions: append(uiOpened(), uiPath(2,
-				uiStep(incident.Investigating, incident.Proposed, "alice suggests changing the probe timing."),
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:alice."),
 				uiStep(incident.Proposed, incident.AwaitingSuggestion, "Refused. Container web isn't in the workload."))...),
 			proposals: []store.Proposal{func() store.Proposal {
 				p := person(p2, "alice", probes.Name, map[string]any{"container": "web", "liveness": map[string]any{"timeoutSeconds": int64(3)}}, store.ProposalRejected)
@@ -637,10 +702,10 @@ func uiIncidents(t *testing.T) []incidentRecord {
 		{
 			incident: inc(12, incident.Resolved, "probe-restart-storm"), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
 			transitions: append(uiOpened(), uiPath(2,
-				uiStep(incident.Investigating, incident.Proposed, "alice suggests changing the probe timing."),
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:alice."),
 				uiStep(incident.Proposed, incident.Authorized, "Allowed by policy."),
-				uiStep(incident.Authorized, incident.Executing, "Changing the probe timing."),
-				uiStep(incident.Executing, incident.Verifying, "Changed the probe timing."),
+				uiStep(incident.Authorized, incident.Executing, "Applying the change."),
+				uiStep(incident.Executing, incident.Verifying, "Lengthened checkout's liveness probe timeout from 1s to 3s."),
 				uiStep(incident.Verifying, incident.Resolved, "3 of 3 pods ready for 5 minutes."))...),
 			proposals: []store.Proposal{person(p2, "alice", probes.Name, probesParams, store.ProposalAccepted)},
 			actions: []actionRecord{
@@ -653,7 +718,7 @@ func uiIncidents(t *testing.T) []incidentRecord {
 					a := rb(a1, p2, store.ActionSucceeded)
 					a.Capability, a.Params, a.PreState, a.Desired, a.Decision = probes.Name, probesParams, []byte(probesPre), []byte(probesDesired), "allow"
 					return a
-				}(), execution: uiExecuted("succeeded", "Changed the probe timing.", 7), verification: uiVerified("resolved", "healthy", "3 of 3 pods ready for 5 minutes.")},
+				}(), execution: uiExecuted("succeeded", "Lengthened checkout's liveness probe timeout from 1s to 3s.", 7), verification: uiVerified("resolved", "healthy", "3 of 3 pods ready for 5 minutes.")},
 			},
 		},
 		// Only recommended: Argo CD manages the workload.
@@ -708,6 +773,68 @@ func uiIncidents(t *testing.T) []incidentRecord {
 				uiStep(incident.Verifying, incident.ContainedEscalated, "2 of 3 pods ready. Referred to a person."))...),
 			proposals: []store.Proposal{uiInvestigatorProposal(p1, store.ProposalAccepted)},
 			actions:   []actionRecord{{action: rb(a1, p1, store.ActionSucceeded), execution: uiExecuted("succeeded", "Rolled back to revision 1.", 6), verification: uiVerified("contained", "improved", "2 of 3 pods ready.")}},
+		},
+		// Waiting for approval of the investigator's raise of a CPU limit,
+		// the throttling read from Prometheus.
+		{
+			incident: throttled(19, incident.AwaitingApproval), evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."))...),
+			proposals: []store.Proposal{investigatorFix(p1, resources.Name, cpuParams, "throttling_data_available", "cpu_throttled_at_limit", "cpu_usage_near_limit")},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionAwaitingApproval)
+				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, cpuParams, []byte(cpuPre), []byte(cpuRaised)
+				a.BlastRadius = map[string]any{"replicas": int64(4), "atOnce": int64(2)}
+				a.DecisionReason, a.PolicyID = "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval.", "raise-needs-approval"
+				return a
+			}()}},
+		},
+		// Waiting for approval of a lower CPU request on one container of
+		// two, which the Deployment recreates all at once.
+		{
+			incident: throttled(20, incident.AwaitingApproval), evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:bob."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."))...),
+			proposals: []store.Proposal{person(p2, "bob", resources.Name, lowerParams, store.ProposalAccepted)},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p2, store.ActionAwaitingApproval)
+				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, lowerParams, []byte(twoPre), []byte(twoLowered)
+				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(3)}
+				return a
+			}()}},
+		},
+		// Waiting for approval of two fields of one probe.
+		{
+			incident: inc(21, incident.AwaitingApproval, "probe-restart-storm"), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:bob."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, "Policy rule probes-need-approval of the probe-restart-storm profile requires a person's approval."))...),
+			proposals: []store.Proposal{person(p2, "bob", probes.Name, probesBothParams, store.ProposalAccepted)},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p2, store.ActionAwaitingApproval)
+				a.Capability, a.Params, a.PreState, a.Desired = probes.Name, probesBothParams, []byte(probesPre), []byte(probesBothDesired)
+				a.BlastRadius = map[string]any{"replicas": int64(1)}
+				return a
+			}()}},
+		},
+		// Verifying a raised memory limit, before the first reading says
+		// anything.
+		{
+			incident: inc(22, incident.Verifying, "oom-limit-too-low"), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Proposed, "A fix was suggested by person:alice."),
+				uiStep(incident.Proposed, incident.Authorized, "Allowed by policy."),
+				uiStep(incident.Authorized, incident.Executing, "Applying the change."),
+				uiStep(incident.Executing, incident.Verifying, "Raised checkout's memory limit from 256Mi to 512Mi."))...),
+			proposals: []store.Proposal{person(p2, "alice", resources.Name, memoryParams, store.ProposalAccepted)},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p2, store.ActionSucceeded)
+				a.Capability, a.Params, a.Desired, a.Decision = resources.Name, memoryParams, []byte(memoryRaised), "allow"
+				return a
+			}(), execution: uiExecuted("succeeded", "Raised checkout's memory limit from 256Mi to 512Mi.", 5), verification: uiVerified("", "unchanged", "")}},
 		},
 	}
 }

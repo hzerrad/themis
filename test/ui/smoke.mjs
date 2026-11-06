@@ -2,8 +2,10 @@
 // API serves (fixtures the Go views build: make test-ui writes them), visits
 // every page as each role, and works the forms that rebuild parts of a page.
 // After each step it fails on an exception or unhandled rejection, a
-// console.error, a "Not loaded:" box, and text a missing value leaves, such
-// as "null", "undefined", "NaN" or "[object Object]".
+// console.error, a "Not loaded:" box, text a missing value leaves, such as
+// "null", "undefined", "NaN" or "[object Object]", and words the page no
+// longer says. Where the words come from the change itself, it checks the
+// page says them.
 //
 //   node smoke.mjs <fixtures.json>
 
@@ -23,6 +25,40 @@ const MISSING = /(?<![A-Za-z])(?:null|undefined)(?![a-z])|NaN|\[object Object\]/
 // Evidence is shown as collected: its JSON holds null for a figure no source
 // gave.
 const AS_COLLECTED = "details.item > pre, pre.quote";
+
+// OLD are words no page says any more: names of changes that didn't say
+// what changes, an unexplained risk label, and the void condition at length.
+const OLD = [/memory and CPU (change|settings)/, /probe timing/, /\bRisk: /, /\bAffects \d/, /then verifies it/, /before it is applied/];
+
+// SAYS are, by the incident's number, texts its page shows an admin, worked
+// out from its change, and texts it must not show.
+const SECRETS = "Values that look like secrets are hidden.";
+const SAYS = {
+  2: {
+    has: ["Roll checkout back to revision 1?", "Approve the rollback", "Deny the rollback", "Supports the rollback",
+      "Restarts 3 pods, one at a time.", "Then checks that the pods become ready and stay ready.", "Void if checkout changes first.", SECRETS],
+  },
+  3: { has: ["Change checkout's memory request and memory limit?", "Approve the change", "Supports the change"], not: [SECRETS] },
+  12: { has: ["Lengthened checkout's liveness probe timeout from 1s to 3s.", "Change checkout's memory request and memory limit"] },
+  19: {
+    has: ["Raise checkout's CPU limit from 200m to 300m?", "Approve the raise", "Deny the raise", "Supports the raise",
+      "2 checks support the raise. None is against it.", "Restarts 4 pods, up to 2 at a time.", "Then checks that the pods become ready and stay ready.",
+      "Based on Prometheus's container CPU history over 1h."],
+    not: [SECRETS, "Commands and arguments"],
+  },
+  20: {
+    has: ["Lower the CPU request of checkout's app container from 100m to 50m?", "Approve the decrease", "Restarts all 3 pods at once."],
+    not: [SECRETS],
+  },
+  21: {
+    has: ["Change checkout's liveness probe?", "Approve the probe change", "Restarts 1 pod.",
+      "Then checks that the pods become ready and stay ready, with no restart."],
+  },
+  22: { has: ["Verifying the raise.", "Raised checkout's memory limit from 256Mi to 512Mi."], not: ["pods ready", "pods are ready"] },
+};
+// LISTED are lines the incidents list shows, worked out from each change.
+const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
+  "Change checkout's liveness probe?", "Roll checkout back to revision 1?"];
 
 // Problems are what went wrong since the last check, wherever the page was:
 // unhandled rejections reach the process, not the window.
@@ -152,6 +188,10 @@ function check(page, where) {
     shown.push(el.getAttribute("placeholder"), el.getAttribute("title"), el.getAttribute("aria-label"));
   }
   for (const s of shown) if (s && MISSING.test(s)) problems.push("it shows " + JSON.stringify(s));
+  for (const old of OLD) {
+    const at = main.textContent.match(old);
+    if (at) problems.push("it still says " + JSON.stringify(at[0]));
+  }
   flush(where);
   steps++;
 }
@@ -206,6 +246,22 @@ const act = {
     await settle(page);
   },
 };
+
+// says checks the page shows each text of has and none of not.
+function says(page, { has = [], not = [] }) {
+  const text = page.document.getElementById("main").textContent.replace(/\s+/g, " ");
+  for (const t of has) if (!text.includes(t)) problems.push("it doesn't say " + JSON.stringify(t));
+  for (const t of not) if (text.includes(t)) problems.push("it says " + JSON.stringify(t));
+}
+
+// rested checks that a check that says only whether figures are there is
+// never for or against the fix: it shows apart, as what the others rest on.
+function rested(page, detail) {
+  const pans = [...page.document.querySelectorAll(".pans li")].map((li) => li.textContent).join("\n");
+  for (const [name, c] of Object.entries(detail.Checks || {})) {
+    if (c.availability && [c.true, c.false].some((t) => t && pans.includes(t))) problems.push("it weighs " + name + " for or against the fix");
+  }
+}
 
 // field is the input, select or textarea a field labelled text holds.
 function field(page, text, root = page.document) {
@@ -283,8 +339,18 @@ await visit("temporary password", { who: "temporary" }, async (page, ok) => {
 // incidents.
 for (const who of ["admin", "approver", "viewer"]) {
   await visit(who + ": no incidents", { who, empty: true });
-  await visit(who + ": incidents", { who });
-  for (const i of ids) await visit(who + ": incident " + F.details[i].raw.Incident.state + " " + i.slice(-2), { who, hash: "#/incidents/" + i });
+  await visit(who + ": incidents", { who }, async (page, ok) => {
+    says(page, { has: LISTED });
+    ok("each change named by what it does");
+  });
+  for (const i of ids) {
+    await visit(who + ": incident " + F.details[i].raw.Incident.state + " " + i.slice(-2), { who, hash: "#/incidents/" + i }, async (page, ok) => {
+      rested(page, F.details[i].raw);
+      const said = SAYS[Number(i.slice(-12))];
+      if (said && who === "admin") says(page, said);
+      ok("the words of its change");
+    });
+  }
   await visit(who + ": status", { who, hash: "#/status" }, async (page, ok) => {
     await act.click(page, "button", "Check again");
     ok("checked again");
@@ -298,14 +364,15 @@ await visit("viewer: accounts", { who: "viewer", hash: "#/accounts" });
 for (const who of ["approver", "admin"]) {
   await visit(who + ": suggest every fix", { who, hash: "#/incidents/" + id(4) }, async (page, ok) => {
     const kinds = [...the(page, "details[data-key=suggest] select").options].map((o) => o.textContent);
-    if (kinds.length < 4) throw new Error("the form offers " + kinds.length + " fixes, not 4");
+    const offered = ["Rollback", "Memory or CPU change", "Probe change", "Scale change"];
+    if (kinds.join() !== offered.join()) throw new Error("the form offers " + kinds.join(", ") + ", not " + offered.join(", "));
     for (const kind of kinds) {
       const form = () => the(page, "details[data-key=suggest] form");
       await act.choose(page, field(page, "Fix", form()), kind);
       ok("chose " + kind);
-      if (kind === "Memory and CPU change") {
+      if (kind === "Memory or CPU change") {
         await act.choose(page, field(page, "Container", form()), "proxy");
-        ok("memory and CPU of proxy");
+        ok("memory or CPU of proxy");
         await act.choose(page, field(page, "Container", form()), "app");
         await act.type(page, field(page, "Memory limit", form()), "1Gi");
       } else if (kind === "Probe change") {

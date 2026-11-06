@@ -39,6 +39,14 @@ func TestFix_BindsWhatRollbackBound(t *testing.T) {
 	}
 }
 
+// A rollback is named by the revision it goes back to.
+func TestWords(t *testing.T) {
+	w := rollback.Capability{}.Words("checkout", map[string]any{"revision": int64(1)}, nil, nil)
+	if w.Noun != "rollback" || w.Act != "Roll checkout back to revision 1" || w.Done != "Rolled checkout back to revision 1." {
+		t.Errorf("Words = %+v", w)
+	}
+}
+
 func TestRevisionParam(t *testing.T) {
 	for _, tc := range []struct {
 		params map[string]any

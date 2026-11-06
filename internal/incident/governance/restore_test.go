@@ -133,8 +133,8 @@ func TestRestore_PolicyEscalates(t *testing.T) {
 		decision string
 		want     string
 	}{
-		{config.DecisionRequireApproval, "Not restored. Policy rule restore-rule requires a person's approval. The fix stays in place. Referred to a person."},
-		{config.DecisionDeny, "Not restored. Policy rule restore-rule forbids this fix. The fix stays in place. Referred to a person."},
+		{config.DecisionRequireApproval, "Not restored. Policy rule restore-rule of the rollout-regression profile requires a person's approval. The fix stays in place. Referred to a person."},
+		{config.DecisionDeny, "Not restored. Policy rule restore-rule of the rollout-regression profile forbids this fix. The fix stays in place. Referred to a person."},
 	} {
 		t.Run(tt.decision, func(t *testing.T) {
 			e := newEnv(t)

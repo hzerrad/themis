@@ -71,11 +71,12 @@ func TestPlan(t *testing.T) {
 	if _, ok := p.Params["restores"]; ok || p.Params["container"] != "app" {
 		t.Errorf("Params = %v", p.Params)
 	}
-	if p.Target.UID != target.UID || p.Target.SpecHash == "" || p.Mark == p.Target.SpecHash || p.BlastRadius["replicas"] != int64(2) {
+	// Kubernetes' default rolling update replaces 2 pods one at a time.
+	if p.Target.UID != target.UID || p.Target.SpecHash == "" || p.Mark == p.Target.SpecHash || p.BlastRadius["replicas"] != int64(2) || p.BlastRadius["atOnce"] != int64(1) {
 		t.Errorf("plan = %+v", p)
 	}
-	if want := "liveness probe periodSeconds 10 → 5, readiness probe timeoutSeconds 1 → 5"; !strings.Contains(p.Done, want) {
-		t.Errorf("Done = %q, want it to say %q", p.Done, want)
+	if want := "Changed checkout's liveness and readiness probes."; p.Done != want {
+		t.Errorf("Done = %q, want %q", p.Done, want)
 	}
 }
 

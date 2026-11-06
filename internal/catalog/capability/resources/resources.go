@@ -225,15 +225,6 @@ func facts(ds []diff) map[string]string {
 	return out
 }
 
-// done says what the fix did, once applied.
-func done(ds []diff) string {
-	parts := make([]string, 0, len(ds))
-	for _, d := range ds {
-		parts = append(parts, fmt.Sprintf("the %s of %s to %s", d.field, d.container, shown(d.after)))
-	}
-	return "Set " + strings.Join(parts, ", ") + "."
-}
-
 // names lists a template's containers, for saying which there are.
 func names(t corev1.PodTemplateSpec) string {
 	var out []string

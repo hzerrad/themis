@@ -68,7 +68,7 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 		Before: before, After: after,
 		ManagedBy:   live.ManagedBy,
 		Risk:        "medium",
-		BlastRadius: map[string]any{"replicas": int64(live.Replicas)},
+		BlastRadius: capability.Rollout(live.Workload),
 		Done:        fmt.Sprintf("Rolled back to revision %d.", revision),
 		Mark:        live.DesiredHash,
 		State:       live,
@@ -116,6 +116,17 @@ func (Capability) Changes(before, after json.RawMessage) ([]capability.Change, e
 		return nil, err
 	}
 	return Changes(pre, desired), nil
+}
+
+// Words name a rollback by the revision it goes back to: "Roll checkout
+// back to revision 1".
+func (Capability) Words(target string, params map[string]any, _, _ json.RawMessage) capability.Words {
+	to := "an earlier revision"
+	if revision, ok := RevisionParam(params); ok {
+		to = fmt.Sprintf("revision %d", revision)
+	}
+	roll := capability.Verb{Base: "Roll", Doing: "Rolling", Done: "Rolled"}
+	return capability.Say("rollback", roll, target+" back to "+to, capability.PodsStayReady)
 }
 
 // RevisionParam is the revision params name: a positive whole number, as

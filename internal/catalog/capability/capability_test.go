@@ -36,6 +36,10 @@ func (named) Undo(context.Context, client.Reader, incident.TargetRef, json.RawMe
 
 func (named) Changes(json.RawMessage, json.RawMessage) ([]capability.Change, error) { return nil, nil }
 
+func (named) Words(target string, _ map[string]any, _, _ json.RawMessage) capability.Words {
+	return capability.Say("fix", capability.VerbChange, target, "")
+}
+
 func (named) Mark(context.Context, client.Reader, incident.TargetRef) (string, error) { return "", nil }
 
 func (named) Check(context.Context, client.Reader, incident.TargetRef, string, json.RawMessage, time.Time) (capability.Reading, error) {
@@ -60,6 +64,32 @@ func TestFields_MarksAnUndo(t *testing.T) {
 	}
 	if _, ok := capability.Fields("i1", named("x.fix"), plan, "", "p", "pd").Params["restores"]; ok {
 		t.Error("a fix of its own is marked as an undo")
+	}
+}
+
+// The registry names a restore as one, whatever the fix, a fix it has in
+// that fix's words, and one it doesn't as a change.
+func TestRegistry_Words(t *testing.T) {
+	r := capability.NewRegistry(named("x.fix"))
+	for name, tc := range map[string]struct {
+		fix    string
+		params map[string]any
+		want   capability.Words
+	}{
+		"a restore": {"x.fix", map[string]any{"restores": "a1"}, capability.Words{
+			Noun: "restore", Act: "Restore the previous state of payments",
+			Doing: "Restoring the previous state of payments.", Done: "Restored the previous state of payments.",
+		}},
+		"a fix it has":     {"x.fix", nil, capability.Say("fix", capability.VerbChange, "payments", "")},
+		"a fix it doesn't": {"y.fix", nil, capability.Words{Noun: "change", Act: "Apply this change to payments", Doing: "Applying the change to payments.", Done: "Changed payments."}},
+	} {
+		if got := r.Words(tc.fix, "payments", tc.params, nil, nil); got != tc.want {
+			t.Errorf("%s: %+v, want %+v", name, got, tc.want)
+		}
+	}
+	// A name that ends in s takes only the apostrophe.
+	if got := capability.Of("payments", []string{"app", "worker"}, false, "CPU limits"); got != "the CPU limits of payments' app and worker containers" {
+		t.Errorf("Of = %q", got)
 	}
 }
 
