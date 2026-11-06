@@ -555,7 +555,7 @@ function alertmanagerSetup() {
     try {
       const { steps } = await api("/v1/setup/alertmanager?namespace=" + encodeURIComponent(ns.value.trim()));
       out.replaceChildren(...steps.map((s, i) => h("div", { class: "sub" },
-        h("h3", {}, (i + 1) + ". " + s.title), h("p", { class: "quiet" }, s.text), copyable(s.code))));
+        h("h3", {}, (i + 1) + ". " + s.title), h("p", { class: "quiet" }, s.text), s.code ? copyable(s.code) : null)));
     } catch (e) {
       out.replaceChildren(h("div", { class: "error" }, e.message));
     }

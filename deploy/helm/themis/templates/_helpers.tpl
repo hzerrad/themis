@@ -225,6 +225,52 @@ without an address.
 {{- end }}
 
 {{/*
+The tokens and settings key the chart generates, base64-encoded, as JSON:
+generated once, and kept by an upgrade with Helm's lookup. They are worked
+out once per render, so every template that needs one gets the same.
+*/}}
+{{- define "themis.tokenData" -}}
+{{- if not (hasKey .Values "themisTokenData") -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace (printf "%s-tokens" .Release.Name) -}}
+{{- $data := dict -}}
+{{- if $existing }}{{ $data = $existing.data | default dict }}{{ end -}}
+{{- $out := dict -}}
+{{- range $key := list "intake" "investigator" "admin" "executor" "settings" -}}
+{{- $_ := set $out $key (get $data $key | default (randAlphaNum 48 | b64enc)) -}}
+{{- end -}}
+{{- $_ := set .Values "themisTokenData" $out -}}
+{{- end -}}
+{{- toJson .Values.themisTokenData -}}
+{{- end }}
+
+{{/*
+The alerts Themis answers, as an Alertmanager regular expression: those the
+shipped rules name, which the scenario packs answer, and those of the
+profiles in these values.
+*/}}
+{{- define "themis.alertNames" -}}
+{{- $names := list -}}
+{{- range ((.Files.Get "files/alert-rules.yaml" | fromYaml).groups | default list) -}}
+{{- range .rules }}{{ $names = append $names .alert }}{{ end -}}
+{{- end -}}
+{{- range .Values.profiles -}}
+{{- range ((.match | default dict).alertNames | default list) }}{{ $names = append $names . }}{{ end -}}
+{{- end -}}
+{{- $quoted := list -}}
+{{- range ($names | uniq | sortAlpha) }}{{ $quoted = append $quoted (regexQuoteMeta .) }}{{ end -}}
+{{- join "|" $quoted -}}
+{{- end }}
+
+{{/*
+Whether the chart makes the AlertmanagerConfigs: asked for, and the cluster
+serves them.
+*/}}
+{{- define "themis.alertmanagerConfigs" -}}
+{{- $amc := (((.Values.alerting | default dict).webhook | default dict).alertmanagerConfig | default dict) -}}
+{{- if and $amc.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1alpha1/AlertmanagerConfig") }}true{{ end -}}
+{{- end }}
+
+{{/*
 The Secret holding Themis's tokens and settings key: the one the chart
 generates, or one the install provides, as GitOps tools need.
 */}}

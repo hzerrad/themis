@@ -10,6 +10,12 @@ data:
       bearerTokenFile: /var/run/secrets/themis/intake
       url: http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager
       tokenSecret: {{ include "themis.tokensSecret" . }}
+      {{- with ((.Values.alerting | default dict).webhook | default dict).tokenSecret }}
+      alertmanagerSecret: {{ . | quote }}
+      {{- end }}
+      {{- if include "themis.alertmanagerConfigs" . }}
+      alertmanagerConfigs: true
+      {{- end }}
     alerting:
       alertmanager:
         {{- $am := include "themis.alertmanagerValues" . | fromJson }}

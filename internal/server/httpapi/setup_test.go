@@ -37,42 +37,60 @@ func tokenFile(t *testing.T) string {
 	return file
 }
 
-func TestAlertmanagerSetup(t *testing.T) {
-	h := setupAPI(t, config.Intake{URL: "http://themis-core.themis.svc:8080/v1/intake/alertmanager", TokenSecret: "themis-tokens"})
+func setupSteps(t *testing.T, in config.Intake) []alertmanager.SetupStep {
+	t.Helper()
+	in.URL, in.TokenSecret = "http://themis-core.themis.svc:8080/v1/intake/alertmanager", "themis-tokens"
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/setup/alertmanager?namespace=observability", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
+	setupAPI(t, in).ServeHTTP(rec, req)
 	var got struct{ Steps []alertmanager.SetupStep }
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || len(got.Steps) != 3 {
 		t.Fatalf("setup = %d %q, %v", rec.Code, rec.Body, err)
 	}
-	copyToken := got.Steps[0].Code
+	return got.Steps
+}
+
+// The steps offer the chart's AlertmanagerConfigs, then any Alertmanager:
+// the token copied without being shown, and the route to put first.
+func TestAlertmanagerSetup(t *testing.T) {
+	steps := setupSteps(t, config.Intake{})
+	var values struct {
+		Alerting struct {
+			Webhook struct {
+				AlertmanagerConfig struct{ Enabled bool } `json:"alertmanagerConfig"`
+			}
+		}
+	}
+	if err := yaml.Unmarshal([]byte(steps[0].Code), &values); err != nil || !values.Alerting.Webhook.AlertmanagerConfig.Enabled {
+		t.Errorf("the operator's values = %+v, %v\n%s", values, err, steps[0].Code)
+	}
 	for _, want := range []string{"kubectl -n themis get secret themis-tokens", "kubectl -n observability create secret generic themis-intake-token"} {
-		if !strings.Contains(copyToken, want) {
-			t.Errorf("token step %q lacks %q", copyToken, want)
+		if !strings.Contains(steps[1].Code, want) {
+			t.Errorf("token step %q lacks %q", steps[1].Code, want)
 		}
 	}
-
-	var stack struct {
-		Alertmanager struct {
-			AlertmanagerSpec struct{ Secrets []string } `json:"alertmanagerSpec"`
-			Config           alertmanagerConfig
-		}
+	if !strings.Contains(steps[2].Text, "Put this route first.") {
+		t.Errorf("route step says %q", steps[2].Text)
 	}
-	if err := yaml.Unmarshal([]byte(got.Steps[1].Code), &stack); err != nil {
-		t.Fatalf("kube-prometheus-stack values don't parse: %v\n%s", err, got.Steps[1].Code)
-	}
-	if s := stack.Alertmanager.AlertmanagerSpec.Secrets; len(s) != 1 || s[0] != "themis-intake-token" {
-		t.Errorf("mounted secrets = %v", s)
-	}
-	stack.Alertmanager.Config.check(t, "/etc/alertmanager/secrets/themis-intake-token/token")
-
 	var plain alertmanagerConfig
-	if err := yaml.Unmarshal([]byte(got.Steps[2].Code), &plain); err != nil {
-		t.Fatalf("alertmanager.yml doesn't parse: %v\n%s", err, got.Steps[2].Code)
+	if err := yaml.Unmarshal([]byte(steps[2].Code), &plain); err != nil {
+		t.Fatalf("alertmanager.yml doesn't parse: %v\n%s", err, steps[2].Code)
 	}
 	plain.check(t, "/etc/alertmanager/themis/token")
+}
+
+// Under GitOps the steps read the token from the Secret the install manages,
+// and say when the chart made the AlertmanagerConfigs.
+func TestAlertmanagerSetup_GitOps(t *testing.T) {
+	steps := setupSteps(t, config.Intake{AlertmanagerSecret: "intake-from-vault"}) //nolint:gosec // a Secret's name
+	if steps[1].Code != "" || !strings.Contains(steps[1].Text, "intake-from-vault Secret you manage in observability") ||
+		!strings.Contains(steps[0].Text, "intake-from-vault") || !strings.Contains(steps[2].Text, "Mount the intake-from-vault Secret") {
+		t.Errorf("steps with a Secret the install manages = %+v", steps)
+	}
+	if steps := setupSteps(t, config.Intake{AlertmanagerConfigs: true}); steps[0].Code != "" || !strings.HasPrefix(steps[0].Text, "Done.") {
+		t.Errorf("the operator's step once the chart made the AlertmanagerConfigs = %+v", steps[0])
+	}
 }
 
 type alertmanagerConfig struct {

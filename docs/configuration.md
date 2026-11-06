@@ -13,6 +13,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `intake.bearerTokenFile` | yes | File holding the token Alertmanager must send when it sends alerts to Themis's webhook. Read on every request, so rotating the Secret needs no restart. |
 | `intake.url` | no | Where Alertmanager reaches the webhook, for the steps the Setup page shows. The chart sets it. |
 | `intake.tokenSecret` | no | The Secret, in Themis's namespace, whose `intake` key holds the token, for the same steps. The chart sets it. |
+| `intake.alertmanagerSecret` | no | A Secret the install manages, with a `token` key holding the token, in Alertmanager's namespace and each enrolled one. The Setup page's steps use it instead of copying the token. The chart sets it from `alerting.webhook.tokenSecret`. |
+| `intake.alertmanagerConfigs` | no | The chart made an AlertmanagerConfig in each enrolled namespace, so the Setup page says the operator's step is done. The chart sets it. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
 | `settings.keyFile` | no | File holding the secret that encrypts secret settings made on the Setup page, such as the model's key. The chart generates it once, in the `themis-tokens` Secret, and keeps it across upgrades. Losing or changing it makes those settings unreadable: set them again. |
 | `model.provider`, `model.baseURL`, `model.name`, `model.apiKey`, `model.strictOutput`, `model.schemaDialect` | no | What the install set for the investigator's model; the chart sets them from its values. The Setup page can't change these, and sets only what's left; see [The model on the Setup page](#the-model-on-the-setup-page). `model.provider` is the API the investigator speaks: `openai` (the default) for any OpenAI-compatible API, or `anthropic` for Claude models through Anthropic's own API. Anthropic's needs no address, so the Setup page shows only its model name and key. An address set at install fixes the provider, `model.strictOutput` and `model.schemaDialect` with it. How an OpenAI-compatible API is asked for its reply is the chart's too: `model.outputLimitField`, `max_tokens` (the default) or `max_completion_tokens`; `model.temperature`, a number (`0` by default) or `default` to send none; and `model.schemaDialect`, `as-is` (the default) or `openai-strict`, which sends the reply schema in the form OpenAI's strict mode accepts: every object closed, every field required, an optional one allowed to be null, and a map such as a fix's containers as a list of entries. Themis turns each reply back and checks it against its own schema. For OpenAI's newer models, set all three: `max_completion_tokens`, `default` and `openai-strict`. Ollama and vLLM take the defaults. |
@@ -563,7 +565,25 @@ Every core replica can read. One read applies at a time, and a read that finishe
 
 ### Or let Alertmanager send alerts to Themis
 
-Alertmanager can post alerts to Themis's webhook instead, or as well: an alert that arrives both ways is the same alert. The **Setup** page shows these steps with your install's address and alerts filled in, for kube-prometheus-stack or any other Alertmanager, under **Or let Alertmanager send alerts to Themis**. By hand: add a receiver that posts to the core with the intake token. With the chart, the token is the `intake` key of the `themis-tokens` Secret: copy it into a Secret Alertmanager can mount.
+Alertmanager can post alerts to Themis's webhook instead, or as well: an alert that arrives both ways is the same alert. To use only the webhook, set `alerting.alertmanager.enabled=false` in the chart. The **Setup** page shows the steps below with your install's address and alerts filled in, under **Or let Alertmanager send alerts to Themis**. Alertmanager sends the intake token, the `intake` key of the `themis-tokens` Secret, as a bearer token.
+
+**With the Prometheus Operator**, such as kube-prometheus-stack, the chart makes the routing:
+
+```yaml
+alerting:
+  webhook:
+    alertmanagerConfig:
+      enabled: true
+```
+
+It makes an `AlertmanagerConfig` in each enrolled namespace, with a Secret there holding the intake token, when the cluster serves `monitoring.coreos.com/v1alpha1`. The operator adds a matcher on the namespace an AlertmanagerConfig is in to its route, so each sends only its own namespace's alerts: the namespaces Themis watches. That needs no change to your Alertmanager, unlike `alertmanagerConfigMatcherStrategy: None`, which would lift that matcher from every AlertmanagerConfig in the cluster. The operator puts these routes before your own and keeps them `continue: true`, and reads the token only from a Secret in the AlertmanagerConfig's namespace. Anyone who can read Secrets in an enrolled namespace can then send alerts to Themis. kube-prometheus-stack selects AlertmanagerConfigs in every namespace by default. If your Alertmanager selects them by label, set `alerting.webhook.alertmanagerConfig.labels`.
+
+**With any other Alertmanager**, copy the token into a Secret in Alertmanager's namespace without showing it, mount it, at `/etc/alertmanager/themis` for example, and add a receiver and a route. Put this route first: with `continue: true`, the alerts go on to the routes after it.
+
+```bash
+kubectl -n themis get secret themis-tokens -o jsonpath='{.data.intake}' | base64 -d | \
+  kubectl -n monitoring create secret generic themis-intake-token --from-file=token=/dev/stdin
+```
 
 ```yaml
 receivers:
@@ -583,7 +603,9 @@ route:
       continue: true
 ```
 
-`send_resolved: true` matters: when every alert of an incident resolves before Themis acts, the incident closes as `self_resolved`. To use only the webhook, set `alerting.alertmanager.enabled=false` in the chart.
+**Under GitOps**, with `tokens.existingSecret`, manage the token where Alertmanager reads it too, with your secrets tool: a Secret with a `token` key holding the same value as the `intake` key, in Alertmanager's namespace, and with `alertmanagerConfig`, in each enrolled namespace. Name it in `alerting.webhook.tokenSecret`. The chart then makes no Secret of its own, and the Setup page's steps use it instead of copying the token.
+
+`send_resolved: true` matters: when every alert of an incident resolves before Themis acts, the incident closes as `self_resolved`.
 
 ## Escalation notices
 
