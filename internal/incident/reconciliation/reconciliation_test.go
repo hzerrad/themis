@@ -160,6 +160,37 @@ func TestReconcile_FixedOutsideThemis_SelfResolves(t *testing.T) {
 	}
 }
 
+// An incident handed to a person, waiting for the fix they suggest, is
+// watched too: fixed by hand, it closes as recovered; changed and still
+// failing, a new incident replaces it, so the next alert isn't lost in it.
+func TestReconcile_WaitingForAPersonsFix(t *testing.T) {
+	for name, fixed := range map[string]bool{"fixed by hand": true, "changed and still failing": false} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id := e.open(t, incident.Investigating)
+			err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+				return e.store.Transition(t.Context(), tx, store.TransitionArgs{
+					ID: id, From: incident.Investigating, To: incident.AwaitingSuggestion,
+					Reason: "No fix proposed. Referred to a person.", Actor: "test", Refer: true,
+				})
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.edit(t)
+			want := incident.Canceled
+			if fixed {
+				e.heal(t)
+				want = incident.SelfResolved
+			}
+			e.reconcile(t)
+			if got := e.incident(t, id).State; got != want {
+				t.Errorf("state = %s, want %s", got, want)
+			}
+		})
+	}
+}
+
 // Authorized cannot self-resolve: the action is in flight.
 func TestReconcile_FixedWhileAuthorized_Cancels(t *testing.T) {
 	e := newEnv(t)
