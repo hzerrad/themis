@@ -215,13 +215,25 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 	return errors.Join(errs...)
 }
 
-// runs says why p doesn't run the check named, if it doesn't.
+// runs says why p doesn't run the check named, or can't answer it from the
+// evidence it collects first, if so. A check without the evidence it needs
+// is always unknown.
 func (c Catalog) runs(p config.Profile, name string) error {
-	if _, ok := c.Checks.Get(name); !ok {
+	ch, ok := c.Checks.Get(name)
+	if !ok {
 		return errors.New("which doesn't exist")
 	}
 	if len(p.Checks) > 0 && !slices.Contains(p.Checks, name) {
 		return errors.New("which the profile doesn't run")
+	}
+	// Diagnose collects what this one reads for a profile that offers a fix.
+	if name == check.GitOpsManaged && len(p.Capabilities) > 0 {
+		return nil
+	}
+	for _, t := range ch.Needs() {
+		if !slices.Contains(p.Evidence.Initial, t) {
+			return fmt.Errorf("which needs the evidence template %q in evidence.initial", t)
+		}
 	}
 	return nil
 }
