@@ -102,6 +102,14 @@ func TestMessages_OneLinePerFinding(t *testing.T) {
 	if got := writer.Messages(checkout, gaps); strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
+	// Only the metrics API: no peaks, and no history of earlier revisions.
+	noHistory := []store.EvidenceGap{
+		{Template: evidence.ContainerMemory, Cause: evidence.GapUnavailable, Detail: "collect container_memory: no figures: " + metrics.NoHistory},
+		{Template: evidence.RevisionHealth, Cause: evidence.GapUnavailable, Detail: "collect revision_health: no figures: " + metrics.NoRevisionHistory},
+	}
+	if got := writer.Messages(checkout, noHistory); len(got) != 1 || got[0] != "Container memory and revision health: no history in the Kubernetes metrics API. Set metrics.prometheus.address." {
+		t.Errorf("got %q, want one line for both, with the remedy", got)
+	}
 	budget := []store.EvidenceGap{{Template: evidence.PodStates, Cause: evidence.GapBudgetSpent}, {Template: evidence.TargetEvents, Cause: evidence.GapForbidden}, {Template: evidence.ContainerLogsTail, Cause: evidence.GapBudgetSpent}}
 	if got := writer.Messages(checkout, budget); len(got) != 2 || !strings.HasPrefix(got[0], "Pod states and container logs: not read. ") {
 		t.Errorf("got %q, want the budget once, for both", got)
