@@ -1108,6 +1108,14 @@ function suggestForm(inc, evidence, reload) {
 
 // opening splits a reason Themis wrote into what happened, its first
 // sentence, and the grounds after it.
+// handedOver closes a referred incident's explanation: the state already says
+// a person takes over, so the reason drops that sentence and ends with what
+// Themis does next.
+function handedOver(text) {
+  const rest = (text || "").replace(/\s*Referred to a person\.\s*$/, "").trim();
+  return rest ? rest + " No further action by Themis." : "No further action by Themis.";
+}
+
 function opening(reason, otherwise) {
   const cut = reason.indexOf(". ");
   return cut > 0 ? [reason.slice(0, cut + 1), reason.slice(cut + 2)] : [reason || otherwise, ""];
@@ -1145,8 +1153,11 @@ function headline(d, ctx) {
     return ["The " + ctx.undone.noun + " didn't help. Restoring the previous state.", observed(fixed) || ""];
   }
   if (s === "resolved" && fx) return [fx.done, reason];
-  if (s === "escalated" && ctx.restored && ctx.undone) return ["The " + ctx.undone.noun + " didn't help and was undone.", reason];
-  if (REFERRED.includes(s)) return opening(reason, "Referred to a person.");
+  if (s === "escalated" && ctx.restored && ctx.undone) return ["The " + ctx.undone.noun + " didn't help and was undone.", handedOver(reason)];
+  if (REFERRED.includes(s)) {
+    const [title, rest] = opening(reason, "Referred to a person.");
+    return [title, handedOver(rest)];
+  }
   if (s === "closed_no_action") {
     const leading = cause ? "The investigator's leading cause: " + cause.charAt(0).toLowerCase() + cause.slice(1) : "";
     if (d.Headline) return [d.Headline, leading];
