@@ -1,0 +1,13 @@
+{
+  "name": "themis-ui-test",
+  "private": true,
+  "description": "Loads the Themis page in jsdom against what the API serves, as each role, and fails on any error it throws or shows.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "30.1.3"
+  }
+}

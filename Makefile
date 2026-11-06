@@ -110,8 +110,8 @@ scenario-check: ## Check every scenario pack, or one with NAME=..., and replay i
 eval-local: ## Evaluate a local model on every scenario; start Ollama with OLLAMA_CONTEXT_LENGTH=16384
 	$(UV) run python -m themis_intelligence.evaluation --out ../eval/out/local --context-tokens 16384
 
-.PHONY: test test-go test-go-next test-python
-test: test-go test-python ## Run all unit tests
+.PHONY: test test-go test-go-next test-python test-ui
+test: test-go test-python test-ui ## Run all unit tests
 
 test-go: envtest ## Run Go tests with the race detector
 ifneq ($(HAS_GO),)
@@ -127,6 +127,14 @@ test-go-next: envtest ## Run Go tests against the next, unreleased Kubernetes (L
 
 test-python: ## Run Python tests
 	$(UV) run pytest || test $$? -eq 5  # exit code 5 means no tests collected
+
+# The Go views write what the API serves the page; -race, as test-go builds
+# the package, so the build is reused.
+test-ui: ## Load the web UI in jsdom as each role, against what the API serves, and fail on any error it throws or shows (needs Node)
+	@mkdir -p bin
+	npm ci --prefix test/ui --ignore-scripts --no-audit --no-fund --loglevel=error
+	go test -race -count=1 -run '^TestUIFixtures$$' ./internal/server/httpapi -ui-fixtures=$(CURDIR)/bin/ui-fixtures.json
+	node test/ui/smoke.mjs bin/ui-fixtures.json
 
 # Security
 
