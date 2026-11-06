@@ -210,5 +210,5 @@
     "outcome": "require_approval",
     "reason": "Policy rule raise-needs-approval requires a person's approval."
   },
-  "unproposed": "Themis's checks support a memory or CPU change (cpu_throttled_at_limit is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a memory or CPU change (cpu_throttled_at_limit is true)."
 }

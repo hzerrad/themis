@@ -194,7 +194,7 @@ func TestRestore_YieldsToAnotherFix(t *testing.T) {
 	}
 
 	e.restore(t, fix)
-	if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != "Not restored: another fix is already in progress on this workload. The fix stays in place. Referred to a person." {
+	if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != "Not restored. Another fix is already in progress on this workload. The fix stays in place. Referred to a person." {
 		t.Errorf("state = %s: %q", got, e.lastReason(t, id))
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1`, governance.ExecuteArgs{}.Kind()); n != 0 {
@@ -215,7 +215,7 @@ func TestRestore_AlreadyBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.restore(t, fix)
-	if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != "Nothing to restore: the workload is already as it was before Themis acted. Referred to a person." {
+	if got := e.state(t, id); got != incident.Escalated || e.lastReason(t, id) != "Nothing to restore. The workload is already as it was before Themis acted. Referred to a person." {
 		t.Errorf("state = %s: %q", got, e.lastReason(t, id))
 	}
 }
@@ -299,7 +299,7 @@ func TestRestoreWorker_EscalatesOnTheLastAttempt(t *testing.T) {
 	if got := e.state(t, id); got != incident.Escalated {
 		t.Errorf("state = %s, want escalated", got)
 	}
-	if got := e.lastReason(t, id); !strings.HasPrefix(got, "Not restored: ") || !strings.HasSuffix(got, ". The fix stays in place. Referred to a person.") {
+	if got := e.lastReason(t, id); !strings.HasPrefix(got, "Not restored after ") || !strings.HasSuffix(got, ". The fix stays in place. Referred to a person.") {
 		t.Errorf("reason = %q", got)
 	}
 }
@@ -311,8 +311,8 @@ func TestRestore_CannotPutItBack(t *testing.T) {
 		forget func(t *testing.T, e *env)
 		want   string
 	}{
-		"profile removed": {func(_ *testing.T, e *env) { e.worker.Config = config.Config{} }, "Not restored: Themis no longer has the rollout-regression profile this incident matched. The fix stays in place. Referred to a person."},
-		"fix unknown":     {func(_ *testing.T, e *env) { e.worker.Fixes = nil }, "Not restored: Themis has no way to undo this fix. The fix stays in place. Referred to a person."},
+		"profile removed": {func(_ *testing.T, e *env) { e.worker.Config = config.Config{} }, "Not restored. Themis no longer has the rollout-regression profile this incident matched. The fix stays in place. Referred to a person."},
+		"fix unknown":     {func(_ *testing.T, e *env) { e.worker.Fixes = nil }, "Not restored. Themis has no way to undo this fix. The fix stays in place. Referred to a person."},
 		"version before gone": {func(t *testing.T, e *env) {
 			rs := &appsv1.ReplicaSet{}
 			if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout-7d9f8b6c4"}, rs); err != nil {
@@ -321,7 +321,7 @@ func TestRestore_CannotPutItBack(t *testing.T) {
 			if err := k8s.Delete(t.Context(), rs); err != nil {
 				t.Fatal(err)
 			}
-		}, "Not restored: Kubernetes no longer keeps the revision from before Themis acted. The fix stays in place. Referred to a person."},
+		}, "Not restored. Kubernetes no longer keeps the revision from before Themis acted. The fix stays in place. Referred to a person."},
 	} {
 		e := shipped(t)
 		id, fix := e.restoring(t)

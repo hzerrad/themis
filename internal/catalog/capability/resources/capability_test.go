@@ -143,7 +143,7 @@ func TestPlan(t *testing.T) {
 		},
 		"no such container": {
 			params:  set("web", map[string]string{"limits.memory": "512Mi"}),
-			refusal: "The workload has no container named web; its containers are app, sidecar.",
+			refusal: "The workload has no container named web. Its containers are app, sidecar.",
 		},
 		"a request above its limit": {
 			params:  set("app", map[string]string{"requests.memory": "512Mi"}),
@@ -151,7 +151,7 @@ func TestPlan(t *testing.T) {
 		},
 		"already so": {
 			params:  set("app", map[string]string{"limits.memory": "0.25Gi"}),
-			refusal: "The workload already has these resources, so there's nothing to change.", noOp: true,
+			refusal: "Nothing to change. The workload already has these resources.", noOp: true,
 		},
 		"replaced": {
 			params: set("app", map[string]string{"limits.memory": "512Mi"}), uid: "d-0",
@@ -220,7 +220,7 @@ func TestFeasible(t *testing.T) {
 		"fits": {objs: []client.Object{node("n1", "8Gi", nil)}, params: big},
 		"no node fits": {
 			objs: []client.Object{node("n1", "4Gi", nil), node("n2", "2Gi", nil)}, params: big,
-			refusal: "No node can fit a pod with a 6Gi memory request; the largest has 4Gi allocatable.",
+			refusal: "No node can fit a pod with a 6Gi memory request. The largest has 4Gi allocatable.",
 		},
 		"only nodes the pods can run on count": {
 			objs: []client.Object{
@@ -232,7 +232,7 @@ func TestFeasible(t *testing.T) {
 				}),
 			},
 			params:  big,
-			refusal: "No node can fit a pod with a 6Gi memory request; the largest has 4Gi allocatable.",
+			refusal: "No node can fit a pod with a 6Gi memory request. The largest has 4Gi allocatable.",
 		},
 		"a tolerated taint": {objs: []client.Object{node("shop", "8Gi", func(n *corev1.Node) {
 			n.Spec.Taints = []corev1.Taint{{Key: "dedicated", Value: "shop", Effect: corev1.TaintEffectNoSchedule}}
@@ -240,7 +240,7 @@ func TestFeasible(t *testing.T) {
 		"no nodes Themis can see": {params: big},
 		"over the quota": {
 			objs: []client.Object{quota()}, params: set("app", map[string]string{"requests.memory": "256Mi"}),
-			refusal: "The ResourceQuota compute in shop allows 1Gi of memory requests; 512Mi is in use, and rolling out the change needs 640Mi more.",
+			refusal: "The ResourceQuota compute in shop allows 1Gi of memory requests. 512Mi is in use, and rolling out the change needs 640Mi more.",
 		},
 		"a quota for some pods only": {objs: []client.Object{quota(corev1.ResourceQuotaScopeBestEffort)}, params: set("app", map[string]string{"requests.memory": "256Mi"})},
 		"above a container maximum": {
@@ -265,7 +265,7 @@ func TestFeasible(t *testing.T) {
 		},
 		"not allowed to read nodes": {
 			params: big, forbid: true,
-			refusal: "Themis can't tell whether the cluster can run this change: it isn't allowed to read nodes.",
+			refusal: "Themis can't tell whether the cluster can run this change. It isn't allowed to read nodes.",
 		},
 	} {
 		var r client.Reader = cluster(tc.objs...)
@@ -328,9 +328,9 @@ func TestUndo_Refused(t *testing.T) {
 		reason string
 		noOp   bool
 	}{
-		"a value there wasn't": {before: without, reason: "Not restored: app had no memory limit before, and Themis never removes one. The fix stays in place."},
-		"nothing differs":      {before: checkout().Spec.Template, reason: "Nothing to restore: the workload's resources are already as they were before Themis acted.", noOp: true},
-		"replaced":             {before: checkout().Spec.Template, uid: "d-0", reason: "Not restored: the workload was replaced by a new object with the same name."},
+		"a value there wasn't": {before: without, reason: "Not restored. Container app had no memory limit before, and Themis never removes one. The fix stays in place."},
+		"nothing differs":      {before: checkout().Spec.Template, reason: "Nothing to restore. The workload's resources are already as they were before Themis acted.", noOp: true},
+		"replaced":             {before: checkout().Spec.Template, uid: "d-0", reason: "Not restored. The workload was replaced by a new object with the same name."},
 	} {
 		tt := target
 		if tc.uid != "" {

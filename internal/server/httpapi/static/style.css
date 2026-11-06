@@ -169,6 +169,13 @@ dl.result dd { margin: 0 0 10px; }
 .alert { display: flex; gap: 12px; margin: 16px 0 0; padding: 12px 16px; border: 1px solid var(--oxblood-rule); border-left: 3px solid var(--oxblood); border-radius: 3px; font-size: 15px; background: var(--plate); }
 .alert b { color: var(--oxblood); font-weight: 600; }
 .alert .sign { color: var(--oxblood); }
+.alert.suspect > div { flex: 1; min-width: 0; }
+.alert.suspect b { display: block; }
+.alert.suspect pre.quote { margin: 8px 0 4px; padding: 8px 12px; max-height: 160px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.alert.suspect .src { display: block; margin: 4px 0 8px; font-size: 13px; color: var(--quiet); overflow-wrap: anywhere; }
+.alert.suspect p { margin: 0; max-width: 72ch; }
+.alert.suspect p.quiet { margin: 6px 0 2px; }
+.alert + .alert { margin-top: 10px; }
 .note { border-left: 3px solid var(--rule); padding: 2px 0 2px 14px; color: var(--ink-2); margin: 0 0 20px; }
 
 /* Findings */

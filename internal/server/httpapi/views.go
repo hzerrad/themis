@@ -35,6 +35,9 @@ type summaryView struct {
 	Cause *causeView `json:"cause,omitempty"`
 	// Fix is the latest fix for the incident.
 	Fix *fixView `json:"fix,omitempty"`
+	// Rule is the policy rule that decided the latest change, such as
+	// gitops-owns-the-target for one Themis only recommends.
+	Rule string `json:"rule,omitempty"`
 	// Reason is why the incident last changed state, and From the state it
 	// left.
 	Reason string `json:"reason,omitempty"`
@@ -52,7 +55,7 @@ type fixView struct {
 }
 
 func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryView {
-	v := &summaryView{Reason: s.Reason, From: string(s.From)}
+	v := &summaryView{Reason: s.Reason, From: string(s.From), Rule: s.Rule}
 	if s.Cause != "" {
 		v.Cause = &causeView{Name: s.Cause}
 		for _, c := range causes {
@@ -80,6 +83,22 @@ type evidenceView struct {
 	evidence.Item
 	// Data is left out for people who may not see raw evidence.
 	Data jsontext.Value `json:",omitzero"`
+	// Suspicious says, for each flagged text, what in the item holds it and
+	// what it is, in plain words.
+	Suspicious []suspicionView `json:",omitempty"`
+}
+
+// suspicionView is text flagged in an item, as people read it.
+type suspicionView struct {
+	Reason string `json:"reason"`
+	At     string `json:"at"`
+	// Excerpt is left out for people who may not see raw evidence.
+	Excerpt string `json:"excerpt,omitempty"`
+	// Origin names what holds the text, such as a pod and container.
+	Origin string `json:"origin,omitempty"`
+	// What says what the text is, such as "is written as an instruction to
+	// Themis".
+	What string `json:"what"`
 }
 
 // actionView lists its fields rather than embedding store.Action: the
@@ -146,6 +165,8 @@ type checkWords struct {
 	False string `json:"false,omitempty"`
 	// Topic names what it is about, for saying it is unknown.
 	Topic string `json:"topic,omitempty"`
+	// Reads are the evidence templates it reads.
+	Reads []string `json:"reads,omitempty"`
 }
 
 func viewAction(a store.Action, fixes capability.Registry) actionView {

@@ -104,7 +104,7 @@ func (l *Leases) Lease(ctx context.Context, worker string) (Leased, bool, error)
 			return err
 		}
 		for _, id := range expired {
-			if err := l.abandon(ctx, tx, id, "The investigator stopped responding during its last attempt."); err != nil {
+			if err := l.abandon(ctx, tx, id, gaveUp(stoppedResponding)); err != nil {
 				return err
 			}
 		}

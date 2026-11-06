@@ -27,7 +27,7 @@ func TargetLost(ctx context.Context, s *store.Store, tx pgx.Tx, in store.Inciden
 	case errors.Is(lost, workload.ErrReplaced):
 		now := in.Target
 		now.UID = lost.Found
-		return Supersede(ctx, s, tx, in, now, "Replaced by a new incident for the new object: "+reason, actor)
+		return Supersede(ctx, s, tx, in, now, "Replaced by a new incident for the new object. "+reason, actor)
 	case errors.Is(lost, workload.ErrUnsupported) && incident.CanTransition(in.State, incident.Rejected):
 		return end(ctx, s, tx, in, incident.Rejected, reason, actor)
 	default:

@@ -58,7 +58,7 @@ func (Capability) Feasible(ctx context.Context, r client.Reader, p capability.Pl
 func list(ctx context.Context, r client.Reader, into client.ObjectList, what string, opts ...client.ListOption) error {
 	err := r.List(ctx, into, opts...)
 	if apierrors.IsForbidden(err) {
-		return &capability.Refusal{Reason: fmt.Sprintf("Themis can't tell whether the cluster can run this change: it isn't allowed to read %s.", what)}
+		return &capability.Refusal{Reason: fmt.Sprintf("Themis can't tell whether the cluster can run this change. It isn't allowed to read %s.", what)}
 	}
 	if err != nil {
 		return fmt.Errorf("list %s: %w", what, err)
@@ -219,7 +219,7 @@ func fits(nodes []corev1.Node, spec corev1.PodSpec, before, after totals) error 
 			largest, found = max(largest, q.MilliValue()), true
 		}
 		if found && after[f] > largest {
-			return &capability.Refusal{Reason: fmt.Sprintf("No node can fit a pod with a %s %s; the largest has %s allocatable.",
+			return &capability.Refusal{Reason: fmt.Sprintf("No node can fit a pod with a %s %s. The largest has %s allocatable.",
 				quantity(after[f], res), f, quantity(largest, res))}
 		}
 	}
@@ -275,7 +275,7 @@ func withinQuotas(quotas []corev1.ResourceQuota, before, after totals, replicas,
 			used := q.Status.Used[key]
 			if need > 0 && used.MilliValue()+need > hard.MilliValue() {
 				return &capability.Refusal{Reason: fmt.Sprintf(
-					"The ResourceQuota %s in %s allows %s of %ss; %s is in use, and rolling out the change needs %s more.",
+					"The ResourceQuota %s in %s allows %s of %ss. %s is in use, and rolling out the change needs %s more.",
 					q.Name, q.Namespace, hard.String(), f, quantity(used.MilliValue(), f.resource), quantity(need, f.resource))}
 			}
 		}

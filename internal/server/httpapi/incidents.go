@@ -46,7 +46,7 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 	}
 	d := detailView{Incident: viewIncident(in), Checks: map[string]checkWords{}, Causes: map[string]string{}}
 	for _, c := range a.CheckList {
-		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic}
+		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads}
 	}
 	for _, c := range a.RootCauses.For(in.Profiles()...) {
 		d.Causes[c.Name] = c.Description
@@ -68,11 +68,13 @@ func (a *API) detail(w http.ResponseWriter, r *http.Request) {
 		v := evidenceView{Item: it}
 		if raw {
 			v.Data = it.Data
-		} else {
-			v.Suspicious = nil
-			for _, s := range it.Suspicious {
-				v.Suspicious = append(v.Suspicious, evidence.Suspicion{Reason: s.Reason, At: s.At})
+		}
+		for _, s := range it.Suspicious {
+			sv := suspicionView{Reason: s.Reason, At: s.At, Origin: it.Origin(s), What: s.What()}
+			if raw {
+				sv.Excerpt = s.Excerpt
 			}
+			v.Suspicious = append(v.Suspicious, sv)
 		}
 		d.Evidence = append(d.Evidence, v)
 	}

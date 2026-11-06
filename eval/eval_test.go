@@ -205,7 +205,7 @@ profile:
 	if !slices.ContainsFunc(b.RootCauses, func(c catalog.RootCause) bool { return c.Name == "memory_too_low" }) {
 		t.Errorf("root causes = %+v, want the memory pack's too", b.RootCauses)
 	}
-	if want := "Policy rule rollback-needs-approval requires a person's approval. It is the rollout-regression profile's policy."; b.Policy.Reason != want {
+	if want := "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval."; b.Policy.Reason != want {
 		t.Errorf("policy = %+v, want %q", b.Policy, want)
 	}
 

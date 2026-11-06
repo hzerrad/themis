@@ -159,7 +159,7 @@ var modelFixes = map[string]struct{ summary, fix string }{
 		"For OpenAI models, set model.schemaDialect=openai-strict. For others, use a larger model.",
 	},
 	"deadline_exceeded": {
-		"Too slow: the last investigation ran out of time.",
+		"Too slow. The last investigation ran out of time.",
 		"Use a faster model, or one closer to the cluster.",
 	},
 	"stopped_responding": {
@@ -171,7 +171,7 @@ var modelFixes = map[string]struct{ summary, fix string }{
 func (c *Checker) model(ctx context.Context) Check {
 	ch := Check{Name: "Model"}
 	if c.NoInvestigator {
-		ch.State, ch.Summary = Off, "Not used: no investigator is installed."
+		ch.State, ch.Summary = Off, "Not used. No investigator is installed."
 		ch.Fix = installInvestigator
 		return ch
 	}
@@ -234,7 +234,7 @@ func (c *Checker) alerts(ctx context.Context) Check {
 			ch.State, ch.Summary = Waiting, "Refused while no admin account existed."
 			return ch
 		}
-		ch.State, ch.Summary = Problem, "Refused: wrong intake token."
+		ch.State, ch.Summary = Problem, "Wrong intake token."
 		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
@@ -358,7 +358,7 @@ func (c *Checker) metrics(ctx context.Context) Check {
 		ch.Fix = "Install metrics-server, or set metrics.prometheus.address."
 	case !history:
 		ch.State = OK
-		says = append(says, "No history: peak memory and CPU throttling are unknown.")
+		says = append(says, "No history. Peak memory and CPU throttling are unknown.")
 		ch.Fix = "Set metrics.prometheus.address to read them."
 	default:
 		ch.State = OK

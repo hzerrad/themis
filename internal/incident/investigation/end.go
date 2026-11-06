@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/jackc/pgx/v5"
 
@@ -34,9 +35,12 @@ const (
 // summary is shown apart, as its note: what operators read of a decision
 // comes from what Themis can check.
 const (
-	couldntDecide = "The investigator couldn't decide."
-	suggestedFix  = "The investigator suggested a fix."
-	noFixAccepted = "The investigation suggested no fix that Themis could accept."
+	noFixProposed = "No fix proposed."
+	fixProposed   = "Fix proposed."
+	noFixAccepted = "No proposed fix was accepted."
+	// checkingSuggested follows when a fix suggested from outside goes next.
+	checkingSuggested = " Checking the suggested fix."
+	referred          = " Referred to a person."
 )
 
 // Complete ends the investigation leaseID holds with r, keeping the gaps the
@@ -77,10 +81,10 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		matched := l.Config.Current().Matched(inv.Profiles)
 		if r.Conclusion == Inconclusive {
 			store.CountInvestigation(tx, store.InvestigationAbstained)
-			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, couldntDecide, incident.Investigating, incident.Inconclusive); handed || err != nil {
+			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, noFixProposed+checkingSuggested, incident.Investigating, incident.Inconclusive); handed || err != nil {
 				return err
 			}
-			if referred, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, couldntDecide); referred || err != nil {
+			if done, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixProposed); done || err != nil {
 				return err
 			}
 			// Text in the evidence may have talked the investigator out of a
@@ -90,20 +94,20 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 				return err
 			}
 			if note != "" {
-				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide+" "+note, investigator, incident.Investigating, incident.Escalated)
+				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixProposed+" "+note+referred, investigator, incident.Investigating, incident.Escalated)
 			}
 			// Someone may yet suggest a fix: CloseUndecidedWorker closes it if not.
 			if l.Config.Current().SuggestionWindow() > 0 {
-				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide, investigator, incident.Investigating, incident.Inconclusive)
+				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixProposed, investigator, incident.Investigating, incident.Inconclusive)
 			}
-			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, couldntDecide, investigator, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
+			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixProposed, investigator, incident.Investigating, incident.Inconclusive, incident.ClosedNoAction)
 		}
 
 		store.CountInvestigation(tx, store.InvestigationProposed)
-		if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, suggestedFix, incident.Investigating); handed || err != nil {
+		if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, fixProposed, incident.Investigating); handed || err != nil {
 			return err
 		}
-		if referred, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixAccepted); referred || err != nil {
+		if done, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixAccepted); done || err != nil {
 			return err
 		}
 		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
@@ -112,9 +116,12 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 
 // referDiagnosis hands an incident none of whose profiles offers a fix to a
 // person, saying after conclusion what the checks found, or that they found
-// nothing. Themis can only diagnose such an incident: closing it would drop
-// the diagnosis, and nobody can suggest a fix it would take. It reports
-// whether it did; it doesn't for an incident whose profiles are all gone.
+// nothing: "No fix proposed. The checks found that an image can't be pulled
+// (…). Themis has no fix for this kind of incident. Referred to a person."
+// Themis can only
+// diagnose such an incident: closing it would drop the diagnosis, and nobody
+// can suggest a fix it would take. It reports whether it did; it doesn't for
+// an incident whose profiles are all gone.
 func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID string, profiles config.Matched, conclusion string) (bool, error) {
 	if len(profiles) == 0 || len(profiles.Capabilities()) > 0 {
 		return false, nil
@@ -131,15 +138,37 @@ func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID strin
 		}
 		what := r.Name + " is true"
 		if c, ok := l.Checks.Get(r.Name); ok && c.Description != "" {
-			what = c.Description
+			what = lowerFirst(c.Description)
 		}
-		found = append(found, what+": "+strings.TrimSuffix(r.Reason, ".")+".")
+		if why := strings.TrimSuffix(r.Reason, "."); why != "" {
+			what += " (" + why + ")"
+		}
+		found = append(found, "that "+what)
 	}
-	if len(found) == 0 {
-		found = []string{"Themis's checks found no cause."}
+	findings := "No check found a cause."
+	switch n := len(found); n {
+	case 0:
+	case 1:
+		findings = "The checks found " + found[0] + "."
+	default:
+		findings = "The checks found " + strings.Join(found[:n-1], ", ") + " and " + found[n-1] + "."
 	}
-	reason := conclusion + " " + strings.Join(found, " ") + " Themis has no fix for this kind of incident, so it refers it to a person."
+	reason := conclusion + " " + findings + " Themis has no fix for this kind of incident." + referred
 	return true, l.Store.TransitionPath(ctx, tx, incidentID, reason, investigator, incident.Investigating, incident.Escalated)
+}
+
+// lowerFirst puts a check's description inside a sentence: "An image can't
+// be pulled" reads "an image can't be pulled". A first word in capitals, such
+// as CPU, stays as it is.
+func lowerFirst(s string) string {
+	r := []rune(s)
+	if len(r) > 1 && unicode.IsUpper(r[1]) {
+		return s
+	}
+	if len(r) > 0 {
+		r[0] = unicode.ToLower(r[0])
+	}
+	return string(r)
 }
 
 // Reason is why an investigation failed, as stored, such as
@@ -156,23 +185,45 @@ const (
 	Internal           Reason = "internal"
 )
 
-// failures say why an investigation failed, as the end of a sentence.
+// failures say why an investigation failed, to follow "Last error: ".
 var failures = map[Reason]string{
-	Unspecified:        "the investigator gave no reason.",
-	ModelUnavailable:   "the model couldn't be reached.",
-	InvalidModelOutput: "the model's answers weren't in the required format.",
-	BudgetExhausted:    "it used up its token budget.",
-	DeadlineExceeded:   "it ran out of time.",
-	Internal:           "the investigator hit an internal error.",
+	Unspecified:        "no reason given",
+	ModelUnavailable:   "the model was unreachable",
+	InvalidModelOutput: "the model's answers didn't follow the reply format",
+	BudgetExhausted:    "the token budget ran out",
+	DeadlineExceeded:   "the time limit was reached",
+	Internal:           "an internal error in the investigator",
 }
+
+// stoppedResponding is why an investigation whose last lease expired failed.
+const stoppedResponding = "the investigator stopped responding"
 
 // budget reports whether r ends an investigation for running out of its
 // budget.
 func (r Reason) budget() bool { return r == BudgetExhausted || r == DeadlineExceeded }
 
-// failed says why an investigation failed, as a sentence of its own.
+// failed says why an investigation failed, as the start of a sentence, such
+// as "The model was unreachable", for the investigator's message to follow.
 func (r Reason) failed() string {
-	return "The investigation failed because " + strings.TrimSuffix(failures[r], ".")
+	why := []rune(r.why())
+	why[0] = unicode.ToUpper(why[0])
+	return string(why)
+}
+
+// why is why r failed an investigation; a reason Themis doesn't know gave
+// none.
+func (r Reason) why() string {
+	if w, ok := failures[r]; ok {
+		return w
+	}
+	return failures[Unspecified]
+}
+
+// gaveUp says why an investigation that won't finish was given up:
+// "Investigation failed after 3 attempts. Last error: the model was
+// unreachable."
+func gaveUp(why string) string {
+	return fmt.Sprintf("Investigation failed after %d attempts. Last error: %s.", store.MaxInvestigationAttempts, why)
 }
 
 // Fail ends the attempt leaseID holds for reason, saying message, and keeps
@@ -200,7 +251,7 @@ func (l *Leases) Fail(ctx context.Context, leaseID string, reason Reason, messag
 		if !exhausted {
 			return nil
 		}
-		return l.abandon(ctx, tx, inv.IncidentID, fmt.Sprintf("The investigation failed %d times. The last time, %s", store.MaxInvestigationAttempts, failures[reason]))
+		return l.abandon(ctx, tx, inv.IncidentID, gaveUp(reason.why()))
 	})
 }
 
@@ -250,14 +301,14 @@ func (l *Leases) abandon(ctx context.Context, tx pgx.Tx, incidentID, reason stri
 	if _, err := l.Store.LockIncident(ctx, tx, incidentID); err != nil {
 		return err
 	}
-	handed, err := l.Suggestions.HandOver(ctx, tx, incidentID, "", reason+" A fix was suggested from outside, so Themis is checking that.", incident.Investigating)
+	handed, err := l.Suggestions.HandOver(ctx, tx, incidentID, "", reason+checkingSuggested, incident.Investigating)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}
 	if handed || err != nil {
 		return err
 	}
-	err = l.Store.TransitionPath(ctx, tx, incidentID, reason, investigator, incident.Investigating, incident.Escalated)
+	err = l.Store.TransitionPath(ctx, tx, incidentID, reason+referred, investigator, incident.Investigating, incident.Escalated)
 	if errors.Is(err, store.ErrStateConflict) {
 		return nil
 	}

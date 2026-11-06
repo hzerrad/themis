@@ -232,5 +232,5 @@
     "outcome": "require_approval",
     "reason": "Policy rule rollback-needs-approval requires a person's approval."
   },
-  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a rollback (failure_onset_after_rollout is true)."
 }

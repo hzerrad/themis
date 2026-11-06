@@ -239,7 +239,7 @@ func TestFailInvestigation(t *testing.T) {
 			if err := e.pool.QueryRow(t.Context(), `SELECT failure, failure_kind FROM investigations WHERE incident_id = $1`, inv.GetIncidentId()).Scan(&failure, &kind); err != nil {
 				t.Fatal(err)
 			}
-			if kind != string(want) || !strings.HasPrefix(failure, "The investigation failed because ") || strings.Contains(failure, "because :") {
+			if why, _, _ := strings.Cut(failure, ": m"); kind != string(want) || why == "" || strings.ToUpper(why[:1]) != why[:1] || !strings.HasSuffix(failure, ": m") {
 				t.Errorf("failure = %q (%s), want a sentence, stored as %s", failure, kind, want)
 			}
 		})

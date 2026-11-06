@@ -154,7 +154,7 @@ func TestChecks_Problems(t *testing.T) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "budget_exhausted", At: now}
 		}, "Model", statuspage.Warn, "budget"},
 		"unknown failure": {func(_ *statuspage.Checker, s *fakeStore) {
-			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "The investigation failed because the investigator hit an internal error: boom", At: now}
+			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "An internal error in the investigator: boom", At: now}
 		}, "Model", statuspage.Problem, "internal error"},
 		"no alerts yet": {
 			func(_ *statuspage.Checker, s *fakeStore) { delete(s.heartbeats, store.HeartbeatAlertmanager) },
@@ -162,7 +162,7 @@ func TestChecks_Problems(t *testing.T) {
 		},
 		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
-		}, "Alerts", statuspage.Problem, "Refused: wrong intake token."},
+		}, "Alerts", statuspage.Problem, "Wrong intake token."},
 		"refused without an admin account": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now, Detail: statuspage.RefusedNoAdminAccount}
 		}, "Alerts", statuspage.Waiting, "Refused while no admin account existed."},
@@ -176,7 +176,7 @@ func TestChecks_Problems(t *testing.T) {
 		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Warn, "No metrics source."},
 		"metrics without history": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes}}
-		}, "Metrics", statuspage.OK, "No history: peak memory and CPU throttling are unknown."},
+		}, "Metrics", statuspage.OK, "No history. Peak memory and CPU throttling are unknown."},
 		"no metrics-server": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: metrics.ErrNotServed}}
 		}, "Metrics", statuspage.Warn, "No metrics source."},
@@ -192,7 +192,7 @@ func TestChecks_Problems(t *testing.T) {
 		}, "Fixes", statuspage.Problem, "Executor unreachable"},
 		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
 		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
-		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "no investigator"},
+		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "No investigator"},
 		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "The initial admin password is not retired."},
 		"setup finished":  {func(*statuspage.Checker, *fakeStore) {}, "Sign-in", statuspage.OK, "Through Themis accounts. The initial admin password is retired."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},

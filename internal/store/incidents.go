@@ -237,6 +237,8 @@ type IncidentSummary struct {
 	// latest accepted suggestion's.
 	Capability string
 	Params     map[string]any
+	// Rule is the policy rule that decided the latest action, if any.
+	Rule string
 	// Reason is why the incident last changed state, and From the state
 	// it left.
 	Reason string
@@ -250,11 +252,11 @@ func (s *Store) IncidentSummaries(ctx context.Context, ids []string) (map[string
 		coalesce((SELECT h->>'rootCauseClass'
 			FROM jsonb_array_elements(CASE WHEN jsonb_typeof(inv.hypotheses) = 'array' THEN inv.hypotheses ELSE '[]' END) WITH ORDINALITY AS x(h, n)
 			WHERE coalesce(h->>'status', '') NOT LIKE '%REFUTED' ORDER BY n LIMIT 1), ''),
-		coalesce(a.capability, p.capability, ''), coalesce(a.params, p.params, '{}'),
+		coalesce(a.capability, p.capability, ''), coalesce(a.params, p.params, '{}'), coalesce(a.policy_id, ''),
 		coalesce(t.reason, ''), coalesce(t.from_state::text, '')
 	FROM incidents i
 	LEFT JOIN investigations inv ON inv.incident_id = i.id
-	LEFT JOIN LATERAL (SELECT capability, params FROM actions WHERE incident_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1) a ON true
+	LEFT JOIN LATERAL (SELECT capability, params, policy_id FROM actions WHERE incident_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1) a ON true
 	LEFT JOIN LATERAL (SELECT capability, params FROM proposals WHERE incident_id = i.id AND status = 'accepted' ORDER BY created_at DESC, id DESC LIMIT 1) p ON true
 	LEFT JOIN LATERAL (SELECT reason, from_state FROM transitions WHERE incident_id = i.id ORDER BY id DESC LIMIT 1) t ON true
 	WHERE i.id = ANY($1::uuid[])
@@ -270,7 +272,7 @@ func (s *Store) IncidentSummaries(ctx context.Context, ids []string) (map[string
 			sum    IncidentSummary
 			params []byte
 		)
-		if err := rows.Scan(&id, &sum.Cause, &sum.Capability, &params, &sum.Reason, &sum.From); err != nil {
+		if err := rows.Scan(&id, &sum.Cause, &sum.Capability, &params, &sum.Rule, &sum.Reason, &sum.From); err != nil {
 			return nil, fmt.Errorf("summarise incidents: %w", err)
 		}
 		if err := json.Unmarshal(params, &sum.Params); err != nil {
