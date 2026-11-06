@@ -47,8 +47,8 @@ type API struct {
 	Remedy hint.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
-	// Again has an incident investigated again after a person denied its
-	// fix. Without it, nobody can.
+	// Again has an incident waiting for a suggested fix investigated again.
+	// Without it, nobody can.
 	Again Reinvestigation
 	// Fixes are the fixes Themis can carry out, which show what an action
 	// changes and how a person suggests one.

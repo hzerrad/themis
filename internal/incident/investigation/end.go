@@ -50,9 +50,9 @@ const (
 // inconclusive investigation is handed to a person when the incident's checks
 // support a fix the investigator didn't propose; failing that it waits for a
 // suggestion if the install gives time for one, and otherwise, like a
-// proposed one, closes the incident. An incident a person had investigated
-// again, after denying its fix, waits for a suggested fix instead: the
-// person is working on it.
+// proposed one, closes the incident. An incident a person works on, having
+// denied its fix or had it investigated again, waits for a suggested fix
+// instead: the person decides what comes next.
 func (l *Leases) Complete(ctx context.Context, leaseID string, r store.InvestigationResult, reported []catalog.Gap) error {
 	return l.Store.InTx(ctx, func(tx pgx.Tx) error {
 		inv, err := l.Store.LeasedInvestigation(ctx, tx, leaseID, l.now())
@@ -81,7 +81,7 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 			return err
 		}
 		matched := l.Config.Current().Matched(inv.Profiles)
-		again, err := l.Store.Denied(ctx, tx, inv.IncidentID)
+		involved, err := l.Store.PersonInvolved(ctx, tx, inv.IncidentID)
 		if err != nil {
 			return err
 		}
@@ -90,9 +90,9 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, noFixProposed+checkingSuggested, incident.Investigating, incident.Inconclusive); handed || err != nil {
 				return err
 			}
-			// The checks still support the fix a person denied: that is no
-			// reason to refer it.
-			if again {
+			// The checks may still support a fix the person denied: that is
+			// no reason to refer it.
+			if involved {
 				return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixProposed, investigator, incident.Investigating, incident.AwaitingSuggestion)
 			}
 			if done, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixProposed); done || err != nil {
@@ -121,7 +121,7 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		if done, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixAccepted); done || err != nil {
 			return err
 		}
-		if again {
+		if involved {
 			return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.AwaitingSuggestion)
 		}
 		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)

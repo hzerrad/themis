@@ -48,7 +48,8 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
 //
 // A fix refused while a person works on the incident leaves it waiting for
 // another: one a person or an agent suggested, or any once a person denied
-// a fix for it. They can suggest another fix, or have it investigated again.
+// a fix for it or had it investigated again. They can suggest another fix,
+// or have it investigated again.
 // The investigator's own refused fix closes it otherwise, as an
 // investigation that proposes nothing does. Themis only recommending a fix,
 // GitOps owning the workload, ends it either way.
@@ -165,13 +166,13 @@ func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check
 }
 
 // waits reports whether a refusal of p leaves its incident waiting for
-// another fix: p came from a person or an agent, or a person denied a fix
-// for the incident before.
+// another fix: p came from a person or an agent, or a person works on the
+// incident.
 func (w *Worker) waits(ctx context.Context, p store.Proposal) (bool, error) {
 	if p.LeaseID == "" {
 		return true, nil
 	}
-	return w.Store.Denied(ctx, w.Store.DB(), p.IncidentID)
+	return w.Store.PersonInvolved(ctx, w.Store.DB(), p.IncidentID)
 }
 
 // refuse ends the governing of p, refused for reason: its incident waits

@@ -57,8 +57,8 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 	a.reply(w, r, map[string]string{"state": string(store.ActionDenied)})
 }
 
-// Reinvestigation has an incident investigated again, after a person
-// denied its fix.
+// Reinvestigation has an incident waiting for a suggested fix investigated
+// again.
 type Reinvestigation interface {
 	Offer(ctx context.Context, in store.Incident) (investigation.Offer, error)
 	Start(ctx context.Context, incidentID, by string) error

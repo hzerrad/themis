@@ -12,9 +12,10 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// Again has an incident investigated again when a person asks, after they
-// denied its fix. The investigator gets what the incident has, and the
-// fixes people denied with their reasons. The new investigation draws on the
+// Again has an incident investigated again when a person asks, while it
+// waits for a suggested fix: after they denied its fix, or a fix suggested
+// was refused. The investigator gets what the incident has, and the fixes
+// people denied with their reasons. The new investigation draws on the
 // incident's token budget: what the earlier ones used counts. Its zero
 // value is not ready: set Store and Config.
 type Again struct {
