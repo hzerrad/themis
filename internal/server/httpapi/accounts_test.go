@@ -211,7 +211,7 @@ func TestAccounts_SetupFlow(t *testing.T) {
 		f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "carol", "role": "admin", "password": rootPassword}),
 		f.send(http.MethodGet, "/v1/accounts", first, nil),
 	} {
-		if rec.Code != http.StatusForbidden || strings.TrimSpace(rec.Body.String()) != "The initial admin password only creates the first admin account." {
+		if rec.Code != http.StatusForbidden || strings.TrimSpace(rec.Body.String()) != "Refused. The initial admin password only creates the first admin account." {
 			t.Errorf("the initial admin once root exists = %d %q, want 403", rec.Code, rec.Body)
 		}
 	}
@@ -264,7 +264,7 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 	b := f.signIn("bob", "bob's long password")
 	rec = f.send(http.MethodGet, "/v1/incidents", b, nil)
 	expect(t, "bob listing incidents with a temporary password", rec, http.StatusForbidden)
-	if !strings.Contains(rec.Body.String(), "Refused: the password is temporary.") {
+	if !strings.Contains(rec.Body.String(), "Refused. The password is temporary.") {
 		t.Errorf("a temporary password says %q", rec.Body)
 	}
 	expect(t, "bob keeping the temporary password", f.send(http.MethodPost, "/v1/me/password", b, map[string]string{"current": "bob's long password", "new": "bob's long password"}), http.StatusBadRequest)
@@ -300,7 +300,7 @@ func TestAccounts_AdminsManageThem(t *testing.T) {
 		f.withToken(http.MethodPatch, "/v1/accounts/root", map[string]string{"role": "approver"}),
 		f.withToken(http.MethodDelete, "/v1/accounts/root", nil),
 	} {
-		if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != "Refused: root is the last admin." {
+		if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != "Refused. root is the last admin account." {
 			t.Errorf("the token removing the last admin = %d %q, want 409", rec.Code, rec.Body)
 		}
 	}
@@ -324,7 +324,7 @@ func TestAccounts_TheLastAdminAccountWithAnAdminThroughOIDC(t *testing.T) {
 	f := newFresh(t, config.AccessBinding{Role: config.RoleAdmin, Users: []string{"alice@example.com"}})
 	f.admin()
 	rec := f.withToken(http.MethodDelete, "/v1/accounts/root", nil)
-	if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != "Refused: root is the last admin." {
+	if rec.Code != http.StatusConflict || strings.TrimSpace(rec.Body.String()) != "Refused. root is the last admin account." {
 		t.Errorf("the token deleting root = %d %q, want 409", rec.Code, rec.Body)
 	}
 }

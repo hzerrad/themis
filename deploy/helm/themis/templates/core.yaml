@@ -96,7 +96,7 @@ spec:
           configMap: {name: {{ .Release.Name }}-config}
         {{- if include "themis.adminAccount" . }}
         {{- $account := .Values.initialAdmin.account }}
-        # Read only while no admin account exists; then the core refuses to
+        # Read only while no admin account exists. The core then refuses to
         # start without it. Optional, so it may go once the account exists.
         - name: admin-account
           secret:
@@ -106,8 +106,8 @@ spec:
               - {key: {{ $account.passwordKey | default "password" }}, path: password}
             optional: true
         {{- else }}
-        # Optional, so the core starts without it: once an admin account
-        # exists, the password signs no one in anyway.
+        # Optional, so the core starts without it. Once an admin account
+        # exists, the password signs no one in.
         - name: initial-admin
           secret:
             secretName: {{ include "themis.initialAdminSecret" . }}

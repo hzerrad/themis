@@ -102,11 +102,11 @@ password in values is refused: Git and Helm's release history keep values.
 {{- $account := $initial.account | default dict -}}
 {{- range $key := list "password" "passwordHash" }}
 {{- if or (hasKey $initial $key) (hasKey $account $key) }}
-{{- fail "Refused: a password in values. Values are kept in Git and in Helm's release history. Put the password or its hash in a Secret, and set initialAdmin.account.existingSecret." }}
+{{- fail "Refused. initialAdmin holds a password. Values are kept in Git and in Helm's release history. Put the password or its hash in a Secret, and set initialAdmin.account.existingSecret." }}
 {{- end }}
 {{- end }}
 {{- with $account.username }}
-{{- $_ := required "initialAdmin.account.existingSecret is required with initialAdmin.account.username: the Secret holding the password or its hash." $account.existingSecret }}
+{{- $_ := required "initialAdmin.account.existingSecret is required with initialAdmin.account.username. Name the Secret that holds the password or its hash." $account.existingSecret }}
 {{- . }}
 {{- end }}
 {{- end }}

@@ -15,7 +15,7 @@ investigators:
 
 api:
   bearerTokenFile: bin/dev/admin-token
-  # Themis serves nothing until an admin account exists: this one is created
+  # Themis serves nothing until an admin account exists. This one is created
   # at startup. Sign in as dev with the password in bin/dev/admin-password.
   adminAccount:
     username: dev

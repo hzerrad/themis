@@ -127,7 +127,7 @@ func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request)
 
 // initialAdminOnly is all the initial admin password is refused with once an
 // admin account exists.
-const initialAdminOnly = "The initial admin password only creates the first admin account."
+const initialAdminOnly = "Refused. The initial admin password only creates the first admin account."
 
 // guard serves h to whoever has role and s allows, with the log fields of
 // the request's path, and logs the request at debug level.
@@ -154,7 +154,7 @@ func (a *API) guard(role string, s serves, h http.HandlerFunc, fields func(*http
 			http.Error(w, "Sign in to Themis first.", http.StatusUnauthorized)
 			return
 		case who.TemporaryPassword && !s.temporary:
-			http.Error(w, "Refused: the password is temporary. Choose a new one first.", http.StatusForbidden)
+			http.Error(w, "Refused. The password is temporary. Choose a new one first.", http.StatusForbidden)
 			return
 		}
 		if !s.closed {

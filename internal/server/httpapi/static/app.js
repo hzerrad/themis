@@ -400,7 +400,7 @@ function changePassword() {
   render(h("div", { class: "plate centre" },
     h("h1", {}, temporary ? "Choose your password" : "Change your password"),
     h("p", { class: "quiet" }, temporary
-      ? "Temporary password: an admin set it. Choose your own to continue."
+      ? "Temporary password. Choose your own to continue."
       : "Changing it ends every session, this one included."),
     h("form", { class: "form", onsubmit: submit },
       field(temporary ? "Temporary password" : "Current password", current), field("New password", next, "12 characters or more."),
@@ -473,8 +473,8 @@ async function accounts() {
       onclick: () => act(path(a), { method: "DELETE" }, "Account " + a.username + " deleted.") }, "Delete");
     return h("tr", {},
       h("td", {}, h("b", {}, a.username),
-        a.locked ? h("div", { class: "quiet small" }, "Locked: too many wrong passwords") : null,
-        a.temporaryPassword ? h("div", { class: "quiet small" }, "Temporary password: a new one is due at the next sign-in") : null),
+        a.locked ? h("div", { class: "quiet small" }, "Locked. Too many wrong passwords.") : null,
+        a.temporaryPassword ? h("div", { class: "quiet small" }, "Temporary password. A new one is due at the next sign-in.") : null),
       h("td", {}, r),
       h("td", { class: "quiet small" }, "By " + a.createdBy + ", " + when(a.createdAt)),
       h("td", {}, h("div", { class: "inline" }, pw, reset, remove)));
@@ -483,7 +483,6 @@ async function accounts() {
   flash = null;
   render(
     h("h1", {}, "Accounts"),
-    h("p", { class: "lede" }, "Accounts sign in with a username and password. A password an admin sets is temporary. Its holder chooses a new one at the next sign-in. The last admin account stays."),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}, h("span", { class: "quiet" }, "Password and removal")))),
@@ -496,7 +495,7 @@ async function accounts() {
     error,
     events.length ? h("details", { class: "fold sub", "data-key": "account-record" },
       h("summary", {}, "Record", h("span", { class: "n" }, events.length)),
-      h("p", { class: "quiet small" }, "Changes to accounts and to the initial admin password, newest first."),
+      h("p", { class: "quiet small" }, "Newest first."),
       h("table", { class: "list" },
         h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "By"), h("th", {}, "Change"))),
         h("tbody", {}, events.map((e) => h("tr", {},

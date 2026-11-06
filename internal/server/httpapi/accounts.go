@@ -225,7 +225,7 @@ func (a *API) changeOwnPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.New == in.Current {
-		http.Error(w, "Refused: the new password is the current one.", http.StatusBadRequest)
+		http.Error(w, "Refused. The new password is the current one.", http.StatusBadRequest)
 		return
 	}
 	if err := identity.CheckNewPassword(who.Username, in.New); err != nil {
@@ -263,7 +263,7 @@ func (a *API) failAccount(w http.ResponseWriter, r *http.Request, username strin
 	case errors.Is(err, store.ErrNotFound):
 		http.Error(w, "No such account.", http.StatusNotFound)
 	case errors.Is(err, store.ErrLastAdmin):
-		http.Error(w, "Refused: "+username+" is the last admin.", http.StatusConflict)
+		http.Error(w, "Refused. "+username+" is the last admin account.", http.StatusConflict)
 	default:
 		a.fail(w, r, err)
 	}

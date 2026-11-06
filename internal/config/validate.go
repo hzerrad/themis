@@ -56,7 +56,7 @@ func (c Config) Validate() error {
 			add("api.adminAccount", "set passwordHashFile, passwordFile, or both")
 		}
 		if c.API.InitialAdmin != nil {
-			add("api.adminAccount", "set it or api.initialAdmin, not both")
+			add("api.adminAccount", "can't be set with api.initialAdmin")
 		}
 	}
 	if o := c.API.OIDC; o != nil {

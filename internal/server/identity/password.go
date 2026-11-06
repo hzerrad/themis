@@ -85,7 +85,7 @@ func CheckHash(encoded string) error {
 			return fmt.Errorf("not a bcrypt hash: %w", err)
 		}
 		if cost < minBcryptCost || cost > maxBcryptCost {
-			return fmt.Errorf("the bcrypt cost is %d; use %d to %d", cost, minBcryptCost, maxBcryptCost)
+			return fmt.Errorf("the bcrypt cost is %d, outside %d to %d", cost, minBcryptCost, maxBcryptCost)
 		}
 		return nil
 	}
@@ -95,9 +95,9 @@ func CheckHash(encoded string) error {
 	}
 	switch {
 	case h.memory > maxArgonMemory:
-		return fmt.Errorf("the argon2id memory is %d KiB; use at most %d", h.memory, maxArgonMemory)
+		return fmt.Errorf("the argon2id memory is %d KiB, above the limit of %d", h.memory, maxArgonMemory)
 	case h.time < 1 || h.time > maxArgonTime:
-		return fmt.Errorf("the argon2id time is %d; use 1 to %d", h.time, maxArgonTime)
+		return fmt.Errorf("the argon2id time is %d, outside 1 to %d", h.time, maxArgonTime)
 	case h.threads < 1:
 		return errors.New("the argon2id parallelism is 0")
 	case len(h.salt) < 8 || len(h.key) < 16:
