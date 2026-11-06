@@ -19,7 +19,7 @@ uv run python -m themis_intelligence
 | `MODEL_NAME` | `qwen3:8b` | The model |
 | `MODEL_API_KEY_FILE` | none | A file holding the endpoint's API key |
 | `MODEL_CEILING` | `sensitive` | The most sensitive evidence the endpoint may receive |
-| `MODEL_TOKEN_BUDGET` | `200000` | Tokens per investigation |
+| `MODEL_TOKEN_BUDGET` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
 
 ## How an investigation runs
 

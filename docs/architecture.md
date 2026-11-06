@@ -103,7 +103,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `scenarios/` | **The incidents Themis handles**, one scenario pack per folder: its profile, its checks and the evaluation cases that prove it, built into the binary; see [scenarios.md](scenarios.md) |
 | `internal/incident` | An incident and its states |
 | `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |
-| `internal/incident/investigation` | An incident's investigation: prepares it, hands it to an investigator under a lease, reads the evidence it asks for within its profile and budget, records what it couldn't have, and ends it with the state its outcome leads to; waits for a suggested fix when there is none |
+| `internal/incident/investigation` | An incident's investigation: prepares it, hands it to an investigator under a lease, reads the evidence it asks for within its profile and budget, records what it couldn't have, and ends it with the state its outcome leads to; waits for a suggested fix when there is none, and investigates again when a person asks |
 | `internal/incident/suggestion` | Takes a fix suggested for an incident, from the investigator, a tool outside Themis or a person: judges it once, keeps it with why it was refused, and hands the one that goes next to governance |
 | `internal/incident/governance` | Deciding each action by policy, approvals, handing approved actions to the executor, and putting a failed fix back |
 | `internal/incident/governance/policy` | Policy rules: compiling them, and deciding an action with them |
