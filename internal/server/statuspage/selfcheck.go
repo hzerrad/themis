@@ -146,7 +146,7 @@ func (c *Checker) investigator(ctx context.Context) Check {
 }
 
 // installInvestigator is the remedy when no investigator is installed.
-const installInvestigator = "Set model.enabled=true and the model's address to have Themis investigate."
+const installInvestigator = "Set model.enabled=true and a model to have Themis investigate."
 
 // modelFixes say what to do about each way the model can fail.
 var modelFixes = map[string]struct{ summary, fix string }{
@@ -183,6 +183,9 @@ func (c *Checker) model(ctx context.Context) Check {
 		if !v.Complete {
 			ch.State, ch.Summary = Problem, "Not set. Incidents are not investigated."
 			ch.Fix = "Set the model's address and name in Setup, or in the chart's model values."
+			if v.Provider == "anthropic" {
+				ch.Fix = "Set the model's name in Setup, or model.name in the chart."
+			}
 			return ch
 		}
 	}

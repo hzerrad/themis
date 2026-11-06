@@ -56,6 +56,18 @@ missing key means on.
 {{- end }}
 
 {{/*
+The API the investigator speaks: openai, the default, or anthropic, which has
+its own address.
+*/}}
+{{- define "themis.modelProvider" -}}
+{{- $provider := ((.Values.model | default dict).provider | default "openai" | toString | trim | lower) -}}
+{{- if not (has $provider (list "openai" "anthropic")) -}}
+{{- fail (printf "model.provider must be openai or anthropic, not %q" $provider) -}}
+{{- end -}}
+{{- $provider -}}
+{{- end }}
+
+{{/*
 Whether the core reads the Kubernetes metrics API. A missing key means on, as
 above.
 */}}

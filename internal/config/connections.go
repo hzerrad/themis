@@ -17,11 +17,21 @@ type Settings struct {
 // Model says which of the investigator's model settings the install set.
 // Those win over setup's.
 type Model struct {
-	BaseURL string `json:"baseURL,omitempty"`
-	Name    string `json:"name,omitempty"`
+	// Provider is the API the investigator speaks: openai, the default, or
+	// anthropic, which has its own address, so setup's doesn't apply.
+	Provider string `json:"provider,omitempty" jsonschema:"enum=openai,enum=anthropic"`
+	BaseURL  string `json:"baseURL,omitempty"`
+	Name     string `json:"name,omitempty"`
 	// APIKey says the install gives the investigator a key.
 	APIKey bool `json:"apiKey,omitempty"`
 }
+
+// ModelProviders are the APIs the investigator speaks.
+var ModelProviders = []string{"openai", "anthropic"}
+
+// OwnAddress says the provider's API has a single address of its own, so a
+// model there needs only a name.
+func (m Model) OwnAddress() bool { return m.Provider == "anthropic" }
 
 // Resources configures reading configuration from custom resources.
 type Resources struct {

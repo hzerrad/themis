@@ -147,23 +147,41 @@ async def test_asks_each_waiting_incident_once() -> None:
     assert "SECRET_FROM_A_LOG" not in req.notes
 
 
-class Unreachable(FakeThemis):
+class Flaky(FakeThemis):
+    """Answers or is unreachable as scripted, one poll at a time."""
+
+    def __init__(self, *answers: bool) -> None:
+        super().__init__({})
+        self.answers = list(answers)
+        self.done = asyncio.Event()
+
     async def list_incidents(self) -> list[proposal_pb2.OpenIncident]:
-        raise grpc.aio.AioRpcError(
-            grpc.StatusCode.UNAVAILABLE, grpc.aio.Metadata(), grpc.aio.Metadata()
-        )
+        if self.answers and not self.answers.pop(0):
+            raise grpc.aio.AioRpcError(
+                grpc.StatusCode.UNAVAILABLE, grpc.aio.Metadata(), grpc.aio.Metadata()
+            )
+        if not self.answers:
+            self.done.set()
+        return await super().list_incidents()
 
 
-async def test_waiting_for_themis_at_start_is_quiet(caplog: pytest.LogCaptureFixture) -> None:
+# Waiting for Themis at start is expected. An outage after that is logged when
+# it starts and when it ends, not on every poll.
+async def test_outages_are_logged_once(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level("INFO")
-    agent = Agent(Unreachable({}), holmes_answering(GOOD, []), poll_s=0)
+    themis = Flaky(False, False, True, False, False, False, True)
+    agent = Agent(themis, holmes_answering(GOOD, []), poll_s=0)
     task = asyncio.create_task(agent.run())
-    await asyncio.sleep(0.05)
+    await asyncio.wait_for(themis.done.wait(), 1)
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task
     said = [(r.levelname, r.getMessage()) for r in caplog.records if "Themis" in r.getMessage()]
-    assert said == [("INFO", "waiting for Themis to start")]
+    assert said == [
+        ("INFO", "waiting for Themis to start"),
+        ("WARNING", "Themis can't be reached"),
+        ("INFO", "Themis reachable again"),
+    ]
 
 
 async def test_free_text_suggests_nothing() -> None:

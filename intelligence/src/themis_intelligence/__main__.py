@@ -11,8 +11,9 @@ Configuration comes from the environment:
     MODEL_NAME               the model, such as qwen3:8b
     MODEL_API_KEY_FILE       file holding the API key, if the endpoint needs one
                              The three above, and MODEL_STRICT_OUTPUT with the address,
-                             come from Themis's setup when unset here; without an
-                             address and a name, no incident is investigated
+                             come from Themis's setup when unset here; without a
+                             name, and an address for openai, no incident is
+                             investigated
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
     MODEL_TOKEN_BUDGET       tokens per investigation (200000)
     MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low (for

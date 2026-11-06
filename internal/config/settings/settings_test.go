@@ -68,7 +68,7 @@ func TestModel_SetAndRead(t *testing.T) {
 		t.Fatalf("Model = %+v, %v", got, err)
 	}
 	v, err := s.View(t.Context())
-	if err != nil || !v.Complete || !v.APIKeySet || v.StrictOutput || len(v.ByInstall) != 0 {
+	if err != nil || !v.Complete || !v.APIKeySet || v.StrictOutput || len(v.ByInstall) != 0 || v.Provider != "openai" {
 		t.Errorf("View = %+v, %v", v, err)
 	}
 	// An empty key removes it.
@@ -101,6 +101,19 @@ func TestModel_InstallWins(t *testing.T) {
 	}
 	if strings.Join(v.ByInstall, ",") != "model.baseURL,model.strictOutput,model.apiKey" {
 		t.Errorf("by install = %v", v.ByInstall)
+	}
+}
+
+// Anthropic's API has its own address: a name is enough, and setup's address
+// doesn't apply.
+func TestModel_ProviderWithItsOwnAddress(t *testing.T) {
+	s := &settings.Settings{Store: memStore{}, KeyFile: keyFile(t, key), Install: config.Model{Provider: "anthropic", Name: "claude-haiku-5-5"}}
+	if err := s.SetModel(t.Context(), settings.ModelChange{BaseURL: ptr("https://elsewhere/v1")}, "alice"); !errors.Is(err, settings.ErrSetByInstall) {
+		t.Errorf("setting an address for Anthropic: %v, want ErrSetByInstall", err)
+	}
+	v, err := s.View(t.Context())
+	if err != nil || !v.Complete || v.Provider != "anthropic" || v.BaseURL != "" {
+		t.Errorf("View = %+v, %v", v, err)
 	}
 }
 

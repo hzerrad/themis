@@ -25,6 +25,7 @@ Themis brings no model. Pick one the cluster can reach.
 kubectl --context kind-themis-dev create namespace themis
 kubectl --context kind-themis-dev -n themis create secret generic model-key --from-literal=apiKey=sk-...
 # then, in step 3: MODEL_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4.1 MODEL_KEY_SECRET=model-key
+# or, for Claude: MODEL_PROVIDER=anthropic MODEL_NAME=claude-haiku-5-5 MODEL_KEY_SECRET=model-key
 ```
 
 **Ollama on your machine.** Pods reach your machine at the kind network's gateway. Bind Ollama to that address only, so it is not exposed on your network:

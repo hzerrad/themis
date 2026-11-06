@@ -62,21 +62,25 @@ type Model struct {
 // ModelView is the model settings for the setup page: what's set, by whom.
 // The key itself is never shown.
 type ModelView struct {
+	// Provider is the API the install chose: openai or anthropic.
+	Provider     string `json:"provider"`
 	BaseURL      string `json:"baseURL"`
 	Name         string `json:"name"`
 	APIKeySet    bool   `json:"apiKeySet"`
 	StrictOutput bool   `json:"strictOutput"`
 	// ByInstall lists the settings the install made, which setup can't change.
 	ByInstall []string `json:"byInstall"`
-	// Complete says the model can be used: it has an address and a name.
+	// Complete says the model can be used: it has a name, and an address
+	// unless its provider has its own.
 	Complete bool `json:"complete"`
 }
 
 // installSet lists the settings the install made. The address and strict
-// output go together: they describe the same endpoint.
+// output go together: they describe the same endpoint. A provider with its
+// own address sets both.
 func (s *Settings) installSet() []string {
 	var set []string
-	if s.Install.BaseURL != "" {
+	if s.Install.BaseURL != "" || s.Install.OwnAddress() {
 		set = append(set, ModelBaseURL, ModelStrictOutput)
 	}
 	if s.Install.Name != "" {
@@ -129,11 +133,14 @@ func (s *Settings) View(ctx context.Context) (ModelView, error) {
 	if err != nil {
 		return ModelView{}, err
 	}
-	v := ModelView{BaseURL: m.BaseURL, Name: m.Name, APIKeySet: m.APIKey != "", StrictOutput: m.StrictOutput == nil || *m.StrictOutput, ByInstall: s.installSet()}
+	v := ModelView{Provider: s.Install.Provider, BaseURL: m.BaseURL, Name: m.Name, APIKeySet: m.APIKey != "", StrictOutput: m.StrictOutput == nil || *m.StrictOutput, ByInstall: s.installSet()}
+	if v.Provider == "" {
+		v.Provider = "openai"
+	}
 	if v.ByInstall == nil {
 		v.ByInstall = []string{}
 	}
-	if s.Install.BaseURL != "" {
+	if s.Install.BaseURL != "" || s.Install.OwnAddress() {
 		v.BaseURL = s.Install.BaseURL
 	}
 	if s.Install.Name != "" {
@@ -142,7 +149,7 @@ func (s *Settings) View(ctx context.Context) (ModelView, error) {
 	if s.Install.APIKey {
 		v.APIKeySet = true
 	}
-	v.Complete = v.BaseURL != "" && v.Name != ""
+	v.Complete = v.Name != "" && (v.BaseURL != "" || s.Install.OwnAddress())
 	return v, nil
 }
 
