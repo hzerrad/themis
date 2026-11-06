@@ -24,6 +24,8 @@ const (
 	InvestigationService_CompleteInvestigation_FullMethodName = "/themis.v1.InvestigationService/CompleteInvestigation"
 	InvestigationService_FailInvestigation_FullMethodName     = "/themis.v1.InvestigationService/FailInvestigation"
 	InvestigationService_GetModelSettings_FullMethodName      = "/themis.v1.InvestigationService/GetModelSettings"
+	InvestigationService_TakeModelTest_FullMethodName         = "/themis.v1.InvestigationService/TakeModelTest"
+	InvestigationService_ReportModelTest_FullMethodName       = "/themis.v1.InvestigationService/ReportModelTest"
 )
 
 // InvestigationServiceClient is the client API for InvestigationService service.
@@ -37,6 +39,12 @@ type InvestigationServiceClient interface {
 	// GetModelSettings returns the model settings made in Themis's setup, for
 	// whatever the investigator's own environment leaves unset.
 	GetModelSettings(ctx context.Context, in *GetModelSettingsRequest, opts ...grpc.CallOption) (*GetModelSettingsResponse, error)
+	// TakeModelTest waits a few seconds for a test of the model's connection,
+	// asked for on the Setup page. Only the investigator may reach the model,
+	// so it makes the test's request. An empty response means none came.
+	TakeModelTest(ctx context.Context, in *TakeModelTestRequest, opts ...grpc.CallOption) (*TakeModelTestResponse, error)
+	// ReportModelTest returns what a test found.
+	ReportModelTest(ctx context.Context, in *ReportModelTestRequest, opts ...grpc.CallOption) (*ReportModelTestResponse, error)
 }
 
 type investigationServiceClient struct {
@@ -97,6 +105,26 @@ func (c *investigationServiceClient) GetModelSettings(ctx context.Context, in *G
 	return out, nil
 }
 
+func (c *investigationServiceClient) TakeModelTest(ctx context.Context, in *TakeModelTestRequest, opts ...grpc.CallOption) (*TakeModelTestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(TakeModelTestResponse)
+	err := c.cc.Invoke(ctx, InvestigationService_TakeModelTest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *investigationServiceClient) ReportModelTest(ctx context.Context, in *ReportModelTestRequest, opts ...grpc.CallOption) (*ReportModelTestResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportModelTestResponse)
+	err := c.cc.Invoke(ctx, InvestigationService_ReportModelTest_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InvestigationServiceServer is the server API for InvestigationService service.
 // All implementations must embed UnimplementedInvestigationServiceServer
 // for forward compatibility.
@@ -108,6 +136,12 @@ type InvestigationServiceServer interface {
 	// GetModelSettings returns the model settings made in Themis's setup, for
 	// whatever the investigator's own environment leaves unset.
 	GetModelSettings(context.Context, *GetModelSettingsRequest) (*GetModelSettingsResponse, error)
+	// TakeModelTest waits a few seconds for a test of the model's connection,
+	// asked for on the Setup page. Only the investigator may reach the model,
+	// so it makes the test's request. An empty response means none came.
+	TakeModelTest(context.Context, *TakeModelTestRequest) (*TakeModelTestResponse, error)
+	// ReportModelTest returns what a test found.
+	ReportModelTest(context.Context, *ReportModelTestRequest) (*ReportModelTestResponse, error)
 	mustEmbedUnimplementedInvestigationServiceServer()
 }
 
@@ -132,6 +166,12 @@ func (UnimplementedInvestigationServiceServer) FailInvestigation(context.Context
 }
 func (UnimplementedInvestigationServiceServer) GetModelSettings(context.Context, *GetModelSettingsRequest) (*GetModelSettingsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetModelSettings not implemented")
+}
+func (UnimplementedInvestigationServiceServer) TakeModelTest(context.Context, *TakeModelTestRequest) (*TakeModelTestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method TakeModelTest not implemented")
+}
+func (UnimplementedInvestigationServiceServer) ReportModelTest(context.Context, *ReportModelTestRequest) (*ReportModelTestResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReportModelTest not implemented")
 }
 func (UnimplementedInvestigationServiceServer) mustEmbedUnimplementedInvestigationServiceServer() {}
 func (UnimplementedInvestigationServiceServer) testEmbeddedByValue()                              {}
@@ -244,6 +284,42 @@ func _InvestigationService_GetModelSettings_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InvestigationService_TakeModelTest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TakeModelTestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InvestigationServiceServer).TakeModelTest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InvestigationService_TakeModelTest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InvestigationServiceServer).TakeModelTest(ctx, req.(*TakeModelTestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _InvestigationService_ReportModelTest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReportModelTestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InvestigationServiceServer).ReportModelTest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InvestigationService_ReportModelTest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InvestigationServiceServer).ReportModelTest(ctx, req.(*ReportModelTestRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // InvestigationService_ServiceDesc is the grpc.ServiceDesc for InvestigationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +346,14 @@ var InvestigationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetModelSettings",
 			Handler:    _InvestigationService_GetModelSettings_Handler,
+		},
+		{
+			MethodName: "TakeModelTest",
+			Handler:    _InvestigationService_TakeModelTest_Handler,
+		},
+		{
+			MethodName: "ReportModelTest",
+			Handler:    _InvestigationService_ReportModelTest_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -99,6 +99,9 @@ func (c Config) Validate() error {
 	if p := c.Model.Provider; p != "" && !slices.Contains(ModelProviders, p) {
 		add("model.provider", "must be one of %s, got %q", strings.Join(ModelProviders, ", "), p)
 	}
+	if d := c.Model.SchemaDialect; d != "" && !slices.Contains(SchemaDialects, d) {
+		add("model.schemaDialect", "must be one of %s, got %q", strings.Join(SchemaDialects, ", "), d)
+	}
 	if c.Executor != nil {
 		if c.Executor.Address == "" {
 			add("executor.address", "is required")

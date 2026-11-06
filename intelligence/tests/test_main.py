@@ -22,14 +22,15 @@ def test_read_flag_refuses_anything_else(monkeypatch: pytest.MonkeyPatch) -> Non
 @pytest.mark.parametrize(
     ("field", "temperature", "dialect", "want"),
     [
-        ("", "", "", ("max_tokens", 0.0, "as-is")),
+        # An unset dialect is left to Themis's setup.
+        ("", "", "", ("max_tokens", 0.0, None)),
         (
             "max_completion_tokens",
             "Default",
             "openai-strict",
             ("max_completion_tokens", None, "openai-strict"),
         ),
-        ("", "0.7", "", ("max_tokens", 0.7, "as-is")),
+        ("", "0.7", "as-is", ("max_tokens", 0.7, "as-is")),
     ],
 )
 def test_read_sampling(
@@ -37,7 +38,7 @@ def test_read_sampling(
     field: str,
     temperature: str,
     dialect: str,
-    want: tuple[str, float | None, str],
+    want: tuple[str, float | None, str | None],
 ) -> None:
     monkeypatch.setenv("MODEL_OUTPUT_LIMIT_FIELD", field)
     monkeypatch.setenv("MODEL_TEMPERATURE", temperature)

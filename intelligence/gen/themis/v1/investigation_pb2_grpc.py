@@ -39,6 +39,16 @@ class InvestigationServiceStub:
                 request_serializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.SerializeToString,
                 response_deserializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.FromString,
                 _registered_method=True)
+        self.TakeModelTest = channel.unary_unary(
+                '/themis.v1.InvestigationService/TakeModelTest',
+                request_serializer=themis_dot_v1_dot_investigation__pb2.TakeModelTestRequest.SerializeToString,
+                response_deserializer=themis_dot_v1_dot_investigation__pb2.TakeModelTestResponse.FromString,
+                _registered_method=True)
+        self.ReportModelTest = channel.unary_unary(
+                '/themis.v1.InvestigationService/ReportModelTest',
+                request_serializer=themis_dot_v1_dot_investigation__pb2.ReportModelTestRequest.SerializeToString,
+                response_deserializer=themis_dot_v1_dot_investigation__pb2.ReportModelTestResponse.FromString,
+                _registered_method=True)
 
 
 class InvestigationServiceServicer:
@@ -76,6 +86,22 @@ class InvestigationServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def TakeModelTest(self, request, context):
+        """TakeModelTest waits a few seconds for a test of the model's connection,
+        asked for on the Setup page. Only the investigator may reach the model,
+        so it makes the test's request. An empty response means none came.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReportModelTest(self, request, context):
+        """ReportModelTest returns what a test found.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InvestigationServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -103,6 +129,16 @@ def add_InvestigationServiceServicer_to_server(servicer, server):
                     servicer.GetModelSettings,
                     request_deserializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.FromString,
                     response_serializer=themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.SerializeToString,
+            ),
+            'TakeModelTest': grpc.unary_unary_rpc_method_handler(
+                    servicer.TakeModelTest,
+                    request_deserializer=themis_dot_v1_dot_investigation__pb2.TakeModelTestRequest.FromString,
+                    response_serializer=themis_dot_v1_dot_investigation__pb2.TakeModelTestResponse.SerializeToString,
+            ),
+            'ReportModelTest': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReportModelTest,
+                    request_deserializer=themis_dot_v1_dot_investigation__pb2.ReportModelTestRequest.FromString,
+                    response_serializer=themis_dot_v1_dot_investigation__pb2.ReportModelTestResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -240,6 +276,60 @@ class InvestigationService:
             '/themis.v1.InvestigationService/GetModelSettings',
             themis_dot_v1_dot_investigation__pb2.GetModelSettingsRequest.SerializeToString,
             themis_dot_v1_dot_investigation__pb2.GetModelSettingsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def TakeModelTest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/themis.v1.InvestigationService/TakeModelTest',
+            themis_dot_v1_dot_investigation__pb2.TakeModelTestRequest.SerializeToString,
+            themis_dot_v1_dot_investigation__pb2.TakeModelTestResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReportModelTest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/themis.v1.InvestigationService/ReportModelTest',
+            themis_dot_v1_dot_investigation__pb2.ReportModelTestRequest.SerializeToString,
+            themis_dot_v1_dot_investigation__pb2.ReportModelTestResponse.FromString,
             options,
             channel_credentials,
             insecure,

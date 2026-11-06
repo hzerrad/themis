@@ -1,5 +1,6 @@
 import datetime
 
+from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from themis.v1 import common_pb2 as _common_pb2
 from google.protobuf.internal import containers as _containers
@@ -10,6 +11,19 @@ from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
+
+class ModelTestOutcome(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    MODEL_TEST_OUTCOME_UNSPECIFIED: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_CONNECTED: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_INCOMPLETE: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_UNREACHABLE: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_NO_ANSWER: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_REFUSED: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_NOT_IN_FORMAT: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_CUT_OFF: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_DECLINED: _ClassVar[ModelTestOutcome]
+    MODEL_TEST_OUTCOME_ERROR: _ClassVar[ModelTestOutcome]
 
 class HypothesisStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -39,6 +53,16 @@ class EvidenceGapCause(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE: _ClassVar[EvidenceGapCause]
     EVIDENCE_GAP_CAUSE_DATA_CEILING: _ClassVar[EvidenceGapCause]
     EVIDENCE_GAP_CAUSE_BUDGET_SPENT: _ClassVar[EvidenceGapCause]
+MODEL_TEST_OUTCOME_UNSPECIFIED: ModelTestOutcome
+MODEL_TEST_OUTCOME_CONNECTED: ModelTestOutcome
+MODEL_TEST_OUTCOME_INCOMPLETE: ModelTestOutcome
+MODEL_TEST_OUTCOME_UNREACHABLE: ModelTestOutcome
+MODEL_TEST_OUTCOME_NO_ANSWER: ModelTestOutcome
+MODEL_TEST_OUTCOME_REFUSED: ModelTestOutcome
+MODEL_TEST_OUTCOME_NOT_IN_FORMAT: ModelTestOutcome
+MODEL_TEST_OUTCOME_CUT_OFF: ModelTestOutcome
+MODEL_TEST_OUTCOME_DECLINED: ModelTestOutcome
+MODEL_TEST_OUTCOME_ERROR: ModelTestOutcome
 HYPOTHESIS_STATUS_UNSPECIFIED: HypothesisStatus
 HYPOTHESIS_STATUS_REFUTED: HypothesisStatus
 HYPOTHESIS_STATUS_SUPPORTED: HypothesisStatus
@@ -62,16 +86,72 @@ class GetModelSettingsRequest(_message.Message):
     def __init__(self) -> None: ...
 
 class GetModelSettingsResponse(_message.Message):
-    __slots__ = ("base_url", "model", "api_key", "strict_output")
+    __slots__ = ("base_url", "model", "api_key", "strict_output", "provider", "schema_dialect")
     BASE_URL_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     API_KEY_FIELD_NUMBER: _ClassVar[int]
     STRICT_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_DIALECT_FIELD_NUMBER: _ClassVar[int]
     base_url: str
     model: str
     api_key: str
     strict_output: bool
-    def __init__(self, base_url: _Optional[str] = ..., model: _Optional[str] = ..., api_key: _Optional[str] = ..., strict_output: _Optional[bool] = ...) -> None: ...
+    provider: str
+    schema_dialect: str
+    def __init__(self, base_url: _Optional[str] = ..., model: _Optional[str] = ..., api_key: _Optional[str] = ..., strict_output: _Optional[bool] = ..., provider: _Optional[str] = ..., schema_dialect: _Optional[str] = ...) -> None: ...
+
+class TakeModelTestRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class TakeModelTestResponse(_message.Message):
+    __slots__ = ("test",)
+    TEST_FIELD_NUMBER: _ClassVar[int]
+    test: ModelTest
+    def __init__(self, test: _Optional[_Union[ModelTest, _Mapping]] = ...) -> None: ...
+
+class ModelTest(_message.Message):
+    __slots__ = ("id", "settings", "timeout")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    SETTINGS_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    settings: GetModelSettingsResponse
+    timeout: _duration_pb2.Duration
+    def __init__(self, id: _Optional[str] = ..., settings: _Optional[_Union[GetModelSettingsResponse, _Mapping]] = ..., timeout: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ...) -> None: ...
+
+class ReportModelTestRequest(_message.Message):
+    __slots__ = ("id", "outcome", "provider", "address", "model", "strict_output", "schema_dialect", "answered_by", "status", "detail", "latency", "output_limit")
+    ID_FIELD_NUMBER: _ClassVar[int]
+    OUTCOME_FIELD_NUMBER: _ClassVar[int]
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
+    ADDRESS_FIELD_NUMBER: _ClassVar[int]
+    MODEL_FIELD_NUMBER: _ClassVar[int]
+    STRICT_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_DIALECT_FIELD_NUMBER: _ClassVar[int]
+    ANSWERED_BY_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    DETAIL_FIELD_NUMBER: _ClassVar[int]
+    LATENCY_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_LIMIT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    outcome: ModelTestOutcome
+    provider: str
+    address: str
+    model: str
+    strict_output: bool
+    schema_dialect: str
+    answered_by: str
+    status: int
+    detail: str
+    latency: _duration_pb2.Duration
+    output_limit: int
+    def __init__(self, id: _Optional[str] = ..., outcome: _Optional[_Union[ModelTestOutcome, str]] = ..., provider: _Optional[str] = ..., address: _Optional[str] = ..., model: _Optional[str] = ..., strict_output: _Optional[bool] = ..., schema_dialect: _Optional[str] = ..., answered_by: _Optional[str] = ..., status: _Optional[int] = ..., detail: _Optional[str] = ..., latency: _Optional[_Union[datetime.timedelta, _duration_pb2.Duration, _Mapping]] = ..., output_limit: _Optional[int] = ...) -> None: ...
+
+class ReportModelTestResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class LeaseInvestigationRequest(_message.Message):
     __slots__ = ("worker_id",)
