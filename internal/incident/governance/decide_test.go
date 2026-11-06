@@ -124,11 +124,11 @@ func TestDecide(t *testing.T) {
 		{name: "bad rollout without OOM", checks: set(facts(check.True), 0, check.False), want: policy.RequireApproval, rule: "rollback-needs-approval"},
 		// The crash loop began before the rollout: the check that justifies a
 		// rollback is false, so Themis refuses it before any rule.
-		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "The check that justifies a rollback isn't true: failure_onset_after_rollout is false."},
+		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused: the check that justifies a rollback isn't true: failure_onset_after_rollout is false."},
 		// Without the evidence that says when the failures started, no rollback.
 		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: governance.UnjustifiedRule},
 		// Every profile offering the fix must find it justified.
-		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "The check that justifies a rollback isn't true: oom_killed_new_revision is false. They are the watching profile's."},
+		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused: the check that justifies a rollback isn't true: oom_killed_new_revision is false. They are the watching profile's."},
 		// A referenced ConfigMap changed between the rollout and the failures:
 		// rolling back wouldn't undo it.
 		{name: "config changed before the failure", checks: set(facts(check.True), 3, check.True), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
@@ -142,9 +142,9 @@ func TestDecide(t *testing.T) {
 		// any profile's policy, which here would ask for approval: it only
 		// recommends the fix. Ownership is read live too, so a stale check
 		// doesn't hide it.
-		{name: "GitOps owns the target", checks: facts(check.True), gitOps: true, want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD manages this workload, so Themis only recommends the change: apply it in Git."},
-		{name: "the check says GitOps owns it", checks: set(facts(check.True), 1, check.True), want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD or Flux manages this workload, so Themis only recommends the change: apply it in Git."},
-		{name: "GitOps may own it", checks: set(facts(check.True), 1, check.Unknown), want: policy.Deny, rule: governance.GitOpsRule, reason: "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change."},
+		{name: "GitOps owns the target", checks: facts(check.True), gitOps: true, want: policy.Deny, rule: governance.GitOpsRule, reason: "Recommended, not applied: Argo CD manages this workload. Apply the change in Git."},
+		{name: "the check says GitOps owns it", checks: set(facts(check.True), 1, check.True), want: policy.Deny, rule: governance.GitOpsRule, reason: "Recommended, not applied: Argo CD or Flux manages this workload. Apply the change in Git."},
+		{name: "GitOps may own it", checks: set(facts(check.True), 1, check.Unknown), want: policy.Deny, rule: governance.GitOpsRule, reason: "Recommended, not applied: Themis couldn't tell whether Argo CD or Flux manages this workload. Apply the change in Git."},
 		// Putting a fix back needs no approval, whatever the checks say of a fix,
 		// unless GitOps owns the workload: then Themis changes nothing.
 		{name: "putting a fix back", checks: facts(check.False), restores: "the-fix", want: policy.Allow},

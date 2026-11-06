@@ -183,12 +183,12 @@ func checksRead(a *cel.Ast) []string {
 func (p *Policy) Evaluate(in Input) Decision {
 	d, matched := p.Rule(in)
 	if !matched {
-		d = Decision{Outcome: RequireApproval, Reason: "No policy rule matched, so a person must approve this fix.", PolicyDigest: p.digest}
+		d = Decision{Outcome: RequireApproval, Reason: "No policy rule matched: the fix needs a person's approval.", PolicyDigest: p.digest}
 		if in.Restore {
 			// Putting back what Themis changed needs no approval unless a
 			// rule asks for one: it returns the workload to how a person
 			// left it.
-			d = Decision{Outcome: Allow, Reason: "No policy rule matched, so Themis may put the workload back as it was.", PolicyDigest: p.digest}
+			d = Decision{Outcome: Allow, Reason: "No policy rule matched: Themis may restore the previous state.", PolicyDigest: p.digest}
 		}
 	}
 	if d.Failed {
@@ -213,7 +213,7 @@ func (p *Policy) Rule(in Input) (Decision, bool) {
 		if err != nil {
 			return Decision{
 				Outcome: Deny, PolicyID: r.Name, PolicyDigest: p.digest, Failed: true,
-				Reason: fmt.Sprintf("Policy rule %s couldn't be evaluated (%v), so the fix is forbidden.", r.Name, err),
+				Reason: fmt.Sprintf("Refused: policy rule %s couldn't be evaluated (%v).", r.Name, err),
 			}, true
 		}
 		if matched, ok := val.Value().(bool); ok && matched {

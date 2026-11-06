@@ -185,20 +185,20 @@ func TestSubmit_Rejected(t *testing.T) {
 		safety string // the safety event counted; "" counts none
 	}{{
 		name: "a fix no profile allows", from: investigator, fixes: []string{},
-		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "None of this incident's profiles (diagnosis, rollout-regression) allows this kind of fix (deployment.rollback-to-revision).", safety: "unknown_capability",
+		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "Refused: none of the incident's profiles (diagnosis, rollout-regression) allows deployment.rollback-to-revision.", safety: "unknown_capability",
 	}, {
 		name: "a fix Themis doesn't have", from: investigator, fixes: []string{"x.unknown"},
 		change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			generic(map[string]any{})(r)
 			r.CapabilityName = "x.unknown"
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "(x.unknown)", safety: "unknown_capability",
+		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "Refused: none of the incident's profiles (diagnosis, rollout-regression) allows x.unknown.", safety: "unknown_capability",
 	}, {
 		name: "another target", from: investigator,
 		change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			r.Target = &themisv1.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "kube-system", Name: "coredns", Uid: "u-coredns"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, says: "It names Deployment kube-system/coredns (uid u-coredns), but the incident is about shop/checkout (uid u-checkout).", safety: "wrong_target",
+		reason: themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH, says: "Refused: it names Deployment kube-system/coredns (uid u-coredns); the incident is about shop/checkout (uid u-checkout).", safety: "wrong_target",
 	}, {
 		// Same name, another UID: the object was recreated.
 		name: "the target recreated", from: agent,
@@ -209,10 +209,10 @@ func TestSubmit_Rejected(t *testing.T) {
 		change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			r.Capability = &themisv1.SubmitProposalRequest_RollbackToRevision{RollbackToRevision: &themisv1.RollbackToRevisionParams{Revision: 0}}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, says: "The revision must be a positive number.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, says: "Refused: the revision must be a positive number.",
 	}, {
 		name: "no revision", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) { generic(map[string]any{})(r) },
-		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, says: "A rollback needs only revision, a positive whole number.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, says: "Refused: a rollback needs only revision, a positive whole number.",
 	}, {
 		name: "a fractional revision", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			generic(map[string]any{"revision": 1.5})(r)
@@ -225,20 +225,20 @@ func TestSubmit_Rejected(t *testing.T) {
 		reason: themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, says: "only revision",
 	}, {
 		name: "no evidence", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) { r.CitedEvidenceIds = nil },
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, says: "It cites no evidence.", safety: "unknown_evidence",
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, says: "Refused: it cites no evidence.", safety: "unknown_evidence",
 	}, {
 		name: "evidence never collected", from: agent,
 		change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			r.CitedEvidenceIds = []string{"0192f0c1-0000-7000-8000-0000000000ee"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, says: "It cites evidence Themis never collected: 0192f0c1-0000-7000-8000-0000000000ee.", safety: "unknown_evidence",
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, says: "Refused: it cites evidence Themis didn't collect: 0192f0c1-0000-7000-8000-0000000000ee.", safety: "unknown_evidence",
 	}, {
 		// A check is cited for what it answered for this incident: one Themis
 		// has, but didn't run for it, answered nothing.
 		name: "a check the incident didn't run", from: investigator, change: func(_ *testing.T, _ *env, r *themisv1.SubmitProposalRequest) {
 			r.CitedPredicates = []string{"rollout_recent"}
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, says: "It cites a check Themis didn't run for this incident: rollout_recent.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, says: "Refused: it cites a check Themis didn't run for this incident: rollout_recent.",
 	}, {
 		name: "a fix the source may not suggest",
 		from: func(e *env) suggestion.Suggester {
@@ -246,17 +246,17 @@ func TestSubmit_Rejected(t *testing.T) {
 			a.Fixes = []string{"something.else"}
 			return a
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "serviceaccount:agents/triage may not suggest this kind of fix (deployment.rollback-to-revision).", safety: "unknown_capability",
+		reason: themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED, says: "Refused: serviceaccount:agents/triage may not suggest deployment.rollback-to-revision.", safety: "unknown_capability",
 	}, {
 		name: "an incident past taking suggestions", from: agent,
 		change: func(t *testing.T, e *env, _ *themisv1.SubmitProposalRequest) {
 			e.setState(t, incident.ClosedNoAction)
 		},
-		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "This incident is past the point of taking suggestions.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "Refused: the incident no longer takes suggestions.",
 	}, {
 		name: "a profile no longer configured", from: agent,
 		change: func(_ *testing.T, e *env, _ *themisv1.SubmitProposalRequest) { e.inbox.Config = config.Config{} },
-		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "Themis no longer has the diagnosis and rollout-regression profiles this incident matched.",
+		reason: themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED, says: "Refused: Themis no longer has the diagnosis and rollout-regression profiles this incident matched.",
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, tc.fixes)

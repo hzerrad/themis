@@ -59,7 +59,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	}
 	matched := w.Config.Current().Matched(in.Profiles())
 	if len(matched) == 0 {
-		return w.close(ctx, in.ID, fmt.Sprintf("Themis no longer has %s this incident matched, so it stopped working on it.", config.Named(in.Profiles())))
+		return w.close(ctx, in.ID, fmt.Sprintf("Themis no longer has %s this incident matched.", config.Named(in.Profiles())))
 	}
 	f, ok := w.Fixes[p.Capability]
 	if !ok {
