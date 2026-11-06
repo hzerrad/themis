@@ -45,10 +45,10 @@ func TestEnsureAdminAccount(t *testing.T) {
 		"from the password, without a hash":        {password: chartPassword, created: true},
 		"once an admin account exists":             {hash: argon, existing: []store.Account{{Username: "root", Role: config.RoleAdmin, PasswordHash: "changed"}}},
 		"with the username taken by another role":  {hash: argon, existing: []store.Account{{Username: "root", Role: config.RoleViewer}}},
-		"from a hash Themis can't check with":      {hash: "$1$md5$not-ours", err: "the password hash in"},
+		"from a hash Themis can't check with":      {hash: "$1$md5$not-ours", err: "api.adminAccount.passwordHashFile:"},
 		"from a bcrypt hash too cheap to guard it": {hash: "$2y$04$luNqaYZ.yNt8KhsZLwQyCOy84kRtqxorY53uwu2ejJLh8bvhJOOk6", err: "the bcrypt cost is 4"},
 		"from a password too short":                {password: "short", err: "at least 12 characters"},
-		"with nothing to read":                     {err: "read the password"},
+		"with nothing to read":                     {err: "api.adminAccount.passwordFile:"},
 		"with a name Themis keeps":                 {username: identity.ChartUser, hash: argon, err: "api.adminAccount.username"},
 	} {
 		t.Run(name, func(t *testing.T) {

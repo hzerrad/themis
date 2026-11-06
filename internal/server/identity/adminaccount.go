@@ -48,7 +48,7 @@ func EnsureAdminAccount(ctx context.Context, s AdminAccountStore, c config.Admin
 	}
 	hash, err := configuredHash(ctx, c)
 	if err != nil {
-		return fmt.Errorf("api.adminAccount: %w", err)
+		return err
 	}
 	err = s.CreateAccount(ctx, store.Account{Username: c.Username, PasswordHash: hash, Role: config.RoleAdmin, CreatedAt: now, CreatedBy: ChartUser})
 	if errors.Is(err, store.ErrAccountExists) {
@@ -70,19 +70,23 @@ func configuredHash(ctx context.Context, c config.AdminAccount) (string, error) 
 		switch {
 		case err == nil:
 			if err := CheckHash(string(hash)); err != nil {
-				return "", fmt.Errorf("the password hash in %s: %w", c.PasswordHashFile, err)
+				return "", fmt.Errorf("api.adminAccount.passwordHashFile: %w", err)
 			}
 			return string(hash), nil
 		case !errors.Is(err, fs.ErrNotExist) || c.PasswordFile == "":
-			return "", fmt.Errorf("read the password hash: %w", err)
+			return "", fmt.Errorf("api.adminAccount.passwordHashFile: %w", err)
 		}
 	}
 	password, err := token.Read(c.PasswordFile)
 	if err != nil {
-		return "", fmt.Errorf("read the password: %w", err)
+		return "", fmt.Errorf("api.adminAccount.passwordFile: %w", err)
 	}
 	if err := CheckNewPassword(c.Username, string(password)); err != nil {
-		return "", fmt.Errorf("the password in %s: %w", c.PasswordFile, err)
+		return "", fmt.Errorf("api.adminAccount.passwordFile: %w", err)
 	}
-	return HashPassword(ctx, string(password))
+	hash, err := HashPassword(ctx, string(password))
+	if err != nil {
+		return "", fmt.Errorf("api.adminAccount: %w", err)
+	}
+	return hash, nil
 }

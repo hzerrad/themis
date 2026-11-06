@@ -548,7 +548,7 @@ func TestRun_RefusesToStart(t *testing.T) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
 			o.ConfigPath = writeFile(t, "admin.yaml", strings.Replace(readFile(t, o.ConfigPath), "  adminAccount:\n",
 				"  adminAccount:\n    passwordHashFile: "+writeFile(t, "hash", "$1$md5$not-ours\n")+"\n", 1))
-		}, "api.adminAccount: the password hash in"},
+		}, "api.adminAccount.passwordHashFile:"},
 		"unreadable executor token": {func(t *testing.T, o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
 			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n")

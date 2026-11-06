@@ -2,8 +2,6 @@ package identity
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
@@ -177,7 +175,12 @@ func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
 	}
 	// The password is random letters and digits: space around it is from
 	// copying it.
-	if !samePassword(strings.TrimSpace(in.Password), want) {
+	same, err := samePassword(ctx, strings.TrimSpace(in.Password), want)
+	if err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	if !same {
 		if err := i.Store.InitialAdminPasswordFailed(ctx, now, maxWrongPasswords, lockFor); err != nil {
 			i.fail(w, r, err)
 			return
@@ -205,11 +208,14 @@ func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// samePassword compares in constant time. Comparing hashes keeps the length
-// from showing too.
-func samePassword(got string, want []byte) bool {
-	g, w := sha256.Sum256([]byte(got)), sha256.Sum256(want)
-	return subtle.ConstantTimeCompare(g[:], w[:]) == 1
+// samePassword checks got through argon2id, as account passwords are
+// checked: in constant time, and without the length showing.
+func samePassword(ctx context.Context, got string, want []byte) (bool, error) {
+	hash, err := HashPassword(ctx, string(want))
+	if err != nil {
+		return false, err
+	}
+	return CheckPassword(ctx, hash, got)
 }
 
 func (i *InitialAdmin) refuse(w http.ResponseWriter, r *http.Request, why string, code int, message string) {
