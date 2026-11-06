@@ -51,7 +51,7 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
 	// Retrying can't make an unsupported target supported.
 	if err != nil && (job.Attempt >= job.MaxAttempts || errors.Is(err, workload.ErrUnsupported)) {
 		// A write happened: never leave the incident in verifying.
-		return w.escalate(ctx, job.Args.ActionID, "Couldn't check whether the fix worked: "+err.Error())
+		return w.escalate(ctx, job.Args.ActionID, "Not verified: "+err.Error()+". Referred to a person.")
 	}
 	if err != nil || final {
 		return err
@@ -134,7 +134,7 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 			// Put back what the fix changed, so people find the workload as
 			// they left it.
 			if err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: reason + " Themis is putting the workload back as it was.", Actor: "verify",
+				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: reason + " Restoring the previous state.", Actor: "verify",
 			}); err != nil {
 				return err
 			}
@@ -211,11 +211,11 @@ func (w *Worker) verifyRestore(ctx context.Context, a store.Action, in store.Inc
 	var reason string
 	switch {
 	case reading.Changed:
-		reason = "Themis put the workload back, but it was then changed outside Themis. A person needs to take over."
+		reason = "Restored, but the workload was then changed outside Themis. Referred to a person."
 	case reading.Applied:
-		reason = "Themis put the workload back as it was before it acted: " + reading.Facts + " A person needs to take over."
+		reason = "Restored to the state before Themis acted: " + reading.Facts + " Referred to a person."
 	case w.now().Sub(args.WindowStart) >= window:
-		reason = "Themis put the workload back, but Kubernetes didn't finish rolling it out in time: " + reading.Facts + " A person needs to take over."
+		reason = "Restore incomplete: Kubernetes didn't finish the rollout within the verification window. " + reading.Facts + " Referred to a person."
 	default:
 		return false, nil
 	}

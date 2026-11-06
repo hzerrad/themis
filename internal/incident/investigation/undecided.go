@@ -3,6 +3,7 @@ package investigation
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -45,11 +46,15 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	reason := "No fix was suggested, and no time to suggest one is configured."
+	if window > 0 {
+		reason = "No fix was suggested within " + shortDuration(window) + "."
+	}
 	for _, u := range undecided {
 		err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 			return w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: u.ID, From: u.State, To: incident.ClosedNoAction,
-				Reason: "Nobody suggested a fix in time, so Themis closed the incident.", Actor: actor,
+				Reason: reason, Actor: actor,
 			})
 		})
 		if err != nil && !errors.Is(err, store.ErrStateConflict) {
@@ -57,4 +62,16 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// shortDuration writes d as people read it: 30m, 1h, 1h30m.
+func shortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return s
 }

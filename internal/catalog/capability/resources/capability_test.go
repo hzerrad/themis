@@ -328,9 +328,9 @@ func TestUndo_Refused(t *testing.T) {
 		reason string
 		noOp   bool
 	}{
-		"a value there wasn't": {before: without, reason: "Themis couldn't put the workload back: app had no memory limit before, and Themis never removes one."},
-		"nothing differs":      {before: checkout().Spec.Template, reason: "The workload's resources are already as they were before Themis acted.", noOp: true},
-		"replaced":             {before: checkout().Spec.Template, uid: "d-0", reason: "The workload was replaced by a new object with the same name, so there is nothing to put back."},
+		"a value there wasn't": {before: without, reason: "Not restored: app had no memory limit before, and Themis never removes one. The fix stays in place."},
+		"nothing differs":      {before: checkout().Spec.Template, reason: "Nothing to restore: the workload's resources are already as they were before Themis acted.", noOp: true},
+		"replaced":             {before: checkout().Spec.Template, uid: "d-0", reason: "Not restored: the workload was replaced by a new object with the same name."},
 	} {
 		tt := target
 		if tc.uid != "" {

@@ -202,6 +202,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "The check that justifies a rollback isn't true: failure_onset_after_rollout is unknown."
+    "reason": "Refused: the check that justifies a rollback isn't true: failure_onset_after_rollout is unknown."
   }
 }

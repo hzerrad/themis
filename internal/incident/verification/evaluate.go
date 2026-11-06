@@ -42,19 +42,20 @@ func Evaluate(r capability.Reading, stableFor time.Duration, c Criteria, elapsed
 }
 
 // Explain says in words what verification found: the outcome, then what the
-// fix saw.
+// fix saw, then what follows for an outcome that refers the incident to a
+// person.
 func Explain(outcome Outcome, r capability.Reading) string {
 	switch outcome {
 	case Resolved:
-		return "The fix worked, and the workload stayed healthy: " + r.Facts
+		return "Fixed. The workload recovered and held: " + r.Facts
 	case Contained:
-		return "The fix helped, but the workload isn't stable: " + r.Facts
+		return "Partly recovered: " + r.Facts + " Referred to a person."
 	case Worsened:
-		return "The fix made things worse: " + r.Facts
+		return "Worse after the fix: " + r.Facts
 	case Unchanged:
 		return "The fix didn't help: " + r.Facts
 	case Inconclusive:
-		return "Can't tell whether the fix worked: the workload was changed outside Themis while Themis was checking it."
+		return "Inconclusive: the workload was changed outside Themis while Themis verified the fix. Referred to a person."
 	default:
 		return string(outcome)
 	}

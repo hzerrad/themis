@@ -71,6 +71,9 @@ func TestCloseUndecided_WaitsOutTheWindow(t *testing.T) {
 			if got := e.state(t, id); got != incident.ClosedNoAction {
 				t.Errorf("state = %s, want closed", got)
 			}
+			if _, reason := e.path(t, id); reason != "No fix was suggested within 1h." {
+				t.Errorf("reason = %q", reason)
+			}
 		})
 	}
 }

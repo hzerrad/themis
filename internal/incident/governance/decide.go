@@ -160,7 +160,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 				return r, nil
 			}
 		}
-		return policy.Decision{Outcome: policy.Deny, Reason: "None of this incident's profiles offers this fix, so it is forbidden."}, nil
+		return policy.Decision{Outcome: policy.Deny, Reason: "Refused: none of the incident's profiles offers this fix."}, nil
 	}
 	if fix.Restores == "" {
 		if reason, ok := justified(offering, fix.Capability, in.Predicates); !ok {
@@ -193,22 +193,22 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 // Argo CD or Flux manages it, as read live or by check.GitOpsManaged, or the
 // check couldn't tell, or didn't run.
 func gitOps(in policy.Input) (string, bool) {
-	const recommend = ", so Themis only recommends the change: apply it in Git."
+	const recommend = " Apply the change in Git."
 	if in.ManagedBy != "" {
 		tool, ok := gitOpsTools[in.ManagedBy]
 		if !ok {
 			tool = in.ManagedBy
 		}
-		return tool + " manages this workload" + recommend, true
+		return "Recommended, not applied: " + tool + " manages this workload." + recommend, true
 	}
 	switch check.ParseTruth(in.Predicates[check.GitOpsManaged]) {
 	case check.False:
 		return "", false
 	case check.True:
-		return "Argo CD or Flux manages this workload" + recommend, true
+		return "Recommended, not applied: Argo CD or Flux manages this workload." + recommend, true
 	case check.Unknown:
 	}
-	return "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change.", true
+	return "Recommended, not applied: Themis couldn't tell whether Argo CD or Flux manages this workload." + recommend, true
 }
 
 // policy returns p's compiled policy.

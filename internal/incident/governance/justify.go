@@ -18,7 +18,7 @@ func justified(offering config.Matched, fix capability.Capability, predicates ma
 	for _, p := range offering {
 		names := p.JustifiedBy[fix.Name()]
 		if len(names) == 0 {
-			return fmt.Sprintf("The %s profile names no check that justifies %s, so Themis refuses it.", p.Name, fix.Noun()), false
+			return fmt.Sprintf("Refused: the %s profile names no check that justifies %s.", p.Name, fix.Noun()), false
 		}
 		if len(supporting(names, predicates)) > 0 {
 			continue
@@ -28,9 +28,9 @@ func justified(offering config.Matched, fix capability.Capability, predicates ma
 			answers = append(answers, answer(name, predicates))
 		}
 		if len(names) == 1 {
-			reason = fmt.Sprintf("The check that justifies %s isn't true: %s.", fix.Noun(), answers[0])
+			reason = fmt.Sprintf("Refused: the check that justifies %s isn't true: %s.", fix.Noun(), answers[0])
 		} else {
-			reason = fmt.Sprintf("None of the checks that justify %s is true: %s.", fix.Noun(), strings.Join(answers, ", "))
+			reason = fmt.Sprintf("Refused: none of the checks that justify %s is true: %s.", fix.Noun(), strings.Join(answers, ", "))
 		}
 		if len(offering) > 1 {
 			reason += " They are the " + p.Name + " profile's."

@@ -76,7 +76,7 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 	started := e.now()
 	if a.State == store.ActionExecuting {
 		// Claimed, but the executor stopped before recording an outcome.
-		res := Result{Status: Ambiguous, Message: "The executor stopped while applying the fix, so it's unknown whether the change was made."}
+		res := Result{Status: Ambiguous, Message: "Unknown whether the change was made: the executor stopped while applying it."}
 		return res, e.record(ctx, a, res, started)
 	}
 
@@ -121,7 +121,7 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 		return Result{Status: Stale, Message: "Not applied. " + refusal.Reason}
 	}
 	if err != nil {
-		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error()}
+		return Result{Status: Failed, Message: "Not applied: Themis couldn't read the workload: " + err.Error() + "."}
 	}
 	undone, _ := a.Restores()
 	current, err := digest.Compute(capability.Fields(a.IncidentID, f, plan, undone, a.PolicyID, a.PolicyDigest))
@@ -130,18 +130,18 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	}
 
 	if _, err := f.Apply(ctx, e.Client, plan, true); err != nil {
-		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change in a trial run: " + err.Error(), dryRunFailed: true}
+		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change in a dry run: " + err.Error() + ".", dryRunFailed: true}
 	}
 	gen, err := f.Apply(ctx, e.Client, plan, false)
 	switch {
 	case err == nil:
 		return Result{Status: Succeeded, Message: plan.Done, PostGeneration: gen}
 	case apierrors.IsConflict(err):
-		return Result{Status: Stale, Message: "Not applied: the workload changed while the fix was being applied: " + err.Error()}
+		return Result{Status: Stale, Message: "Not applied: the workload changed while the fix was being applied: " + err.Error() + "."}
 	case isRejected(err):
-		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change: " + err.Error()}
+		return Result{Status: Failed, Message: "Not applied: Kubernetes rejected the change: " + err.Error() + "."}
 	default:
-		return Result{Status: Ambiguous, Message: "Unknown whether the change was made: " + err.Error()}
+		return Result{Status: Ambiguous, Message: "Unknown whether the change was made: " + err.Error() + "."}
 	}
 }
 
@@ -176,9 +176,9 @@ func (e *Executor) record(ctx context.Context, a store.Action, res Result, start
 		if res.Status != Succeeded {
 			e.logger().WarnContext(ctx, "action not executed", telemetry.FieldActionID, a.ID, "status", res.Status, "message", res.Message)
 			if restore {
-				return e.advance(ctx, tx, a.IncidentID, "Themis couldn't put the workload back. "+res.Message, incident.Restoring, incident.Escalated)
+				return e.advance(ctx, tx, a.IncidentID, "Not restored. "+res.Message+" Referred to a person.", incident.Restoring, incident.Escalated)
 			}
-			return e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Escalated)
+			return e.advance(ctx, tx, a.IncidentID, res.Message+" Referred to a person.", incident.Executing, incident.Escalated)
 		}
 		if !restore {
 			if err := e.advance(ctx, tx, a.IncidentID, res.Message, incident.Executing, incident.Verifying); err != nil {

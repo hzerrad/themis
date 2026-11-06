@@ -46,19 +46,19 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 		if !slices.Contains(open, in.state) {
 			return &rejection{
 				themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED,
-				"This incident is past the point of taking suggestions.",
+				"Refused: the incident no longer takes suggestions.",
 			}, nil
 		}
 		if !from.All && !slices.Contains(from.Fixes, p.Capability) {
 			return &rejection{
 				themisv1.RejectionReason_REJECTION_REASON_CAPABILITY_NOT_ALLOWED,
-				fmt.Sprintf("%s may not suggest this kind of fix (%s).", from.Source, p.Capability),
+				fmt.Sprintf("Refused: %s may not suggest %s.", from.Source, p.Capability),
 			}, nil
 		}
 		if len(in.profiles) == 0 {
 			return &rejection{
 				themisv1.RejectionReason_REJECTION_REASON_INCIDENT_CLOSED,
-				fmt.Sprintf("Themis no longer has %s this incident matched.", config.Named(in.names)),
+				fmt.Sprintf("Refused: Themis no longer has %s this incident matched.", config.Named(in.names)),
 			}, nil
 		}
 	}
@@ -74,15 +74,15 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 		t := p.Target
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_TARGET_MISMATCH,
-			fmt.Sprintf("It names %s %s/%s (uid %s), but the incident is about %s/%s (uid %s).",
+			fmt.Sprintf("Refused: it names %s %s/%s (uid %s); the incident is about %s/%s (uid %s).",
 				t.Kind, t.Namespace, t.Name, t.UID, in.target.Namespace, in.target.Name, in.target.UID),
 		}, nil
 	}
 	if invalid != "" {
-		return &rejection{themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, invalid}, nil
+		return &rejection{themisv1.RejectionReason_REJECTION_REASON_INVALID_PARAMS, "Refused: " + invalid}, nil
 	}
 	if len(p.CitedEvidenceIDs) == 0 {
-		return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, "It cites no evidence."}, nil
+		return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE, "Refused: it cites no evidence."}, nil
 	}
 	missing, err := b.Store.MissingEvidence(ctx, tx, in.incidentID, p.CitedEvidenceIDs)
 	if err != nil {
@@ -91,7 +91,7 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 	if len(missing) > 0 {
 		return &rejection{
 			themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_EVIDENCE,
-			"It cites evidence Themis never collected: " + strings.Join(missing, ", ") + ".",
+			"Refused: it cites evidence Themis didn't collect: " + strings.Join(missing, ", ") + ".",
 		}, nil
 	}
 	if len(p.CitedPredicates) == 0 {
@@ -105,7 +105,7 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 	}
 	for _, name := range p.CitedPredicates {
 		if !slices.ContainsFunc(ran, func(r check.Result) bool { return r.Name == name }) {
-			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "It cites a check Themis didn't run for this incident: " + name + "."}, nil
+			return &rejection{themisv1.RejectionReason_REJECTION_REASON_UNKNOWN_PREDICATE, "Refused: it cites a check Themis didn't run for this incident: " + name + "."}, nil
 		}
 	}
 	return nil, nil
@@ -114,17 +114,17 @@ func (b *Inbox) judge(ctx context.Context, tx pgx.Tx, from Suggester, in subject
 // notOffered says that none of the profiles named offers fix.
 func notOffered(names []string, fix string) string {
 	if len(names) == 1 {
-		return fmt.Sprintf("The %s profile doesn't allow this kind of fix (%s).", names[0], fix)
+		return fmt.Sprintf("Refused: the %s profile doesn't allow %s.", names[0], fix)
 	}
-	return fmt.Sprintf("None of this incident's profiles (%s) allows this kind of fix (%s).", strings.Join(names, ", "), fix)
+	return fmt.Sprintf("Refused: none of the incident's profiles (%s) allows %s.", strings.Join(names, ", "), fix)
 }
 
-// sentence makes a fix's error about its parameters a sentence for the
-// incident's timeline.
+// sentence makes a fix's error about its parameters the grounds of a
+// refusal, to follow "Refused: ".
 func sentence(err error) string {
 	msg := strings.TrimPrefix(err.Error(), capability.ErrInvalidParams.Error()+": ")
 	if msg == "" {
-		return "The fix's parameters aren't valid."
+		return "the fix's parameters aren't valid."
 	}
-	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+	return msg + "."
 }

@@ -169,10 +169,10 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	}
 	w, err := workload.Read(ctx, r, t)
 	if errors.Is(err, workload.ErrGone) {
-		return "", nil, &capability.Refusal{Reason: "The workload was deleted, so there is nothing to put back."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was deleted."}
 	}
 	if errors.Is(err, workload.ErrReplaced) {
-		return "", nil, &capability.Refusal{Reason: "The workload was replaced by a new one with the same name, so there is nothing to put back."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was replaced by a new one with the same name."}
 	}
 	if err != nil {
 		return "", nil, err
@@ -184,14 +184,14 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 			return "", nil, err
 		}
 		if hash == w.TemplateHash {
-			return "", nil, &capability.Refusal{NoOp: true, Reason: "The probes are already as they were before Themis acted."}
+			return "", nil, &capability.Refusal{NoOp: true, Reason: "Nothing to restore: the probes are already as they were before Themis acted."}
 		}
-		return "", nil, &capability.Refusal{Reason: "The workload changed after Themis's fix, so Themis left it as it is."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: the workload changed after Themis's fix. It stays as it is."}
 	}
 	req := request{container: edits[0].container, set: map[string]map[string]int32{}}
 	for _, e := range edits {
 		if e.container != req.container {
-			return "", nil, &capability.Refusal{Reason: "The probes of more than one container changed since Themis acted, so Themis left them as they are."}
+			return "", nil, &capability.Refusal{Reason: "Not restored: the probes of more than one container changed after Themis acted. They stay as they are."}
 		}
 		if req.set[e.kind] == nil {
 			req.set[e.kind] = map[string]int32{}

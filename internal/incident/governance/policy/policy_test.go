@@ -100,7 +100,7 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 			t.Errorf("%s, %s: %s, %q; want %s, %q", c.mode, c.decision, d.Outcome, d.Reason, c.outcome, c.want)
 		}
 	}
-	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched, so a person must approve this fix." {
+	if got := compile(t, config.ModeGuarded).Evaluate(input()).Reason; got != "No policy rule matched: the fix needs a person's approval." {
 		t.Errorf("no rule: reason = %q", got)
 	}
 }
@@ -115,7 +115,7 @@ func restore() policy.Input {
 // guarded mode: it returns the workload to how a person left it.
 func TestPolicy_RestoreAllowedByDefault(t *testing.T) {
 	d := compile(t, config.ModeGuarded).Evaluate(restore())
-	if d.Outcome != policy.Allow || d.Reason != "No policy rule matched, so Themis may put the workload back as it was." {
+	if d.Outcome != policy.Allow || d.Reason != "No policy rule matched: Themis may restore the previous state." {
 		t.Errorf("decision = %+v, want allowed", d)
 	}
 	if d := compile(t, config.ModeGuarded).Evaluate(input()); d.Outcome != policy.RequireApproval {
