@@ -64,11 +64,11 @@ func (s *Setup) Open(ctx context.Context) (bool, error) {
 	return !finished, nil
 }
 
-// finish ends setup once who is an admin signed in with an account or through
-// the identity provider: an admin can now sign in without the initial admin
-// password, which is retired.
+// finish ends setup once who is an admin signed in with an account, with a
+// password of their own, or through the identity provider: an admin can now
+// sign in without the initial admin password, which is retired.
 func (s *Setup) finish(ctx context.Context, who Identity, at time.Time) {
-	if who.Token || who.InitialAdmin || who.Role != config.RoleAdmin || s.finished.Load() {
+	if who.Token || who.InitialAdmin || who.TemporaryPassword || who.Role != config.RoleAdmin || s.finished.Load() {
 		return
 	}
 	done, err := s.Store.FinishSetup(ctx, who.Username, at)
@@ -89,12 +89,13 @@ func (s *Setup) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// InitialAdminStore counts wrong initial admin passwords, and keeps the
-// sessions the right one starts.
+// InitialAdminStore counts wrong initial admin passwords, keeps the sessions
+// the right one starts, and records each.
 type InitialAdminStore interface {
 	InitialAdminLockedUntil(ctx context.Context) (time.Time, error)
 	InitialAdminPasswordFailed(ctx context.Context, now time.Time, maxFailures int, lockFor time.Duration) error
 	InitialAdminPasswordSucceeded(ctx context.Context) error
+	RecordAccountEvent(ctx context.Context, e store.AccountEvent) error
 	CreateSession(ctx context.Context, id string, se store.Session) error
 }
 
@@ -175,6 +176,11 @@ func (i *InitialAdmin) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := i.Store.InitialAdminPasswordSucceeded(ctx); err != nil {
+		i.fail(w, r, err)
+		return
+	}
+	// On the record before the session starts, so no use of it goes unrecorded.
+	if err := i.Store.RecordAccountEvent(ctx, store.AccountEvent{At: now, Actor: InitialAdminUser, Action: store.InitialAdminSignedIn}); err != nil {
 		i.fail(w, r, err)
 		return
 	}

@@ -57,6 +57,8 @@ func (f *firstRun) InitialAdminPasswordSucceeded(context.Context) error {
 	return nil
 }
 
+func (f *firstRun) RecordAccountEvent(context.Context, store.AccountEvent) error { return nil }
+
 const initialPassword = "a long initial password"
 
 type firstRunRig struct {

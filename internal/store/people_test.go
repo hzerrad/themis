@@ -67,6 +67,32 @@ func TestAccount_LocksAfterWrongPasswords(t *testing.T) {
 	}
 }
 
+var byAdmin = store.AccountChange{By: "root", At: t0}
+
+// With KeepAnAdmin, the last admin account can't be deleted or lose its role;
+// without it, as when the identity provider grants admin too, it can.
+func TestAccount_KeepsAnAdmin(t *testing.T) {
+	s, _ := newStore(t)
+	newAccount(t, s, "alice")
+	keep := store.AccountChange{By: "admin", At: t0, KeepAnAdmin: true}
+	if err := s.SetRole(t.Context(), "alice", "admin", keep); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetRole(t.Context(), "alice", "viewer", keep); !errors.Is(err, store.ErrLastAdmin) {
+		t.Errorf("demoting the last admin: %v, want ErrLastAdmin", err)
+	}
+	if err := s.DeleteAccount(t.Context(), "alice", keep); !errors.Is(err, store.ErrLastAdmin) {
+		t.Errorf("deleting the last admin: %v, want ErrLastAdmin", err)
+	}
+	newAccount(t, s, "bob")
+	if err := s.DeleteAccount(t.Context(), "bob", keep); err != nil {
+		t.Errorf("deleting an approver while alice is admin: %v", err)
+	}
+	if err := s.DeleteAccount(t.Context(), "alice", byAdmin); err != nil {
+		t.Errorf("deleting the last admin without KeepAnAdmin: %v", err)
+	}
+}
+
 // Changing a password or deleting an account ends its sessions, and only its.
 func TestAccount_ChangesEndSessions(t *testing.T) {
 	s, _ := newStore(t)
@@ -86,7 +112,7 @@ func TestAccount_ChangesEndSessions(t *testing.T) {
 	}
 	session("alice-1", "alice")
 	session("bob-1", "bob")
-	if err := s.SetPassword(t.Context(), "alice", "hash-2"); err != nil {
+	if err := s.SetPassword(t.Context(), "alice", "hash-2", false, byAdmin); err != nil {
 		t.Fatal(err)
 	}
 	if live("alice-1") || !live("bob-1") {
@@ -95,22 +121,22 @@ func TestAccount_ChangesEndSessions(t *testing.T) {
 	if a, _ := s.Account(t.Context(), "alice"); a.PasswordHash != "hash-2" {
 		t.Errorf("password hash = %q", a.PasswordHash)
 	}
-	if err := s.SetRole(t.Context(), "bob", "admin"); err != nil {
+	if err := s.SetRole(t.Context(), "bob", "admin", byAdmin); err != nil {
 		t.Fatal(err)
 	}
 	if a, _ := s.Account(t.Context(), "bob"); a.Role != "admin" {
 		t.Errorf("bob's role = %q", a.Role)
 	}
-	if err := s.DeleteAccount(t.Context(), "bob"); err != nil {
+	if err := s.DeleteAccount(t.Context(), "bob", byAdmin); err != nil {
 		t.Fatal(err)
 	}
 	if live("bob-1") {
 		t.Error("bob's session outlived his account")
 	}
 	for name, err := range map[string]error{
-		"SetPassword":   s.SetPassword(t.Context(), "nobody", "x"),
-		"SetRole":       s.SetRole(t.Context(), "nobody", "viewer"),
-		"DeleteAccount": s.DeleteAccount(t.Context(), "nobody"),
+		"SetPassword":   s.SetPassword(t.Context(), "nobody", "x", true, byAdmin),
+		"SetRole":       s.SetRole(t.Context(), "nobody", "viewer", byAdmin),
+		"DeleteAccount": s.DeleteAccount(t.Context(), "nobody", byAdmin),
 	} {
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("%s for an unknown account: %v, want ErrNotFound", name, err)

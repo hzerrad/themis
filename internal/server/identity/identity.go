@@ -41,6 +41,9 @@ type Identity struct {
 	InitialAdmin bool
 	// Account is set for someone signed in with a Themis account's password.
 	Account bool
+	// TemporaryPassword is set while that password is one an admin set: they
+	// may only see who they are and choose their own.
+	TemporaryPassword bool
 }
 
 // Can reports whether i has role, or one more trusted.
@@ -146,7 +149,7 @@ func (d *Directory) sessionIdentity(ctx context.Context, se store.Session) (Iden
 	if err != nil {
 		return Identity{}, errors.Join(ErrUnavailable, err)
 	}
-	return Identity{Username: a.Username, Role: a.Role, Account: true}, nil
+	return Identity{Username: a.Username, Role: a.Role, Account: true, TemporaryPassword: a.TemporaryPassword}, nil
 }
 
 // initialAdmin is whoever signed in with the initial admin password, while

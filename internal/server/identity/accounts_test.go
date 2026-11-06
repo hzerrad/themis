@@ -158,6 +158,14 @@ func TestIdentify_Account(t *testing.T) {
 		t.Errorf("role after a change = %q, want viewer", who.Role)
 	}
 	s.mu.Lock()
+	acc = s.accounts["alice"]
+	acc.TemporaryPassword = true
+	s.accounts["alice"] = acc
+	s.mu.Unlock()
+	if who, _ := identify(); !who.TemporaryPassword || who.Role != config.RoleViewer {
+		t.Errorf("identity with a temporary password = %+v, want it said, and the role kept", who)
+	}
+	s.mu.Lock()
 	delete(s.accounts, "alice")
 	s.mu.Unlock()
 	if _, err := identify(); !errors.Is(err, identity.ErrSignedOut) {

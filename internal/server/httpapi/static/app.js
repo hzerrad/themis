@@ -323,7 +323,10 @@ function noAccess() {
 }
 
 // password lets someone signed in with an account change its password.
+// A password an admin set is temporary: until its holder chooses their own,
+// it is the only page they may open.
 function changePassword() {
+  const temporary = me.temporaryPassword;
   const current = h("input", { type: "password", autocomplete: "current-password", required: true });
   const next = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const error = h("div", { class: "error", role: "alert" });
@@ -332,7 +335,11 @@ function changePassword() {
     error.textContent = "";
     try {
       await api("/v1/me/password", { method: "POST", body: JSON.stringify({ current: current.value, new: next.value }) });
-      // A new password ends every session, this one too.
+      // A new password ends every session, this one too. Replacing a
+      // temporary one signs in again with it, to continue.
+      if (temporary) {
+        await fetch("/auth/password", { method: "POST", headers: headers(), body: JSON.stringify({ username: me.username, password: next.value }) });
+      }
       me = null;
       route();
     } catch (err) {
@@ -340,20 +347,46 @@ function changePassword() {
     }
   };
   render(h("div", { class: "plate centre" },
-    h("h1", {}, "Change your password"),
-    h("p", { class: "quiet" }, "Changing it ends every session, this one included."),
+    h("h1", {}, temporary ? "Choose your password" : "Change your password"),
+    h("p", { class: "quiet" }, temporary
+      ? "Temporary password: an admin set it. Choose your own to continue."
+      : "Changing it ends every session, this one included."),
     h("form", { class: "form", onsubmit: submit },
-      field("Current password", current), field("New password", next, "12 characters or more."),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Change password")),
+      field(temporary ? "Temporary password" : "Current password", current), field("New password", next, "12 characters or more."),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, temporary ? "Choose this password" : "Change password")),
       error)));
 }
 
 // Accounts ----------------------------------------------------------------
 
-// accounts lets admins manage who signs in with a password. During setup,
-// it's where the first admin account is made.
+// recordLine says what an entry of the account record did, in the past tense
+// of the one who did it.
+function recordLine(e) {
+  const role = ROLE_LABEL[e.role] || e.role;
+  if (e.action === "account_created") return "Created " + e.username + ", " + role + ", with a temporary password.";
+  if (e.action === "account_deleted") return "Deleted " + e.username + ".";
+  if (e.action === "role_changed") return "Gave " + e.username + " the " + role + " role.";
+  if (e.action === "temporary_password_set") return "Set a temporary password for " + e.username + ".";
+  if (e.action === "password_changed") return e.actor === e.username ? "Chose a new password." : "Changed the password of " + e.username + ".";
+  if (e.action === "initial_admin_signed_in") return "Signed in with the initial admin password.";
+  if (e.action === "initial_admin_retired") return "Signed in as an admin, which retired the initial admin password.";
+  return humanize(e.action) + (e.username ? ": " + e.username : "") + ".";
+}
+
+// recordActor names who made an entry: a person, or a credential that proves
+// itself, not who.
+function recordActor(actor) {
+  if (actor === "admin") return "The break-glass token";
+  if (actor === "initial-admin") return "The initial admin password";
+  return actor;
+}
+
+// accounts lets admins manage who signs in with a password, and shows the
+// record of changes to accounts. During setup, it's where the first admin
+// account is made.
 async function accounts() {
   const list = await api("/v1/accounts");
+  const { events } = await api("/v1/audit/accounts");
   const error = h("div", { class: "error", role: "alert" });
   const act = async (path, options, done) => {
     error.textContent = "";
@@ -372,7 +405,8 @@ async function accounts() {
   const create = (e) => {
     e.preventDefault();
     const name = username.value.trim();
-    act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) }, "Account " + name + " created.");
+    act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) },
+      "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.");
   };
   const hasAdmin = list.some((a) => a.role === "admin");
   const first = me.initialAdmin && !hasAdmin;
@@ -384,14 +418,16 @@ async function accounts() {
     const r = roleSelect(a.role, "Role of " + a.username);
     r.disabled = self;
     r.addEventListener("change", () => act(path(a), { method: "PATCH", body: JSON.stringify({ role: r.value }) }, a.username + " is now " + ROLE_LABEL[r.value] + "."));
-    const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "New password for " + a.username, placeholder: "New password" });
+    const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "Temporary password for " + a.username, placeholder: "Temporary password" });
     const reset = h("button", { class: "btn small", type: "button", onclick: () => {
-      if (pw.value) act(path(a), { method: "PATCH", body: JSON.stringify({ password: pw.value }) }, "Password of " + a.username + " set.");
-    } }, "Set password");
+      if (pw.value) act(path(a), { method: "PATCH", body: JSON.stringify({ password: pw.value }) }, "Temporary password set. " + a.username + " must choose a new one at next sign-in.");
+    } }, "Set a temporary password");
     const remove = h("button", { class: "btn small deny", type: "button", disabled: self,
       onclick: () => act(path(a), { method: "DELETE" }, "Account " + a.username + " deleted.") }, "Delete");
     return h("tr", {},
-      h("td", {}, h("b", {}, a.username), a.locked ? h("div", { class: "quiet small" }, "Locked: too many wrong passwords") : null),
+      h("td", {}, h("b", {}, a.username),
+        a.locked ? h("div", { class: "quiet small" }, "Locked: too many wrong passwords") : null,
+        a.temporaryPassword ? h("div", { class: "quiet small" }, "Temporary password: a new one is due at the next sign-in") : null),
       h("td", {}, r),
       h("td", { class: "quiet small" }, "By " + a.createdBy + ", " + when(a.createdAt)),
       h("td", {}, h("div", { class: "inline" }, pw, reset, remove)));
@@ -401,12 +437,12 @@ async function accounts() {
   render(
     finish ? h("div", { class: "plate" },
       h("h1", {}, "Sign in with the admin account"),
-      h("p", { class: "quiet" }, "Signing in completes setup. The initial admin password then stops working."),
+      h("p", { class: "quiet" }, "Then choose your own password. That completes setup; the initial admin password then stops working."),
       finish.form) : null,
     h("h1", { class: finish ? "sub" : "" }, first ? "Create the admin account" : "Accounts"),
     h("p", { class: "lede" }, first
-      ? "Sign in with it here to complete setup. The initial admin password then stops working."
-      : "Accounts sign in with a username and password. People signing in through the identity provider take their roles from Themis's settings."),
+      ? "Then sign in with it here and choose your own password. That completes setup; the initial admin password then stops working."
+      : "Accounts sign in with a username and password. A password an admin sets is temporary: its holder chooses a new one at the next sign-in. People signing in through the identity provider take their roles from Themis's settings."),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}, h("span", { class: "quiet" }, "Password and removal")))),
@@ -414,9 +450,18 @@ async function accounts() {
     h("div", { class: "plate" },
       h("h2", {}, "New account"),
       h("form", { class: "inline", onsubmit: create },
-        field("Username", username), field("Role", role), field("Password, 12 characters or more", password),
+        field("Username", username), field("Role", role), field("Temporary password, 12 characters or more", password),
         h("button", { class: "btn primary", type: "submit" }, "Create account"))),
-    error);
+    error,
+    events.length ? h("details", { class: "fold sub", "data-key": "account-record" },
+      h("summary", {}, "Record", h("span", { class: "n" }, events.length)),
+      h("p", { class: "quiet small" }, "Changes to accounts and to the initial admin password, newest first."),
+      h("table", { class: "list" },
+        h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "By"), h("th", {}, "Change"))),
+        h("tbody", {}, events.map((e) => h("tr", {},
+          h("td", { class: "quiet small" }, when(e.at)),
+          h("td", {}, recordActor(e.actor)),
+          h("td", {}, recordLine(e))))))) : null);
 }
 
 // Status and setup --------------------------------------------------------
@@ -1203,8 +1248,13 @@ async function route() {
     : me.username + (me.role ? " · " + ROLE_LABEL[me.role] : "");
   document.getElementById("setup").hidden = !(me && me.initialAdmin);
   document.getElementById("logout").hidden = !me;
-  document.querySelector(".bar nav").hidden = !me || !me.role;
+  document.querySelector(".bar nav").hidden = !me || !me.role || me.temporaryPassword;
   if (!me) return login();
+  // A temporary password opens nothing but the page that replaces it.
+  if (me.temporaryPassword) {
+    document.title = "Password · Themis";
+    return changePassword();
+  }
   if (!me.role) return noAccess();
   document.getElementById("nav-accounts").hidden = !can("admin");
   document.getElementById("nav-setup").hidden = !can("admin");

@@ -79,7 +79,7 @@ type API struct {
 
 func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sign-in", a.signInMethods)
-	mux.Handle("GET /v1/me", a.authed("", a.me, nil))
+	mux.Handle("GET /v1/me", a.whileTemporary(a.me))
 	mux.Handle("GET /v1/incidents", a.authed(config.RoleViewer, a.list, nil))
 	mux.Handle("GET /v1/incidents/{id}", a.authed(config.RoleViewer, a.detail, incidentFields))
 	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
@@ -107,8 +107,18 @@ func (a *API) status(w http.ResponseWriter, r *http.Request) {
 
 // authed serves h to whoever has role, or to anyone signed in when role is
 // empty, with the log fields of the request's path, and logs the request at
-// debug level.
+// debug level. Someone whose password is temporary is refused.
 func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
+	return a.guard(role, false, h, fields)
+}
+
+// whileTemporary serves h to anyone signed in, even with a temporary
+// password: they may see who they are and choose their own.
+func (a *API) whileTemporary(h http.HandlerFunc) http.Handler {
+	return a.guard("", true, h, nil)
+}
+
+func (a *API) guard(role string, temporaryOK bool, h http.HandlerFunc, fields func(*http.Request) []slog.Attr) http.Handler {
 	directory := &identity.Directory{TokenFile: a.TokenFile, Access: a.Access, Sessions: a.Sessions, Setup: a.Setup, Now: a.now}
 	if a.Accounts != nil {
 		directory.Accounts = a.Accounts
@@ -129,6 +139,9 @@ func (a *API) authed(role string, h http.HandlerFunc, fields func(*http.Request)
 			return
 		case err != nil:
 			http.Error(w, "Sign in to Themis first.", http.StatusUnauthorized)
+			return
+		case who.TemporaryPassword && !temporaryOK:
+			http.Error(w, "Refused: the password is temporary. Choose a new one first.", http.StatusForbidden)
 			return
 		}
 		if role != "" && !who.Can(role) {
@@ -167,11 +180,17 @@ type meView struct {
 	InitialAdmin bool `json:"initialAdmin,omitempty"`
 	// Account is set for someone signed in with a Themis account.
 	Account bool `json:"account,omitempty"`
+	// TemporaryPassword is set while that account's password is one an admin
+	// set, which its holder must replace before anything else.
+	TemporaryPassword bool `json:"temporaryPassword,omitempty"`
 }
 
 func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	who, _ := identity.From(r.Context())
-	a.reply(w, r, meView{Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, InitialAdmin: who.InitialAdmin, Account: who.Account})
+	a.reply(w, r, meView{
+		Username: who.Username, Groups: who.Groups, Role: who.Role, Token: who.Token, InitialAdmin: who.InitialAdmin, Account: who.Account,
+		TemporaryPassword: who.TemporaryPassword,
+	})
 }
 
 type signInView struct {

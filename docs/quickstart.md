@@ -140,7 +140,7 @@ Open <http://localhost:8090> and sign in with the initial admin password. The ch
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-It signs in as an admin until an admin signs in with an account or through your identity provider; then it stops working. Opening Themis grants nothing by itself. The first page is **Setup**, in order: create your admin account and sign in with it, which completes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+It signs in as an admin until an admin signs in with an account or through your identity provider; then it stops working. Opening Themis grants nothing by itself. The first page is **Setup**, in order: create your admin account, sign in with it and choose your own password, which completes setup (or use your identity provider, in step 6); the model, if you didn't set it at install; and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 
