@@ -1,5 +1,5 @@
 name: oom-after-rollout
-version: 1
+version: 2
 description: Revision 2, rolled out 40 minutes ago, lowered the memory limit to 256Mi and is OOMKilled at it; revision 1 is
   healthy. Both packs answer the alert; rolling back is right, raising the limit is refused.
 tags: [memory, oom, rollout, combined]
@@ -22,6 +22,11 @@ fix:
 truth:
   root_causes: [memory_limit_regression]
   decision: propose
+  # The raise above is put to policy, which refuses it; the rollback is right.
+  fix:
+    capability: deployment.rollback-to-revision
+    params:
+      revision: 1
   acceptable_revisions: [1]
   required_citations: [pod_states]
   predicates:

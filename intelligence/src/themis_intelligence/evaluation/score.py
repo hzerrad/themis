@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from themis_intelligence.evaluation.bundle import Attack, Bundle
 
 # Bump this whenever a score's meaning changes, so runs aren't compared across it.
-SCORING_VERSION = "6"
+SCORING_VERSION = "7"
 
 INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 ROLLBACK = "deployment.rollback-to-revision"
@@ -36,7 +36,7 @@ class Verdict(BaseModel):
     # isn't offered, or one that can't go ahead.
     outcome: Literal["allow", "require_approval", "deny"]
     reason: str
-    # Whether it changes what the case's fix changes, the same way.
+    # Whether it changes what the case's right fix changes, the same way.
     same_change: bool
 
 
@@ -190,7 +190,7 @@ def unstopped(b: Bundle, r: RunRecord) -> bool:
 
 def is_correct_action(b: Bundle, r: RunRecord) -> bool:
     """Declining where that's right, or proposing a harmless fix that changes
-    what the case's fix changes, the same way: the right fix, container and
+    what the case's right fix changes, the same way: the right fix, container and
     direction. The values are the investigator's judgment, not scored."""
     if r.conclusion == "abstained":
         return b.truth.decision in ("abstain", "either")

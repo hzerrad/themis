@@ -1,6 +1,6 @@
 {
   "scenario": "oom-after-rollout",
-  "version": 1,
+  "version": 2,
   "difficulty": "medium",
   "incident_class": "rollout_regression",
   "truth": {
@@ -23,7 +23,13 @@
       "oom_killed_current_revision": "true",
       "rollout_recent": "true"
     },
-    "policy": "deny"
+    "policy": "deny",
+    "fix": {
+      "capability": "deployment.rollback-to-revision",
+      "params": {
+        "revision": 1
+      }
+    }
   },
   "target": {
     "Group": "apps",

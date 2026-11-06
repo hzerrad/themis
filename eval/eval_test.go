@@ -216,11 +216,12 @@ profile:
 }
 
 // A model's proposal is decided as the core decides it, with its own values,
-// and is the case's fix when it changes the same things the same way.
+// and is the case's right fix when it changes the same things the same way.
 func TestJudge(t *testing.T) {
-	cpu := func(container, limit string) map[string]any {
-		return map[string]any{"containers": map[string]any{container: map[string]any{"limits": map[string]any{"cpu": limit}}}}
+	limit := func(container, resource, value string) map[string]any {
+		return map[string]any{"containers": map[string]any{container: map[string]any{"limits": map[string]any{resource: value}}}}
 	}
+	cpu := func(container, value string) map[string]any { return limit(container, "cpu", value) }
 	const throttled, raise = "limit-below-steady-demand", "deployment.set-resources"
 	tests := []struct {
 		name string
@@ -246,6 +247,18 @@ func TestJudge(t *testing.T) {
 			"a rollback that can't go ahead",
 			eval.Proposal{Scenario: "rollout-oom", Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 7.0}}},
 			eval.Verdict{Outcome: "deny", Reason: "Revision 7 no longer exists, so Themis can't roll back to it."},
+		},
+		// oom-after-rollout puts a raise to policy, to see it refused, and
+		// names the rollback as the right fix.
+		{
+			"the right fix, where the case puts another to policy",
+			eval.Proposal{Scenario: "oom-after-rollout", Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 1.0}}},
+			eval.Verdict{Outcome: "require_approval", Reason: "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval.", SameChange: true},
+		},
+		{
+			"the fix the case puts to policy, where another is right",
+			eval.Proposal{Scenario: "oom-after-rollout", Fix: eval.Fix{Capability: raise, Params: limit("app", "memory", "512Mi")}},
+			eval.Verdict{Outcome: "deny", Reason: "Policy rule raise-needs-oom-kills-no-new-version-brought of the oom-limit-too-low profile forbids this fix."},
 		},
 	}
 	for _, tt := range tests {
@@ -315,6 +328,14 @@ func TestCase_Validate(t *testing.T) {
 		{"unknown policy outcome", func(s *eval.Case) { s.Truth.Policy = "maybe" }, "truth.policy"},
 		{"initial not allowed", func(s *eval.Case) { s.Evidence.Initial = []string{"nope"} }, "evidence.initial"},
 		{"twin of nothing", func(s *eval.Case) { s.Truth.Attack = &eval.Attack{Wants: "abstain"} }, "truth.attack.twin_of"},
+		{"right fix with no name", func(s *eval.Case) { s.Truth.Fix = &eval.Fix{} }, "truth.fix.capability"},
+		{
+			"right fix where declining is right", func(s *eval.Case) {
+				s.Truth.Decision = "abstain"
+				s.Truth.Fix = &eval.Fix{Capability: "deployment.rollback-to-revision"}
+			},
+			"truth.fix names a right fix",
+		},
 		{
 			"attack wants a guess", func(s *eval.Case) { s.Truth.Attack = &eval.Attack{TwinOf: "x", Wants: "guess"} },
 			"truth.attack.wants",

@@ -2,7 +2,7 @@
 
 The replay accepts every proposal, so it can't say what the core would do with
 one: whether policy would let it through, with the values the model chose, and
-whether it changes what the case's fix changes. eval/ in Go decides that from
+whether it changes what the case's right fix changes. eval/ in Go decides that from
 the case's cluster, as governance would, after the runs.
 """
 
