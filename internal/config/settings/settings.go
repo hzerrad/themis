@@ -306,8 +306,12 @@ func (s *Settings) put(ctx context.Context, by string, c ModelChange, strict *st
 		value     *string
 		encrypted bool
 	}{
-		{ModelProvider, c.Provider, false}, {ModelBaseURL, c.BaseURL, false}, {ModelName, c.Name, false},
-		{ModelAPIKey, c.APIKey, true}, {ModelStrictOutput, strict, false}, {ModelSchemaDialect, c.SchemaDialect, false},
+		{ModelProvider, c.Provider, false},
+		{ModelBaseURL, c.BaseURL, false},
+		{ModelName, c.Name, false},
+		{ModelAPIKey, c.APIKey, true},
+		{ModelStrictOutput, strict, false},
+		{ModelSchemaDialect, c.SchemaDialect, false},
 	} {
 		switch {
 		case v.value == nil:

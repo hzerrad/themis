@@ -149,18 +149,18 @@ func TestModelSettings_Test(t *testing.T) {
 			Outcome: modeltest.Connected, Provider: "anthropic", Model: "claude-haiku-5-5", AnsweredBy: "claude-haiku-5-5", Latency: 1200 * time.Millisecond,
 		})
 	}()
-	got := testModel(t, h, map[string]any{"apiKey": "sk-ant-typed-not-saved"})
+	got := testModel(t, h, map[string]any{"apiKey": "typed-not-saved"})
 	want := modelTestReply{OK: true, Outcome: "connected", Text: "Connected. claude-haiku-5-5 answered in 1.2 s in the reply format."}
 	if got != want {
 		t.Errorf("test = %+v, want %+v", got, want)
 	}
-	if sent := <-took; sent.Settings.APIKey != "sk-ant-typed-not-saved" {
+	if sent := <-took; sent.Settings.APIKey != "typed-not-saved" {
 		t.Errorf("the investigator got %+v", sent.Settings)
 	}
 	if rec := send(t, h, http.MethodGet, "/v1/settings/model", nil); strings.Contains(rec.Body.String(), `"apiKeySet":true`) {
 		t.Errorf("the test saved the key: %s", rec.Body)
 	}
-	if !strings.Contains(logs.String(), "the model's connection was tested") || strings.Contains(logs.String(), "sk-ant") {
+	if !strings.Contains(logs.String(), "the model's connection was tested") || strings.Contains(logs.String(), "typed-not") {
 		t.Errorf("logs = %s", logs)
 	}
 }
@@ -181,7 +181,7 @@ func TestModelSettings_TestRefuses(t *testing.T) {
 		t.Errorf("without an investigator: %+v", got)
 	}
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/settings/model/test", strings.NewReader(`{}`))
-	req.AddCookie(&http.Cookie{Name: "themis_session", Value: "session-viewer"})
+	req.AddCookie(&http.Cookie{Name: "themis_session", Value: "session-viewer", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	req.Header.Set("X-Themis-Request", "1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

@@ -120,6 +120,9 @@ def _failure(e: BaseException) -> tuple[pb.ModelTestOutcome, int, str]:
             return pb.MODEL_TEST_OUTCOME_UNREACHABLE, 0, _plain(e)
         case anthropic.APIConnectionError():
             return pb.MODEL_TEST_OUTCOME_UNREACHABLE, 0, _plain(e.__cause__)
+        case ProviderError():
+            # The adapter refused the request itself, and says why.
+            return pb.MODEL_TEST_OUTCOME_ERROR, 0, str(e)
         case _:
             return pb.MODEL_TEST_OUTCOME_ERROR, 0, f"{type(e).__name__}: {e}"
 

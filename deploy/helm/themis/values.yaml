@@ -44,7 +44,8 @@ model:
   enabled: true
   # openai: an OpenAI-compatible API, such as OpenAI's, Ollama's or vLLM's.
   # anthropic: Anthropic's Messages API, for Claude models; baseURL can stay
-  # empty, and the Setup page's address doesn't apply. Empty means openai.
+  # empty, and the Setup page's address doesn't apply. Left empty with no
+  # baseURL, it's chosen on the Setup page; otherwise empty means openai.
   provider: ""
   # For example https://api.openai.com/v1 or http://ollama:11434/v1. Left
   # empty, it's set on Themis's Setup page instead.
@@ -67,10 +68,12 @@ model:
   # or its replies are cut off.
   maxOutputTokens: ""
   # Ask the provider to follow the reply schema exactly. Replies are still
-  # checked either way.
+  # checked either way. Without a baseURL, the Setup page's reply format
+  # sets it instead.
   strictOutput: true
   # How the reply schema is sent: as-is, or openai-strict, the form OpenAI's
-  # strict mode accepts. Empty: as-is, as Ollama and vLLM take it.
+  # strict mode accepts. Empty: as-is, as Ollama and vLLM take it, or the
+  # Setup page's reply format when baseURL is empty too.
   schemaDialect: ""
   # The field the output limit is sent in: max_tokens or max_completion_tokens.
   # Empty: max_tokens, as Ollama and vLLM read it. OpenAI's newer models need

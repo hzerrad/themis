@@ -59,12 +59,12 @@ func TestModelTest_TakeAndReport(t *testing.T) {
 	e.server.ModelTests = tests
 	done := make(chan modeltest.Result, 1)
 	go func() {
-		r, _ := tests.Run(context.Background(), settings.Model{Provider: "anthropic", Name: "claude-haiku-5-5", APIKey: "sk-ant-typed"})
+		r, _ := tests.Run(context.Background(), settings.Model{Provider: "anthropic", Name: "claude-haiku-5-5", APIKey: "typed-key"})
 		done <- r
 	}()
 	took, err := e.investigations.TakeModelTest(t.Context(), &themisv1.TakeModelTestRequest{})
 	test := took.GetTest()
-	if err != nil || test.GetSettings().GetApiKey() != "sk-ant-typed" || test.GetSettings().GetProvider() != "anthropic" || test.GetTimeout().AsDuration() != 20*time.Second {
+	if err != nil || test.GetSettings().GetApiKey() != "typed-key" || test.GetSettings().GetProvider() != "anthropic" || test.GetTimeout().AsDuration() != 20*time.Second {
 		t.Fatalf("TakeModelTest = %v, %v", took, err)
 	}
 	if _, err := e.investigations.ReportModelTest(t.Context(), &themisv1.ReportModelTestRequest{Id: "another", Outcome: themisv1.ModelTestOutcome_MODEL_TEST_OUTCOME_CONNECTED}); status.Code(err) != codes.NotFound {

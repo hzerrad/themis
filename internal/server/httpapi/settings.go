@@ -42,8 +42,12 @@ func (a *API) setModelSettings(w http.ResponseWriter, r *http.Request) {
 		name string
 		set  bool
 	}{
-		{"provider", change.Provider != nil}, {"address", change.BaseURL != nil}, {"name", change.Name != nil}, {"key", change.APIKey != nil},
-		{"strict output", change.StrictOutput != nil}, {"schema dialect", change.SchemaDialect != nil},
+		{"provider", change.Provider != nil},
+		{"address", change.BaseURL != nil},
+		{"name", change.Name != nil},
+		{"key", change.APIKey != nil},
+		{"strict output", change.StrictOutput != nil},
+		{"schema dialect", change.SchemaDialect != nil},
 	} {
 		if c.set {
 			changed = append(changed, c.name)
