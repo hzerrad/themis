@@ -291,15 +291,29 @@ demo-fix: ## Roll checkout back to its previous revision
 # oom-limit-too-low: catalog. The pods restart to load the larger catalog;
 # deleting them, unlike a rollout restart, leaves the revision as it was.
 .PHONY: demo-break-oom demo-fix-oom
+# catalog-feed-serves waits until the catalog-feed Service answers size $(1)
+# five times in a row: for a few seconds after a rollout it can still reach
+# the old feed pod, and catalog pods restarted then would load the old size.
+define catalog-feed-serves
+	@for i in $$(seq 1 60); do \
+	  ok=1; for j in 1 2 3 4 5; do \
+	    [ "$$($(KUBECTL) -n shop exec deploy/catalog -- wget -qO- -T 2 http://catalog-feed:8080/size 2>/dev/null)" = "$(1)" ] || ok=0; \
+	  done; \
+	  [ $$ok = 1 ] && exit 0; sleep 1; \
+	done; echo "catalog-feed still answers another size than $(1)"; exit 1
+endef
+
 demo-break-oom: demo-namespace ## oom-limit-too-low: double catalog's data, past its memory limit, with no rollout
 	$(KUBECTL) apply -f $(DEMO)/catalog.yaml
 	$(KUBECTL) -n shop set env deployment/catalog-feed SIZE_MI=64
 	$(KUBECTL) -n shop rollout status deployment/catalog-feed --timeout=120s
+	$(call catalog-feed-serves,64)
 	$(KUBECTL) -n shop delete pods -l app=catalog
 
 demo-fix-oom: ## Shrink catalog's data back under its memory limit
 	$(KUBECTL) -n shop set env deployment/catalog-feed SIZE_MI=32
 	$(KUBECTL) -n shop rollout status deployment/catalog-feed --timeout=120s
+	$(call catalog-feed-serves,32)
 	$(KUBECTL) -n shop delete pods -l app=catalog
 
 # cpu-throttling: search.
