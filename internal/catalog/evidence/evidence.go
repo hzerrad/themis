@@ -24,6 +24,10 @@ var (
 	// ErrNoPods means the workload runs no pods to read from.
 	ErrNoPods = errors.New("the workload has no pods")
 
+	// ErrNoRevision means Kubernetes keeps no current revision of the
+	// workload to read about.
+	ErrNoRevision = errors.New("the workload has no current revision")
+
 	// ErrPodReplaced means a pod was recreated under its name while it was read.
 	ErrPodReplaced = errors.New("the pod was replaced")
 )

@@ -190,14 +190,17 @@ const MARK = { for: "✓", against: "✕", unknown: "?", found: "✓" };
 const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", found: "Found" };
 // AGAINST says which answer of a check is a fact against a fix: against any
 // fix ("*"), or against the fix named. Any other check weighs for a fix
-// when true. No earlier revision rules out a rollback; a healthy one rules
-// out raising a limit, since the new version is what fails.
+// when true. No healthy earlier revision rules out a rollback. Failures the
+// latest rollout brought rule out raising a limit, since the new version is
+// what fails; failures it didn't bring rule out the rollback.
 const AGAINST = {
   gitops_managed: { "*": "true" },
   config_changed_before_failure: { "*": "true" },
   evidence_has_instructions: { "*": "true" },
-  earlier_revision_healthy: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
+  earlier_revision_healthy: { [ROLLBACK]: "false" },
   failure_onset_after_rollout: { [ROLLBACK]: "false" },
+  failures_came_with_rollout: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
+  throttling_came_with_rollout: { "deployment.set-resources": "true" },
 };
 
 // against says whether p's answer is a fact against one of fixes.
@@ -216,6 +219,7 @@ function supports(p, fix) {
 const EVIDENCE_LABEL = {
   rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs",
   referenced_config: "Referenced config", container_memory: "Container memory", container_cpu: "Container CPU",
+  revision_health: "Revision health",
 };
 const ACTOR_LABEL = {
   intake: "Alert intake", investigation: "Themis", investigator: "The investigator", governance: "Policy",

@@ -42,6 +42,7 @@ var names = map[string]string{
 	evidence.ReferencedConfig:  "Referenced config",
 	evidence.ContainerMemory:   "Container memory",
 	evidence.ContainerCPU:      "Container CPU",
+	evidence.RevisionHealth:    "Revision health",
 }
 
 func nameOf(template string) string {
@@ -116,7 +117,7 @@ func unavailable(g store.EvidenceGap) missing {
 		return missing{"no metrics source", enableMetrics}
 	case strings.Contains(detail, metrics.ErrNotServed.Error()):
 		return missing{"no metrics source", installMetrics}
-	case strings.Contains(detail, metrics.NoHistory):
+	case strings.Contains(detail, metrics.NoHistory), strings.Contains(detail, metrics.NoRevisionHistory):
 		return missing{"no history in the Kubernetes metrics API", "Set metrics.prometheus.address."}
 	}
 	// Themis's own wrapping goes; what the reader said, which the

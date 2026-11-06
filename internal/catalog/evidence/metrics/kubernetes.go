@@ -19,9 +19,11 @@ const Kubernetes = "kubernetes"
 // Why the metrics API can't answer.
 const (
 	// NoHistory is why it has no peaks or throttling.
-	NoHistory   = "the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them"
-	notServed   = "the Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address"
-	notMeasured = "the Kubernetes metrics API has no figures for these pods yet"
+	NoHistory = "the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them"
+	// NoRevisionHistory is why it can't say how a revision's pods ran.
+	NoRevisionHistory = "the Kubernetes metrics API keeps no history, so it can't say how a revision's pods ran: set a Prometheus address to see it"
+	notServed         = "the Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address"
+	notMeasured       = "the Kubernetes metrics API has no figures for these pods yet"
 )
 
 // ErrNotServed is why the metrics API can't answer when the cluster doesn't
@@ -57,6 +59,10 @@ func (metricsAPI) PeakMemory(context.Context, Pods, time.Duration) (Reading, err
 
 func (metricsAPI) Throttling(context.Context, Pods, time.Duration) (Reading, error) {
 	return Reading{Unavailable: NoHistory}, nil
+}
+
+func (metricsAPI) History(context.Context, ReplicaSet, time.Time) (Record, error) {
+	return Record{Unavailable: NoRevisionHistory}, nil
 }
 
 // read lists the namespace's pod metrics, keeping the highest value of each

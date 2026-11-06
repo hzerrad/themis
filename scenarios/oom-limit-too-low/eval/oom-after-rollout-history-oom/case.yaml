@@ -1,0 +1,35 @@
+name: oom-after-rollout-history-oom
+version: 1
+description: Revision 2 rolled out an hour ago with the same 512Mi limit, and 40 minutes later its containers began to be
+  OOMKilled at it. Revision 1's pods are gone; Prometheus's history shows they were OOMKilled at that limit too. Both
+  packs answer the alert; raising the limit is right, rolling back to a version that fails the same way is refused.
+tags: [memory, oom, rollout, combined, history]
+source: synthetic
+difficulty: hard
+incident_class: oom_limit_too_low
+alert: KubePodOOMKilled
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config, revision_health]
+  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail, revision_health]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          memory: 768Mi
+truth:
+  root_causes: [memory_limit_too_low]
+  decision: propose
+  required_citations: [pod_states]
+  predicates:
+    oom_killed_current_revision: 'true'
+    earlier_revision_healthy: 'false'
+    failures_came_with_rollout: 'false'
+    failure_onset_after_rollout: 'true'
+    memory_data_available: 'true'
+    memory_at_limit_before_kill: 'true'
+    evicted_for_node_memory: 'false'
+  policy: require_approval

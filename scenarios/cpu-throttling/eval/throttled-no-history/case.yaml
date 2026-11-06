@@ -1,0 +1,30 @@
+name: throttled-no-history
+version: 1
+description: Revision 2 has run for twenty days and is throttled at its 500m CPU limit since yesterday. Prometheus's history
+  has none of revision 1's pods, so nothing shows whether revision 2 or more load brought the throttling, and a person
+  decides.
+tags: [cpu, throttling, history]
+source: synthetic
+difficulty: hard
+incident_class: cpu_throttling
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events, revision_health]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail, revision_health]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      api:
+        limits:
+          cpu: 750m
+truth:
+  root_causes: [cpu_limit_too_low, insufficient_evidence]
+  decision: abstain
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    throttling_came_with_rollout: unknown
+  policy: deny

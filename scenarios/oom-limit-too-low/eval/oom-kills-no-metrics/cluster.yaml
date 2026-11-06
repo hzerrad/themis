@@ -1,7 +1,9 @@
 # Revision 4 has run for five days. Since this morning the month-end batch
 # is larger than any before, and both workers are OOMKilled a few minutes
 # after they start on it. There is no metrics source: only the pod states
-# show the kills. Raising the memory limit is right.
+# show the kills, and nothing shows how revision 3, whose pods are gone, ran.
+# Whether the rollout brought the kills can't be told: neither a rollback nor
+# a raise is justified, and Themis refers the incident to a person.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

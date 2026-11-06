@@ -10,10 +10,10 @@
     "decision": "propose",
     "predicates": {
       "crashed_on_its_own": "false",
+      "failures_came_with_rollout": "unknown",
       "killed_during_startup": "false",
       "probe_kills": "true",
-      "probe_timeouts": "true",
-      "rollout_recent": "false"
+      "probe_timeouts": "true"
     },
     "policy": "require_approval",
     "attack": {
@@ -68,7 +68,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "Changing a probe's timing is right when the application works and the\nprobe fails it only because it is slower than the probe allows: it is\nkilled while still starting (killed_during_startup), or its probes time\nout (probe_timeouts) on answers that come a little after the probe's\ntimeout. The logs then show it starting or serving normally until it is\nstopped, and crashed_on_its_own is false. Each revision's probe timings\nare in the rollout history: compare them with how long containers ran and\nwith the probe failure messages.\n\nDecide which probes to change and to what, from that evidence: liveness,\nreadiness or startup, and initialDelaySeconds, periodSeconds,\ntimeoutSeconds, failureThreshold or, for readiness, successThreshold.\nGive the values the evidence supports, such as a timeout above the\nanswers' latency, or enough delay or failures to cover the start the logs\nshow, and cite them. A readiness probe made more lenient keeps sending\ntraffic to pods that fail it for longer: change it only when the\nevidence shows readiness failing a pod that serves.\n\nDon't change a probe, and say what you found instead, when:\n- the application is failing: errors or stack traces in the logs,\n  crashed_on_its_own is true, or probes get error answers from a\n  container that is up. A probe failing is then a symptom.\n- a recent rollout (rollout_recent) brought the failures and the revision\n  before it worked: whether to roll back is another kind of incident's\n  call, unless the logs show the new version only starts slower.\n- something the application calls is down, and its readiness probe says\n  so: a more lenient probe would send traffic to pods that can't serve\n  it, and hide the outage.\n- probe_kills and probe_timeouts are both false: nothing shows the probes\n  failing a container that works.\n",
+  "guidance": "Changing a probe's timing is right when the application works and the\nprobe fails it only because it is slower than the probe allows: it is\nkilled while still starting (killed_during_startup), or its probes time\nout (probe_timeouts) on answers that come a little after the probe's\ntimeout. The logs then show it starting or serving normally until it is\nstopped, and crashed_on_its_own is false. Each revision's probe timings\nare in the rollout history: compare them with how long containers ran and\nwith the probe failure messages.\n\nDecide which probes to change and to what, from that evidence: liveness,\nreadiness or startup, and initialDelaySeconds, periodSeconds,\ntimeoutSeconds, failureThreshold or, for readiness, successThreshold.\nGive the values the evidence supports, such as a timeout above the\nanswers' latency, or enough delay or failures to cover the start the logs\nshow, and cite them. A readiness probe made more lenient keeps sending\ntraffic to pods that fail it for longer: change it only when the\nevidence shows readiness failing a pod that serves.\n\nDon't change a probe, and say what you found instead, when:\n- the application is failing: errors or stack traces in the logs,\n  crashed_on_its_own is true, or probes get error answers from a\n  container that is up. A probe failing is then a symptom.\n- the latest rollout brought the failures, where the revision before it\n  ran without failing (failures_came_with_rollout is true): whether to\n  roll back is another kind of incident's call, unless the logs show the\n  new version only starts slower.\n- something the application calls is down, and its readiness probe says\n  so: a more lenient probe would send traffic to pods that can't serve\n  it, and hide the outage.\n- probe_kills and probe_timeouts are both false: nothing shows the probes\n  failing a container that works.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -138,6 +138,17 @@
         "container",
         "previous"
       ]
+    },
+    {
+      "name": "revision_health",
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+    }
+  ],
+  "gaps": [
+    {
+      "template": "revision_health",
+      "cause": "unavailable",
+      "detail": "collect revision_health: no figures: no metrics source is set up"
     }
   ],
   "predicates": [
@@ -182,13 +193,17 @@
       ]
     },
     {
-      "name": "rollout_recent",
-      "version": "2",
-      "value": "false",
-      "reason": "revision 12 rolled out 77h10m0s ago, beyond 6h0m0s",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
+      "name": "failures_came_with_rollout",
+      "version": "1",
+      "value": "unknown",
+      "reason": "no metrics history",
+      "gaps": [
+        {
+          "template": "revision_health",
+          "cause": "unavailable"
+        }
+      ],
+      "blind": true
     },
     {
       "name": "gitops_managed",

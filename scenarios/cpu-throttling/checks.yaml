@@ -88,3 +88,67 @@
     - answer: false
       reason: none of the ${size(measured)} container(s) with a CPU limit uses 80% or more of it
       cite: [ids.container_cpu]
+
+# The throttling came with the latest rollout: the version before it ran
+# unthrottled where the current one is throttled at its limit. Throttling
+# shows only in a metrics source's history, so this reads how each revision's
+# containers ran there: the version before ran unthrottled until after the
+# current one was first throttled, or for longer than the current one ran
+# before it was. A current version that ran unthrottled at least as long as
+# the one before it was seen to is no worse for the rollout: what changed
+# since, such as more load, brought the throttling. With no earlier revision,
+# or one throttled too, the rollout didn't bring it.
+- name: throttling_came_with_rollout
+  version: "1"
+  description: The throttling came with the latest rollout, where the version before it ran unthrottled
+  topic: Whether the rollout brought the throttling
+  whenFalse: The throttling didn't come with the latest rollout
+  reads: [rollout_history, revision_health]
+  let:
+    earlier: revision_health.revisions.filter(r, r.revision == prior.revision)
+    latest: revision_health.revisions.filter(r, r.revision == current.revision)
+    ran: latest[0].firstThrottledAt - rollout_at
+    seen: earlier[0].seenUntil - earlier[0].seenFrom
+  answers:
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: prior == null
+      answer: false
+      reason: there is no revision before revision ${current.revision}, so no rollout brought the throttling
+      cite: [ids.rollout_history]
+    - when: size(earlier) == 0 || earlier[0].seenFrom == null
+      answer: unknown
+      reason: the metrics history has none of the pods of revision ${prior.revision}
+      cite: [ids.revision_health]
+    - when: earlier[0].firstThrottledAt != null
+      answer: false
+      reason: >-
+        the version before it was throttled too: a container of revision ${prior.revision} was throttled
+        at its CPU limit from ${earlier[0].firstThrottledAt}, in ${earlier[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+    - when: rollout_at == null
+      answer: unknown
+      reason: the rollout time is unknown
+    - when: size(latest) == 0 || latest[0].firstThrottledAt == null
+      answer: unknown
+      reason: no history shows revision ${current.revision} throttled at its CPU limit
+      cite: [ids.revision_health]
+    - when: earlier[0].seenUntil >= latest[0].firstThrottledAt
+      answer: true
+      reason: >-
+        pods of revision ${prior.revision} ran unthrottled until ${earlier[0].seenUntil}, after
+        revision ${current.revision} was first throttled at ${latest[0].firstThrottledAt}
+      cite: [ids.rollout_history, ids.revision_health]
+    - when: ran < seen
+      answer: true
+      reason: >-
+        revision ${current.revision} was throttled at its CPU limit ${ran} after its rollout; revision
+        ${prior.revision} ran ${seen} unthrottled, in ${earlier[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+    - answer: false
+      reason: >-
+        revision ${current.revision} ran ${ran} unthrottled after its rollout, at least as long as
+        revision ${prior.revision} was seen to (${seen}, in ${earlier[0].source}'s history), so what
+        changed since brought the throttling
+      cite: [ids.rollout_history, ids.revision_health]

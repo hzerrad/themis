@@ -15,11 +15,11 @@
       "earlier_revision_healthy": "false",
       "evicted_for_node_memory": "false",
       "failure_onset_after_rollout": "false",
+      "failures_came_with_rollout": "false",
       "memory_at_limit_before_kill": "true",
       "memory_data_available": "true",
       "oom_after_long_run": "false",
-      "oom_killed_current_revision": "true",
-      "rollout_recent": "false"
+      "oom_killed_current_revision": "true"
     },
     "policy": "require_approval"
   },
@@ -108,7 +108,7 @@
       "description": "its node ran short of memory and evicted or killed its pods"
     }
   ],
-  "guidance": "From the rollout-regression profile, which offers deployment.rollback-to-revision:\nA rollback is right when the current revision introduced the failure and\nthe revision before it was healthy. If the failure started before the\nrollout, if there is no earlier revision or it failed too\n(earlier_revision_healthy is false), if the target is managed by GitOps,\nif its config changed before the failure, or if the evidence is missing,\ndo not propose a rollback: conclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nearlier_revision_healthy are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n\nFrom the oom-limit-too-low profile, which offers deployment.set-resources:\nRaising a container's memory limit is right when containers are killed\nfor memory and need more than their limit, and no new version brought\nthe kills: oom_killed_current_revision is true,\nmemory_at_limit_before_kill is true, or unknown without peak figures, and\nnothing below applies. With no earlier version to go back to, or one\nthat failed too (earlier_revision_healthy is false), the limit is what to\nchange, however recently the version rolled out. Raise the memory limit\nof the killed containers only, citing pod_states, and container_memory\nwhen it has figures. Size it from the evidence: the peak plus 25% when\ncontainer_memory shows it, otherwise 1.5 times the current limit. Never\nlower a value, never change CPU, never set a limit where there was none,\nand never remove one.\n\nMissing memory figures are no reason to decline: OOM kills in the pod\nstates are enough to act on. They only mean the size can't come from the\npeak.\n\nDon't raise it, and say what you found instead, when:\n- earlier_revision_healthy is true: the version before this one runs\n  healthy, so this one brought the kills. The same holds while\n  earlier_revision_healthy is unknown and rollout_recent is true. Whether\n  to roll it back is a rollback's question, under its own guidance, never\n  a reason to raise the limit here.\n- oom_after_long_run is true, the containers are killed again and again\n  after hours of running, and the limit held for days before: memory\n  that grows until the container is killed, at any limit. A higher limit\n  only delays the next kill; say so and leave it to a person.\n- memory_at_limit_before_kill is false: the containers never came near\n  their limit, so the limit isn't what killed them.\n- evicted_for_node_memory is true: the node ran short of memory. A\n  higher limit doesn't give it more, and can make it worse.\n- oom_killed_current_revision is not true: a container killed with exit\n  code 137 and no OOMKilled reason may have been stopped for another\n  reason. Don't infer a memory kill from restarts, exit codes or the\n  alert alone; say what is missing.",
+  "guidance": "From the rollout-regression profile, which offers deployment.rollback-to-revision:\nA rollback is right when the latest rollout brought the failures: the\nrevision before it ran without failing where the current one fails\n(failures_came_with_rollout is true). If the failure started before the\nrollout, if there is no earlier revision or it failed too, if the current\nrevision ran without failing at least as long as the one before it did\n(failures_came_with_rollout is false), if the target is managed by\nGitOps, if its config changed before the failure, or if the evidence is\nmissing, such as no history of the revision before it\n(failures_came_with_rollout is unknown), do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nfailures_came_with_rollout are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n\nFrom the oom-limit-too-low profile, which offers deployment.set-resources:\nRaising a container's memory limit is right when containers are killed\nfor memory and need more than their limit, and the latest rollout didn't\nbring the kills: oom_killed_current_revision is true,\nfailures_came_with_rollout is false, memory_at_limit_before_kill is true,\nor unknown without peak figures, and nothing below applies.\nfailures_came_with_rollout is false when there is no earlier version to\ngo back to, when the one before it failed too, or when this one ran\nwithout failing at least as long as the one before it did, so what\nchanged since, such as more data or load, brought the kills. Raise the\nmemory limit of the killed containers only, citing pod_states, and\ncontainer_memory when it has figures. Size it from the evidence: the\npeak plus 25% when container_memory shows it, otherwise 1.5 times the\ncurrent limit. Never lower a value, never change CPU, never set a limit\nwhere there was none, and never remove one.\n\nMissing peak memory figures are no reason to decline: OOM kills in the\npod states are enough to act on. They only mean the size can't come from\nthe peak.\n\nDon't raise it, and say what you found instead, when:\n- failures_came_with_rollout is true: the version before this one ran\n  without failing where this one fails, so this one brought the kills.\n  Whether to roll it back is a rollback's question, under its own\n  guidance, never a reason to raise the limit here.\n- failures_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods. Neither\n  fix is justified; say what is missing.\n- oom_after_long_run is true, the containers are killed again and again\n  after hours of running, and the limit held for days before: memory\n  that grows until the container is killed, at any limit. A higher limit\n  only delays the next kill; say so and leave it to a person.\n- memory_at_limit_before_kill is false: the containers never came near\n  their limit, so the limit isn't what killed them.\n- evicted_for_node_memory is true: the node ran short of memory. A\n  higher limit doesn't give it more, and can make it worse.\n- oom_killed_current_revision is not true: a container killed with exit\n  code 137 and no OOMKilled reason may have been stopped for another\n  reason. Don't infer a memory kill from restarts, exit codes or the\n  alert alone; say what is missing.",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -183,18 +183,20 @@
         "container",
         "previous"
       ]
+    },
+    {
+      "name": "revision_health",
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+    }
+  ],
+  "gaps": [
+    {
+      "template": "revision_health",
+      "cause": "unavailable",
+      "detail": "collect revision_health: no figures: Prometheus has no pods of ReplicaSet catalog-6b9d4f7c2 in its history: it keeps none that old, or doesn't scrape kube-state-metrics"
     }
   ],
   "predicates": [
-    {
-      "name": "rollout_recent",
-      "version": "2",
-      "value": "false",
-      "reason": "there is no revision before revision 1, so no rollout replaced one",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
-    },
     {
       "name": "failure_onset_after_rollout",
       "version": "3",
@@ -206,9 +208,18 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "catalog has no earlier revision to roll back to",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failures_came_with_rollout",
+      "version": "1",
+      "value": "false",
+      "reason": "there is no revision before revision 1, so no rollout brought the failures",
       "evidence_ids": [
         "ev-rollout_history"
       ]

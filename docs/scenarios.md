@@ -51,16 +51,16 @@ profile:
     alertNames: [KubePodCrashLooping, KubeDeploymentReplicasMismatch, KubePodOOMKilled]
     targetKinds: [Deployment.apps]
   evidence:
-    initial: [rollout_history, pod_states, target_events, referenced_config]
-    allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
-  checks: [rollout_recent, failure_onset_after_rollout, earlier_revision_healthy, oom_killed_new_revision, gitops_managed]
+    initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+    allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
+  checks: [failure_onset_after_rollout, earlier_revision_healthy, failures_came_with_rollout, oom_killed_new_revision, gitops_managed]
   capabilities: [deployment.rollback-to-revision]
   justifiedBy:
     deployment.rollback-to-revision: [failure_onset_after_rollout]
   symptoms: [failure_onset_after_rollout, oom_killed_new_revision]
   guidance: |
-    A rollback is right when the current revision introduced the failure and
-    a prior revision was healthy. ...
+    A rollback is right when the latest rollout brought the failures: the
+    revision before it ran without failing where the current one fails. ...
   policy:
     rules:
       - name: rollback-needs-approval
@@ -86,13 +86,13 @@ List the checks the profile runs: with none, it runs every check of every pack. 
 
 `symptoms` names the checks that find the failure itself, such as `oom_killed_current_revision` or `cpu_throttled_at_limit`. While one is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person, saying which fix the checks support or what they found, and waits for the fix they suggest. Name every check that finds something wrong, including those that rule the pack's fix out, such as `crashed_on_its_own` for a probe change. Without `symptoms`, the justifying checks are the pack's symptoms. See [symptoms](configuration.md#symptoms).
 
-Whether a new version brought the failure is a question for Themis's own `earlier_revision_healthy`: is there a healthy version before this one to go back to? A pack whose fix is right only when the version isn't to blame, such as a higher limit, refuses it while that check is true. A Deployment's first revision has none, so `earlier_revision_healthy`, `rollout_recent` and `failure_onset_after_rollout` are all false for it: creating a Deployment isn't a rollout.
+Whether the latest rollout brought the failure is a question for Themis's own `failures_came_with_rollout`, which compares how the version before it ran with how the current one runs: from the earlier version's pods while they are there, from the metrics history once they are gone. A pack whose fix is right only when the rollout isn't to blame, such as a higher limit, refuses it unless that check is false, and a rollback needs it true. When it is `unknown`, as without a metrics history of the earlier version, neither goes ahead and a person decides. A Deployment's first revision has no earlier one, so `earlier_revision_healthy`, `failures_came_with_rollout` and `failure_onset_after_rollout` are all false for it: creating a Deployment isn't a rollout. No pack decides a fix by how long ago something happened: write a check that compares what the evidence shows instead, and let it be `unknown` when the evidence is missing.
 
 `guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
 
 ## Checks
 
-`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run Themis's own checks, `rollout_recent`, `earlier_revision_healthy` and `gitops_managed`, as it runs the pack's. Don't rely on another pack's checks: it may be disabled. A check name belongs to one pack, and Themis's own names can't be defined again.
+`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run Themis's own checks, `earlier_revision_healthy`, `failures_came_with_rollout` and `gitops_managed`, as it runs the pack's. Don't rely on another pack's checks: it may be disabled. A check name belongs to one pack, and Themis's own names can't be defined again.
 
 ## Cases and look-alikes
 
@@ -109,14 +109,14 @@ incident_class: rollout_regression
 now: "2026-10-27T09:20:00Z"
 target: {kind: Deployment, namespace: shop, name: checkout}
 evidence:
-  initial: [rollout_history, pod_states, target_events, referenced_config]
-  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+  initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
 truth:
   root_causes: [memory_limit_regression]
   decision: propose
   acceptable_revisions: [1]
   predicates:
-    rollout_recent: "true"
+    failures_came_with_rollout: "true"
     oom_killed_new_revision: "true"
 ```
 

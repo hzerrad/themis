@@ -32,8 +32,7 @@ profiles:
         - name: rollback-needs-a-bad-rollout
           when: >-
             action.restore != "true" &&
-            (predicates.rollout_recent != "true" ||
-             predicates.failure_onset_after_rollout != "true" ||
+            (predicates.failure_onset_after_rollout != "true" ||
              predicates.config_changed_before_failure != "false" ||
              (predicates.oom_killed_new_revision != "true" &&
               predicates.earlier_revision_healthy != "true"))

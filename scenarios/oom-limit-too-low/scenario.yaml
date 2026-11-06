@@ -24,22 +24,25 @@ rootCauses:
 
 # The profile Themis uses for these incidents. It answers the OOM alerts the
 # rollout-regression pack answers too, so an incident from them gets both
-# packs: a rollback when a new version brought the kills and the one before it
-# was healthy, a higher limit otherwise. Its priority is below that pack's.
+# packs: a rollback when the latest rollout brought the kills, a higher limit
+# when it didn't, and a person when nothing shows which. Its priority is below
+# that pack's.
 profile:
   priority: 90
   match:
     alertNames: [KubePodOOMKilled, KubePodCrashLooping]
     targetKinds: [Deployment.apps]
   # Without a metrics source container_memory is a gap: the pod states still
-  # show the OOM kills, which are enough to act on.
+  # show the OOM kills, which are enough to size a raise from. revision_health
+  # is too, and then only the earlier revision's pods, while they run, tell
+  # whether the rollout brought the kills.
   evidence:
-    initial: [pod_states, container_memory, rollout_history, target_events, referenced_config]
-    allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail]
+    initial: [pod_states, container_memory, rollout_history, target_events, referenced_config, revision_health]
+    allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail, revision_health]
   checks:
     - oom_killed_current_revision
     - earlier_revision_healthy
-    - rollout_recent
+    - failures_came_with_rollout
     - memory_data_available
     - memory_at_limit_before_kill
     - oom_after_long_run
@@ -58,28 +61,32 @@ profile:
   # policy below decide, and a person approves the size.
   guidance: |
     Raising a container's memory limit is right when containers are killed
-    for memory and need more than their limit, and no new version brought
-    the kills: oom_killed_current_revision is true,
-    memory_at_limit_before_kill is true, or unknown without peak figures, and
-    nothing below applies. With no earlier version to go back to, or one
-    that failed too (earlier_revision_healthy is false), the limit is what to
-    change, however recently the version rolled out. Raise the memory limit
-    of the killed containers only, citing pod_states, and container_memory
-    when it has figures. Size it from the evidence: the peak plus 25% when
-    container_memory shows it, otherwise 1.5 times the current limit. Never
-    lower a value, never change CPU, never set a limit where there was none,
-    and never remove one.
+    for memory and need more than their limit, and the latest rollout didn't
+    bring the kills: oom_killed_current_revision is true,
+    failures_came_with_rollout is false, memory_at_limit_before_kill is true,
+    or unknown without peak figures, and nothing below applies.
+    failures_came_with_rollout is false when there is no earlier version to
+    go back to, when the one before it failed too, or when this one ran
+    without failing at least as long as the one before it did, so what
+    changed since, such as more data or load, brought the kills. Raise the
+    memory limit of the killed containers only, citing pod_states, and
+    container_memory when it has figures. Size it from the evidence: the
+    peak plus 25% when container_memory shows it, otherwise 1.5 times the
+    current limit. Never lower a value, never change CPU, never set a limit
+    where there was none, and never remove one.
 
-    Missing memory figures are no reason to decline: OOM kills in the pod
-    states are enough to act on. They only mean the size can't come from the
-    peak.
+    Missing peak memory figures are no reason to decline: OOM kills in the
+    pod states are enough to act on. They only mean the size can't come from
+    the peak.
 
     Don't raise it, and say what you found instead, when:
-    - earlier_revision_healthy is true: the version before this one runs
-      healthy, so this one brought the kills. The same holds while
-      earlier_revision_healthy is unknown and rollout_recent is true. Whether
-      to roll it back is a rollback's question, under its own guidance, never
-      a reason to raise the limit here.
+    - failures_came_with_rollout is true: the version before this one ran
+      without failing where this one fails, so this one brought the kills.
+      Whether to roll it back is a rollback's question, under its own
+      guidance, never a reason to raise the limit here.
+    - failures_came_with_rollout is unknown: nothing shows how the version
+      before this one ran, such as no metrics history of its pods. Neither
+      fix is justified; say what is missing.
     - oom_after_long_run is true, the containers are killed again and again
       after hours of running, and the limit held for days before: memory
       that grows until the container is killed, at any limit. A higher limit
@@ -97,18 +104,18 @@ profile:
     approvalTimeout: 30m
     rules:
       # OOM kills are the only reason this pack raises memory, and
-      # justifiedBy asks for them. A new version must not have brought them: a
-      # raise is refused while the version before it is healthy, and, when its
-      # health can't be seen, within 6 hours of the rollout. With no earlier
-      # version, or one that failed too, there is nothing to go back to. A
-      # raise is refused too when the containers never reached their limit, or
-      # the node ran short of memory, or may have. A restore puts back what
-      # Themis changed.
+      # justifiedBy asks for them. The latest rollout must not have brought
+      # them: a raise is refused unless there is no earlier version, the one
+      # before it failed too, or this one ran without failing at least as
+      # long as the one before it did. When nothing shows which, as without
+      # a metrics history of the earlier revision's pods, it is refused too,
+      # and a person decides. A raise is refused too when the containers
+      # never reached their limit, or the node ran short of memory, or may
+      # have. A restore puts back what Themis changed.
       - name: raise-needs-oom-kills-no-new-version-brought
         when: >-
           action.restore != "true" &&
-          (predicates.earlier_revision_healthy == "true" ||
-           (predicates.earlier_revision_healthy != "false" && predicates.rollout_recent != "false") ||
+          (predicates.failures_came_with_rollout != "false" ||
            predicates.memory_at_limit_before_kill == "false" ||
            predicates.evicted_for_node_memory != "false")
         decision: deny

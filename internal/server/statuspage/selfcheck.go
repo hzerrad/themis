@@ -467,7 +467,7 @@ func (c *Checker) metrics(ctx context.Context) Check {
 		ch.Fix = "Install metrics-server, or set metrics.prometheus.address."
 	case !history:
 		ch.State = OK
-		says = append(says, "No history. Peak memory and CPU throttling are unknown.")
+		says = append(says, "No history. Peak memory, CPU throttling and how earlier versions ran are unknown.")
 		ch.Fix = "Set metrics.prometheus.address to read them."
 	default:
 		ch.State = OK

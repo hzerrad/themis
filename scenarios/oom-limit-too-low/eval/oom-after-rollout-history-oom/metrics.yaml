@@ -1,0 +1,32 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  checkout-8e2a6c9d1-a1b2c:
+    app:
+      memory: 140Mi
+      peakMemory: 512Mi
+  checkout-8e2a6c9d1-d3e4f:
+    app:
+      memory: 120Mi
+      peakMemory: 512Mi
+  checkout-8e2a6c9d1-g5h6i:
+    app:
+      memory: 410Mi
+      peakMemory: 512Mi
+# What Prometheus's history says of each ReplicaSet's pods. It keeps 15
+# days, so it has none from before 20 Oct 14:00.
+revisions:
+  checkout-5c6a1e2f3:
+    seenFrom: '2026-10-20T14:00:00Z'
+    seenUntil: '2026-11-04T13:06:00Z'
+    restarts: 6
+    firstRestartAt: '2026-10-28T14:10:00Z'
+    oomKilled: 3
+    firstOOMKillAt: '2026-10-28T14:10:00Z'
+  checkout-8e2a6c9d1:
+    seenFrom: '2026-11-04T13:00:30Z'
+    seenUntil: '2026-11-04T14:00:00Z'
+    restarts: 7
+    firstRestartAt: '2026-11-04T13:40:00Z'
+    oomKilled: 3
+    firstOOMKillAt: '2026-11-04T13:40:00Z'

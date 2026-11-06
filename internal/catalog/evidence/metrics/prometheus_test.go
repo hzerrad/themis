@@ -2,6 +2,7 @@ package metrics_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -145,6 +146,86 @@ func TestPrometheus_CantAnswer(t *testing.T) {
 	}
 }
 
+// labelled is a series with the labels given and a value.
+func labelled(value string, labels ...string) string {
+	m := map[string]string{}
+	for i := 0; i+1 < len(labels); i += 2 {
+		m[labels[i]] = labels[i+1]
+	}
+	data, _ := json.Marshal(m) //nolint:errchkjson // a map of strings
+	return fmt.Sprintf(`{"metric":%s,"value":[1730800000,%q]}`, data, value)
+}
+
+// History finds a ReplicaSet's pods by their owner, then reads how they ran
+// by their names, over the lookback since asks for.
+func TestPrometheus_History(t *testing.T) {
+	var queries []string
+	fake := &promServer{reply: func(q string) (int, string) {
+		queries = append(queries, q)
+		if strings.Contains(q, "kube_pod_owner") {
+			return http.StatusOK, vector(
+				labelled("1762200000", "pod", "checkout-5c6a1e2f3-a1b2c", "edge", "first"),
+				labelled("1762300000", "pod", "checkout-5c6a1e2f3-a1b2c", "edge", "last"),
+				labelled("1762100000", "pod", "checkout-5c6a1e2f3-d.e4f", "edge", "first"),
+				labelled("1762250000", "pod", "checkout-5c6a1e2f3-d.e4f", "edge", "last"),
+			)
+		}
+		return http.StatusOK, vector(
+			labelled("4", "part", "restarts"),
+			labelled("1762150000", "part", "first_restart"),
+			labelled("1", "part", "oom_killed"),
+			labelled("1762150000", "part", "first_oom_kill"),
+			labelled("0.3", "part", "throttled"),
+			labelled("1762160000", "part", "first_throttled"),
+		)
+	}}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	since := time.Now().Add(-48 * time.Hour)
+	r, err := newPrometheus(t, srv, nil).History(t.Context(), metrics.ReplicaSet{Namespace: "shop", Name: "checkout-5c6a1e2f3"}, since)
+	if err != nil || !r.Answered() {
+		t.Fatalf("record = %+v, %v", r, err)
+	}
+	if !r.SeenFrom.Equal(time.Unix(1762100000, 0)) || !r.SeenUntil.Equal(time.Unix(1762300000, 0)) {
+		t.Errorf("seen %v to %v, want the earliest first and latest last of its pods", r.SeenFrom, r.SeenUntil)
+	}
+	if r.Restarts != 4 || r.OOMKilled != 1 || *r.Throttled != 0.3 || !r.FirstRestart.Equal(time.Unix(1762150000, 0)) || !r.FirstThrottled.Equal(time.Unix(1762160000, 0)) {
+		t.Errorf("record = %+v, want each part read", r)
+	}
+	if len(queries) != 2 {
+		t.Fatalf("queries = %q, want the pods, then how they ran", queries)
+	}
+	// Two days back at a thousand steps is a step of 173 seconds.
+	for _, want := range []string{`owner_kind="ReplicaSet"`, `owner_name="checkout-5c6a1e2f3"`, `namespace="shop"`, ":173s]"} {
+		if !strings.Contains(queries[0], want) {
+			t.Errorf("query %s lacks %s", queries[0], want)
+		}
+	}
+	for _, want := range []string{
+		"pod=~`checkout-5c6a1e2f3-a1b2c|checkout-5c6a1e2f3-d\\.e4f`", "kube_pod_container_status_restarts_total{",
+		`reason="OOMKilled"`, "container_cpu_cfs_throttled_periods_total{", ">= 0.25", "[3600s]", ":173s]",
+	} {
+		if !strings.Contains(queries[1], want) {
+			t.Errorf("query %s lacks %s", queries[1], want)
+		}
+	}
+}
+
+// A ReplicaSet the history has none of is one it can't say anything about,
+// and the lookback never goes past the cost bound.
+func TestPrometheus_HistoryHasNone(t *testing.T) {
+	fake := &promServer{reply: func(string) (int, string) { return http.StatusOK, vector() }}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	r, err := newPrometheus(t, srv, nil).History(t.Context(), metrics.ReplicaSet{Namespace: "shop", Name: "old"}, time.Now().Add(-400*24*time.Hour))
+	if err != nil || r.Answered() || r.Unavailable != metrics.NotInHistory("old") {
+		t.Errorf("record = %+v, %v, want it to say Prometheus has none of its pods", r, err)
+	}
+	if !strings.Contains(fake.query, "[2592000s:2592s]") {
+		t.Errorf("query %s, want 30 days back at most", fake.query)
+	}
+}
+
 // A password in the address is never shown.
 func withPassword(c *config.Prometheus) {
 	c.Address = strings.Replace(c.Address, "http://", "http://admin:hunter2@", 1)
@@ -154,6 +235,7 @@ func withPassword(c *config.Prometheus) {
 type stub struct {
 	name string
 	r    metrics.Reading
+	h    metrics.Record
 	err  error
 }
 
@@ -169,4 +251,8 @@ func (s stub) CPU(context.Context, metrics.Pods) (metrics.Reading, error) { retu
 
 func (s stub) Throttling(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return s.r, s.err
+}
+
+func (s stub) History(context.Context, metrics.ReplicaSet, time.Time) (metrics.Record, error) {
+	return s.h, s.err
 }

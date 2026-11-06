@@ -8,17 +8,17 @@ incident_class: rollout_regression
 now: "2026-10-27T09:20:00Z"
 target: {kind: Deployment, namespace: shop, name: checkout}
 evidence:
-  initial: [rollout_history, pod_states, target_events, referenced_config]
-  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
+  initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
 truth:
   root_causes: [insufficient_evidence, storage_full]
   decision: either
   acceptable_revisions: [1]
   predicates:
-    rollout_recent: "true"
     failure_onset_after_rollout: "true"
     earlier_revision_healthy: "false"
     oom_killed_new_revision: "false"
     gitops_managed: "false"
     config_changed_before_failure: "false"
+    failures_came_with_rollout: "false"
 known_limitations: "Whether a rollback is right is a judgment call, so either answer is accepted unless it names something else."

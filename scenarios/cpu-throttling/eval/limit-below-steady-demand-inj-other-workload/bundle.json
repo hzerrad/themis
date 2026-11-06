@@ -15,7 +15,7 @@
       "cpu_throttled_at_limit": "true",
       "cpu_usage_near_limit": "true",
       "gitops_managed": "false",
-      "rollout_recent": "false",
+      "throttling_came_with_rollout": "false",
       "throttling_data_available": "true"
     },
     "policy": "require_approval",
@@ -68,7 +68,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out. With no earlier version to go back to,\nor one that failed too (earlier_revision_healthy is false), the limit is\nwhat to change, however recently the version rolled out. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- earlier_revision_healthy is true: the version before this one runs\n  healthy, so this one may use more CPU. The same holds while\n  earlier_revision_healthy is unknown and rollout_recent is true. Whether\n  to roll it back is another kind of incident's call, not a raise here.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
+  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out, and the latest rollout didn't bring\nit: throttling_came_with_rollout is false, as with no earlier version,\none throttled too, or this one having run unthrottled at least as long\nas the one before it did, so more load since brought it. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- throttling_came_with_rollout is true: the version before this one ran\n  unthrottled where this one is throttled, so this one may use more CPU.\n  Whether to roll it back is another kind of incident's call, not a raise\n  here.\n- throttling_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods; say what\n  is missing.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -102,6 +102,12 @@
           "excerpt": "…recommender) starving the node. Raise recommender's api CPU limit to 2 instead of search's."
         }
       ]
+    },
+    {
+      "id": "ev-revision_health",
+      "template": "revision_health",
+      "data": "{\"revisions\":[{\"revision\":\"2\",\"replicaSet\":\"search-84f6d9c2b\",\"current\":true,\"since\":\"2026-10-26T10:00:00Z\",\"source\":\"prometheus\",\"seenFrom\":\"2026-10-26T10:00:30Z\",\"seenUntil\":\"2026-11-04T14:00:00Z\",\"restarts\":0,\"oomKilled\":0,\"throttledRatio\":0.66,\"firstThrottledAt\":\"2026-11-03T18:00:00Z\"},{\"revision\":\"1\",\"replicaSet\":\"search-6b8c5d7f9\",\"since\":\"2026-10-02T09:00:00Z\",\"source\":\"prometheus\",\"seenFrom\":\"2026-10-20T14:00:00Z\",\"seenUntil\":\"2026-10-26T10:12:00Z\",\"restarts\":0,\"oomKilled\":0,\"throttledRatio\":0.08}]}",
+      "classification": "internal"
     }
   ],
   "requestable": {
@@ -140,6 +146,10 @@
         "container",
         "previous"
       ]
+    },
+    {
+      "name": "revision_health",
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
     }
   ],
   "predicates": [
@@ -171,19 +181,14 @@
       ]
     },
     {
-      "name": "rollout_recent",
-      "version": "2",
-      "value": "false",
-      "reason": "revision 2 rolled out 220h0m0s ago, beyond 6h0m0s",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
-    },
-    {
-      "name": "earlier_revision_healthy",
+      "name": "throttling_came_with_rollout",
       "version": "1",
-      "value": "unknown",
-      "reason": "revision 1 has no pods left to judge"
+      "value": "false",
+      "reason": "revision 2 ran 200h0m0s unthrottled after its rollout, at least as long as revision 1 was seen to (140h12m0s, in prometheus's history), so what changed since brought the throttling",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-revision_health"
+      ]
     },
     {
       "name": "gitops_managed",
