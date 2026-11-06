@@ -18,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence/hint"
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/server/statuspage"
@@ -45,6 +46,9 @@ type API struct {
 	Remedy hint.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Again has an incident investigated again after a person denied its
+	// fix. Without it, nobody can.
+	Again Reinvestigation
 	// Fixes are the fixes Themis can carry out, which show what an action
 	// changes.
 	Fixes capability.Registry
@@ -99,6 +103,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
 	mux.Handle("POST /v1/actions/{id}/approve", a.authed(config.RoleApprover, a.approve, a.actionFields))
 	mux.Handle("POST /v1/actions/{id}/deny", a.authed(config.RoleApprover, a.deny, a.actionFields))
+	if a.Again != nil {
+		mux.Handle("POST /v1/incidents/{id}/investigate", a.authed(config.RoleApprover, a.investigate, incidentFields))
+	}
 	if a.Accounts != nil {
 		a.registerAccounts(mux)
 	}
@@ -334,6 +341,8 @@ func (a *API) fail(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "This fix was already approved, denied or canceled.", http.StatusConflict)
 	case errors.Is(err, store.ErrExpired):
 		http.Error(w, "Approval expired. This fix can no longer be approved.", http.StatusGone)
+	case errors.Is(err, governance.ErrOwnSuggestion):
+		http.Error(w, "Refused. A fix needs an approver other than the person who suggested it.", http.StatusForbidden)
 	default:
 		a.logger().ErrorContext(r.Context(), "API request failed", telemetry.FieldError, err)
 		http.Error(w, "Something went wrong in Themis. The core's logs have the details.", http.StatusInternalServerError)

@@ -80,6 +80,10 @@ message Budget {
   int64 max_input_tokens = 2;
   int64 max_output_tokens = 3;
   google.protobuf.Timestamp deadline = 4;
+  // The tokens the incident's earlier investigations used, as their
+  // investigators reported. They count toward the investigator's token
+  // budget, which is the incident's, however many times it is investigated.
+  int64 tokens_used = 5;
 }
 
 // Capability is a fix Themis can carry out, as a suggester sees it.

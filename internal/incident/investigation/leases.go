@@ -88,6 +88,11 @@ type Leased struct {
 	Results  []check.Result
 	// Deadline is when the investigation's time runs out.
 	Deadline time.Time
+	// Denials are the fixes people denied for the incident, oldest first:
+	// only an incident investigated again has any.
+	Denials []store.Denial
+	// TokensUsed are the tokens the incident's earlier investigations used.
+	TokensUsed int64
 }
 
 // Lease hands the next investigation to worker, first giving up on those
@@ -126,9 +131,18 @@ func (l *Leases) Lease(ctx context.Context, worker string) (Leased, bool, error)
 	if err != nil {
 		return Leased{}, false, err
 	}
+	denials, err := l.Store.Denials(ctx, l.Store.DB(), inv.IncidentID)
+	if err != nil {
+		return Leased{}, false, err
+	}
+	tokens, err := l.Store.IncidentTokens(ctx, l.Store.DB(), inv.IncidentID)
+	if err != nil {
+		return Leased{}, false, err
+	}
 	return Leased{
 		Investigation: inv, Scope: matched, Evidence: items, Results: results,
 		Deadline: now.Add(matched.InvestigationBudget().Timeout.Duration),
+		Denials:  denials, TokensUsed: tokens.Used,
 	}, true, nil
 }
 

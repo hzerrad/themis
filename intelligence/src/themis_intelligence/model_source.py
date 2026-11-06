@@ -15,6 +15,7 @@ from themis_intelligence.platform.adapters import (
     connect,
     needs_address,
 )
+from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class ModelSource:
         installed: Installed,
         core: SettingsCore,
         endpoint: Endpoint,
-        make: Callable[[ProviderAdapter, Endpoint], Model],
+        make: Callable[[ProviderAdapter, Endpoint, Budget], Model],
     ) -> None:
         self.installed = installed
         self.core = core
@@ -93,8 +94,9 @@ class ModelSource:
             self.endpoint = endpoint
         return True
 
-    def new_model(self) -> Model:
-        """A client for one investigation, with the settings ready() last read."""
+    def new_model(self, budget: Budget) -> Model:
+        """A client for one investigation, with the settings ready() last read,
+        held to budget."""
         if self.adapter is None or self.endpoint is None:
             raise RuntimeError("new_model before ready")
-        return self.make(self.adapter, self.endpoint)
+        return self.make(self.adapter, self.endpoint, budget)

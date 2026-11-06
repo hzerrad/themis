@@ -1,5 +1,6 @@
 import datetime
 
+from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from themis.v1 import common_pb2 as _common_pb2
 from google.protobuf.internal import containers as _containers
@@ -146,7 +147,7 @@ class FailInvestigationResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class Investigation(_message.Message):
-    __slots__ = ("lease_id", "lease_deadline", "incident_id", "profile", "target", "initial_evidence", "initial_failures", "predicates", "allowed_templates", "candidate_capabilities", "budget", "capabilities", "root_causes", "guidance")
+    __slots__ = ("lease_id", "lease_deadline", "incident_id", "profile", "target", "initial_evidence", "initial_failures", "predicates", "allowed_templates", "candidate_capabilities", "budget", "capabilities", "root_causes", "guidance", "denials")
     LEASE_ID_FIELD_NUMBER: _ClassVar[int]
     LEASE_DEADLINE_FIELD_NUMBER: _ClassVar[int]
     INCIDENT_ID_FIELD_NUMBER: _ClassVar[int]
@@ -161,6 +162,7 @@ class Investigation(_message.Message):
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     ROOT_CAUSES_FIELD_NUMBER: _ClassVar[int]
     GUIDANCE_FIELD_NUMBER: _ClassVar[int]
+    DENIALS_FIELD_NUMBER: _ClassVar[int]
     lease_id: str
     lease_deadline: _timestamp_pb2.Timestamp
     incident_id: str
@@ -175,7 +177,20 @@ class Investigation(_message.Message):
     capabilities: _containers.RepeatedCompositeFieldContainer[_common_pb2.Capability]
     root_causes: _containers.RepeatedCompositeFieldContainer[_common_pb2.RootCause]
     guidance: str
-    def __init__(self, lease_id: _Optional[str] = ..., lease_deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., incident_id: _Optional[str] = ..., profile: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., initial_evidence: _Optional[_Iterable[_Union[_common_pb2.EvidenceItem, _Mapping]]] = ..., initial_failures: _Optional[_Iterable[_Union[_common_pb2.CollectionFailure, _Mapping]]] = ..., predicates: _Optional[_Iterable[_Union[_common_pb2.PredicateResult, _Mapping]]] = ..., allowed_templates: _Optional[_Iterable[_Union[EvidenceTemplate, _Mapping]]] = ..., candidate_capabilities: _Optional[_Iterable[str]] = ..., budget: _Optional[_Union[_common_pb2.Budget, _Mapping]] = ..., capabilities: _Optional[_Iterable[_Union[_common_pb2.Capability, _Mapping]]] = ..., root_causes: _Optional[_Iterable[_Union[_common_pb2.RootCause, _Mapping]]] = ..., guidance: _Optional[str] = ...) -> None: ...
+    denials: _containers.RepeatedCompositeFieldContainer[Denial]
+    def __init__(self, lease_id: _Optional[str] = ..., lease_deadline: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., incident_id: _Optional[str] = ..., profile: _Optional[str] = ..., target: _Optional[_Union[_common_pb2.TargetRef, _Mapping]] = ..., initial_evidence: _Optional[_Iterable[_Union[_common_pb2.EvidenceItem, _Mapping]]] = ..., initial_failures: _Optional[_Iterable[_Union[_common_pb2.CollectionFailure, _Mapping]]] = ..., predicates: _Optional[_Iterable[_Union[_common_pb2.PredicateResult, _Mapping]]] = ..., allowed_templates: _Optional[_Iterable[_Union[EvidenceTemplate, _Mapping]]] = ..., candidate_capabilities: _Optional[_Iterable[str]] = ..., budget: _Optional[_Union[_common_pb2.Budget, _Mapping]] = ..., capabilities: _Optional[_Iterable[_Union[_common_pb2.Capability, _Mapping]]] = ..., root_causes: _Optional[_Iterable[_Union[_common_pb2.RootCause, _Mapping]]] = ..., guidance: _Optional[str] = ..., denials: _Optional[_Iterable[_Union[Denial, _Mapping]]] = ...) -> None: ...
+
+class Denial(_message.Message):
+    __slots__ = ("capability_name", "params", "denied_by", "reason")
+    CAPABILITY_NAME_FIELD_NUMBER: _ClassVar[int]
+    PARAMS_FIELD_NUMBER: _ClassVar[int]
+    DENIED_BY_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    capability_name: str
+    params: _struct_pb2.Struct
+    denied_by: str
+    reason: str
+    def __init__(self, capability_name: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., denied_by: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
 
 class Hypothesis(_message.Message):
     __slots__ = ("root_cause_class", "summary", "supporting_evidence_ids", "contradicting_evidence_ids", "missing", "status")
@@ -204,11 +219,13 @@ class EvidenceTemplate(_message.Message):
     def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., params: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class Usage(_message.Message):
-    __slots__ = ("steps_used", "input_tokens", "output_tokens")
+    __slots__ = ("steps_used", "input_tokens", "output_tokens", "token_budget")
     STEPS_USED_FIELD_NUMBER: _ClassVar[int]
     INPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_TOKENS_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_BUDGET_FIELD_NUMBER: _ClassVar[int]
     steps_used: int
     input_tokens: int
     output_tokens: int
-    def __init__(self, steps_used: _Optional[int] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ...) -> None: ...
+    token_budget: int
+    def __init__(self, steps_used: _Optional[int] = ..., input_tokens: _Optional[int] = ..., output_tokens: _Optional[int] = ..., token_budget: _Optional[int] = ...) -> None: ...

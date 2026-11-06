@@ -155,6 +155,19 @@ type detailView struct {
 	// EvidenceWarning says that some evidence looks like instructions or
 	// forged tool output, for whoever approves a fix.
 	EvidenceWarning string `json:",omitempty"`
+
+	// InvestigateAgain is set while a person can have the incident
+	// investigated again, and says why it can't be, if it can't.
+	InvestigateAgain *againView `json:",omitempty"`
+	// AnotherApprover is set when a fix needs an approver other than the
+	// person who suggested it.
+	AnotherApprover bool `json:",omitempty"`
+}
+
+// againView is whether investigating an incident again is available.
+type againView struct {
+	// Refused says why it isn't, such as a token budget spent.
+	Refused string `json:"refused,omitempty"`
 }
 
 // checkWords are what a check finds in each answer, in its pack's words.

@@ -67,7 +67,18 @@ func (p ProposalSource) EffectivePerMinute() int {
 // Without an investigator only suggestions can fix anything, so it's never
 // none: people need time to answer.
 func (c Config) SuggestionWindow() time.Duration {
-	if w := c.ExternalProposals.EffectiveWindow(); w > 0 || !c.Investigators.Disabled {
+	if c.Investigators.Disabled {
+		return c.AwaitingSuggestionWindow()
+	}
+	return c.ExternalProposals.EffectiveWindow()
+}
+
+// AwaitingSuggestionWindow returns how long an incident waits for a person
+// to suggest a fix: without an investigator, from when it opens, and after a
+// person denied its fix, from the denial. People need time to answer, so it's
+// never none.
+func (c Config) AwaitingSuggestionWindow() time.Duration {
+	if w := c.ExternalProposals.EffectiveWindow(); w > 0 {
 		return w
 	}
 	return DefaultProposalWindow

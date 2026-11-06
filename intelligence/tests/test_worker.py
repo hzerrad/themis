@@ -8,6 +8,7 @@ import pytest
 from tests.investigation.fakes import FakeCore, FakeRpcError, ScriptedModel, job
 from themis.v1 import investigation_pb2
 from themis_intelligence.investigation.loop import PROMPT_VERSION
+from themis_intelligence.platform.budget import Budget
 from themis_intelligence.worker import Worker
 
 
@@ -50,7 +51,7 @@ async def test_completes_a_leased_investigation() -> None:
     core = LeasingCore()
     worker = Worker(
         core=core,
-        new_model=lambda: ScriptedModel({"kind": "conclude_inconclusive", "summary": "no logs"}),
+        new_model=lambda _: ScriptedModel({"kind": "conclude_inconclusive", "summary": "no logs"}),
     )
     assert await worker.run_once() is True
     assert len(core.completed) == 1
@@ -62,7 +63,7 @@ async def test_completes_a_leased_investigation() -> None:
 
 
 async def test_nothing_to_lease() -> None:
-    worker = Worker(core=LeasingCore(leases=0), new_model=ScriptedModel)
+    worker = Worker(core=LeasingCore(leases=0), new_model=lambda _: ScriptedModel())
     assert await worker.run_once() is False
 
 
@@ -89,7 +90,7 @@ async def test_an_outage_is_logged_when_it_starts_and_ends(
 ) -> None:
     caplog.set_level("INFO")
     core = ClosedCore(refusals=5)
-    task = asyncio.create_task(Worker(core=core, new_model=ScriptedModel).run(idle_s=0))
+    task = asyncio.create_task(Worker(core=core, new_model=lambda _: ScriptedModel()).run(idle_s=0))
     await asyncio.wait_for(core.opened.wait(), 1)
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
@@ -102,7 +103,7 @@ async def test_an_outage_is_logged_when_it_starts_and_ends(
 
 async def test_failure_is_reported() -> None:
     core = LeasingCore()
-    worker = Worker(core=core, new_model=lambda: ScriptedModel("unavailable"))
+    worker = Worker(core=core, new_model=lambda _: ScriptedModel("unavailable"))
     await worker.run_once()
     assert core.completed == []
     assert len(core.failed) == 1
@@ -120,7 +121,7 @@ async def test_lost_lease_cancels_the_investigation() -> None:
     core = LeasingCore()
     core.renew_errors = [grpc.StatusCode.FAILED_PRECONDITION]
     model = slow_investigation()
-    worker = Worker(core=core, new_model=lambda: model, heartbeat_s=0.05)
+    worker = Worker(core=core, new_model=lambda _: model, heartbeat_s=0.05)
     assert await worker.run_once() is True
     assert core.completed == [] and core.failed == []
     assert len(model.requests) <= 2
@@ -130,7 +131,7 @@ async def test_heartbeat_survives_a_transient_error() -> None:
     core = LeasingCore()
     core.renew_errors = [grpc.StatusCode.UNAVAILABLE]
     model = SlowModel({"kind": "request_evidence", "template": "pod_states", "params": {}})
-    worker = Worker(core=core, new_model=lambda: model, heartbeat_s=0.05)
+    worker = Worker(core=core, new_model=lambda _: model, heartbeat_s=0.05)
     await worker.run_once()
     assert core.renewals >= 3
     assert len(core.completed) == 1
@@ -140,7 +141,9 @@ async def test_report_retried_on_a_transient_error() -> None:
     core = LeasingCore()
     core.complete_errors = [grpc.StatusCode.UNAVAILABLE]
     worker = Worker(
-        core=core, new_model=lambda: ScriptedModel({"kind": "conclude_inconclusive"}), retry_s=0.01
+        core=core,
+        new_model=lambda _: ScriptedModel({"kind": "conclude_inconclusive"}),
+        retry_s=0.01,
     )
     await worker.run_once()
     assert len(core.completed) == 1
@@ -150,7 +153,7 @@ async def test_reports_the_gaps_it_met() -> None:
     core = LeasingCore()
     worker = Worker(
         core=core,
-        new_model=lambda: ScriptedModel(
+        new_model=lambda _: ScriptedModel(
             {"kind": "request_evidence", "template": "target_events", "params": {}},
             {"kind": "request_evidence", "template": "container_logs_tail", "params": {}},
             {"kind": "conclude_inconclusive"},
@@ -160,3 +163,28 @@ async def test_reports_the_gaps_it_met() -> None:
     assert [(g.template, g.cause) for g in core.completed[0].gaps] == [
         ("target_events", investigation_pb2.EVIDENCE_GAP_CAUSE_NOT_IN_PROFILE)
     ]
+
+
+class AgainCore(LeasingCore):
+    """Leases an investigation run again, after earlier ones used tokens."""
+
+    async def lease(self, worker_id: str) -> investigation_pb2.Investigation | None:
+        again = await super().lease(worker_id)
+        if again is not None:
+            again.budget.tokens_used = 150
+        return again
+
+
+# The token budget is the incident's: what its earlier investigations used
+# counts, and the core is told the budget, to say when it is spent.
+async def test_an_investigation_run_again_draws_on_the_incident_budget() -> None:
+    core = AgainCore()
+    budgets: list[Budget] = []
+
+    def new_model(b: Budget) -> ScriptedModel:
+        budgets.append(b)
+        return ScriptedModel({"kind": "conclude_inconclusive"})
+
+    await Worker(core=core, new_model=new_model, token_budget=1000).run_once()
+    assert [(b.max_tokens, b.spent) for b in budgets] == [(1000, 150)]
+    assert core.completed[0].usage.token_budget == 1000

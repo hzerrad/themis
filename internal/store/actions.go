@@ -227,6 +227,65 @@ func (s *Store) Approve(ctx context.Context, tx pgx.Tx, actionID, dg, approver s
 	return a, nil
 }
 
+// Denial is a person's denial of an action, and the fix it was.
+type Denial struct {
+	ActionID string
+	Denier   string
+	// Reason is exactly what the denier wrote; empty when they gave none.
+	Reason string
+	At     time.Time
+	// Capability and Params are the action's fix, for reading only.
+	Capability string
+	Params     map[string]any
+}
+
+// Deny records a person's denial of the action awaiting approval, and denies
+// it. It returns ErrAlreadyDecided for an action no longer awaiting approval.
+func (s *Store) Deny(ctx context.Context, tx pgx.Tx, actionID, denier, reason string, now time.Time) (Action, error) {
+	a, err := s.Action(ctx, tx, actionID)
+	if err != nil {
+		return Action{}, err
+	}
+	if err := s.SetActionState(ctx, tx, a.ID, ActionAwaitingApproval, ActionDenied); err != nil {
+		return Action{}, ErrAlreadyDecided
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO denials (action_id, denier, reason, denied_at) VALUES ($1, $2, $3, $4)`,
+		a.ID, denier, reason, now); err != nil {
+		return Action{}, fmt.Errorf("record denial of %s: %w", a.ID, err)
+	}
+	a.State = ActionDenied
+	return a, nil
+}
+
+// Denials returns the denials of an incident's actions, oldest first.
+func (s *Store) Denials(ctx context.Context, q Querier, incidentID string) ([]Denial, error) {
+	rows, err := q.Query(ctx, `
+	SELECT d.action_id::text, d.denier, d.reason, d.denied_at, a.capability, a.params
+	FROM denials d JOIN actions a ON a.id = d.action_id
+	WHERE a.incident_id = $1
+	ORDER BY d.denied_at, d.action_id
+`, incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("denials of incident %s: %w", incidentID, err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Denial, error) {
+		var (
+			d      Denial
+			params []byte
+		)
+		if err := row.Scan(&d.ActionID, &d.Denier, &d.Reason, &d.At, &d.Capability, &params); err != nil {
+			return Denial{}, err
+		}
+		dec := json.NewDecoder(bytesReader(params))
+		dec.UseNumber()
+		if err := dec.Decode(&d.Params); err != nil {
+			return Denial{}, err
+		}
+		d.Params = normalizeNumbers(d.Params)
+		return d, nil
+	})
+}
+
 // ExpireApprovals moves actions whose approval window passed to expired and
 // returns them.
 func (s *Store) ExpireApprovals(ctx context.Context, tx pgx.Tx, now time.Time) ([]Action, error) {

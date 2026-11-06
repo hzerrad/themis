@@ -255,7 +255,7 @@ func (s *Store) IncidentSummaries(ctx context.Context, ids []string) (map[string
 		coalesce(a.capability, p.capability, ''), coalesce(a.params, p.params, '{}'), coalesce(a.policy_id, ''),
 		coalesce(t.reason, ''), coalesce(t.from_state::text, '')
 	FROM incidents i
-	LEFT JOIN investigations inv ON inv.incident_id = i.id
+	LEFT JOIN LATERAL (SELECT hypotheses FROM investigations WHERE incident_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1) inv ON true
 	LEFT JOIN LATERAL (SELECT capability, params, policy_id FROM actions WHERE incident_id = i.id ORDER BY created_at DESC, id DESC LIMIT 1) a ON true
 	LEFT JOIN LATERAL (SELECT capability, params FROM proposals WHERE incident_id = i.id AND status = 'accepted' ORDER BY created_at DESC, id DESC LIMIT 1) p ON true
 	LEFT JOIN LATERAL (SELECT reason, from_state FROM transitions WHERE incident_id = i.id ORDER BY id DESC LIMIT 1) t ON true
@@ -380,15 +380,16 @@ type Undecided struct {
 	State incident.State
 }
 
-// UndecidedBefore returns the incidents left undecided since before t: those
-// the investigation couldn't decide, and those waiting for a suggestion
-// without an investigator. The last transition says since when; updated_at
+// UndecidedBefore returns the incidents left undecided: those the
+// investigation couldn't decide since before inconclusive, and those waiting
+// for a suggestion since before waiting, without an investigator or after a
+// person denied their fix. The last transition says since when; updated_at
 // also moves when an alert joins.
-func (s *Store) UndecidedBefore(ctx context.Context, q Querier, t time.Time, limit int) ([]Undecided, error) {
+func (s *Store) UndecidedBefore(ctx context.Context, q Querier, inconclusive, waiting time.Time, limit int) ([]Undecided, error) {
 	rows, err := q.Query(ctx, `SELECT i.id::text, i.state FROM incidents i
-	WHERE i.state IN ('inconclusive', 'awaiting_suggestion')
-	  AND (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) <= $1
-	ORDER BY i.id LIMIT $2`, t, limit)
+	CROSS JOIN LATERAL (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) last
+	WHERE (i.state = 'inconclusive' AND last.at <= $1) OR (i.state = 'awaiting_suggestion' AND last.at <= $2)
+	ORDER BY i.id LIMIT $3`, inconclusive, waiting, limit)
 	if err != nil {
 		return nil, fmt.Errorf("undecided incidents: %w", err)
 	}

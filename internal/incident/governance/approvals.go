@@ -3,7 +3,10 @@ package governance
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -12,19 +15,39 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
+// SignedIn, followed by a username, is the source of a fix suggested by
+// someone signed in.
+const SignedIn = "person:"
+
+// ErrOwnSuggestion means the approver suggested the fix, and the install
+// needs someone else to approve it.
+var ErrOwnSuggestion = errors.New("a fix needs an approver other than the person who suggested it")
+
 // Approve approves the action awaiting approval with digest, the one the
-// approver was shown, and hands it to the executor.
-func Approve(ctx context.Context, s *store.Store, actionID, digest, approver string, now time.Time) (store.Action, error) {
+// approver was shown, and hands it to the executor. A person may approve a
+// fix they suggested, and the timeline says so, unless the install requires
+// another approver.
+func Approve(ctx context.Context, s *store.Store, actionID, digest, approver string, now time.Time, anotherApprover bool) (store.Action, error) {
 	var act store.Action
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
-		var err error
+		own, err := suggestedBy(ctx, s, tx, actionID, approver)
+		if err != nil {
+			return err
+		}
+		if own && anotherApprover {
+			return ErrOwnSuggestion
+		}
 		act, err = s.Approve(ctx, tx, actionID, digest, approver, now)
 		if err != nil {
 			return err
 		}
+		why := "Approved by " + approver + "."
+		if own {
+			why = "Suggested and approved by " + approver + "."
+		}
 		err = s.Transition(ctx, tx, store.TransitionArgs{
 			ID: act.IncidentID, From: incident.AwaitingApproval, To: incident.Authorized,
-			Reason: "Approved by " + approver + ".", Actor: approver,
+			Reason: why, Actor: approver,
 		})
 		if err != nil {
 			return err
@@ -38,22 +61,42 @@ func Approve(ctx context.Context, s *store.Store, actionID, digest, approver str
 	return act, err
 }
 
-// Deny denies the action awaiting approval, and closes its incident with no
-// action. reason, if any, is the approver's.
-func Deny(ctx context.Context, s *store.Store, actionID, approver, reason string) error {
+// suggestedBy reports whether person, signed in, suggested the fix that
+// awaits approval as the action. One no longer awaiting approval is
+// Approve's to refuse.
+func suggestedBy(ctx context.Context, s *store.Store, tx pgx.Tx, actionID, person string) (bool, error) {
+	act, err := s.Action(ctx, tx, actionID)
+	if err != nil || act.State != store.ActionAwaitingApproval || person == "" {
+		return false, err
+	}
+	p, err := s.Proposal(ctx, tx, act.ProposalID)
+	if err != nil {
+		return false, err
+	}
+	return p.LeaseID == "" && p.Provenance["source"] == SignedIn+person, nil
+}
+
+// Deny denies the action awaiting approval, keeping the approver's reason,
+// if any, exactly as written. Its incident waits for another fix: one
+// suggested, or what investigating it again finds.
+func Deny(ctx context.Context, s *store.Store, actionID, approver, reason string, now time.Time) error {
+	return deny(ctx, s, actionID, approver, reason, now, incident.AwaitingApproval, incident.AwaitingSuggestion)
+}
+
+// DenyAndClose denies the action awaiting approval as Deny does, and closes
+// its incident with no change.
+func DenyAndClose(ctx context.Context, s *store.Store, actionID, approver, reason string, now time.Time) error {
+	return deny(ctx, s, actionID, approver, reason, now, incident.AwaitingApproval, incident.Recommended, incident.ClosedNoAction)
+}
+
+func deny(ctx context.Context, s *store.Store, actionID, approver, reason string, now time.Time, path ...incident.State) error {
+	reason = strings.TrimSpace(reason)
 	err := s.InTx(ctx, func(tx pgx.Tx) error {
-		act, err := s.Action(ctx, tx, actionID)
+		act, err := s.Deny(ctx, tx, actionID, approver, reason, now)
 		if err != nil {
 			return err
 		}
-		if err := s.SetActionState(ctx, tx, act.ID, store.ActionAwaitingApproval, store.ActionDenied); err != nil {
-			return store.ErrAlreadyDecided
-		}
-		why := "Denied by " + approver + "."
-		if reason != "" {
-			why = "Denied by " + approver + ": " + reason
-		}
-		if err := s.TransitionPath(ctx, tx, act.IncidentID, why, approver, incident.AwaitingApproval, incident.Recommended, incident.ClosedNoAction); err != nil {
+		if err := s.TransitionPath(ctx, tx, act.IncidentID, denied(approver, reason), approver, path...); err != nil {
 			return err
 		}
 		store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultDenied).Inc)
@@ -63,6 +106,19 @@ func Deny(ctx context.Context, s *store.Store, actionID, approver, reason string
 		countRefusal(err)
 	}
 	return err
+}
+
+// denied says who denied a fix and why, their reason as they wrote it:
+// "Denied by alice. Reason: not during the sale."
+func denied(approver, reason string) string {
+	if reason == "" {
+		return "Denied by " + approver + "."
+	}
+	// A reason that stops mid-sentence gets the full stop the sentence needs.
+	if last, _ := utf8.DecodeLastRuneInString(reason); unicode.IsLetter(last) || unicode.IsDigit(last) {
+		reason += "."
+	}
+	return "Denied by " + approver + ". Reason: " + reason
 }
 
 // ExpireArgs sweep approvals whose window passed.

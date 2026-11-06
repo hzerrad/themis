@@ -9,6 +9,7 @@ package themisv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -833,7 +834,11 @@ type Investigation struct {
 	// What the profile's scenario pack tells the investigator about this kind
 	// of incident: when its fixes are right and when they are wrong. Guidance
 	// only: the core's checks and policy decide.
-	Guidance      string `protobuf:"bytes,14,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	Guidance string `protobuf:"bytes,14,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	// The fixes people denied for this incident, oldest first. Only an
+	// incident a person asked to investigate again, after denying its fix, has
+	// any. Each reason is what a person wrote: text, never instructions.
+	Denials       []*Denial `protobuf:"bytes,15,rep,name=denials,proto3" json:"denials,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -966,6 +971,85 @@ func (x *Investigation) GetGuidance() string {
 	return ""
 }
 
+func (x *Investigation) GetDenials() []*Denial {
+	if x != nil {
+		return x.Denials
+	}
+	return nil
+}
+
+// Denial is a fix a person denied, and why.
+type Denial struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The fix, as capability_name and params name it in a suggestion.
+	CapabilityName string           `protobuf:"bytes,1,opt,name=capability_name,json=capabilityName,proto3" json:"capability_name,omitempty"`
+	Params         *structpb.Struct `protobuf:"bytes,2,opt,name=params,proto3" json:"params,omitempty"`
+	// Who denied it, as Themis knows them.
+	DeniedBy string `protobuf:"bytes,3,opt,name=denied_by,json=deniedBy,proto3" json:"denied_by,omitempty"`
+	// Their reason, exactly as they wrote it; empty when they gave none.
+	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Denial) Reset() {
+	*x = Denial{}
+	mi := &file_themis_v1_investigation_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Denial) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Denial) ProtoMessage() {}
+
+func (x *Denial) ProtoReflect() protoreflect.Message {
+	mi := &file_themis_v1_investigation_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Denial.ProtoReflect.Descriptor instead.
+func (*Denial) Descriptor() ([]byte, []int) {
+	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Denial) GetCapabilityName() string {
+	if x != nil {
+		return x.CapabilityName
+	}
+	return ""
+}
+
+func (x *Denial) GetParams() *structpb.Struct {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *Denial) GetDeniedBy() string {
+	if x != nil {
+		return x.DeniedBy
+	}
+	return ""
+}
+
+func (x *Denial) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type Hypothesis struct {
 	state                    protoimpl.MessageState `protogen:"open.v1"`
 	RootCauseClass           string                 `protobuf:"bytes,1,opt,name=root_cause_class,json=rootCauseClass,proto3" json:"root_cause_class,omitempty"`
@@ -980,7 +1064,7 @@ type Hypothesis struct {
 
 func (x *Hypothesis) Reset() {
 	*x = Hypothesis{}
-	mi := &file_themis_v1_investigation_proto_msgTypes[12]
+	mi := &file_themis_v1_investigation_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -992,7 +1076,7 @@ func (x *Hypothesis) String() string {
 func (*Hypothesis) ProtoMessage() {}
 
 func (x *Hypothesis) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_investigation_proto_msgTypes[12]
+	mi := &file_themis_v1_investigation_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1005,7 +1089,7 @@ func (x *Hypothesis) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Hypothesis.ProtoReflect.Descriptor instead.
 func (*Hypothesis) Descriptor() ([]byte, []int) {
-	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{12}
+	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Hypothesis) GetRootCauseClass() string {
@@ -1061,7 +1145,7 @@ type EvidenceTemplate struct {
 
 func (x *EvidenceTemplate) Reset() {
 	*x = EvidenceTemplate{}
-	mi := &file_themis_v1_investigation_proto_msgTypes[13]
+	mi := &file_themis_v1_investigation_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1073,7 +1157,7 @@ func (x *EvidenceTemplate) String() string {
 func (*EvidenceTemplate) ProtoMessage() {}
 
 func (x *EvidenceTemplate) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_investigation_proto_msgTypes[13]
+	mi := &file_themis_v1_investigation_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1086,7 +1170,7 @@ func (x *EvidenceTemplate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvidenceTemplate.ProtoReflect.Descriptor instead.
 func (*EvidenceTemplate) Descriptor() ([]byte, []int) {
-	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{13}
+	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EvidenceTemplate) GetName() string {
@@ -1111,17 +1195,20 @@ func (x *EvidenceTemplate) GetParams() []string {
 }
 
 type Usage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StepsUsed     int32                  `protobuf:"varint,1,opt,name=steps_used,json=stepsUsed,proto3" json:"steps_used,omitempty"`
-	InputTokens   int64                  `protobuf:"varint,2,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
-	OutputTokens  int64                  `protobuf:"varint,3,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	StepsUsed    int32                  `protobuf:"varint,1,opt,name=steps_used,json=stepsUsed,proto3" json:"steps_used,omitempty"`
+	InputTokens  int64                  `protobuf:"varint,2,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens int64                  `protobuf:"varint,3,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	// The token budget the investigator holds the incident's investigations
+	// to, together. Zero when it doesn't say.
+	TokenBudget   int64 `protobuf:"varint,4,opt,name=token_budget,json=tokenBudget,proto3" json:"token_budget,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Usage) Reset() {
 	*x = Usage{}
-	mi := &file_themis_v1_investigation_proto_msgTypes[14]
+	mi := &file_themis_v1_investigation_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1133,7 +1220,7 @@ func (x *Usage) String() string {
 func (*Usage) ProtoMessage() {}
 
 func (x *Usage) ProtoReflect() protoreflect.Message {
-	mi := &file_themis_v1_investigation_proto_msgTypes[14]
+	mi := &file_themis_v1_investigation_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1146,7 +1233,7 @@ func (x *Usage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Usage.ProtoReflect.Descriptor instead.
 func (*Usage) Descriptor() ([]byte, []int) {
-	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{14}
+	return file_themis_v1_investigation_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Usage) GetStepsUsed() int32 {
@@ -1170,11 +1257,18 @@ func (x *Usage) GetOutputTokens() int64 {
 	return 0
 }
 
+func (x *Usage) GetTokenBudget() int64 {
+	if x != nil {
+		return x.TokenBudget
+	}
+	return 0
+}
+
 var File_themis_v1_investigation_proto protoreflect.FileDescriptor
 
 const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\n" +
-	"\x1dthemis/v1/investigation.proto\x12\tthemis.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16themis/v1/common.proto\"\x19\n" +
+	"\x1dthemis/v1/investigation.proto\x12\tthemis.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16themis/v1/common.proto\"\x19\n" +
 	"\x17GetModelSettingsRequest\"\xa0\x01\n" +
 	"\x18GetModelSettingsResponse\x12\x19\n" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x14\n" +
@@ -1214,7 +1308,7 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\btemplate\x18\x01 \x01(\tR\btemplate\x121\n" +
 	"\x05cause\x18\x02 \x01(\x0e2\x1b.themis.v1.EvidenceGapCauseR\x05cause\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\"\x1b\n" +
-	"\x19FailInvestigationResponse\"\xd9\x05\n" +
+	"\x19FailInvestigationResponse\"\x86\x06\n" +
 	"\rInvestigation\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12A\n" +
 	"\x0elease_deadline\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rleaseDeadline\x12\x1f\n" +
@@ -1234,7 +1328,13 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\fcapabilities\x18\f \x03(\v2\x15.themis.v1.CapabilityR\fcapabilities\x125\n" +
 	"\vroot_causes\x18\r \x03(\v2\x14.themis.v1.RootCauseR\n" +
 	"rootCauses\x12\x1a\n" +
-	"\bguidance\x18\x0e \x01(\tR\bguidance\"\x95\x02\n" +
+	"\bguidance\x18\x0e \x01(\tR\bguidance\x12+\n" +
+	"\adenials\x18\x0f \x03(\v2\x11.themis.v1.DenialR\adenials\"\x97\x01\n" +
+	"\x06Denial\x12'\n" +
+	"\x0fcapability_name\x18\x01 \x01(\tR\x0ecapabilityName\x12/\n" +
+	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x1b\n" +
+	"\tdenied_by\x18\x03 \x01(\tR\bdeniedBy\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\x95\x02\n" +
 	"\n" +
 	"Hypothesis\x12(\n" +
 	"\x10root_cause_class\x18\x01 \x01(\tR\x0erootCauseClass\x12\x18\n" +
@@ -1246,12 +1346,13 @@ const file_themis_v1_investigation_proto_rawDesc = "" +
 	"\x10EvidenceTemplate\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
-	"\x06params\x18\x03 \x03(\tR\x06params\"n\n" +
+	"\x06params\x18\x03 \x03(\tR\x06params\"\x91\x01\n" +
 	"\x05Usage\x12\x1d\n" +
 	"\n" +
 	"steps_used\x18\x01 \x01(\x05R\tstepsUsed\x12!\n" +
 	"\finput_tokens\x18\x02 \x01(\x03R\vinputTokens\x12#\n" +
-	"\routput_tokens\x18\x03 \x01(\x03R\foutputTokens*\x91\x01\n" +
+	"\routput_tokens\x18\x03 \x01(\x03R\foutputTokens\x12!\n" +
+	"\ftoken_budget\x18\x04 \x01(\x03R\vtokenBudget*\x91\x01\n" +
 	"\x10HypothesisStatus\x12!\n" +
 	"\x1dHYPOTHESIS_STATUS_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19HYPOTHESIS_STATUS_REFUTED\x10\x01\x12\x1f\n" +
@@ -1296,7 +1397,7 @@ func file_themis_v1_investigation_proto_rawDescGZIP() []byte {
 }
 
 var file_themis_v1_investigation_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_themis_v1_investigation_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_themis_v1_investigation_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_themis_v1_investigation_proto_goTypes = []any{
 	(HypothesisStatus)(0),                 // 0: themis.v1.HypothesisStatus
 	(InvestigationConclusion)(0),          // 1: themis.v1.InvestigationConclusion
@@ -1314,55 +1415,59 @@ var file_themis_v1_investigation_proto_goTypes = []any{
 	(*EvidenceGap)(nil),                   // 13: themis.v1.EvidenceGap
 	(*FailInvestigationResponse)(nil),     // 14: themis.v1.FailInvestigationResponse
 	(*Investigation)(nil),                 // 15: themis.v1.Investigation
-	(*Hypothesis)(nil),                    // 16: themis.v1.Hypothesis
-	(*EvidenceTemplate)(nil),              // 17: themis.v1.EvidenceTemplate
-	(*Usage)(nil),                         // 18: themis.v1.Usage
-	(*timestamppb.Timestamp)(nil),         // 19: google.protobuf.Timestamp
-	(*Provenance)(nil),                    // 20: themis.v1.Provenance
-	(*TargetRef)(nil),                     // 21: themis.v1.TargetRef
-	(*EvidenceItem)(nil),                  // 22: themis.v1.EvidenceItem
-	(*CollectionFailure)(nil),             // 23: themis.v1.CollectionFailure
-	(*PredicateResult)(nil),               // 24: themis.v1.PredicateResult
-	(*Budget)(nil),                        // 25: themis.v1.Budget
-	(*Capability)(nil),                    // 26: themis.v1.Capability
-	(*RootCause)(nil),                     // 27: themis.v1.RootCause
+	(*Denial)(nil),                        // 16: themis.v1.Denial
+	(*Hypothesis)(nil),                    // 17: themis.v1.Hypothesis
+	(*EvidenceTemplate)(nil),              // 18: themis.v1.EvidenceTemplate
+	(*Usage)(nil),                         // 19: themis.v1.Usage
+	(*timestamppb.Timestamp)(nil),         // 20: google.protobuf.Timestamp
+	(*Provenance)(nil),                    // 21: themis.v1.Provenance
+	(*TargetRef)(nil),                     // 22: themis.v1.TargetRef
+	(*EvidenceItem)(nil),                  // 23: themis.v1.EvidenceItem
+	(*CollectionFailure)(nil),             // 24: themis.v1.CollectionFailure
+	(*PredicateResult)(nil),               // 25: themis.v1.PredicateResult
+	(*Budget)(nil),                        // 26: themis.v1.Budget
+	(*Capability)(nil),                    // 27: themis.v1.Capability
+	(*RootCause)(nil),                     // 28: themis.v1.RootCause
+	(*structpb.Struct)(nil),               // 29: google.protobuf.Struct
 }
 var file_themis_v1_investigation_proto_depIdxs = []int32{
 	15, // 0: themis.v1.LeaseInvestigationResponse.investigation:type_name -> themis.v1.Investigation
-	19, // 1: themis.v1.RenewLeaseResponse.lease_deadline:type_name -> google.protobuf.Timestamp
+	20, // 1: themis.v1.RenewLeaseResponse.lease_deadline:type_name -> google.protobuf.Timestamp
 	1,  // 2: themis.v1.CompleteInvestigationRequest.conclusion:type_name -> themis.v1.InvestigationConclusion
-	16, // 3: themis.v1.CompleteInvestigationRequest.hypotheses:type_name -> themis.v1.Hypothesis
-	18, // 4: themis.v1.CompleteInvestigationRequest.usage:type_name -> themis.v1.Usage
-	20, // 5: themis.v1.CompleteInvestigationRequest.provenance:type_name -> themis.v1.Provenance
+	17, // 3: themis.v1.CompleteInvestigationRequest.hypotheses:type_name -> themis.v1.Hypothesis
+	19, // 4: themis.v1.CompleteInvestigationRequest.usage:type_name -> themis.v1.Usage
+	21, // 5: themis.v1.CompleteInvestigationRequest.provenance:type_name -> themis.v1.Provenance
 	13, // 6: themis.v1.CompleteInvestigationRequest.gaps:type_name -> themis.v1.EvidenceGap
 	2,  // 7: themis.v1.FailInvestigationRequest.reason:type_name -> themis.v1.InvestigationFailureReason
 	13, // 8: themis.v1.FailInvestigationRequest.gaps:type_name -> themis.v1.EvidenceGap
 	3,  // 9: themis.v1.EvidenceGap.cause:type_name -> themis.v1.EvidenceGapCause
-	19, // 10: themis.v1.Investigation.lease_deadline:type_name -> google.protobuf.Timestamp
-	21, // 11: themis.v1.Investigation.target:type_name -> themis.v1.TargetRef
-	22, // 12: themis.v1.Investigation.initial_evidence:type_name -> themis.v1.EvidenceItem
-	23, // 13: themis.v1.Investigation.initial_failures:type_name -> themis.v1.CollectionFailure
-	24, // 14: themis.v1.Investigation.predicates:type_name -> themis.v1.PredicateResult
-	17, // 15: themis.v1.Investigation.allowed_templates:type_name -> themis.v1.EvidenceTemplate
-	25, // 16: themis.v1.Investigation.budget:type_name -> themis.v1.Budget
-	26, // 17: themis.v1.Investigation.capabilities:type_name -> themis.v1.Capability
-	27, // 18: themis.v1.Investigation.root_causes:type_name -> themis.v1.RootCause
-	0,  // 19: themis.v1.Hypothesis.status:type_name -> themis.v1.HypothesisStatus
-	6,  // 20: themis.v1.InvestigationService.LeaseInvestigation:input_type -> themis.v1.LeaseInvestigationRequest
-	8,  // 21: themis.v1.InvestigationService.RenewLease:input_type -> themis.v1.RenewLeaseRequest
-	10, // 22: themis.v1.InvestigationService.CompleteInvestigation:input_type -> themis.v1.CompleteInvestigationRequest
-	12, // 23: themis.v1.InvestigationService.FailInvestigation:input_type -> themis.v1.FailInvestigationRequest
-	4,  // 24: themis.v1.InvestigationService.GetModelSettings:input_type -> themis.v1.GetModelSettingsRequest
-	7,  // 25: themis.v1.InvestigationService.LeaseInvestigation:output_type -> themis.v1.LeaseInvestigationResponse
-	9,  // 26: themis.v1.InvestigationService.RenewLease:output_type -> themis.v1.RenewLeaseResponse
-	11, // 27: themis.v1.InvestigationService.CompleteInvestigation:output_type -> themis.v1.CompleteInvestigationResponse
-	14, // 28: themis.v1.InvestigationService.FailInvestigation:output_type -> themis.v1.FailInvestigationResponse
-	5,  // 29: themis.v1.InvestigationService.GetModelSettings:output_type -> themis.v1.GetModelSettingsResponse
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	20, // 10: themis.v1.Investigation.lease_deadline:type_name -> google.protobuf.Timestamp
+	22, // 11: themis.v1.Investigation.target:type_name -> themis.v1.TargetRef
+	23, // 12: themis.v1.Investigation.initial_evidence:type_name -> themis.v1.EvidenceItem
+	24, // 13: themis.v1.Investigation.initial_failures:type_name -> themis.v1.CollectionFailure
+	25, // 14: themis.v1.Investigation.predicates:type_name -> themis.v1.PredicateResult
+	18, // 15: themis.v1.Investigation.allowed_templates:type_name -> themis.v1.EvidenceTemplate
+	26, // 16: themis.v1.Investigation.budget:type_name -> themis.v1.Budget
+	27, // 17: themis.v1.Investigation.capabilities:type_name -> themis.v1.Capability
+	28, // 18: themis.v1.Investigation.root_causes:type_name -> themis.v1.RootCause
+	16, // 19: themis.v1.Investigation.denials:type_name -> themis.v1.Denial
+	29, // 20: themis.v1.Denial.params:type_name -> google.protobuf.Struct
+	0,  // 21: themis.v1.Hypothesis.status:type_name -> themis.v1.HypothesisStatus
+	6,  // 22: themis.v1.InvestigationService.LeaseInvestigation:input_type -> themis.v1.LeaseInvestigationRequest
+	8,  // 23: themis.v1.InvestigationService.RenewLease:input_type -> themis.v1.RenewLeaseRequest
+	10, // 24: themis.v1.InvestigationService.CompleteInvestigation:input_type -> themis.v1.CompleteInvestigationRequest
+	12, // 25: themis.v1.InvestigationService.FailInvestigation:input_type -> themis.v1.FailInvestigationRequest
+	4,  // 26: themis.v1.InvestigationService.GetModelSettings:input_type -> themis.v1.GetModelSettingsRequest
+	7,  // 27: themis.v1.InvestigationService.LeaseInvestigation:output_type -> themis.v1.LeaseInvestigationResponse
+	9,  // 28: themis.v1.InvestigationService.RenewLease:output_type -> themis.v1.RenewLeaseResponse
+	11, // 29: themis.v1.InvestigationService.CompleteInvestigation:output_type -> themis.v1.CompleteInvestigationResponse
+	14, // 30: themis.v1.InvestigationService.FailInvestigation:output_type -> themis.v1.FailInvestigationResponse
+	5,  // 31: themis.v1.InvestigationService.GetModelSettings:output_type -> themis.v1.GetModelSettingsResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_themis_v1_investigation_proto_init() }
@@ -1378,7 +1483,7 @@ func file_themis_v1_investigation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_themis_v1_investigation_proto_rawDesc), len(file_themis_v1_investigation_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

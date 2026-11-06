@@ -47,12 +47,18 @@ type InvestigationResult struct {
 // CreateInvestigation records an incident's initial evidence and predicates
 // and queues its investigation for leasing.
 func (s *Store) CreateInvestigation(ctx context.Context, tx pgx.Tx, incidentID string, items []evidence.Item, results []check.Result) (string, error) {
+	if err := s.RecordInitialEvidence(ctx, tx, incidentID, items, results); err != nil {
+		return "", err
+	}
+	return s.QueueInvestigation(ctx, tx, incidentID)
+}
+
+// QueueInvestigation queues another investigation of an incident for
+// leasing, from the evidence and predicates it has.
+func (s *Store) QueueInvestigation(ctx context.Context, tx pgx.Tx, incidentID string) (string, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return "", fmt.Errorf("failed to create investigation ID: %w", err)
-	}
-	if err := s.RecordInitialEvidence(ctx, tx, incidentID, items, results); err != nil {
-		return "", err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO investigations (id, incident_id) VALUES ($1, $2)`, id, incidentID); err != nil {
 		return "", fmt.Errorf("create investigation of incident %s: %w", incidentID, err)
@@ -431,12 +437,13 @@ type InvestigationRecord struct {
 	Blind bool
 }
 
-// IncidentInvestigation returns the investigation of an incident.
+// IncidentInvestigation returns the latest investigation of an incident.
 func (s *Store) IncidentInvestigation(ctx context.Context, incidentID string) (InvestigationRecord, error) {
 	var r InvestigationRecord
 	err := s.pool.QueryRow(ctx, `
 	SELECT state::text, attempts, conclusion, summary, hypotheses, usage, provenance, failure, blind
 	FROM investigations WHERE incident_id = $1
+	ORDER BY created_at DESC, id DESC LIMIT 1
 `, incidentID).Scan(&r.State, &r.Attempts, &r.Conclusion, &r.Summary, &r.Hypotheses, &r.Usage, &r.Provenance, &r.Failure, &r.Blind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return InvestigationRecord{}, fmt.Errorf("investigation of %s: %w", incidentID, ErrNotFound)
@@ -445,6 +452,38 @@ func (s *Store) IncidentInvestigation(ctx context.Context, incidentID string) (I
 		return InvestigationRecord{}, fmt.Errorf("investigation of %s: %w", incidentID, err)
 	}
 	return r, nil
+}
+
+// Tokens are the tokens an incident's investigations used, and the budget
+// they share.
+type Tokens struct {
+	// Used is what they used together, as their investigators reported.
+	Used int64
+	// Budget is the token budget the latest investigator to say one held
+	// them to; zero when none said.
+	Budget int64
+}
+
+// Spent reports whether the investigations used all of a known budget.
+func (t Tokens) Spent() bool {
+	return t.Budget > 0 && t.Used >= t.Budget
+}
+
+// IncidentTokens returns the tokens an incident's investigations used, and
+// their budget.
+func (s *Store) IncidentTokens(ctx context.Context, q Querier, incidentID string) (Tokens, error) {
+	var t Tokens
+	err := q.QueryRow(ctx, `
+	SELECT coalesce(sum(greatest(coalesce((usage->>'inputTokens')::bigint, 0), 0) + greatest(coalesce((usage->>'outputTokens')::bigint, 0), 0)), 0)::bigint,
+	       coalesce((SELECT (b.usage->>'tokenBudget')::bigint FROM investigations b
+	                 WHERE b.incident_id = $1 AND b.usage ? 'tokenBudget'
+	                 ORDER BY b.created_at DESC, b.id DESC LIMIT 1), 0)::bigint
+	FROM investigations WHERE incident_id = $1
+`, incidentID).Scan(&t.Used, &t.Budget)
+	if err != nil {
+		return Tokens{}, fmt.Errorf("tokens of incident %s: %w", incidentID, err)
+	}
+	return t, nil
 }
 
 // EvidenceGap is evidence an investigation needed and could not have.

@@ -578,8 +578,12 @@ type Budget struct {
 	MaxInputTokens  int64                  `protobuf:"varint,2,opt,name=max_input_tokens,json=maxInputTokens,proto3" json:"max_input_tokens,omitempty"`
 	MaxOutputTokens int64                  `protobuf:"varint,3,opt,name=max_output_tokens,json=maxOutputTokens,proto3" json:"max_output_tokens,omitempty"`
 	Deadline        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=deadline,proto3" json:"deadline,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The tokens the incident's earlier investigations used, as their
+	// investigators reported. They count toward the investigator's token
+	// budget, which is the incident's, however many times it is investigated.
+	TokensUsed    int64 `protobuf:"varint,5,opt,name=tokens_used,json=tokensUsed,proto3" json:"tokens_used,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Budget) Reset() {
@@ -638,6 +642,13 @@ func (x *Budget) GetDeadline() *timestamppb.Timestamp {
 		return x.Deadline
 	}
 	return nil
+}
+
+func (x *Budget) GetTokensUsed() int64 {
+	if x != nil {
+		return x.TokensUsed
+	}
+	return 0
 }
 
 // Capability is a fix Themis can carry out, as a suggester sees it.
@@ -936,12 +947,14 @@ const file_themis_v1_common_proto_rawDesc = "" +
 	"\x0eSuspiciousText\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x0e\n" +
 	"\x02at\x18\x02 \x01(\tR\x02at\x12\x18\n" +
-	"\aexcerpt\x18\x03 \x01(\tR\aexcerpt\"\xb3\x01\n" +
+	"\aexcerpt\x18\x03 \x01(\tR\aexcerpt\"\xd4\x01\n" +
 	"\x06Budget\x12\x1b\n" +
 	"\tmax_steps\x18\x01 \x01(\x05R\bmaxSteps\x12(\n" +
 	"\x10max_input_tokens\x18\x02 \x01(\x03R\x0emaxInputTokens\x12*\n" +
 	"\x11max_output_tokens\x18\x03 \x01(\x03R\x0fmaxOutputTokens\x126\n" +
-	"\bdeadline\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\"g\n" +
+	"\bdeadline\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bdeadline\x12\x1f\n" +
+	"\vtokens_used\x18\x05 \x01(\x03R\n" +
+	"tokensUsed\"g\n" +
 	"\n" +
 	"Capability\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +

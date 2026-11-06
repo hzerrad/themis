@@ -114,7 +114,7 @@ async def test_context_does_not_leak_between_investigations(logs: Lines) -> None
     def model() -> SlowModel:
         return SlowModel({"kind": "request_evidence", "template": "pod_states", "params": {}})
 
-    worker = Worker(core=core, new_model=model, heartbeat_s=0.05)
+    worker = Worker(core=core, new_model=lambda _: model(), heartbeat_s=0.05)
     await asyncio.gather(worker.run_once(), worker.run_once())
 
     by_lease: dict[str, set[str]] = {}
@@ -226,16 +226,18 @@ async def test_budget_exhaustion_counted_by_kind() -> None:
     steps = value("themis_budget_exhausted_total", kind="steps")
     tokens = value("themis_budget_exhausted_total", kind="tokens")
     evidence: dict[str, Any] = {"kind": "request_evidence", "template": "pod_states", "params": {}}
-    worker = Worker(core=LeasingCore(), new_model=lambda: ScriptedModel(*[evidence] * 6))
+    worker = Worker(core=LeasingCore(), new_model=lambda _: ScriptedModel(*[evidence] * 6))
     await worker.run_once()
-    await Worker(core=LeasingCore(), new_model=lambda: ScriptedModel("budget_exceeded")).run_once()
+    await Worker(
+        core=LeasingCore(), new_model=lambda _: ScriptedModel("budget_exceeded")
+    ).run_once()
     assert value("themis_budget_exhausted_total", kind="steps") == steps + 1
     assert value("themis_budget_exhausted_total", kind="tokens") == tokens + 1
 
 
 async def test_investigation_steps_observed() -> None:
     count = value("themis_investigation_steps_count")
-    await Worker(core=LeasingCore(), new_model=ScriptedModel).run_once()
+    await Worker(core=LeasingCore(), new_model=lambda _: ScriptedModel()).run_once()
     assert value("themis_investigation_steps_count") == count + 1
 
 

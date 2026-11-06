@@ -15,7 +15,8 @@ Configuration comes from the environment:
                              name, and an address for openai, no incident is
                              investigated
     MODEL_CEILING            the most sensitive data the endpoint may see (sensitive)
-    MODEL_TOKEN_BUDGET       tokens per investigation (200000)
+    MODEL_TOKEN_BUDGET       tokens per incident, shared by its investigations when a
+                             person has it investigated again (200000)
     MODEL_REASONING_EFFORT   sent to reasoning models, for example none or low (for
                              anthropic: low, medium, high, xhigh or max); unset leaves
                              the provider's default
@@ -46,7 +47,6 @@ from typing import cast
 from themis_intelligence import telemetry, tracing
 from themis_intelligence.model_source import Installed, ModelSource
 from themis_intelligence.platform.adapters import PROVIDERS, Provider
-from themis_intelligence.platform.budget import Budget
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price, read_temperature
 from themis_intelligence.platform.contract import (
     CLASSIFICATION_RANK,
@@ -160,7 +160,7 @@ async def main() -> None:
         temperature=temperature,
         schema_dialect=schema_dialect,
     )
-    budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
+    token_budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()
     telemetry.configure_routes([ROUTE])
     telemetry.init_route(ROUTE, priced=price is not None)
@@ -174,11 +174,13 @@ async def main() -> None:
         installed,
         core,
         endpoint,
-        lambda adapter, endpoint: ModelClient(
-            adapter=adapter, endpoint=endpoint, budget=Budget(budget), route=ROUTE, price=price
+        lambda adapter, endpoint, budget: ModelClient(
+            adapter=adapter, endpoint=endpoint, budget=budget, route=ROUTE, price=price
         ),
     )
-    worker = Worker(core=core, new_model=source.new_model, ready=source.ready)
+    worker = Worker(
+        core=core, new_model=source.new_model, ready=source.ready, token_budget=token_budget
+    )
     stop_tracing = tracing.setup_tracing()
     try:
         await worker.run()

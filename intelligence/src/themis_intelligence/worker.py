@@ -12,10 +12,13 @@ import grpc
 from themis.v1 import investigation_pb2
 from themis_intelligence import telemetry, tracing
 from themis_intelligence.investigation.loop import Core, InvestigationError, Model, investigate
+from themis_intelligence.platform.budget import Budget
 
 log = logging.getLogger(__name__)
 
 DEFAULT_MAX_STEPS = 8
+# Tokens an incident's investigations may use together.
+DEFAULT_TOKEN_BUDGET = 200_000
 REPORT_ATTEMPTS = 3
 
 _TRANSIENT = {grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED}
@@ -53,14 +56,20 @@ class Worker:
     def __init__(
         self,
         core: WorkerCore,
-        new_model: Callable[[], Model],
+        new_model: Callable[[Budget], Model],
         worker_id: str | None = None,
         ready: Callable[[], Awaitable[bool]] | None = None,
         heartbeat_s: float = 20.0,
         retry_s: float = 2.0,
+        token_budget: int = DEFAULT_TOKEN_BUDGET,
     ) -> None:
         self.core = core
+        # new_model makes the model client for one investigation, held to
+        # the budget it is given.
         self.new_model = new_model
+        # The budget is the incident's: an investigation run again after a
+        # person denied its fix gets what the earlier ones left.
+        self.token_budget = token_budget
         # ready says whether a model is set; without one, no work is leased.
         self.ready = ready
         self.worker_id = worker_id or socket.gethostname()
@@ -110,11 +119,12 @@ class Worker:
         log.info("investigation started")
         deadline = job.budget.deadline.ToSeconds() if job.budget.HasField("deadline") else None
         gaps: list[investigation_pb2.EvidenceGap] = []
+        budget = Budget(self.token_budget, spent=job.budget.tokens_used)
         task = asyncio.create_task(
             investigate(
                 job,
                 self.core,
-                self.new_model(),
+                self.new_model(budget),
                 job.budget.max_steps or DEFAULT_MAX_STEPS,
                 deadline,
                 gaps,
@@ -156,6 +166,8 @@ class Worker:
             with contextlib.suppress(asyncio.CancelledError):
                 await heartbeat
 
+        # So the core can tell when the incident's budget is spent.
+        result.usage.token_budget = self.token_budget
         await self._report(
             self.core.complete,
             investigation_pb2.CompleteInvestigationRequest(
