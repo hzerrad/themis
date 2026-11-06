@@ -85,11 +85,28 @@ kept with --reuse-values, have none.
 {{- end }}
 
 {{/*
-Whether the core reads Alertmanager. A missing key means on, as above.
+The alerts mode Helm fixes: poll, push, or empty, which starts in poll mode
+and lets the Setup page switch it. alerting.alertmanager.enabled=false, from
+earlier charts, means push.
+*/}}
+{{- define "themis.alertsMode" -}}
+{{- $mode := toString ((.Values.alerting | default dict).mode | default "") -}}
+{{- $am := include "themis.alertmanagerValues" . | fromJson -}}
+{{- $off := and (hasKey $am "enabled") (eq (toString $am.enabled) "false") -}}
+{{- if not (has $mode (list "" "poll" "push")) }}
+{{- fail (printf "alerting.mode must be poll or push, or empty, got %q." $mode) }}
+{{- end }}
+{{- if and $off (eq $mode "poll") }}
+{{- fail "alerting.alertmanager.enabled=false means push mode, and alerting.mode is poll. Set only alerting.mode." }}
+{{- end }}
+{{- if $off }}push{{ else }}{{ $mode }}{{ end -}}
+{{- end }}
+
+{{/*
+Whether the core may read Alertmanager: unless Helm fixes push mode.
 */}}
 {{- define "themis.alertmanagerEnabled" -}}
-{{- $am := include "themis.alertmanagerValues" . | fromJson -}}
-{{- if not (and (hasKey $am "enabled") (eq (toString $am.enabled) "false")) }}true{{ end -}}
+{{- if ne (include "themis.alertsMode" .) "push" }}true{{ end -}}
 {{- end }}
 
 {{/*

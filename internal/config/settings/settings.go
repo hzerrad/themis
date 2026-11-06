@@ -50,10 +50,11 @@ type Settings struct {
 	KeyFile string
 	// Install is what the install set, which setup leaves alone.
 	Install config.Model
-	// Alertmanager is the install's Alertmanager. An address it set, setup
-	// leaves alone; one the chart found, setup may replace.
-	InstallAlertmanager config.Alertmanager
-	Now                 func() time.Time
+	// InstallAlerting is what the install set for alerts. A mode or an
+	// Alertmanager address it set, setup leaves alone; an address the chart
+	// found, setup may replace.
+	InstallAlerting config.Alerting
+	Now             func() time.Time
 }
 
 // Model is the investigator's model, as setup set it. Empty values were not

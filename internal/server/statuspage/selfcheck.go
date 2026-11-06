@@ -85,8 +85,8 @@ type Checker struct {
 	Model interface {
 		View(ctx context.Context) (settings.ModelView, error)
 	}
-	// Alertmanager is the Alertmanager Themis reads, every ReadEvery. Nil
-	// means alerts come only through the webhook.
+	// Alertmanager says how alerts reach Themis, and how the Alertmanager it
+	// reads every ReadEvery in poll mode was last read. Nil means push mode.
 	Alertmanager interface {
 		View(ctx context.Context) (settings.AlertmanagerView, error)
 		LastRead(ctx context.Context) (store.AlertRead, error)
@@ -235,18 +235,19 @@ func (c *Checker) model(ctx context.Context) Check {
 	return ch
 }
 
+// alerts says how alerts reach Themis, in the mode in use: whether reading
+// Alertmanager works in poll mode, and whether Alertmanager sends alerts in
+// push mode.
 func (c *Checker) alerts(ctx context.Context) Check {
 	ch := Check{Name: "Alerts"}
-	reading := false
 	if c.Alertmanager != nil {
 		v, err := c.Alertmanager.View(ctx)
 		if err != nil {
 			return failed(ch, err)
 		}
-		if v.Address != "" {
-			return c.reading(ctx, ch, v.Address)
+		if v.Polling() {
+			return c.polling(ctx, ch, v)
 		}
-		reading = v.Reading
 	}
 	got, err := c.Store.LastHeartbeat(ctx, store.HeartbeatAlertmanager)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -260,27 +261,19 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		ch.At, ch.Since = &refused.SeenAt, "Last refused"
 		if refused.Detail == RefusedNoAdminAccount {
 			// Alertmanager sends them again: the next arrival settles it.
-			ch.State, ch.Summary = Waiting, "Refused while no admin account existed."
+			ch.State, ch.Summary = Waiting, "Push mode. Refused while no admin account existed."
 			return ch
 		}
-		ch.State, ch.Summary = Problem, "Wrong intake token."
+		ch.State, ch.Summary = Problem, "Push mode. Wrong intake token."
 		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
-	if err != nil && reading {
-		ch.State, ch.Summary = Warn, "No Alertmanager address."
-		ch.Fix = "Set Alertmanager's address on the Setup page."
-		return ch
-	}
 	if err != nil {
-		ch.State, ch.Summary = Waiting, "No alert received."
+		ch.State, ch.Summary = Waiting, "Push mode. No alert received yet."
 		ch.Fix = "Add an Alertmanager webhook receiver for Themis's /v1/intake/alertmanager, with the intake token from the themis-tokens Secret. Route crash-loop and out-of-memory alerts to it."
 		return ch
 	}
-	ch.State, ch.Summary, ch.At, ch.Since = OK, "Received.", &got.SeenAt, "Last alert"
-	if got.Detail != "" {
-		ch.Summary = fmt.Sprintf("Received through the %q receiver.", got.Detail)
-	}
+	ch.State, ch.Summary, ch.At, ch.Since = OK, "Push mode.", &got.SeenAt, "Last alert"
 	return ch
 }
 
@@ -302,10 +295,17 @@ func (c *Checker) alertRules(ctx context.Context) Check {
 		ch.State, ch.Summary = Warn, "Not checked. "+upper(strings.TrimSuffix(err.Error(), "."))+"."
 		ch.Fix = "Check metrics.prometheus.address, and that Prometheus answers."
 	case len(res.Missing) == 0:
-		ch.State, ch.Summary = OK, fmt.Sprintf("All %d alerts exist in Prometheus at %s.", len(res.Exist), res.Address)
+		ch.State, ch.Summary = OK, fmt.Sprintf("All %d alerts have rules in Prometheus.", len(res.Exist))
+		if len(res.Exist) == 1 {
+			ch.Summary = res.Exist[0] + " has a rule in Prometheus."
+		}
 	default:
+		have := "have rules"
+		if len(res.Exist) == 1 {
+			have = "has a rule"
+		}
 		ch.State = Warn
-		ch.Summary = fmt.Sprintf("%d of %d alerts exist. Missing: %s.", len(res.Exist), len(answered), strings.Join(res.Missing, ", "))
+		ch.Summary = fmt.Sprintf("%d of %d alerts %s in Prometheus. Missing: %s.", len(res.Exist), len(answered), have, strings.Join(res.Missing, ", "))
 		ch.Fix = "Add their rules from the Setup page, or with the Prometheus Operator, set alerting.rules.install=true."
 	}
 	return ch
@@ -318,41 +318,45 @@ var readFixes = map[string]string{
 	fetch.Unexpected:  "Check that the address on the Setup page is Alertmanager's.",
 }
 
-// reading says how reading Alertmanager at address goes.
-func (c *Checker) reading(ctx context.Context, ch Check, address string) Check {
+// polling says how reading Alertmanager goes in poll mode. A read or a
+// failure from before setup last switched the mode doesn't count. Only a
+// failure names the address: that is when it helps.
+func (c *Checker) polling(ctx context.Context, ch Check, v settings.AlertmanagerView) Check {
+	if v.Address == "" {
+		ch.State, ch.Summary = Warn, "Poll mode. No Alertmanager address."
+		ch.Fix = "Set Alertmanager's address on the Setup page."
+		return ch
+	}
 	every := c.ReadEvery
 	r, err := c.Alertmanager.LastRead(ctx)
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return failed(ch, err)
 	}
+	if r.ReadAt.Before(v.ModeSince) {
+		r.ReadAt = time.Time{}
+	}
+	if r.FailedAt.Before(v.ModeSince) {
+		r.FailedAt = time.Time{}
+	}
 	if !r.ReadAt.IsZero() {
 		ch.At, ch.Since = &r.ReadAt, "Last read"
 	}
-	says := fmt.Sprintf("Reading from %s every %s.", address, seconds(every))
 	switch {
 	case r.FailedAt.After(r.ReadAt):
-		ch.State, ch.Summary, ch.Fix = Problem, upper(r.Failure)+".", readFixes[r.FailureKind]
+		ch.State, ch.Summary, ch.Fix = Problem, "Poll mode. "+upper(r.Failure)+".", readFixes[r.FailureKind]
 		if ch.Fix == "" {
 			ch.Fix = readFixes[fetch.Unexpected]
 		}
-	case r.ReadAt.IsZero() || r.Address != address:
-		ch.State, ch.Summary, ch.At, ch.Since = Waiting, says+" Not read yet.", nil, ""
+	case r.ReadAt.IsZero() || r.Address != v.Address:
+		ch.State, ch.Summary, ch.At, ch.Since = Waiting, "Poll mode. Not read yet.", nil, ""
 	// Reads stopped: three missed, and some leeway for a slow one.
 	case c.now().Sub(r.ReadAt) > 3*every+30*time.Second:
-		ch.State, ch.Summary = Problem, fmt.Sprintf("Reading from %s stopped.", address)
+		ch.State, ch.Summary = Problem, fmt.Sprintf("Poll mode. Reading from %s stopped.", v.Address)
 		ch.Fix = "Read the core's logs."
 	default:
-		ch.State, ch.Summary = OK, says
+		ch.State, ch.Summary = OK, "Poll mode."
 	}
 	return ch
-}
-
-// seconds writes an interval as people read it: 15 s, or 2 min.
-func seconds(d time.Duration) string {
-	if d >= time.Minute && d%time.Minute == 0 {
-		return fmt.Sprintf("%d min", int(d/time.Minute))
-	}
-	return fmt.Sprintf("%d s", int(d.Round(time.Second)/time.Second))
 }
 
 // needs is what Themis reads in each namespace it watches, and what's lost

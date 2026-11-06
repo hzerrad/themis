@@ -222,12 +222,12 @@ func Run(ctx context.Context, o Options) error {
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
 	}
-	// The Alertmanager Themis reads. Its address isn't secret, so setup can
-	// set it without a settings key.
+	// The Alertmanager Themis reads in poll mode. Neither the mode nor its
+	// address is secret, so setup can set them without a settings key.
 	reading := cfg.Alerting.Alertmanager
 	connection := &alertmanager.Connection{
 		Install:   reading,
-		Addresses: &settings.Settings{Store: s, InstallAlertmanager: reading},
+		Addresses: &settings.Settings{Store: s, InstallAlerting: cfg.Alerting},
 		Reads:     s,
 	}
 	telemetry.AddUnscopedWorker(workers, &alertmanager.ReadWorker{
@@ -249,7 +249,9 @@ func Run(ctx context.Context, o Options) error {
 			return investigation.CloseUndecidedArgs{}, nil
 		}, nil),
 	}
-	if !reading.Disabled {
+	// Setup may switch to poll mode at any time, unless the install fixed
+	// push mode: each read finds the mode in use.
+	if cfg.Alerting.FixedMode() != config.PushMode {
 		periodic = append(periodic, river.NewPeriodicJob(river.PeriodicInterval(reading.EffectiveInterval()), func() (river.JobArgs, *river.InsertOpts) {
 			return alertmanager.ReadArgs{}, nil
 		}, &river.PeriodicJobOpts{RunOnStart: true}))

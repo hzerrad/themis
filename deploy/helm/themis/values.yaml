@@ -25,13 +25,16 @@ telemetry:
 enrolledNamespaces:
   - shop
 
-# Where Themis gets alerts. By default it reads the active alerts from
-# Alertmanager's API: nothing to configure in Alertmanager.
+# How alerts reach Themis.
 alerting:
+  # poll: Themis reads the active alerts from Alertmanager's API, with nothing
+  # to configure in Alertmanager. push: Alertmanager sends them to Themis's
+  # webhook, as alerting.webhook sets up. Empty starts in poll mode, and the
+  # Setup page can switch it. alerting.alertmanager.enabled=false, from
+  # earlier charts, means push.
+  mode: ""
+  # The Alertmanager Themis reads in poll mode.
   alertmanager:
-    # Off: Themis reads nothing, and Alertmanager must send alerts to its
-    # webhook instead.
-    enabled: true
     # Alertmanager's base URL, for example
     # http://alertmanager-operated.monitoring:9093. Empty: the chart looks for
     # an Alertmanager Service in the cluster at install, with Helm's lookup,
@@ -72,8 +75,9 @@ alerting:
     # Labels your Prometheus selects rules by, such as {release: kube-prometheus-stack}.
     # Empty: those of the first Prometheus resource found at install.
     labels: {}
-  # Alertmanager sending alerts to Themis's webhook, besides or instead of
-  # Themis reading them.
+  # Alertmanager sending alerts to Themis's webhook, in push mode. The webhook
+  # takes alerts in poll mode too: one that arrives both ways is the same
+  # alert.
   webhook:
     # A Secret you manage, with a token key holding the intake token, in
     # Alertmanager's namespace and, for alertmanagerConfig, in each enrolled

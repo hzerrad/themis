@@ -7,15 +7,39 @@ import (
 	"github.com/prometheus/alertmanager/pkg/labels"
 )
 
-// Alerting says where Themis gets alerts besides its webhook.
+// Alerting says how alerts reach Themis.
 type Alerting struct {
-	// Alertmanager is the Alertmanager whose active alerts Themis reads.
+	// Mode fixes how alerts reach Themis: poll, Themis reads Alertmanager's
+	// API, or push, Alertmanager sends them to Themis's webhook. Empty starts
+	// in poll mode, and the Setup page may switch it. The webhook takes
+	// alerts in either mode.
+	Mode string `json:"mode,omitempty" jsonschema:"enum=poll,enum=push"`
+
+	// Alertmanager is the Alertmanager whose active alerts Themis reads in
+	// poll mode.
 	Alertmanager Alertmanager `json:"alertmanager,omitzero"`
 
 	// Prometheus is where Themis checks that the alerts the profiles answer
 	// have alerting rules, when metrics.prometheus has no address: the
 	// metrics source is asked first.
 	Prometheus PrometheusRules `json:"prometheus,omitzero"`
+}
+
+// How alerts reach Themis.
+const (
+	// PollMode: Themis reads Alertmanager's API.
+	PollMode = "poll"
+	// PushMode: Alertmanager sends alerts to Themis's webhook.
+	PushMode = "push"
+)
+
+// FixedMode is the mode the install fixed, or empty when the Setup page
+// chooses. Alertmanager.Disabled is the earlier form of push mode.
+func (a Alerting) FixedMode() string {
+	if a.Alertmanager.Disabled {
+		return PushMode
+	}
+	return a.Mode
 }
 
 // PrometheusRules is a server answering Prometheus's API whose alerting
@@ -26,11 +50,10 @@ type PrometheusRules struct {
 	Address string `json:"address,omitempty"`
 }
 
-// Alertmanager configures reading the active alerts from Alertmanager's API.
-// Reading is on unless disabled; without an address, the Setup page sets
-// one.
+// Alertmanager configures reading the active alerts from Alertmanager's API,
+// in poll mode. Without an address, the Setup page sets one.
 type Alertmanager struct {
-	// Disabled stops reading: alerts arrive only through the webhook.
+	// Disabled fixes push mode, as the earlier form of alerting.mode push.
 	Disabled bool `json:"disabled,omitempty"`
 
 	// Address is Alertmanager's base URL, under which /api/v2/alerts is

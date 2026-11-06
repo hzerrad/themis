@@ -8,24 +8,102 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/incident/intake/rules"
 	"github.com/hzerrad/themis/internal/server/httpapi"
+	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
-func alertmanagerAPI(t *testing.T, install config.Alertmanager) http.Handler {
+// alertmanagerAPI serves the alerting settings, for the admin token and an
+// approver signed in with the session approverSession.
+func alertmanagerAPI(t *testing.T, install config.Alerting) http.Handler {
 	t.Helper()
 	s, _ := pgtest.NewStore(t)
+	se := store.Session{Subject: "a", Username: "approver@example.com", CreatedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}
+	if err := s.CreateSession(t.Context(), approverSession, se); err != nil {
+		t.Fatal(err)
+	}
 	cfg := config.Config{Profiles: []config.Profile{{Match: config.Match{AlertNames: []string{"KubePodCrashLooping"}}}}}
 	mux := http.NewServeMux()
-	(&httpapi.API{Store: s, TokenFile: tokenFile(t), Config: cfg, Alertmanager: &alertmanager.Connection{
-		Install: install, Addresses: &settings.Settings{Store: s, InstallAlertmanager: install}, Reads: s,
-	}}).Register(mux)
+	(&httpapi.API{
+		Store: s, TokenFile: tokenFile(t), Config: cfg, Sessions: s, OIDC: true,
+		Access: []config.AccessBinding{{Role: config.RoleApprover, Users: []string{"approver@example.com"}}},
+		Alertmanager: &alertmanager.Connection{
+			Install: install.Alertmanager, Addresses: &settings.Settings{Store: s, InstallAlerting: install}, Reads: s,
+		},
+	}).Register(mux)
 	return mux
+}
+
+const approverSession = "session-approver"
+
+// asApprover sends a request as a signed-in approver.
+func asApprover(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
+	req.AddCookie(&http.Cookie{Name: "themis_session", Value: approverSession, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	req.Header.Set("X-Themis-Request", "1")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// view returns the alerting settings as the Setup page reads them.
+func view(t *testing.T, h http.Handler) settings.AlertmanagerView {
+	t.Helper()
+	var v settings.AlertmanagerView
+	rec := send(t, h, http.MethodGet, "/v1/settings/alertmanager", nil)
+	if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+		t.Fatalf("GET = %d %q, %v", rec.Code, rec.Body, err)
+	}
+	return v
+}
+
+// An admin switches between poll and push mode on the Setup page, keeping
+// the address; nobody else may. A mode Helm set can't be switched.
+func TestAlertmanagerSettings_Mode(t *testing.T) {
+	const address = "http://alertmanager.observability:9093"
+	h := alertmanagerAPI(t, config.Alerting{Alertmanager: config.Alertmanager{Address: "http://monitoring-alertmanager.monitoring.svc:9093", Found: true}})
+	if v := view(t, h); v.Mode != config.PollMode || v.ModeByInstall {
+		t.Fatalf("by default = %+v, want poll mode, switchable", v)
+	}
+	if rec := send(t, h, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"address": address}); rec.Code != http.StatusOK {
+		t.Fatalf("PUT address = %d %q", rec.Code, rec.Body)
+	}
+	if rec := asApprover(t, h, http.MethodPut, "/v1/settings/alertmanager", `{"mode": "push"}`); rec.Code != http.StatusForbidden {
+		t.Errorf("an approver's switch = %d %q, want 403", rec.Code, rec.Body)
+	}
+	if v := view(t, h); v.Mode != config.PollMode {
+		t.Errorf("after an approver's switch = %+v, want poll mode", v)
+	}
+	if rec := send(t, h, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"mode": "push"}); rec.Code != http.StatusOK {
+		t.Fatalf("an admin's switch = %d %q", rec.Code, rec.Body)
+	}
+	if v := view(t, h); v.Mode != config.PushMode || v.ModeSince.IsZero() || v.Address != address {
+		t.Errorf("switched to push = %+v, want push mode, since now, the address kept", v)
+	}
+	if rec := send(t, h, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"mode": "pull"}); rec.Code != http.StatusBadRequest ||
+		rec.Body.String() != "The mode must be poll or push.\n" {
+		t.Errorf("an unknown mode = %d %q, want a 400 sentence", rec.Code, rec.Body)
+	}
+
+	fixed := alertmanagerAPI(t, config.Alerting{Mode: config.PollMode})
+	if rec := send(t, fixed, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"mode": "push"}); rec.Code != http.StatusConflict {
+		t.Errorf("switching the mode Helm set = %d %q, want 409", rec.Code, rec.Body)
+	}
+	if v := view(t, fixed); v.Mode != config.PollMode || !v.ModeByInstall {
+		t.Errorf("poll mode set in Helm = %+v", v)
+	}
+	push := alertmanagerAPI(t, config.Alerting{Alertmanager: config.Alertmanager{Disabled: true}})
+	if rec := send(t, push, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"address": address}); rec.Code != http.StatusBadRequest ||
+		!strings.HasPrefix(rec.Body.String(), "Push mode is set in the Helm values") {
+		t.Errorf("an address in push mode set in Helm = %d %q, want a 400 sentence", rec.Code, rec.Body)
+	}
 }
 
 // An Alertmanager listing one KubePodCrashLooping alert.
@@ -45,7 +123,7 @@ func fakeAlertmanager(t *testing.T) *httptest.Server {
 // The Setup page replaces the address found at install, and tests one.
 func TestAlertmanagerSettings(t *testing.T) {
 	am := fakeAlertmanager(t)
-	h := alertmanagerAPI(t, config.Alertmanager{Address: "http://monitoring-alertmanager.monitoring.svc:9093", Found: true})
+	h := alertmanagerAPI(t, config.Alerting{Alertmanager: config.Alertmanager{Address: "http://monitoring-alertmanager.monitoring.svc:9093", Found: true}})
 
 	var v settings.AlertmanagerView
 	rec := send(t, h, http.MethodGet, "/v1/settings/alertmanager", nil)
@@ -71,7 +149,7 @@ func TestAlertmanagerSettings(t *testing.T) {
 		t.Errorf("test of an address nothing answers = %d %q, want 502", rec.Code, rec.Body)
 	}
 
-	installed := alertmanagerAPI(t, config.Alertmanager{Address: am.URL})
+	installed := alertmanagerAPI(t, config.Alerting{Alertmanager: config.Alertmanager{Address: am.URL}})
 	if rec := send(t, installed, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"address": "http://other:9093"}); rec.Code != http.StatusConflict {
 		t.Errorf("changing the install's address = %d %q, want 409", rec.Code, rec.Body)
 	}

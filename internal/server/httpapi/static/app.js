@@ -7,6 +7,8 @@
 
 const TOKEN_KEY = "themis-token";
 const POLL_MS = 3000;
+// Status checks every part of the install, so it refreshes less often.
+const STATUS_POLL_MS = 15000;
 const main = document.getElementById("main");
 let timer = null;
 // me is who's signed in, from /v1/me: a person, whoever holds the break-glass
@@ -28,6 +30,12 @@ function h(tag, attrs = {}, ...children) {
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
   return el;
+}
+
+// fill replaces el's children, skipping the empty ones h skips: the DOM
+// would print a null as "null".
+function fill(el, ...children) {
+  el.replaceChildren(...children.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false && c !== ""));
 }
 
 function token() {
@@ -554,10 +562,10 @@ function alertmanagerSetup() {
   const show = async () => {
     try {
       const { steps } = await api("/v1/setup/alertmanager?namespace=" + encodeURIComponent(ns.value.trim()));
-      out.replaceChildren(...steps.map((s, i) => h("div", { class: "sub" },
+      fill(out, ...steps.map((s, i) => h("div", { class: "sub" },
         h("h3", {}, (i + 1) + ". " + s.title), h("p", { class: "quiet" }, s.text), s.code ? copyable(s.code) : null)));
     } catch (e) {
-      out.replaceChildren(h("div", { class: "error" }, e.message));
+      fill(out, h("div", { class: "error" }, e.message));
     }
   };
   ns.addEventListener("change", show);
@@ -567,8 +575,11 @@ function alertmanagerSetup() {
     out);
 }
 
-// alertmanagerSaved says the address was just saved, so Setup says so once.
-let alertmanagerSaved = false;
+// alertsSaid is what the alerts step just changed, so Setup says so once.
+let alertsSaid = null;
+
+// SWITCH names, for each mode, the other mode and the button that switches to it.
+const SWITCH = { poll: ["push", "Switch to push mode"], push: ["poll", "Switch to poll mode"] };
 
 // ADDRESS_FROM says where the Alertmanager address in use comes from.
 const ADDRESS_FROM = {
@@ -596,16 +607,17 @@ function alertRules() {
     try {
       v = await api("/v1/setup/alert-rules");
     } catch (e) {
-      out.replaceChildren(h("div", { class: "error" }, e.message));
+      fill(out, h("div", { class: "error" }, e.message));
       return;
     }
+    const have = v.exist.length === 1 ? " has a rule" : " have rules";
     const finding = v.checked
       ? (v.missing.length
-        ? v.exist.length + " of " + v.answered.length + " alerts exist in Prometheus at " + v.address + ". Missing: " + v.missing.join(", ") + "."
-        : "All " + v.exist.length + " alerts exist in Prometheus at " + v.address + ".")
+        ? v.exist.length + " of " + v.answered.length + " alerts" + have + " in Prometheus. Missing: " + v.missing.join(", ") + "."
+        : v.exist.length === 1 ? v.exist[0] + " has a rule in Prometheus." : "All " + v.exist.length + " alerts have rules in Prometheus.")
       : (v.error ? v.error + " " : "Not checked: no Prometheus address. ") + "Check by hand that Prometheus has rules for " + v.answered.join(", ") + ".";
     const values = "alerting:\n  rules:\n    install: true" + (v.standard ? "\n    standard: true" : "");
-    out.replaceChildren(
+    fill(out, 
       h("h3", {}, "Alert rules"),
       h("p", {}, finding),
       v.unshipped.length ? h("p", { class: "quiet" }, "Themis ships no rule for " + v.unshipped.join(", ") + ". Add one for each.") : null,
@@ -623,18 +635,30 @@ function alertRules() {
   return out;
 }
 
-// alertsStep reads alerts from Alertmanager: the address in use, where it
-// comes from, and a test. Sending them to Themis is the other way.
+// alertsStep is how alerts reach Themis. In poll mode, Themis reads
+// Alertmanager: the address in use, where it comes from, and a test. In push
+// mode, Alertmanager sends them: the steps for this install. An admin may
+// switch modes, unless Helm set the mode.
 function alertsStep(v, check) {
-  const saved = alertmanagerSaved;
-  alertmanagerSaved = false;
-  const webhook = h("details", { class: "fold sub", "data-key": "alerts-webhook" },
-    h("summary", {}, "Or let Alertmanager send alerts to Themis"), alertmanagerSetup());
-  if (!v.reading) {
-    return [h("p", {}, partFinding(check)),
-      check.state === "ok" ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()],
-      alertRules()];
-  }
+  const said = alertsSaid;
+  alertsSaid = null;
+  const [other, label] = SWITCH[v.mode] || SWITCH.poll;
+  const switchError = h("div", { class: "error", role: "alert" });
+  const switchMode = v.modeByInstall ? h("p", { class: "quiet sub" }, "Mode set in Helm.") : h("div", { class: "sub" },
+    h("button", { class: "btn", type: "button", onclick: async () => {
+      switchError.textContent = "";
+      try {
+        await api("/v1/settings/alertmanager", { method: "PUT", body: JSON.stringify({ mode: other }) });
+        alertsSaid = "Switched to " + other + " mode.";
+        route();
+      } catch (err) {
+        switchError.textContent = err.message;
+      }
+    } }, label),
+    switchError);
+  const head = [said ? h("p", { class: "flash", role: "status" }, said) : null, h("p", {}, partFinding(check))];
+  if (v.mode === "push") return [head, alertmanagerSetup(), switchMode, alertRules()];
+
   const locked = v.from === "install";
   const address = h("input", { type: "text", value: v.address, placeholder: "http://alertmanager-operated.monitoring:9093", autocapitalize: "none", disabled: locked });
   const from = v.from === "setup" && v.found ? ADDRESS_FROM.setup + " Empty it to go back to " + v.found + "."
@@ -646,7 +670,7 @@ function alertsStep(v, check) {
     error.textContent = "";
     try {
       await api("/v1/settings/alertmanager", { method: "PUT", body: JSON.stringify({ address: address.value.trim() }) });
-      alertmanagerSaved = true;
+      alertsSaid = "Address saved. Used from the next read.";
       route();
     } catch (err) {
       error.textContent = err.message;
@@ -654,27 +678,25 @@ function alertsStep(v, check) {
   };
   const test = async () => {
     error.textContent = "";
-    result.replaceChildren("Testing.");
+    fill(result, "Testing.");
     try {
       const r = await api("/v1/setup/alertmanager/test", { method: "POST", body: JSON.stringify({ address: locked ? "" : address.value.trim() }) });
-      result.replaceChildren(...testFinding(r));
+      fill(result, ...testFinding(r));
     } catch (err) {
       result.replaceChildren();
       error.textContent = err.message;
     }
   };
   return [
-    saved ? h("p", { class: "flash", role: "status" }, "Address saved. Used from the next read.") : null,
-    h("p", {}, partFinding(check)),
-    h("p", { class: "quiet" }, "Done when Themis reads from Alertmanager."),
+    head,
     h("form", { class: "form", onsubmit: save },
       field("Alertmanager's address", address, from),
       h("div", { class: "inline" },
         locked ? null : h("button", { class: "btn primary", type: "submit" }, "Save the address"),
         h("button", { class: "btn", type: "button", onclick: test }, "Test")),
       error, result),
-    alertRules(),
-    webhook];
+    switchMode,
+    alertRules()];
 }
 
 // modelSaved says the model was just saved, so Setup says so once.
@@ -743,14 +765,14 @@ function modelStep(v) {
     test.disabled = true;
     error.textContent = "";
     result.className = "test-result";
-    result.replaceChildren("Testing. The model has 20 s to answer.");
+    fill(result, "Testing. The model has 20 s to answer.");
     try {
       const r = await api("/v1/settings/model/test", { method: "POST", body: JSON.stringify(change()) });
       result.className = "test-result " + (r.ok ? "good" : "bad");
-      result.replaceChildren(r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
+      fill(result, r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
     } catch (err) {
       result.className = "test-result bad";
-      result.replaceChildren(err.message);
+      fill(result, err.message);
     } finally {
       test.disabled = false;
     }
@@ -768,7 +790,7 @@ function modelStep(v) {
       byInstall("model.apiKey") ? null : field("API key", key, "Stored encrypted. Never shown again."),
       anthropic || formatByInstall ? null : field("Reply format", format, "For OpenAI, choose OpenAI's strict form."),
     ].filter(Boolean);
-    form.replaceChildren(...asked,
+    fill(form, ...asked,
       h("div", { class: "inline" }, asked.length ? h("button", { class: "btn primary", type: "submit" }, "Save the model") : null, test),
       result, error);
   };
@@ -799,13 +821,13 @@ async function setup() {
   const done = (name) => check(name).state === "ok";
   let model = null;
   try { model = await api("/v1/settings/model"); } catch {}
-  let alertmanager = { reading: false };
+  let alertmanager = { mode: "push", modeByInstall: true };
   try { alertmanager = await api("/v1/settings/alertmanager"); } catch {}
   const investigatorOff = check("Investigator").state === "off";
   const signIn = check("Sign-in");
   const acting = checks.filter(needsAction).length;
   const steps = [
-    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
+    { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, "Signed in as ", h("b", {}, me.username), ".")] : [
       h("p", {}, partFinding(signIn)),
       h("ul", { class: "remedies" },
         h("li", {}, h("a", { href: "#/accounts" }, "Create accounts")),
@@ -1527,12 +1549,12 @@ function probeFields(f, evidence) {
       const was = p ? p[t.name] : undefined;
       return { ...t, was, input: h("input", { type: "number", min: t.min, step: "1", value: was }) };
     });
-    box.replaceChildren(...inputs.map((t) => field(t.label, t.input, t.was === undefined ? null : "Currently " + t.was + ".")));
+    fill(box, ...inputs.map((t) => field(t.label, t.input, t.was === undefined ? null : "Currently " + t.was + ".")));
   };
   const fillKinds = () => {
     const p = probes();
     const kinds = p ? PROBES.filter((k) => p[k]) : PROBES;
-    kind.replaceChildren(...kinds.map((k) => h("option", { value: k }, cap(k))));
+    fill(kind, ...kinds.map((k) => h("option", { value: k }, cap(k))));
     kindField.hidden = !kinds.length;
     none.textContent = kinds.length ? "" : "Container " + picker.value + " has no probes to change.";
     fill();
@@ -1655,7 +1677,7 @@ function suggestForm(d, reload) {
   const fields = h("div", { class: "form" });
   const button = h("button", { class: "btn primary", type: "submit" });
   const show = () => {
-    fields.replaceChildren(...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
+    fill(fields, ...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
     button.textContent = "Suggest the " + chosen.noun;
   };
   const choice = fixes.length > 1
@@ -1894,6 +1916,25 @@ async function detail(id) {
   // Refreshing would discard what an approver or suggester is typing.
   const typing = actions.some((a) => a.State === "awaiting_approval") || Boolean(suggesting);
   if (!typing) timer = setTimeout(reload, POLL_MS * 2);
+  else timer = setTimeout(() => watchChanges(id, d, reload), POLL_MS * 2);
+}
+
+// watchChanges keeps checking an incident a person is typing on, and says
+// when it changed, so nobody decides from a stale page and nothing typed is
+// lost.
+function watchChanges(id, seen, reload) {
+  const here = location.hash;
+  const stamp = (d) => JSON.stringify([d.Incident.state, (d.Transitions || []).length,
+    (d.Actions || []).map((a) => a.State), (d.Proposals || []).map((p) => p.Status)]);
+  const again = () => { if (location.hash === here) timer = setTimeout(() => watchChanges(id, seen, reload), POLL_MS * 2); };
+  api("/v1/incidents/" + encodeURIComponent(id)).then((d) => {
+    if (location.hash !== here) return;
+    if (stamp(d) === stamp(seen)) return again();
+    if (!main.querySelector(".changed")) {
+      main.prepend(h("p", { class: "flash changed", role: "status" }, "This incident changed. ",
+        h("a", { href: here, onclick: (e) => { e.preventDefault(); reload(); } }, "Reload"), "."));
+    }
+  }).catch(again);
 }
 
 // Routing -----------------------------------------------------------------
@@ -1961,7 +2002,7 @@ async function route() {
   let run, nav;
   if (m) [run, nav] = [() => detail(m[1]), "nav-incidents"];
   else if (hash === "#/accounts" && can("admin")) [run, nav] = [accounts, "nav-accounts"];
-  else if (hash === "#/status") [run, nav] = [status, "nav-status"];
+  else if (hash === "#/status") [run, nav] = [async () => { await status(); timer = setTimeout(route, STATUS_POLL_MS); }, "nav-status"];
   else if (hash === "#/setup" && can("admin")) [run, nav] = [setup, "nav-setup"];
   else if (hash === "#/password" && me.account) [run, nav] = [async () => changePassword(), "nav-password"];
   else [run, nav] = [async () => { await list(); timer = setTimeout(route, POLL_MS); }, "nav-incidents"];

@@ -83,7 +83,7 @@ kubectl -n themis create secret generic themis-initial-admin-gitops --from-liter
 
 ## Connect Alertmanager
 
-Themis reads the active alerts from Alertmanager's API every 15 seconds. When Alertmanager runs in the cluster, set nothing: at install, the chart finds its Service with Helm's `lookup`, as prometheus-community's prometheus chart and kube-prometheus-stack install it, and `helm install` prints the address it reads. The lookup uses your access, and Themis gets no permission to list Services. Argo CD and Flux don't run `lookup`: set `alerting.alertmanager.address`, or the address on the **Setup** page.
+Themis starts in poll mode: it reads the active alerts from Alertmanager's API every 15 seconds. When Alertmanager runs in the cluster, set nothing: at install, the chart finds its Service with Helm's `lookup`, as prometheus-community's prometheus chart and kube-prometheus-stack install it, and `helm install` prints the address it reads. The lookup uses your access, and Themis gets no permission to list Services. Argo CD and Flux don't run `lookup`: set `alerting.alertmanager.address`, or the address on the **Setup** page.
 
 ```bash
 helm upgrade themis deploy/helm/themis -n themis --reuse-values \
@@ -93,7 +93,9 @@ helm upgrade themis deploy/helm/themis -n themis --reuse-values \
 
 An Alertmanager that needs a token, basic auth or its own CA gets them with its address, in `alerting.alertmanager`.
 
-The Setup page and the Status page say which of the alerts Themis answers have a rule in Prometheus: the one at `metrics.prometheus.address`, or the one the chart finds at install. kube-prometheus-stack lacks `KubePodOOMKilled`. With the Prometheus Operator, `--set alerting.rules.install=true` installs a PrometheusRule with the rules the usual stacks lack, labelled as the first `Prometheus` resource found selects rules, or with `alerting.rules.labels`. `alerting.rules.standard=true` adds the rest, for a Prometheus without kube-prometheus-stack's rules. To have Alertmanager send alerts to Themis's webhook instead, set `alerting.alertmanager.enabled=false`: the **Setup** page then shows the steps for your install. With the Prometheus Operator, `alerting.webhook.alertmanagerConfig.enabled=true` makes an AlertmanagerConfig in each enrolled namespace, which the operator limits to that namespace's alerts, with a Secret there holding the intake token. Under GitOps, manage that Secret yourself and name it in `alerting.webhook.tokenSecret`. Alertmanager sends to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
+The Setup page and the Status page say which of the alerts Themis answers have a rule in Prometheus: the one at `metrics.prometheus.address`, or the one the chart finds at install. kube-prometheus-stack lacks `KubePodOOMKilled`. With the Prometheus Operator, `--set alerting.rules.install=true` installs a PrometheusRule with the rules the usual stacks lack, labelled as the first `Prometheus` resource found selects rules, or with `alerting.rules.labels`. `alerting.rules.standard=true` adds the rest, for a Prometheus without kube-prometheus-stack's rules.
+
+In push mode, Alertmanager sends alerts to Themis's webhook instead, and Themis reads nothing. An admin switches modes on the **Setup** page, which then shows the steps for your install. `alerting.mode=push` or `alerting.mode=poll` sets the mode in Helm instead, and the Setup page can't switch it. With the Prometheus Operator, `alerting.webhook.alertmanagerConfig.enabled=true` makes an AlertmanagerConfig in each enrolled namespace, which the operator limits to that namespace's alerts, with a Secret there holding the intake token. Under GitOps, manage that Secret yourself and name it in `alerting.webhook.tokenSecret`. Alertmanager sends to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
 
 ## Open the UI
 
@@ -164,8 +166,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
 | `telemetry.otlp.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the collector, on ports 4317 and 4318 |
 | `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
-| `alerting.alertmanager.enabled` | `true` | Read the active alerts from Alertmanager's API. Off, Alertmanager must send them to Themis's webhook |
-| `alerting.alertmanager.address` | `""` | Alertmanager's base URL. Empty: the chart looks for one in the cluster at install, or the Setup page sets it |
+| `alerting.mode` | `""` | `poll`: Themis reads the active alerts from Alertmanager's API. `push`: Alertmanager sends them to Themis's webhook. Empty starts in poll mode, and the Setup page can switch it. `alerting.alertmanager.enabled=false`, from earlier charts, means `push` |
+| `alerting.alertmanager.address` | `""` | Alertmanager's base URL, read in poll mode. Empty: the chart looks for one in the cluster at install, or the Setup page sets it |
 | `alerting.alertmanager.tokenSecret` | `""` | A Secret with a `token` key, sent as a bearer token. Needs `address` |
 | `alerting.alertmanager.basicAuth.username`, `.passwordSecret` | `""` | Basic auth: a username, and a Secret with a `password` key. Needs `address` |
 | `alerting.alertmanager.tls.caSecret` | `""` | A Secret with a `ca.crt` key: the CA that signs Alertmanager's certificate. Needs `address` |

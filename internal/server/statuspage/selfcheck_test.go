@@ -161,38 +161,10 @@ func TestChecks_Problems(t *testing.T) {
 		"unknown failure": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "An internal error in the investigator: boom", At: now}
 		}, "Model", statuspage.Problem, "internal error"},
-		"no alerts yet": {
-			func(_ *statuspage.Checker, s *fakeStore) { delete(s.heartbeats, store.HeartbeatAlertmanager) },
-			"Alerts", statuspage.Waiting, "No alert",
-		},
-		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
-			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
-		}, "Alerts", statuspage.Problem, "Wrong intake token."},
-		"refused without an admin account": {func(_ *statuspage.Checker, s *fakeStore) {
-			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now, Detail: statuspage.RefusedNoAdminAccount}
-		}, "Alerts", statuspage.Waiting, "Refused while no admin account existed."},
-		"reading": {func(c *statuspage.Checker, _ *fakeStore) {
-			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Second)}}
-		}, "Alerts", statuspage.OK, "Reading from http://am.monitoring:9093 every 15 s."},
-		"not read yet": {func(c *statuspage.Checker, _ *fakeStore) {
-			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: "http://other:9093", ReadAt: now}}
-		}, "Alerts", statuspage.Waiting, "Reading from http://am.monitoring:9093 every 15 s. Not read yet."},
-		"alertmanager unreachable": {func(c *statuspage.Checker, _ *fakeStore) {
-			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{
-				FailedAt: now, FailureKind: fetch.Unreachable, Failure: "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused",
-			}}
-		}, "Alerts", statuspage.Problem, "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused."},
-		"reading stopped": {func(c *statuspage.Checker, _ *fakeStore) {
-			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Minute)}}
-		}, "Alerts", statuspage.Problem, "Reading from http://am.monitoring:9093 stopped."},
-		"no alertmanager address": {func(c *statuspage.Checker, s *fakeStore) {
-			c.Alertmanager = reading{}
-			delete(s.heartbeats, store.HeartbeatAlertmanager)
-		}, "Alerts", statuspage.Warn, "No Alertmanager address."},
-		"no address, but the webhook works": {func(c *statuspage.Checker, _ *fakeStore) { c.Alertmanager = reading{} }, "Alerts", statuspage.OK, "Received through the \"themis\" receiver."},
+		"all alert rules": {func(*statuspage.Checker, *fakeStore) {}, "Alert rules", statuspage.OK, "All 2 alerts have rules in Prometheus."},
 		"alert rules missing": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Rules = fixedRules{Exist: []string{"KubePodCrashLooping"}, Missing: []string{"KubePodOOMKilled"}}
-		}, "Alert rules", statuspage.Warn, "1 of 2 alerts exist. Missing: KubePodOOMKilled."},
+		}, "Alert rules", statuspage.Warn, "1 of 2 alerts has a rule in Prometheus. Missing: KubePodOOMKilled."},
 		"no prometheus for the rules": {
 			func(c *statuspage.Checker, _ *fakeStore) { c.Rules = nil }, "Alert rules", statuspage.Waiting,
 			"Not checked: no Prometheus address. Check by hand that Prometheus has rules for KubePodCrashLooping and KubePodOOMKilled.",
@@ -243,9 +215,73 @@ func TestChecks_Problems(t *testing.T) {
 	}
 }
 
+// The Alerts part names the mode, and says when Alertmanager was last read
+// in poll mode, or last sent an alert in push mode. A failure names the
+// address.
+func TestChecks_Alerts(t *testing.T) {
+	failure := "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused"
+	for name, tc := range map[string]struct {
+		set   func(*statuspage.Checker, *fakeStore)
+		state statuspage.State
+		says  string
+		// since names the moment the finding rests on, if any.
+		since string
+	}{
+		"poll, reading": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Second)})
+		}, statuspage.OK, "Poll mode.", "Last read"},
+		"poll, not read yet": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{})
+		}, statuspage.Waiting, "Poll mode. Not read yet.", ""},
+		"poll, another address read": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{Address: "http://other:9093", ReadAt: now})
+		}, statuspage.Waiting, "Poll mode. Not read yet.", ""},
+		"poll, read only before switching to it": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{
+				view: settings.AlertmanagerView{Mode: config.PollMode, Address: amAddress, ModeSince: now.Add(-5 * time.Second)},
+				last: store.AlertRead{Address: amAddress, ReadAt: now.Add(-time.Hour), FailedAt: now.Add(-2 * time.Hour), Failure: failure},
+			}
+		}, statuspage.Waiting, "Poll mode. Not read yet.", ""},
+		"poll, alertmanager unreachable": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{Address: amAddress, ReadAt: now.Add(-time.Minute), FailedAt: now, FailureKind: fetch.Unreachable, Failure: failure})
+		}, statuspage.Problem, "Poll mode. " + failure + ".", "Last read"},
+		"poll, reading stopped": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Minute)})
+		}, statuspage.Problem, "Poll mode. Reading from http://am.monitoring:9093 stopped.", "Last read"},
+		"poll, no address": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{view: settings.AlertmanagerView{Mode: config.PollMode}}
+		}, statuspage.Warn, "Poll mode. No Alertmanager address.", ""},
+		"poll, alerts pushed too": {func(c *statuspage.Checker, s *fakeStore) {
+			c.Alertmanager = polling(store.AlertRead{Address: amAddress, ReadAt: now.Add(-10 * time.Second)})
+			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
+		}, statuspage.OK, "Poll mode.", "Last read"},
+		"push, alerts arriving": {func(*statuspage.Checker, *fakeStore) {}, statuspage.OK, "Push mode.", "Last alert"},
+		"push, set on the Setup page": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Alertmanager = reading{view: settings.AlertmanagerView{Mode: config.PushMode, Address: amAddress}, last: store.AlertRead{Address: amAddress, FailedAt: now, Failure: failure}}
+		}, statuspage.OK, "Push mode.", "Last alert"},
+		"push, no alert yet": {func(_ *statuspage.Checker, s *fakeStore) {
+			delete(s.heartbeats, store.HeartbeatAlertmanager)
+		}, statuspage.Waiting, "Push mode. No alert received yet.", ""},
+		"push, wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
+			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
+		}, statuspage.Problem, "Push mode. Wrong intake token.", "Last refused"},
+		"push, refused without an admin account": {func(_ *statuspage.Checker, s *fakeStore) {
+			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now, Detail: statuspage.RefusedNoAdminAccount}
+		}, statuspage.Waiting, "Push mode. Refused while no admin account existed.", "Last refused"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c, s := healthy()
+			tc.set(c, s)
+			got := byName(t, c)["Alerts"]
+			if got.State != tc.state || got.Summary != tc.says || got.Since != tc.since || (got.At == nil) != (tc.since == "") {
+				t.Errorf("Alerts = %+v, want %s saying %q, since %q", got, tc.state, tc.says, tc.since)
+			}
+		})
+	}
+}
+
 const amAddress = "http://am.monitoring:9093"
 
-// reading is an Alertmanager Themis reads at address, last read as last.
 // fixedRules is a Prometheus with the rules of Exist.
 type fixedRules rules.Result
 
@@ -259,13 +295,20 @@ func (failingRules) Check(context.Context, []string) (rules.Result, error) {
 	return rules.Result{}, errors.New("Prometheus at http://prometheus:9090 doesn't answer: connection refused")
 }
 
+// reading is how alerts reach Themis, as view says, with Alertmanager last
+// read as last.
 type reading struct {
-	address string
-	last    store.AlertRead
+	view settings.AlertmanagerView
+	last store.AlertRead
+}
+
+// polling is poll mode, reading Alertmanager at amAddress, last read as last.
+func polling(last store.AlertRead) reading {
+	return reading{view: settings.AlertmanagerView{Mode: config.PollMode, Address: amAddress}, last: last}
 }
 
 func (r reading) View(context.Context) (settings.AlertmanagerView, error) {
-	return settings.AlertmanagerView{Address: r.address, Reading: true}, nil
+	return r.view, nil
 }
 
 func (r reading) LastRead(context.Context) (store.AlertRead, error) {

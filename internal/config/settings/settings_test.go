@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
@@ -234,15 +235,15 @@ func TestAlertmanager_WhereTheAddressComesFrom(t *testing.T) {
 		return v
 	}
 
-	installed := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Address: set}}
-	if v := view(installed); v.Address != set || v.From != settings.FromInstall || !v.Reading {
+	installed := &settings.Settings{Store: memStore{}, InstallAlerting: config.Alerting{Alertmanager: config.Alertmanager{Address: set}}}
+	if v := view(installed); v.Address != set || v.From != settings.FromInstall || !v.Polling() {
 		t.Errorf("set at install = %+v", v)
 	}
 	if err := installed.SetAlertmanager(t.Context(), found, "alice"); !errors.Is(err, settings.ErrSetByInstall) {
 		t.Errorf("changing the install's address: %v, want ErrSetByInstall", err)
 	}
 
-	s := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Address: found, Found: true}}
+	s := &settings.Settings{Store: memStore{}, InstallAlerting: config.Alerting{Alertmanager: config.Alertmanager{Address: found, Found: true}}}
 	if v := view(s); v.Address != found || v.From != settings.FromFound {
 		t.Errorf("found at install = %+v", v)
 	}
@@ -263,14 +264,64 @@ func TestAlertmanager_WhereTheAddressComesFrom(t *testing.T) {
 	}
 
 	none := &settings.Settings{Store: memStore{}}
-	if v := view(none); v.Address != "" || v.From != "" || !v.Reading {
+	if v := view(none); v.Address != "" || v.From != "" || !v.Polling() {
 		t.Errorf("nothing set = %+v", v)
 	}
-	off := &settings.Settings{Store: memStore{}, InstallAlertmanager: config.Alertmanager{Disabled: true}}
-	if v := view(off); v.Reading || v.Address != "" {
-		t.Errorf("reading off = %+v", v)
+	// alerting.alertmanager.disabled is the earlier form of push mode.
+	for _, in := range []config.Alerting{{Mode: config.PushMode}, {Alertmanager: config.Alertmanager{Disabled: true}}} {
+		push := &settings.Settings{Store: memStore{}, InstallAlerting: in}
+		if v := view(push); v.Polling() || !v.ModeByInstall || v.Address != "" {
+			t.Errorf("push mode set at install = %+v", v)
+		}
+		if err := push.SetAlertmanager(t.Context(), set, "alice"); !errors.Is(err, settings.ErrPushByInstall) {
+			t.Errorf("setting an address in push mode set at install: %v", err)
+		}
 	}
-	if err := off.SetAlertmanager(t.Context(), set, "alice"); !errors.Is(err, settings.ErrReadingOff) {
-		t.Errorf("setting an address with reading off: %v", err)
+}
+
+// Setup switches between poll and push mode, from when it last did, unless
+// the install fixed the mode.
+func TestAlertmanager_Mode(t *testing.T) {
+	at := time.Date(2026, 11, 6, 10, 0, 0, 0, time.UTC)
+	m := memStore{}
+	s := &settings.Settings{Store: m, Now: func() time.Time { return at }}
+	view := func() settings.AlertmanagerView {
+		t.Helper()
+		v, err := s.Alertmanager(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	if v := view(); v.Mode != config.PollMode || v.ModeByInstall || !v.ModeSince.IsZero() {
+		t.Errorf("by default = %+v, want poll mode, never switched", v)
+	}
+	if err := s.SetMode(t.Context(), config.PushMode, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if v := view(); v.Mode != config.PushMode || !v.ModeSince.Equal(at) || m[settings.AlertsMode].UpdatedBy != "alice" {
+		t.Errorf("switched to push = %+v", v)
+	}
+	switched := at
+	at = at.Add(time.Hour)
+	if err := s.SetMode(t.Context(), config.PushMode, "bob"); err != nil || !view().ModeSince.Equal(switched) {
+		t.Errorf("switching to the mode in use = %v, %+v; want nothing changed", err, view())
+	}
+	if err := s.SetMode(t.Context(), config.PollMode, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	if v := view(); v.Mode != config.PollMode || !v.ModeSince.Equal(at) {
+		t.Errorf("switched back to poll = %+v", v)
+	}
+	if err := s.SetMode(t.Context(), "pull", "alice"); !errors.Is(err, settings.ErrUnknownMode) {
+		t.Errorf("an unknown mode: %v", err)
+	}
+
+	fixed := &settings.Settings{Store: memStore{}, InstallAlerting: config.Alerting{Mode: config.PollMode}}
+	if err := fixed.SetMode(t.Context(), config.PushMode, "alice"); !errors.Is(err, settings.ErrSetByInstall) {
+		t.Errorf("switching a mode the install fixed: %v, want ErrSetByInstall", err)
+	}
+	if v, err := fixed.Alertmanager(t.Context()); err != nil || v.Mode != config.PollMode || !v.ModeByInstall {
+		t.Errorf("poll mode set at install = %+v, %v", v, err)
 	}
 }

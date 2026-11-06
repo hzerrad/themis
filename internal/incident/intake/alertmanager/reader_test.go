@@ -138,7 +138,7 @@ func newRead(t *testing.T, install config.Alertmanager) *readEnv {
 func (e *readEnv) newWorker(install config.Alertmanager) *alertmanager.ReadWorker {
 	return &alertmanager.ReadWorker{
 		Connection: &alertmanager.Connection{
-			Install: install, Addresses: &settings.Settings{Store: e.store, InstallAlertmanager: install}, Reads: e.store,
+			Install: install, Addresses: &settings.Settings{Store: e.store, InstallAlerting: config.Alerting{Alertmanager: install}}, Reads: e.store,
 		},
 		Config: config.Config{Profiles: []config.Profile{
 			{Match: config.Match{AlertNames: []string{"KubePodCrashLooping"}}},
@@ -285,6 +285,31 @@ func TestRead_AnotherAlertmanager(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM read_alerts`); n != 0 {
 		t.Errorf("%d alerts are still taken, want none", n)
 	}
+}
+
+// In push mode, Alertmanager isn't read. What was taken before is kept, so
+// once poll mode resumes, an alert that ended meanwhile is taken as
+// resolved.
+func TestRead_Modes(t *testing.T) {
+	e := newRead(t, config.Alertmanager{})
+	e.am.set("a", fakeAlert{name: "KubePodCrashLooping", startsAt: t0})
+	want(t, "the first read", e.read(t, 0), "firing a")
+
+	if err := e.worker.Connection.SetMode(t.Context(), config.PushMode, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	asked := len(e.am.queries)
+	e.am.remove("a")
+	e.am.set("b", fakeAlert{name: "KubePodOOMKilled", startsAt: t0.Add(time.Minute)})
+	want(t, "a read in push mode", e.read(t, 15*time.Second))
+	if len(e.am.queries) != asked {
+		t.Errorf("Alertmanager was asked %q in push mode", e.am.queries[asked:])
+	}
+
+	if err := e.worker.Connection.SetMode(t.Context(), config.PollMode, "alice"); err != nil {
+		t.Fatal(err)
+	}
+	want(t, "the first read back in poll mode", e.read(t, 15*time.Minute), "firing b", "resolved a at 10:15")
 }
 
 // Several core replicas read: each change is taken once, and a read that
