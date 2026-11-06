@@ -214,7 +214,7 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		return failed(ch, rerr)
 	}
 	if rerr == nil && (err != nil || refused.SeenAt.After(got.SeenAt)) {
-		ch.State, ch.Summary, ch.At = Problem, "Something is sending alerts with the wrong token, and Themis refuses them.", &refused.SeenAt
+		ch.State, ch.Summary, ch.At = Problem, "Alerts refused: they carry the wrong intake token.", &refused.SeenAt
 		ch.Fix = "Give Alertmanager's Themis receiver the intake token from the themis-tokens Secret (key intake)."
 		return ch
 	}
@@ -408,7 +408,7 @@ func (c *Checker) signIn(ctx context.Context) Check {
 		ch.State, ch.Summary = Warn, "Setup isn't finished: anyone who can kubectl port-forward to Themis is an admin."
 		ch.Fix = "Create an admin account on the Accounts page and sign in with it, or sign in as an admin through your identity provider."
 	case len(ways) == 0:
-		ch.State, ch.Summary = Warn, "Only the emergency token signs in."
+		ch.State, ch.Summary = Warn, "Only the break-glass token signs in."
 		ch.Fix = "Create accounts on the Accounts page, or set up your identity provider, so people sign in as themselves."
 	default:
 		ch.State, ch.Summary = OK, "People sign in "+strings.Join(ways, " and ")+"."

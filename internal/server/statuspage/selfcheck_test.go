@@ -160,7 +160,7 @@ func TestChecks_Problems(t *testing.T) {
 		},
 		"wrong token": {func(_ *statuspage.Checker, s *fakeStore) {
 			s.heartbeats[store.HeartbeatAlertmanagerRefused] = store.Heartbeat{SeenAt: now}
-		}, "Alerts", statuspage.Problem, "wrong token"},
+		}, "Alerts", statuspage.Problem, "Alerts refused: they carry the wrong intake token."},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
 		}, "Namespaces", statuspage.Problem, "In payments, Themis can't list pods or read deployments."},
@@ -186,7 +186,7 @@ func TestChecks_Problems(t *testing.T) {
 		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "waits for a fix suggested"},
 		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "asks no model"},
 		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "port-forward"},
-		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "emergency token"},
+		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c, s := healthy()

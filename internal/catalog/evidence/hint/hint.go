@@ -15,8 +15,8 @@ import (
 
 // Headlines open a stop without a conclusion: which kind of stop it was.
 const (
-	HeadlineBlind     = "Themis couldn't decide, because it couldn't see everything it needed:"
-	HeadlineAmbiguous = "Themis couldn't decide: the evidence doesn't point to one cause."
+	HeadlineBlind     = "No decision: Themis couldn't see everything it needed:"
+	HeadlineAmbiguous = "No decision: the evidence doesn't point to one cause."
 )
 
 // Writer writes messages for one configuration.
