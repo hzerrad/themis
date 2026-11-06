@@ -563,49 +563,115 @@ function alertmanagerSetup() {
 // modelSaved says the model was just saved, so Setup says so once.
 let modelSaved = false;
 
-// modelStep sets the model the install left unset. What the install set is
-// shown locked: a change here would be undone by the next upgrade.
+// PROVIDERS name the APIs the investigator speaks; PROVIDER_CHOICES offer them.
+const PROVIDERS = { openai: "OpenAI-compatible", anthropic: "Anthropic" };
+const PROVIDER_CHOICES = { openai: "OpenAI-compatible: OpenAI, OpenRouter, Ollama, vLLM", anthropic: "Anthropic" };
+
+// REPLY_FORMATS are how an OpenAI-compatible API is asked for its reply: the
+// name on the page, strict output, and the form the schema is sent in.
+const REPLY_FORMATS = {
+  strict: ["Strict", true, "as-is"],
+  "openai-strict": ["OpenAI's strict form", true, "openai-strict"],
+  loose: ["Not strict", false, "as-is"],
+};
+const replyFormat = (v) => (!v.strictOutput ? "loose" : v.schemaDialect === "openai-strict" ? "openai-strict" : "strict");
+
+// choice is a select of options, {value: label}, with value chosen.
+function choice(options, value) {
+  return h("select", {}, Object.entries(options).map(([k, text]) => h("option", { value: k, selected: k === value }, text)));
+}
+
+// modelStep sets the model the install left unset, and tests its connection.
+// What the install set is shown, not offered: a change here would be undone by
+// the next upgrade. Only the settings the chosen provider uses are asked for.
 function modelStep(v) {
   const saved = modelSaved;
   modelSaved = false;
   const byInstall = (name) => v.byInstall.includes(name);
-  const locked = "Set in Helm. Read-only here.";
-  const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", disabled: byInstall("model.baseURL") });
-  const name = h("input", { type: "text", value: v.name, placeholder: "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name") });
-  const key = h("input", { type: "password", autocomplete: "off", disabled: byInstall("model.apiKey"),
-    placeholder: v.apiKeySet ? "Set. Leave empty to keep it." : "Optional" });
-  const strict = h("input", { type: "checkbox", checked: v.strictOutput, disabled: byInstall("model.strictOutput") });
+  // The reply format is two settings: the install may have made either.
+  const formatByInstall = byInstall("model.strictOutput") || byInstall("model.schemaDialect");
+  const provider = choice(PROVIDER_CHOICES, v.provider);
+  const chosen = () => (byInstall("model.provider") ? v.provider : provider.value);
+  const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", autocapitalize: "none" });
+  const name = h("input", { type: "text", value: v.name, autocapitalize: "none" });
+  const key = h("input", { type: "password", autocomplete: "off" });
+  const format = choice(Object.fromEntries(Object.entries(REPLY_FORMATS).map(([k, [text]]) => [k, text])), replyFormat(v));
   const error = h("div", { class: "error", role: "alert" });
+  const result = h("p", { class: "test-result", role: "status" });
+
+  // change is what the form sets: what the install left, and the provider uses.
+  const change = () => {
+    const c = {};
+    const openai = chosen() === "openai";
+    if (!byInstall("model.provider")) c.provider = provider.value;
+    if (openai && !byInstall("model.baseURL")) c.baseURL = url.value.trim();
+    if (!byInstall("model.name")) c.name = name.value.trim();
+    if (!byInstall("model.apiKey") && key.value) c.apiKey = key.value;
+    if (openai && !formatByInstall) [, c.strictOutput, c.schemaDialect] = REPLY_FORMATS[format.value];
+    return c;
+  };
   const save = async (e) => {
     e.preventDefault();
     error.textContent = "";
-    const change = {};
-    if (!byInstall("model.baseURL")) { change.baseURL = url.value.trim(); change.strictOutput = strict.checked; }
-    if (!byInstall("model.name")) change.name = name.value.trim();
-    if (!byInstall("model.apiKey") && key.value) change.apiKey = key.value;
     try {
-      await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change) });
+      await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change()) });
       modelSaved = true;
       route();
     } catch (err) {
       error.textContent = err.message;
     }
   };
-  if (["model.baseURL", "model.name"].every(byInstall)) {
-    return [h("p", {}, "Set in Helm: ", h("code", {}, v.name), " at ", h("code", {}, v.baseURL), ".")];
-  }
+  // The test sends what the form holds, saved or not; nothing is saved.
+  const test = h("button", { class: "btn", type: "button", onclick: async () => {
+    test.disabled = true;
+    error.textContent = "";
+    result.className = "test-result";
+    result.replaceChildren("Testing. The model has 20 s to answer.");
+    try {
+      const r = await api("/v1/settings/model/test", { method: "POST", body: JSON.stringify(change()) });
+      result.className = "test-result " + (r.ok ? "good" : "bad");
+      result.replaceChildren(r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
+    } catch (err) {
+      result.className = "test-result bad";
+      result.replaceChildren(err.message);
+    } finally {
+      test.disabled = false;
+    }
+  } }, "Test the connection");
+
+  const form = h("form", { class: "form", onsubmit: save });
+  const fill = () => {
+    const anthropic = chosen() === "anthropic";
+    name.placeholder = anthropic ? "claude-sonnet-5-5" : "gpt-5 or qwen3:8b";
+    key.placeholder = v.apiKeySet ? "Set. Leave empty to keep it." : anthropic ? "Required" : "Optional";
+    const asked = [
+      byInstall("model.provider") ? null : field("Provider", provider),
+      anthropic || byInstall("model.baseURL") ? null : field("Address", url),
+      byInstall("model.name") ? null : field("Model", name),
+      byInstall("model.apiKey") ? null : field("API key", key, "Stored encrypted. Never shown again."),
+      anthropic || formatByInstall ? null : field("Reply format", format, "For OpenAI, choose OpenAI's strict form."),
+    ].filter(Boolean);
+    form.replaceChildren(...asked,
+      h("div", { class: "inline" }, asked.length ? h("button", { class: "btn primary", type: "submit" }, "Save the model") : null, test),
+      result, error);
+  };
+  provider.addEventListener("change", fill);
+  fill();
+
+  // What Helm set, once, as facts.
+  const fixed = [
+    byInstall("model.provider") ? ["Provider", PROVIDERS[v.provider] || v.provider] : null,
+    byInstall("model.baseURL") && v.baseURL ? ["Address", h("code", {}, v.baseURL)] : null,
+    byInstall("model.name") ? ["Model", h("code", {}, v.name)] : null,
+    byInstall("model.apiKey") ? ["API key", "Set"] : null,
+    formatByInstall && v.provider === "openai" ? ["Reply format", REPLY_FORMATS[replyFormat(v)][0]] : null,
+  ].filter(Boolean);
+  if (fixed.length) form.classList.add("sub");
   return [
-    saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation. Done when the model answers.") : null,
-    h("p", { class: "quiet" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. Used from the next investigation."),
-    h("form", { class: "form", onsubmit: save },
-      field("Address", url, byInstall("model.baseURL") ? locked : null),
-      field("Model", name, byInstall("model.name") ? locked : null),
-      field("API key", key, byInstall("model.apiKey") ? locked : "Stored encrypted. Never shown again."),
-      h("label", { class: "check" }, strict,
-        h("span", {}, "Strict format: the model must follow Themis's reply format exactly. For OpenAI, clear it, or install with ",
-          h("code", {}, "model.schemaDialect=openai-strict"), ".", byInstall("model.strictOutput") ? " " + locked : "")),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Save the model")),
-      error)];
+    saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation.") : null,
+    fixed.length ? [h("p", { class: "quiet" }, "Set in Helm."),
+      h("dl", { class: "tech" }, fixed.map(([k, value]) => [h("dt", {}, k), h("dd", {}, value)]))] : null,
+    form];
 }
 
 // setup walks through what an install needs, in order, each step marked
@@ -627,7 +693,7 @@ async function setup() {
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
-      : model ? { title: "The model", status: done("Model") ? "Done" : model.complete ? "Set" : "Not done", body: modelStep(model) } : null,
+      : model ? { title: "The model", status: model.complete ? "Done" : "Not done", body: modelStep(model) } : null,
     { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: [
       h("p", {}, partFinding(check("Alerts"))),
       done("Alerts") ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]] },

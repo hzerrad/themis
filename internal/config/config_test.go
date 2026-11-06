@@ -120,6 +120,7 @@ func TestValidate_Errors(t *testing.T) {
 		{"client certificate without key", func(c *config.Config) {
 			c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus", TLS: config.TLS{CertFile: "/c"}}
 		}, "metrics.prometheus.tls"},
+		{"unknown schema dialect", func(c *config.Config) { c.Model.SchemaDialect = "strict" }, "model.schemaDialect"},
 		{"no admin token file", func(c *config.Config) { c.API.BearerTokenFile = "" }, "api.bearerTokenFile"},
 		{"initial admin without its password", func(c *config.Config) { c.API.InitialAdmin = &config.InitialAdmin{} }, "api.initialAdmin.passwordFile"},
 		{"admin account without a username", func(c *config.Config) { c.API.AdminAccount = &config.AdminAccount{PasswordFile: "/p"} }, "api.adminAccount.username"},

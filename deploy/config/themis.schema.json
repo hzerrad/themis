@@ -261,6 +261,14 @@
     },
     "model": {
       "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "description": "Provider is the API the investigator speaks: openai, the default, or\nanthropic, which has its own address, so setup's doesn't apply."
+        },
         "baseURL": {
           "type": "string"
         },
@@ -270,6 +278,18 @@
         "apiKey": {
           "type": "boolean",
           "description": "APIKey says the install gives the investigator a key."
+        },
+        "strictOutput": {
+          "type": "boolean",
+          "description": "StrictOutput is the install's strict output, which applies with its\naddress. Nil means on."
+        },
+        "schemaDialect": {
+          "type": "string",
+          "enum": [
+            "as-is",
+            "openai-strict"
+          ],
+          "description": "SchemaDialect is how the reply schema is sent to an OpenAI-compatible\nAPI: as-is, or openai-strict, the form OpenAI's strict mode accepts.\nEmpty leaves it to setup."
         }
       },
       "additionalProperties": false,

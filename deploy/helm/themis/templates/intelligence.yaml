@@ -39,8 +39,8 @@ spec:
           env:
             - {name: THEMIS_CORE_ADDR, value: "{{ .Release.Name }}-core:9090"}
             - {name: THEMIS_TOKEN_FILE, value: /var/run/secrets/themis/investigator}
-            {{- with .Values.model.provider }}
-            - {name: MODEL_PROVIDER, value: {{ . | quote }}}
+            {{- if .Values.model.provider }}
+            - {name: MODEL_PROVIDER, value: {{ include "themis.modelProvider" . | quote }}}
             {{- end }}
             {{- /* Left unset, they come from Themis's Setup page. */}}
             {{- with .Values.model.baseURL }}

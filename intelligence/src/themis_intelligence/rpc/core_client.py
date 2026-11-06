@@ -60,6 +60,22 @@ class _Investigations(Protocol):
         timeout: float,
     ) -> Awaitable[investigation_pb2.GetModelSettingsResponse]: ...
 
+    def TakeModelTest(
+        self,
+        request: investigation_pb2.TakeModelTestRequest,
+        *,
+        metadata: Metadata,
+        timeout: float,
+    ) -> Awaitable[investigation_pb2.TakeModelTestResponse]: ...
+
+    def ReportModelTest(
+        self,
+        request: investigation_pb2.ReportModelTestRequest,
+        *,
+        metadata: Metadata,
+        timeout: float,
+    ) -> Awaitable[investigation_pb2.ReportModelTestResponse]: ...
+
 
 class _Evidence(Protocol):
     def CollectEvidence(
@@ -161,6 +177,20 @@ class CoreClient:
             investigation_pb2.GetModelSettingsRequest(),
             metadata=self.metadata,
             timeout=CALL_TIMEOUT_S,
+        )
+
+    async def take_model_test(self) -> investigation_pb2.ModelTest | None:
+        """A test of the model's connection, waiting a few seconds for one."""
+        resp = await self.investigations.TakeModelTest(
+            investigation_pb2.TakeModelTestRequest(),
+            metadata=self.metadata,
+            timeout=CALL_TIMEOUT_S,
+        )
+        return resp.test if resp.HasField("test") else None
+
+    async def report_model_test(self, req: investigation_pb2.ReportModelTestRequest) -> None:
+        await self.investigations.ReportModelTest(
+            req, metadata=self.metadata, timeout=CALL_TIMEOUT_S
         )
 
     async def renew_lease(self, lease_id: str) -> None:
