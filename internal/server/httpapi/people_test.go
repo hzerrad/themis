@@ -162,7 +162,7 @@ func TestPeople_RawEvidenceIsForResponders(t *testing.T) {
 			t.Errorf("%s isn't told the evidence exists", who)
 		}
 		var warned struct{ EvidenceWarning string }
-		if err := json.Unmarshal(rec.Body.Bytes(), &warned); err != nil || !strings.HasPrefix(warned.EvidenceWarning, "Some evidence contains text that looks like instructions") {
+		if err := json.Unmarshal(rec.Body.Bytes(), &warned); err != nil || !strings.HasPrefix(warned.EvidenceWarning, "Some evidence contains text addressed to Themis") {
 			t.Errorf("%s: warning = %q (%v)", who, warned.EvidenceWarning, err)
 		}
 		if sees {

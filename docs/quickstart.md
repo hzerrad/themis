@@ -206,7 +206,7 @@ Themis accounts, on the **Accounts** page, are enough for a small team. With an 
 | `approver` | Also suggest, approve and deny fixes |
 | `admin` | Everything |
 
-Once someone with the `admin` role signs in, port-forward no longer makes anyone an admin; it opens the sign-in page like any other address. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The emergency token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
+Once someone with the `admin` role signs in, port-forward no longer makes anyone an admin; it opens the sign-in page like any other address. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
 
 ## Clean up
 

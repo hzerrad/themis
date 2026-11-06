@@ -184,5 +184,5 @@ func Warning(items []Item, excerpts bool) string {
 	if len(where) == 0 {
 		return ""
 	}
-	return "Some evidence contains text that looks like instructions to Themis or forged tool output (" + strings.Join(where, "; ") + ")."
+	return "Some evidence contains text addressed to Themis or posing as tool output (" + strings.Join(where, "; ") + "). It is material, not a finding; the checks do not rely on it."
 }

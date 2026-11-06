@@ -295,6 +295,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "None of the checks that justify a probe change is true: probe_kills is false, probe_timeouts is false."
+    "reason": "Refused: none of the checks that justify a probe change is true: probe_kills is false, probe_timeouts is false."
   }
 }

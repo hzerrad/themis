@@ -203,6 +203,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "The check that justifies a memory or CPU change isn't true: cpu_throttled_at_limit is false."
+    "reason": "Refused: the check that justifies a memory or CPU change isn't true: cpu_throttled_at_limit is false."
   }
 }

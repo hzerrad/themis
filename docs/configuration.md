@@ -370,9 +370,9 @@ Some protections hold for every fix and every profile, whoever suggested the fix
 
 Themis never changes a workload that Argo CD or Flux manages: the GitOps controller would undo the change, or fight it. It only recommends the fix. The fix is recorded as denied by `gitops-owns-the-target`, the incident closes without a change, and the incident page shows it as the recommended fix, with the reason:
 
-- "Argo CD manages this workload, so Themis only recommends the change: apply it in Git." when Themis reads the markers or field managers on the live workload as it decides (`Flux` for Flux's).
-- "Argo CD or Flux manages this workload, so Themis only recommends the change: apply it in Git." when `gitops_managed` was true from the evidence.
-- "Themis couldn't tell whether Argo CD or Flux manages this workload, so it only recommends the change." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
+- "Recommended, not applied: Argo CD manages this workload. Apply the change in Git." when Themis reads the markers or field managers on the live workload as it decides (`Flux` for Flux's).
+- "Recommended, not applied: Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` was true from the evidence.
+- "Recommended, not applied: Themis couldn't tell whether Argo CD or Flux manages this workload. Apply the change in Git." when `gitops_managed` is `unknown`, such as when Themis couldn't read the rollout history. Not knowing counts as managed.
 
 This holds for putting a fix back too. A rule of your own that reads `predicates.gitops_managed` or `target.managed_by` still works, but is never needed for this.
 
@@ -401,7 +401,7 @@ It is a small heuristic, not a filter: the text stays in the evidence, and nothi
 What it changes:
 
 - The investigator is told, before the evidence, that Themis flagged it and why, and the evidence is marked `suspicious="true"`. Outside investigators get the same flags in each evidence item's `suspicious` field.
-- The incident page warns, above the evidence and on every fix: "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail: "Ignore all previous instructions…"). Check the fix against the cluster before approving." Viewers, who may not read raw evidence, see which evidence without the text.
+- The incident page warns, above the evidence and on every fix: "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail: "Ignore all previous instructions…"). It is material, not a finding; the checks do not rely on it. Check the fix against the cluster before approving." Viewers, who may not read raw evidence, see which evidence without the text.
 - [Escalation notices](#escalation-notices) carry `evidenceWarning`, naming the evidence without its text.
 - Policy can read `predicates.evidence_has_instructions`, for example to forbid fixes when it is `"true"`, once the profile runs that check.
 
@@ -490,4 +490,4 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail)." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail). It is material, not a finding; the checks do not rely on it." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

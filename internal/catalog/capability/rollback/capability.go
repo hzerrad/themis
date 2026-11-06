@@ -92,13 +92,13 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	}
 	revision, err := RevisionOf(ctx, r, t, template)
 	if errors.Is(err, ErrNoSuchRevision) {
-		return "", nil, &capability.Refusal{Reason: "Themis couldn't put the workload back: Kubernetes no longer keeps the version from before it acted."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: Kubernetes no longer keeps the revision from before Themis acted. The fix stays in place."}
 	}
 	if errors.Is(err, workload.ErrGone) {
-		return "", nil, &capability.Refusal{Reason: "The workload was deleted, so there is nothing to put back."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was deleted."}
 	}
 	if errors.Is(err, ErrStale) {
-		return "", nil, &capability.Refusal{Reason: "The workload was replaced by a new one with the same name, so there is nothing to put back."}
+		return "", nil, &capability.Refusal{Reason: "Not restored: the workload was replaced by a new one with the same name."}
 	}
 	if err != nil {
 		return "", nil, err

@@ -147,7 +147,7 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	}
 	w, err := workload.Read(ctx, r, t)
 	if e, ok := errors.AsType[*workload.Error](err); ok {
-		return "", nil, &capability.Refusal{Reason: fmt.Sprintf("The workload %s, so there is nothing to put back.", e.Case)}
+		return "", nil, &capability.Refusal{Reason: fmt.Sprintf("Not restored: the workload %s.", e.Case)}
 	}
 	if err != nil {
 		return "", nil, err
@@ -156,7 +156,7 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	for _, d := range diffs(w.Template, pre) {
 		if d.after == nil {
 			return "", nil, &capability.Refusal{Reason: fmt.Sprintf(
-				"Themis couldn't put the workload back: %s had no %s before, and Themis never removes one.", d.container, d.field)}
+				"Not restored: %s had no %s before, and Themis never removes one. The fix stays in place.", d.container, d.field)}
 		}
 		if back[d.container] == nil {
 			back[d.container] = map[field]resource.Quantity{}
@@ -164,7 +164,7 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 		back[d.container][d.field] = *d.after
 	}
 	if len(back) == 0 {
-		return "", nil, &capability.Refusal{Reason: "The workload's resources are already as they were before Themis acted.", NoOp: true}
+		return "", nil, &capability.Refusal{Reason: "Nothing to restore: the workload's resources are already as they were before Themis acted.", NoOp: true}
 	}
 	return Name, back.params(), nil
 }

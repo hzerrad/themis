@@ -97,7 +97,7 @@ func (w *ExpireWorker) Expire(ctx context.Context) error {
 			store.AfterCommit(tx, approvalsTotal.WithLabelValues(resultExpired).Inc)
 			err := w.Store.Transition(ctx, tx, store.TransitionArgs{
 				ID: a.IncidentID, From: incident.AwaitingApproval, To: incident.Escalated,
-				Reason: "No one approved the fix before the time to approve it ran out.", Actor: "approval",
+				Reason: "Approval expired: no one approved the fix in time. Referred to a person.", Actor: "approval",
 			})
 			// An incident that already moved on keeps its state; the action
 			// still expires.

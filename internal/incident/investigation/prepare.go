@@ -156,5 +156,5 @@ func awaitingSuggestion(n int) string {
 	if n == 1 {
 		pieces = "1 piece"
 	}
-	return "Themis collected " + pieces + " of evidence and ran its checks. No investigator is installed, so it waits for a fix suggested by a person or a tool outside Themis."
+	return "Collected " + pieces + " of evidence and ran the checks. No investigator is installed: waiting for a fix from a person or a tool outside Themis."
 }

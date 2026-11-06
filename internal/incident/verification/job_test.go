@@ -318,8 +318,8 @@ func TestRestore_CheckedThenEscalated(t *testing.T) {
 		edit bool
 		want string
 	}{
-		"rolled out":                {false, "Themis put the workload back as it was before it acted: 3 of 3 pods are ready. A person needs to take over."},
-		"changed after it was back": {true, "Themis put the workload back, but it was then changed outside Themis. A person needs to take over."},
+		"rolled out":                {false, "Restored to the state before Themis acted: 3 of 3 pods are ready. Referred to a person."},
+		"changed after it was back": {true, "Restored, but the workload was then changed outside Themis. Referred to a person."},
 	} {
 		e := executed(t)
 		e.rolledBack(t)
@@ -357,7 +357,7 @@ func TestRestore_WaitsForTheRollout(t *testing.T) {
 		t.Fatal("final before the restored template was rolled out")
 	}
 	e.clock = e.clock.Add(6 * time.Minute)
-	if !e.verify(t) || e.state(t) != incident.Escalated || !strings.Contains(e.lastReason(t), "didn't finish rolling it out in time") {
+	if !e.verify(t) || e.state(t) != incident.Escalated || !strings.Contains(e.lastReason(t), "Restore incomplete: Kubernetes didn't finish the rollout within the verification window.") {
 		t.Errorf("state = %s: %q", e.state(t), e.lastReason(t))
 	}
 }

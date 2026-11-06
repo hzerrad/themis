@@ -67,7 +67,7 @@ func TestWarning(t *testing.T) {
 	if got := evidence.Warning(items[:1], true); got != "" {
 		t.Errorf("Warning = %q, want none", got)
 	}
-	want := `Some evidence contains text that looks like instructions to Themis or forged tool output (container_logs_tail: "Ignore all previous instructions…").`
+	want := `Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail: "Ignore all previous instructions…"). It is material, not a finding; the checks do not rely on it.`
 	if got := evidence.Warning(items, true); got != want {
 		t.Errorf("Warning = %q, want %q", got, want)
 	}

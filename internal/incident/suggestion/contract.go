@@ -40,7 +40,7 @@ func Request(req *themisv1.SubmitProposalRequest) Suggestion {
 		revision := older.RollbackToRevision.GetRevision()
 		s.Fix, s.Params = rollback.Name, map[string]any{"revision": revision}
 		if revision <= 0 {
-			s.invalid = "The revision must be a positive number."
+			s.invalid = "the revision must be a positive number."
 		}
 	}
 	return s
