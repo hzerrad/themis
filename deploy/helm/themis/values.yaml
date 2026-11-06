@@ -60,6 +60,18 @@ alerting:
     matchers: []
     # How often Alertmanager is read.
     interval: 15s
+  # Prometheus alerting rules for the alerts the scenario packs answer that
+  # the usual stacks lack, such as KubePodOOMKilled, installed as a
+  # PrometheusRule when the Prometheus Operator serves that resource. Off by
+  # default: the alerts reach your Alertmanager's receivers too.
+  rules:
+    install: false
+    # Also the rules kube-prometheus-stack ships, such as KubePodCrashLooping,
+    # for a Prometheus without them.
+    standard: false
+    # Labels your Prometheus selects rules by, such as {release: kube-prometheus-stack}.
+    # Empty: those of the first Prometheus resource found at install.
+    labels: {}
 
 database:
   # A Secret with a DATABASE_URL key. Empty uses the bundled PostgreSQL.

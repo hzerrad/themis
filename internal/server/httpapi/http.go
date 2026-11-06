@@ -70,6 +70,9 @@ type API struct {
 	Settings ModelSettings
 	// Alertmanager is the Alertmanager Themis reads. Nil means none.
 	Alertmanager AlertmanagerConnection
+	// Rules says which alerts have alerting rules in Prometheus. Nil means
+	// Themis knows no Prometheus to ask.
+	Rules AlertRules
 	// ModelTests test the model's connection through the investigator. Nil
 	// means no test is offered.
 	ModelTests *modeltest.Tests
@@ -132,6 +135,9 @@ func (a *API) Register(mux *http.ServeMux) {
 		mux.Handle("GET /v1/settings/alertmanager", a.authed(config.RoleAdmin, a.alertmanagerSettings, nil))
 		mux.Handle("PUT /v1/settings/alertmanager", a.authed(config.RoleAdmin, a.setAlertmanager, nil))
 		mux.Handle("POST /v1/setup/alertmanager/test", a.authed(config.RoleAdmin, a.testAlertmanager, nil))
+	}
+	if a.Config != nil {
+		mux.Handle("GET /v1/setup/alert-rules", a.authed(config.RoleAdmin, a.alertRules, nil))
 	}
 }
 

@@ -545,6 +545,20 @@ A token, basic auth and TLS settings need the address set with them. Themis send
 | Alertmanager restarted without storage and lost the alert | Waits for Prometheus to send it again. It takes the alert as resolved only once the end time Alertmanager last gave has passed. |
 | The address or the matchers change | Forgets the alerts it took before, without resolving them |
 
+**Do the alerts exist?** An alert Prometheus has no rule for never fires. Themis reads the alerting rules, `/api/v1/rules`, of the Prometheus at `metrics.prometheus.address`, with its token and TLS settings, or else of the one at `alerting.prometheus.address`, which the chart sets to the Prometheus it finds in the cluster at install, as it does for Alertmanager. The **Status** page's **Alert rules** part, and the **Setup** page, say which of the alerts the profiles answer have a rule, such as "5 of 7 alerts exist. Missing: KubePodOOMKilled, KubeDeploymentRolloutStuck." Without a Prometheus to ask, they list the alerts to check by hand.
+
+Themis ships a rule for every alert its scenario packs answer, in [`internal/incident/intake/rules/rules.yaml`](../internal/incident/intake/rules/rules.yaml): `KubePodOOMKilled`, which kube-prometheus-stack lacks, and the rest as kube-prometheus-stack writes them, without its `job` selectors, so they work however Prometheus scrapes kube-state-metrics and the kubelet. The Setup page shows those a Prometheus lacks, as a rule file and as a PrometheusRule, ready to copy. With the Prometheus Operator, the chart installs them:
+
+| Value | Default | Meaning |
+|---|---|---|
+| `alerting.rules.install` | `false` | Install the rules as a PrometheusRule, when the cluster serves that resource. Off by default: the alerts reach your Alertmanager's receivers too. |
+| `alerting.rules.standard` | `false` | Also the rules kube-prometheus-stack ships, for a Prometheus without them |
+| `alerting.rules.labels` | `{}` | The labels your Prometheus selects rules by, such as `release: kube-prometheus-stack`. Empty: those of the first `Prometheus` resource found at install. |
+
+| Key | Meaning |
+|---|---|
+| `alerting.prometheus.address` | A server answering Prometheus's API whose alerting rules Themis reads, without credentials, when `metrics.prometheus` has no address. The chart sets it. |
+
 Every core replica can read. One read applies at a time, and a read that finishes after a later one changes nothing. Nothing is read while no admin account exists. The **Status** page says when Alertmanager was last read, or why it couldn't be. The **Setup** page tests an address: whether Alertmanager answers, how many alerts are active, and which of the alerts Themis answers fire now.
 
 ### Or let Alertmanager send alerts to Themis

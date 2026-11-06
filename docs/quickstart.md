@@ -104,7 +104,7 @@ Nothing to do when Alertmanager runs in the cluster. The chart found it at insta
 
 When the chart found none, as under Argo CD or Flux, which don't let it look, or when Alertmanager runs elsewhere, set its address on the **Setup** page, or install with `--set alerting.alertmanager.address=http://alertmanager-operated.monitoring:9093`. For an Alertmanager several clusters share, add `--set 'alerting.alertmanager.matchers={cluster="prod-eu"}'` to read only this cluster's alerts.
 
-With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. More, and how to have Alertmanager send alerts to Themis instead, in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
+With the usual kube-prometheus rules, `KubePodCrashLooping` fires after 15 minutes. kube-prometheus-stack has no `KubePodOOMKilled`: the Setup page says which of the alerts Themis answers your Prometheus lacks, with their rules to copy, and with the Prometheus Operator, `--set alerting.rules.install=true` installs them. More, and how to have Alertmanager send alerts to Themis instead, in [Connecting your Alertmanager](configuration.md#connecting-your-alertmanager).
 
 ## 4. See an incident
 

@@ -71,3 +71,20 @@ func TestAlerting_Defaults(t *testing.T) {
 		t.Errorf("matchers = %v, %v", m, err)
 	}
 }
+
+// The rules are read from the metrics source when it has an address, with
+// its credentials, or else from the Prometheus the chart found.
+func TestRulesSource(t *testing.T) {
+	c := mustParse(t, validYAML)
+	if _, ok := c.RulesSource(); ok {
+		t.Error("a source without any Prometheus")
+	}
+	c.Alerting.Prometheus.Address = "http://monitoring-prometheus-server.monitoring.svc:80"
+	if p, ok := c.RulesSource(); !ok || p.Address != c.Alerting.Prometheus.Address {
+		t.Errorf("source = %+v, %v; want the Prometheus found", p, ok)
+	}
+	c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus.example", BearerTokenFile: "/t"}
+	if p, ok := c.RulesSource(); !ok || p != *c.Metrics.Prometheus {
+		t.Errorf("source = %+v, %v; want the metrics source", p, ok)
+	}
+}

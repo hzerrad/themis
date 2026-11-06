@@ -126,7 +126,7 @@ func (c *Connection) Test(ctx context.Context, address string, answered []string
 	if err != nil {
 		return TestResult{}, err
 	}
-	out := TestResult{Address: cl.shown, Version: st.VersionInfo.Version, Firing: []Firing{}}
+	out := TestResult{Address: cl.Address(), Version: st.VersionInfo.Version, Firing: []Firing{}}
 	counts := map[string]int{}
 	for _, a := range list {
 		if a.Status.State != stateActive {

@@ -112,6 +112,17 @@
           "additionalProperties": false,
           "type": "object",
           "description": "Alertmanager is the Alertmanager whose active alerts Themis reads."
+        },
+        "prometheus": {
+          "properties": {
+            "address": {
+              "type": "string",
+              "description": "Address is its base URL, under which /api/v1/rules is served. The\nchart sets it to the Prometheus it finds in the cluster at install."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Prometheus is where Themis checks that the alerts the profiles answer\nhave alerting rules, when metrics.prometheus has no address: the\nmetrics source is asked first."
         }
       },
       "additionalProperties": false,

@@ -16,6 +16,8 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
+	"github.com/hzerrad/themis/internal/incident/intake/rules"
+	"github.com/hzerrad/themis/internal/platform/fetch"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -90,6 +92,11 @@ type Checker struct {
 		LastRead(ctx context.Context) (store.AlertRead, error)
 	}
 	ReadEvery time.Duration
+	// Rules says which alerts have alerting rules in Prometheus. Nil means
+	// Themis knows no Prometheus to ask.
+	Rules interface {
+		Check(ctx context.Context, answered []string) (rules.Result, error)
+	}
 	// Metrics are the sources Themis reads containers' memory and CPU use
 	// from. Nil means none is set up.
 	Metrics interface {
@@ -122,6 +129,7 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 		c.investigator(ctx),
 		c.model(ctx),
 		c.alerts(ctx),
+		c.alertRules(ctx),
 		c.namespaces(ctx),
 		c.metrics(ctx),
 		c.executor(ctx),
@@ -276,11 +284,38 @@ func (c *Checker) alerts(ctx context.Context) Check {
 	return ch
 }
 
+// alertRules says whether the alerts the profiles answer have alerting rules
+// in Prometheus: an alert without one never fires.
+func (c *Checker) alertRules(ctx context.Context) Check {
+	ch := Check{Name: "Alert rules"}
+	answered := c.Config.Current().AlertNames()
+	if c.Rules == nil {
+		ch.State, ch.Summary = Waiting, "Not checked: no Prometheus address. Check by hand that Prometheus has rules for "+join(answered, "and")+"."
+		ch.Fix = "Set metrics.prometheus.address for Themis to check them."
+		return ch
+	}
+	rctx, cancel := context.WithTimeout(ctx, checkTimeout)
+	res, err := c.Rules.Check(rctx, answered)
+	cancel()
+	switch {
+	case err != nil:
+		ch.State, ch.Summary = Warn, "Not checked. "+upper(strings.TrimSuffix(err.Error(), "."))+"."
+		ch.Fix = "Check metrics.prometheus.address, and that Prometheus answers."
+	case len(res.Missing) == 0:
+		ch.State, ch.Summary = OK, fmt.Sprintf("All %d alerts exist in Prometheus at %s.", len(res.Exist), res.Address)
+	default:
+		ch.State = Warn
+		ch.Summary = fmt.Sprintf("%d of %d alerts exist. Missing: %s.", len(res.Exist), len(answered), strings.Join(res.Missing, ", "))
+		ch.Fix = "Add their rules from the Setup page, or with the Prometheus Operator, set alerting.rules.install=true."
+	}
+	return ch
+}
+
 // readFixes say what to do about each way reading Alertmanager fails.
 var readFixes = map[string]string{
-	store.ReadUnreachable: "Check the address on the Setup page.",
-	store.ReadRefused:     "Set Alertmanager's token or basic auth, with its address, in the alerting.alertmanager values.",
-	store.ReadUnexpected:  "Check that the address on the Setup page is Alertmanager's.",
+	fetch.Unreachable: "Check the address on the Setup page.",
+	fetch.Refused:     "Set Alertmanager's token or basic auth, with its address, in the alerting.alertmanager values.",
+	fetch.Unexpected:  "Check that the address on the Setup page is Alertmanager's.",
 }
 
 // reading says how reading Alertmanager at address goes.
@@ -298,7 +333,7 @@ func (c *Checker) reading(ctx context.Context, ch Check, address string) Check {
 	case r.FailedAt.After(r.ReadAt):
 		ch.State, ch.Summary, ch.Fix = Problem, upper(r.Failure)+".", readFixes[r.FailureKind]
 		if ch.Fix == "" {
-			ch.Fix = readFixes[store.ReadUnexpected]
+			ch.Fix = readFixes[fetch.Unexpected]
 		}
 	case r.ReadAt.IsZero() || r.Address != address:
 		ch.State, ch.Summary, ch.At, ch.Since = Waiting, says+" Not read yet.", nil, ""

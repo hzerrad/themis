@@ -12,6 +12,8 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/evidence/metrics"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
+	"github.com/hzerrad/themis/internal/incident/intake/rules"
+	"github.com/hzerrad/themis/internal/platform/fetch"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -76,7 +78,9 @@ func healthy() (*statuspage.Checker, *fakeStore) {
 		Config: config.Config{
 			EnrolledNamespaces: []string{"shop", "payments"},
 			Metrics:            config.Metrics{Prometheus: &config.Prometheus{Address: "http://prometheus:9090"}},
+			Profiles:           []config.Profile{{Match: config.Match{AlertNames: []string{"KubePodOOMKilled", "KubePodCrashLooping"}}}},
 		},
+		Rules: fixedRules{Exist: []string{"KubePodCrashLooping", "KubePodOOMKilled"}},
 		Store: s, Access: fakeAccess{},
 		Metrics:  fakeMetrics{{Source: metrics.Prometheus, History: true}, {Source: metrics.Kubernetes}},
 		Executor: "themis-executor:9091", Dial: func(context.Context, string) error { return nil },
@@ -92,8 +96,9 @@ func byName(t *testing.T, c *statuspage.Checker) map[string]statuspage.Check {
 		if ch.State != statuspage.OK && ch.Fix == "" && ch.State != statuspage.Waiting {
 			t.Errorf("%s is %s but says no fix", ch.Name, ch.State)
 		}
-		// A model's name opens its finding as it is written, in any case.
-		upper := ch.Name == "Model" && ch.State == statuspage.OK || ch.Summary[0] >= 'A' && ch.Summary[0] <= 'Z'
+		// A model's name opens its finding as it is written, in any case, and
+		// a count opens with its number.
+		upper := ch.Name == "Model" && ch.State == statuspage.OK || ch.Summary[0] >= 'A' && ch.Summary[0] <= 'Z' || ch.Summary[0] >= '1' && ch.Summary[0] <= '9'
 		if !strings.HasSuffix(ch.Summary, ".") || !upper {
 			t.Errorf("%s's summary %q isn't a sentence", ch.Name, ch.Summary)
 		}
@@ -104,7 +109,7 @@ func byName(t *testing.T, c *statuspage.Checker) map[string]statuspage.Check {
 func TestChecks_Healthy(t *testing.T) {
 	c, _ := healthy()
 	got := byName(t, c)
-	for _, name := range []string{"Database", "Investigator", "Model", "Alerts", "Namespaces", "Metrics", "Fixes", "Sign-in"} {
+	for _, name := range []string{"Database", "Investigator", "Model", "Alerts", "Alert rules", "Namespaces", "Metrics", "Fixes", "Sign-in"} {
 		if got[name].State != statuspage.OK {
 			t.Errorf("%s = %+v, want ok", name, got[name])
 		}
@@ -174,7 +179,7 @@ func TestChecks_Problems(t *testing.T) {
 		}, "Alerts", statuspage.Waiting, "Reading from http://am.monitoring:9093 every 15 s. Not read yet."},
 		"alertmanager unreachable": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Alertmanager = reading{address: amAddress, last: store.AlertRead{
-				FailedAt: now, FailureKind: store.ReadUnreachable, Failure: "alertmanager at http://am.monitoring:9093 doesn't answer: connection refused",
+				FailedAt: now, FailureKind: fetch.Unreachable, Failure: "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused",
 			}}
 		}, "Alerts", statuspage.Problem, "Alertmanager at http://am.monitoring:9093 doesn't answer: connection refused."},
 		"reading stopped": {func(c *statuspage.Checker, _ *fakeStore) {
@@ -185,6 +190,17 @@ func TestChecks_Problems(t *testing.T) {
 			delete(s.heartbeats, store.HeartbeatAlertmanager)
 		}, "Alerts", statuspage.Warn, "No Alertmanager address."},
 		"no address, but the webhook works": {func(c *statuspage.Checker, _ *fakeStore) { c.Alertmanager = reading{} }, "Alerts", statuspage.OK, "Received through the \"themis\" receiver."},
+		"alert rules missing": {func(c *statuspage.Checker, _ *fakeStore) {
+			c.Rules = fixedRules{Exist: []string{"KubePodCrashLooping"}, Missing: []string{"KubePodOOMKilled"}}
+		}, "Alert rules", statuspage.Warn, "1 of 2 alerts exist. Missing: KubePodOOMKilled."},
+		"no prometheus for the rules": {
+			func(c *statuspage.Checker, _ *fakeStore) { c.Rules = nil }, "Alert rules", statuspage.Waiting,
+			"Not checked: no Prometheus address. Check by hand that Prometheus has rules for KubePodCrashLooping and KubePodOOMKilled.",
+		},
+		"prometheus down for the rules": {
+			func(c *statuspage.Checker, _ *fakeStore) { c.Rules = failingRules{} }, "Alert rules", statuspage.Warn,
+			"Not checked. Prometheus at http://prometheus:9090 doesn't answer: connection refused.",
+		},
 		"a missing namespace": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Access = fakeAccess{"payments/list pods": true, "payments/get deployments": true}
 		}, "Namespaces", statuspage.Problem, "Not allowed in payments: list pods or read deployments."},
@@ -230,6 +246,19 @@ func TestChecks_Problems(t *testing.T) {
 const amAddress = "http://am.monitoring:9093"
 
 // reading is an Alertmanager Themis reads at address, last read as last.
+// fixedRules is a Prometheus with the rules of Exist.
+type fixedRules rules.Result
+
+func (f fixedRules) Check(context.Context, []string) (rules.Result, error) {
+	return rules.Result{Address: "http://prometheus:9090", Exist: f.Exist, Missing: f.Missing}, nil
+}
+
+type failingRules struct{}
+
+func (failingRules) Check(context.Context, []string) (rules.Result, error) {
+	return rules.Result{}, errors.New("Prometheus at http://prometheus:9090 doesn't answer: connection refused")
+}
+
 type reading struct {
 	address string
 	last    store.AlertRead

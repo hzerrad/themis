@@ -71,6 +71,8 @@ profile:
 
 `profile` is a [profile](configuration.md#profiles) as an operator writes one, without its name: which alerts it answers, which [evidence templates](configuration.md#evidence-templates) it reads, which checks it runs, which fixes it may suggest, the policy that decides them, and how long Themis watches after a fix. Its priority must differ from every other pack's.
 
+Every alert a pack answers needs a Prometheus alerting rule in [`internal/incident/intake/rules/rules.yaml`](../internal/incident/intake/rules/rules.yaml), which the Go tests check: in the `themis` group when the usual stacks lack it, in `themis-standard` when kube-prometheus-stack has it. The Setup page offers it to installs whose Prometheus lacks it, and the chart installs it. Run `make gen` after changing the file.
+
 ### When packs answer the same alert
 
 Two packs may answer the same alert: on an OOM kill, one may offer a rollback and another a higher memory limit. The incident then gets both packs combined: all their checks, all their fixes, and each pack's guidance, introduced by the pack's name and the fixes it offers. The investigator decides which fix the evidence supports. Priority only orders the packs: the highest is the one the incident is shown under, and its root causes come first. [Configuration](configuration.md#combined-profiles) has the details.

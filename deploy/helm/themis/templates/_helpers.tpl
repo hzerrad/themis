@@ -93,30 +93,75 @@ Whether the core reads Alertmanager. A missing key means on, as above.
 {{- end }}
 
 {{/*
-An Alertmanager in the cluster, found at install with Helm's lookup: the
-first Service, by namespace and name, that selects Alertmanager's pods by
-their standard label and isn't headless, as prometheus-community's
-prometheus and alertmanager charts and kube-prometheus-stack make one. Its
-port named http or http-web, as those charts name it, or else 9093. Empty
-when there is none, and under helm template, Argo CD or Flux, where lookup
-finds nothing. It uses the installer's access, never Themis's.
+A Service in the cluster, found at install with Helm's lookup: the first, by
+namespace and name, that selects pods by the standard label
+app.kubernetes.io/name set to .name and isn't headless, as
+prometheus-community's prometheus and alertmanager charts and
+kube-prometheus-stack make one for Alertmanager and Prometheus. Its port
+named http or http-web, as those charts name it, or else .port. Empty when
+there is none, and under helm template, Argo CD or Flux, where lookup finds
+nothing. It uses the installer's access, never Themis's.
 */}}
-{{- define "themis.alertmanagerFound" -}}
+{{- define "themis.findService" -}}
+{{- $want := .name -}}
+{{- $fallback := int .port -}}
 {{- $found := "" -}}
 {{- range (lookup "v1" "Service" "" "").items | default list -}}
 {{- $selector := .spec.selector | default dict -}}
-{{- if and (not $found) (eq (toString (get $selector "app.kubernetes.io/name")) "alertmanager") (ne (toString .spec.clusterIP) "None") -}}
+{{- if and (not $found) (eq (toString (get $selector "app.kubernetes.io/name")) $want) (ne (toString .spec.clusterIP) "None") -}}
 {{- $port := 0 -}}
 {{- range .spec.ports -}}
 {{- if and (not $port) (has (toString .name) (list "http" "http-web")) }}{{ $port = int .port }}{{ end -}}
 {{- end -}}
 {{- range .spec.ports -}}
-{{- if and (not $port) (eq (int .port) 9093) }}{{ $port = 9093 }}{{ end -}}
+{{- if and (not $port) (eq (int .port) $fallback) }}{{ $port = $fallback }}{{ end -}}
 {{- end -}}
 {{- if $port }}{{ $found = printf "http://%s.%s.svc:%d" .metadata.name .metadata.namespace $port }}{{ end -}}
 {{- end -}}
 {{- end -}}
 {{- $found -}}
+{{- end }}
+
+{{/*
+An Alertmanager in the cluster, found at install.
+*/}}
+{{- define "themis.alertmanagerFound" -}}
+{{- include "themis.findService" (dict "name" "alertmanager" "port" 9093) -}}
+{{- end }}
+
+{{/*
+The Prometheus whose alerting rules the core checks, found at install, when
+metrics.prometheus has no address.
+*/}}
+{{- define "themis.prometheusFound" -}}
+{{- if not ((.Values.metrics | default dict).prometheus | default dict).address -}}
+{{- include "themis.findService" (dict "name" "prometheus" "port" 9090) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+The alerting.rules values, as JSON. Values from before they existed, kept
+with --reuse-values, have none.
+*/}}
+{{- define "themis.rulesValues" -}}
+{{- (.Values.alerting | default dict).rules | default dict | toJson -}}
+{{- end }}
+
+{{/*
+The labels of the PrometheusRule of the alerting rules: those set, or else
+those the first Prometheus Operator Prometheus found selects rules by.
+*/}}
+{{- define "themis.ruleLabels" -}}
+{{- $rules := include "themis.rulesValues" . | fromJson -}}
+{{- $labels := $rules.labels | default dict -}}
+{{- if not $labels -}}
+{{- range (lookup "monitoring.coreos.com/v1" "Prometheus" "" "").items | default list -}}
+{{- if not $labels -}}
+{{- $labels = ((.spec | default dict).ruleSelector | default dict).matchLabels | default dict -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $labels -}}
 {{- end }}
 
 {{/*

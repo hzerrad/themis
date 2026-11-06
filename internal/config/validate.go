@@ -112,6 +112,9 @@ func (c Config) Validate() error {
 	}
 
 	c.Metrics.validate(add)
+	if a := c.Alerting.Prometheus.Address; a != "" && !IsHTTPURL(a) {
+		add("alerting.prometheus.address", "%q is not an http or https URL", a)
+	}
 	if !c.Alerting.Alertmanager.Disabled {
 		c.Alerting.Alertmanager.validate(add)
 	}
