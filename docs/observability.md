@@ -13,11 +13,11 @@ The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, 
 | Database | It answers | Nothing else can be checked |
 | Investigator | It asked for work in the last 2 minutes | It never has, or stopped |
 | Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident |
-| Alerts | Alertmanager sent alerts, and through which receiver | None yet, or alerts refused for the wrong intake token |
+| Alerts | Alertmanager sent alerts, and through which receiver | None yet, alerts refused for the wrong intake token, or refused while no admin account existed |
 | Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
 | Metrics | A metrics source answers: Prometheus, or the Kubernetes metrics API | No metrics source, or one failing; without Prometheus, no history of peak memory or CPU throttling |
 | Fixes | The executor is installed and reachable | Off, or unreachable |
-| Sign-in | People sign in with accounts or an identity provider | Port-forward still grants admin, or only the break-glass token signs in |
+| Sign-in | People sign in with accounts or an identity provider | The initial admin password is not retired, or only the break-glass token signs in |
 
 The investigator and Alertmanager are recorded as heard from at most every 30 seconds, in the database, so every core replica sees the same.
 
@@ -82,6 +82,7 @@ A counter counts what was committed: a change the database rolled back is never 
 | `themis_intake_alerts_received_total` | `source`, `result` | Alerts stored at intake, `accepted` or `invalid` |
 | `themis_intake_truncated_alerts_total` | `source` | Alerts a source dropped before sending them, for example past Alertmanager's `max_alerts` |
 | `themis_intake_alerts_processed_total` | `outcome`, `reason` | Alerts that `created` or `joined` an incident, were `resolved`, `stale` or `retried`, or were `rejected` for a `reason` |
+| `themis_intake_refused_total` | `source`, `reason` | Intake requests refused before their alerts were read: `no_admin_account` while no admin account exists |
 
 ### What waits now
 

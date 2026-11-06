@@ -10,8 +10,8 @@ const POLL_MS = 3000;
 const main = document.getElementById("main");
 let timer = null;
 // me is who's signed in, from /v1/me: a person, whoever holds the break-glass
-// token, or, until setup finishes, whoever opened Themis through kubectl
-// port-forward.
+// token, or, until setup finishes, whoever signed in with the initial admin
+// password.
 let me = null;
 // flash is what the last action did, said once on the page it came from.
 let flash = null;
@@ -241,7 +241,7 @@ function passwordForm(primary) {
       return;
     }
     // Signing in during setup finishes it: Setup shows what's left.
-    if (me && me.setup) location.hash = "#/setup";
+    if (me && me.initialAdmin) location.hash = "#/setup";
     me = null;
     route();
   };
@@ -250,6 +250,34 @@ function passwordForm(primary) {
     h("div", {}, h("button", { class: "btn" + (primary ? " primary" : ""), type: "submit" }, "Sign in")),
     error);
   return { form, focus: () => username.focus() };
+}
+
+// initialAdminForm signs in with the initial admin password, while no admin
+// account exists, to create the first. where says how to read it, when
+// Themis knows.
+function initialAdminForm(where) {
+  const password = h("input", { type: "password", autocomplete: "off", required: true });
+  const error = h("div", { class: "error", role: "alert" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const resp = await fetch("/auth/initial-admin", { method: "POST", headers: headers(), body: JSON.stringify({ password: password.value }) });
+    password.value = "";
+    if (!resp.ok) {
+      error.textContent = (await resp.text()).trim();
+      return;
+    }
+    me = null;
+    route();
+  };
+  const section = [
+    h("p", {}, "No admin account. Sign in with the initial admin password to create the first one."),
+    where.command ? [h("p", { class: "quiet small" }, "Read it with kubectl:"), copyable(where.command)] : null,
+    h("form", { class: "form", onsubmit: submit },
+      field("Initial admin password", password),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Sign in")),
+      error)];
+  return { section, focus: () => password.focus() };
 }
 
 async function login() {
@@ -261,27 +289,81 @@ async function login() {
     try { sessionStorage.setItem(TOKEN_KEY, input.value.trim()); } catch {}
     route();
   };
-  const breakGlass = h("details", { class: "minor" }, h("summary", {}, "Use the break-glass token"),
+  const first = methods.initialAdmin ? initialAdminForm(methods.initialAdmin) : null;
+  const breakGlass = h("details", { class: "minor", open: !methods.oidc && !methods.password && !first },
+    h("summary", {}, "Use the break-glass token"),
     h("form", { class: "form", onsubmit: submit },
       h("p", { class: "quiet small" }, "For scripts and failed sign-ins. Kept for this browser tab only."),
       field("Break-glass token", input),
       h("div", {}, h("button", { class: "btn", type: "submit" }, "Continue"))));
-  if (!methods.oidc && !methods.password) {
+  if (!methods.oidc && !methods.password && !first) {
     render(h("div", { class: "plate centre" },
       h("h1", {}, "Sign-in is not set up"),
-      h("p", {}, "Set it up through kubectl port-forward. Port-forward grants admin until an admin signs in with an account."),
-      h("pre", {}, "kubectl -n themis port-forward deploy/themis-core 8090:8083"),
-      h("p", { class: "quiet small" }, "Then open http://localhost:8090. For another install name or namespace, adjust the command."),
+      h("p", {}, "No admin account. Sign in with the break-glass token to create the first one."),
       breakGlass));
     return;
   }
-  const pw = methods.password ? passwordForm(!methods.oidc) : null;
+  const pw = methods.password ? passwordForm(!methods.oidc && !first) : null;
   render(h("div", { class: "plate centre" },
     h("h1", {}, "Sign in"),
-    methods.oidc ? h("p", {}, h("a", { class: "btn primary", href: "/auth/login" }, "Sign in with your identity provider")) : null,
-    pw ? [methods.oidc ? h("p", { class: "or" }, "Or with a Themis account") : null, pw.form] : null,
+    first ? first.section : null,
+    methods.oidc ? [first ? h("p", { class: "or" }, "Or through the identity provider") : null,
+      h("p", {}, h("a", { class: "btn" + (first ? "" : " primary"), href: "/auth/login" }, "Sign in with your identity provider"))] : null,
+    pw ? [methods.oidc || first ? h("p", { class: "or" }, "Or with a Themis account") : null, pw.form] : null,
     breakGlass));
-  if (pw && !methods.oidc) pw.focus();
+  if (first) first.focus();
+  else if (pw && !methods.oidc) pw.focus();
+}
+
+// CLOSED is what Themis says while no admin account exists.
+const CLOSED = "No admin account. Create the first admin account to start Themis.";
+
+// firstAdmin is all Themis serves while no admin account exists: creating
+// the first.
+function firstAdmin() {
+  if (!can("admin")) {
+    render(h("div", { class: "plate centre" }, h("h1", {}, "Themis has not started"), h("p", {}, CLOSED)));
+    return;
+  }
+  const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
+  const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
+  const error = h("div", { class: "error", role: "alert" });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    const name = username.value.trim();
+    try {
+      await api("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: "admin", password: password.value }) });
+      flash = "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.";
+      me = null;
+      route();
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+  render(h("div", { class: "plate centre" },
+    h("h1", {}, "Create the first admin account"),
+    h("p", {}, CLOSED),
+    h("form", { class: "form", onsubmit: submit },
+      field("Username", username),
+      field("Temporary password", password, "12 characters or more. A new one is chosen at the first sign-in."),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Create the admin account")),
+      error)));
+  username.focus();
+}
+
+// signInAsAdmin follows the first admin account's making by the initial
+// admin password, whose only use that was.
+function signInAsAdmin() {
+  const pw = passwordForm(true);
+  const said = flash;
+  flash = null;
+  render(h("div", { class: "plate centre" },
+    h("h1", {}, "Sign in with the admin account"),
+    said ? h("p", { class: "flash", role: "status" }, said) : null,
+    h("p", {}, "Then choose your own password. The initial admin password then stops working."),
+    pw.form));
+  pw.focus();
 }
 
 function noAccess() {
@@ -292,7 +374,10 @@ function noAccess() {
 }
 
 // password lets someone signed in with an account change its password.
+// A password an admin set is temporary: until its holder chooses their own,
+// it is the only page they may open.
 function changePassword() {
+  const temporary = me.temporaryPassword;
   const current = h("input", { type: "password", autocomplete: "current-password", required: true });
   const next = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const error = h("div", { class: "error", role: "alert" });
@@ -301,7 +386,11 @@ function changePassword() {
     error.textContent = "";
     try {
       await api("/v1/me/password", { method: "POST", body: JSON.stringify({ current: current.value, new: next.value }) });
-      // A new password ends every session, this one too.
+      // A new password ends every session, this one too. Replacing a
+      // temporary one signs in again with it, to continue.
+      if (temporary) {
+        await fetch("/auth/password", { method: "POST", headers: headers(), body: JSON.stringify({ username: me.username, password: next.value }) });
+      }
       me = null;
       route();
     } catch (err) {
@@ -309,20 +398,46 @@ function changePassword() {
     }
   };
   render(h("div", { class: "plate centre" },
-    h("h1", {}, "Change your password"),
-    h("p", { class: "quiet" }, "Changing it ends every session, this one included."),
+    h("h1", {}, temporary ? "Choose your password" : "Change your password"),
+    h("p", { class: "quiet" }, temporary
+      ? "Temporary password. Choose your own to continue."
+      : "Changing it ends every session, this one included."),
     h("form", { class: "form", onsubmit: submit },
-      field("Current password", current), field("New password", next, "12 characters or more."),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Change password")),
+      field(temporary ? "Temporary password" : "Current password", current), field("New password", next, "12 characters or more."),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, temporary ? "Choose this password" : "Change password")),
       error)));
 }
 
 // Accounts ----------------------------------------------------------------
 
-// accounts lets admins manage who signs in with a password. During setup,
-// it's where the first admin account is made.
+// recordLine says what an entry of the account record did, in the past tense
+// of the one who did it.
+function recordLine(e) {
+  const role = ROLE_LABEL[e.role] || e.role;
+  if (e.action === "account_created") return "Created " + e.username + " with the " + role + " role.";
+  if (e.action === "account_deleted") return "Deleted " + e.username + ".";
+  if (e.action === "role_changed") return "Gave " + e.username + " the " + role + " role.";
+  if (e.action === "temporary_password_set") return "Set a temporary password for " + e.username + ".";
+  if (e.action === "password_changed") return e.actor === e.username ? "Chose a new password." : "Changed the password of " + e.username + ".";
+  if (e.action === "initial_admin_signed_in") return "Signed in with the initial admin password.";
+  if (e.action === "initial_admin_retired") return "Signed in as an admin, which retired the initial admin password.";
+  return humanize(e.action) + (e.username ? ": " + e.username : "") + ".";
+}
+
+// recordActor names who made an entry: a person, or a credential that proves
+// itself, not who.
+function recordActor(actor) {
+  if (actor === "admin") return "The break-glass token";
+  if (actor === "initial-admin") return "The initial admin password";
+  if (actor === "helm-chart") return "The Helm chart";
+  return actor;
+}
+
+// accounts lets admins manage who signs in with a password, and shows the
+// record of changes to accounts.
 async function accounts() {
   const list = await api("/v1/accounts");
+  const { events } = await api("/v1/audit/accounts");
   const error = h("div", { class: "error", role: "alert" });
   const act = async (path, options, done) => {
     error.textContent = "";
@@ -336,31 +451,30 @@ async function accounts() {
   };
   const roleSelect = (value, name) => h("select", { "aria-label": name }, ROLES.map((r) => h("option", { value: r, selected: r === value }, ROLE_LABEL[r])));
   const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
-  const role = roleSelect(me.setup && !list.length ? "admin" : "approver", "Role");
+  const role = roleSelect("approver", "Role");
   const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const create = (e) => {
     e.preventDefault();
     const name = username.value.trim();
-    act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) }, "Account " + name + " created.");
+    act("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: role.value, password: password.value }) },
+      "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.");
   };
-  const hasAdmin = list.some((a) => a.role === "admin");
-  const first = me.setup && !hasAdmin;
-  // During setup, once an admin account exists, signing in with it finishes setup.
-  const finish = me.setup && hasAdmin ? passwordForm(true) : null;
-  const path = (a) => "/v1/accounts/" + encodeURIComponent(a.username);
+  const path =(a) => "/v1/accounts/" + encodeURIComponent(a.username);
   const rows = list.map((a) => {
     const self = me.account && me.username === a.username;
     const r = roleSelect(a.role, "Role of " + a.username);
     r.disabled = self;
     r.addEventListener("change", () => act(path(a), { method: "PATCH", body: JSON.stringify({ role: r.value }) }, a.username + " is now " + ROLE_LABEL[r.value] + "."));
-    const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "New password for " + a.username, placeholder: "New password" });
+    const pw = h("input", { type: "password", autocomplete: "new-password", "aria-label": "Temporary password for " + a.username, placeholder: "Temporary password" });
     const reset = h("button", { class: "btn small", type: "button", onclick: () => {
-      if (pw.value) act(path(a), { method: "PATCH", body: JSON.stringify({ password: pw.value }) }, "Password of " + a.username + " set.");
-    } }, "Set password");
+      if (pw.value) act(path(a), { method: "PATCH", body: JSON.stringify({ password: pw.value }) }, "Temporary password set. " + a.username + " must choose a new one at next sign-in.");
+    } }, "Set a temporary password");
     const remove = h("button", { class: "btn small deny", type: "button", disabled: self,
       onclick: () => act(path(a), { method: "DELETE" }, "Account " + a.username + " deleted.") }, "Delete");
     return h("tr", {},
-      h("td", {}, h("b", {}, a.username), a.locked ? h("div", { class: "quiet small" }, "Locked: too many wrong passwords") : null),
+      h("td", {}, h("b", {}, a.username),
+        a.locked ? h("div", { class: "quiet small" }, "Locked. Too many wrong passwords.") : null,
+        a.temporaryPassword ? h("div", { class: "quiet small" }, "Temporary password. A new one is due at the next sign-in.") : null),
       h("td", {}, r),
       h("td", { class: "quiet small" }, "By " + a.createdBy + ", " + when(a.createdAt)),
       h("td", {}, h("div", { class: "inline" }, pw, reset, remove)));
@@ -368,14 +482,7 @@ async function accounts() {
   const said = flash;
   flash = null;
   render(
-    finish ? h("div", { class: "plate" },
-      h("h1", {}, "Sign in with the admin account"),
-      h("p", { class: "quiet" }, "Signing in completes setup. Port-forward then grants no admin access."),
-      finish.form) : null,
-    h("h1", { class: finish ? "sub" : "" }, first ? "Create the admin account" : "Accounts"),
-    h("p", { class: "lede" }, first
-      ? "Sign in with it here to complete setup. Port-forward then grants no admin access."
-      : "Accounts sign in with a username and password. People signing in through the identity provider take their roles from Themis's settings."),
+    h("h1", {}, "Accounts"),
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     list.length ? h("div", { class: "plate" }, h("table", { class: "list" },
       h("thead", {}, h("tr", {}, h("th", {}, "Username"), h("th", {}, "Role"), h("th", {}, "Created"), h("th", {}, h("span", { class: "quiet" }, "Password and removal")))),
@@ -383,9 +490,18 @@ async function accounts() {
     h("div", { class: "plate" },
       h("h2", {}, "New account"),
       h("form", { class: "inline", onsubmit: create },
-        field("Username", username), field("Role", role), field("Password, 12 characters or more", password),
+        field("Username", username), field("Role", role), field("Temporary password, 12 characters or more", password),
         h("button", { class: "btn primary", type: "submit" }, "Create account"))),
-    error);
+    error,
+    events.length ? h("details", { class: "fold sub", "data-key": "account-record" },
+      h("summary", {}, "Record", h("span", { class: "n" }, events.length)),
+      h("p", { class: "quiet small" }, "Newest first."),
+      h("table", { class: "list" },
+        h("thead", {}, h("tr", {}, h("th", {}, "When"), h("th", {}, "By"), h("th", {}, "Change"))),
+        h("tbody", {}, events.map((e) => h("tr", {},
+          h("td", { class: "quiet small" }, when(e.at)),
+          h("td", {}, recordActor(e.actor)),
+          h("td", {}, recordLine(e))))))) : null);
 }
 
 // Status and setup --------------------------------------------------------
@@ -505,9 +621,9 @@ async function setup() {
   const acting = checks.filter(needsAction).length;
   const steps = [
     { title: "Sign-in", status: done("Sign-in") ? "Done" : "Not done", body: done("Sign-in") ? [h("p", {}, signIn.summary)] : [
-      h("p", {}, me.setup ? "Incomplete. Port-forward grants admin until an admin account or identity provider is set up." : partFinding(signIn)),
+      h("p", {}, partFinding(signIn)),
       h("ul", { class: "remedies" },
-        h("li", {}, h("a", { href: "#/accounts" }, me.setup ? "Create the admin account" : "Create accounts")),
+        h("li", {}, h("a", { href: "#/accounts" }, "Create accounts")),
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
@@ -912,12 +1028,16 @@ function sourceRows(p) {
   if (p.LeaseID) {
     row("From", "The investigator");
     row("Identity", "Verified. It ran this incident's investigation.");
-  } else if (src === "person:setup") {
+  } else if (src === "person:initial-admin") {
     row("From", "A person");
-    row("Identity", "A person with kubectl access, through port-forward before sign-in was set up. Kubernetes verified the access, not the person.");
+    row("Identity", "The initial admin password");
+  } else if (src === "person:setup") {
+    // Records from versions of Themis that let port-forward in as admin.
+    row("From", "A person");
+    row("Identity", "kubectl port-forward, before sign-in existed");
   } else if (src === "admin-token") {
     row("From", "A person");
-    row("Identity", "The break-glass token. It proves the token, not the person.");
+    row("Identity", "The break-glass token");
   } else if (src.startsWith("person:")) {
     row("From", "A person");
     row("Identity", "Signed in as " + src.slice("person:".length) + ".");
@@ -1274,14 +1394,27 @@ async function route() {
   }
   const who = document.getElementById("whoami");
   who.textContent = !me ? ""
-    : me.setup ? "Admin through kubectl port-forward"
+    : me.initialAdmin ? "Signed in with the initial admin password"
     : me.token ? "Signed in with the break-glass token"
     : me.username + (me.role ? " · " + ROLE_LABEL[me.role] : "");
-  document.getElementById("setup").hidden = !(me && me.setup);
-  // Coming in through port-forward isn't a sign-in, so there's nothing to sign out of.
-  document.getElementById("logout").hidden = !me || me.setup;
-  document.querySelector(".bar nav").hidden = !me || !me.role;
+  document.getElementById("logout").hidden = !me;
+  document.querySelector(".bar nav").hidden = !me || !me.role || me.temporaryPassword || me.closed || me.initialAdmin;
   if (!me) return login();
+  // A temporary password opens nothing but the page that replaces it.
+  if (me.temporaryPassword) {
+    document.title = "Password · Themis";
+    return changePassword();
+  }
+  // Without an admin account, Themis serves nothing but the making of the
+  // first; that is also all the initial admin password ever does.
+  if (me.closed) {
+    document.title = "Themis";
+    return firstAdmin();
+  }
+  if (me.initialAdmin) {
+    document.title = "Sign in · Themis";
+    return signInAsAdmin();
+  }
   if (!me.role) return noAccess();
   document.getElementById("nav-accounts").hidden = !can("admin");
   document.getElementById("nav-setup").hidden = !can("admin");
@@ -1292,7 +1425,7 @@ async function route() {
   if (m) [run, nav] = [() => detail(m[1]), "nav-incidents"];
   else if (hash === "#/accounts" && can("admin")) [run, nav] = [accounts, "nav-accounts"];
   else if (hash === "#/status") [run, nav] = [status, "nav-status"];
-  else if ((hash === "#/setup" || (hash === "" && me.setup)) && can("admin")) [run, nav] = [setup, "nav-setup"];
+  else if (hash === "#/setup" && can("admin")) [run, nav] = [setup, "nav-setup"];
   else if (hash === "#/password" && me.account) [run, nav] = [async () => changePassword(), "nav-password"];
   else [run, nav] = [async () => { await list(); timer = setTimeout(route, POLL_MS); }, "nav-incidents"];
   markNav(nav);

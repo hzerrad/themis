@@ -105,6 +105,8 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
+// writeConfig is an install that configures its admin account, which Themis
+// makes at startup: without an admin account, Themis serves nothing.
 func writeConfig(t *testing.T, ns string) string {
 	t.Helper()
 	tokenFile := writeFile(t, "token", smokeToken+"\n")
@@ -118,6 +120,9 @@ investigators:
   bearerTokenFile: %s
 api:
   bearerTokenFile: %s
+  adminAccount:
+    username: root
+    passwordFile: %s
 profiles:
   - name: rollout-regression
     priority: 100
@@ -127,7 +132,7 @@ profiles:
     evidence:
       initial: [rollout_history, pod_states]
       allowed: [rollout_history, pod_states]
-`, ns, tokenFile, investigatorToken, adminToken))
+`, ns, tokenFile, investigatorToken, adminToken, writeFile(t, "admin-password", adminPassword+"\n")))
 }
 
 // eventually polls cond until it holds or the timeout passes. It stops early if
@@ -191,6 +196,40 @@ func waitReady(o core.Options, exited <-chan error) (bool, error) {
 	return false, errors.New("timed out")
 }
 
+// adminPassword is the configured admin account's password.
+const adminPassword = "a long admin password"
+
+// asAdmin signs in to the core at addr as the configured admin account, then
+// GETs path with that session.
+func asAdmin(t *testing.T, addr, path string) (int, string) {
+	t.Helper()
+	signIn, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+addr+"/auth/password", strings.NewReader(`{"username":"root","password":"`+adminPassword+`"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signIn.Header.Set("X-Themis-Request", "1")
+	resp, err := http.DefaultClient.Do(signIn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent || len(resp.Cookies()) == 0 {
+		t.Fatalf("signing in as the configured admin account = %d", resp.StatusCode)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+addr+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(resp.Cookies()[0])
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
 func get(url string) (int, string) {
 	resp, err := http.Get(url) //nolint:gosec,noctx // a test request to a local server
 	if err != nil {
@@ -207,8 +246,9 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	ns := k8s.NewNamespace(t)
 	_, pod := k8s.NewRollout(t, ns, "checkout")
 	dbURL := pgtest.NewDatabase(t)
-	// The executor is configured but not running. People sign in through an
-	// identity provider, and the model is set in setup, where none is yet.
+	// The executor is configured but not running. Themis makes the admin
+	// account the install configures at startup; people also sign in through
+	// an identity provider, and the model is set in setup, where none is yet.
 	executorAddr := freeAddr(t)
 	configPath := writeFile(t, "with-executor.yaml", strings.Replace(readFile(t, writeConfig(t, ns)), "\napi:\n", fmt.Sprintf(`
 api:
@@ -225,7 +265,6 @@ api:
 			DatabaseURL: dbURL,
 			Kubernetes:  k8s.Config,
 			HTTPAddr:    freeAddr(t),
-			SetupAddr:   freeAddr(t),
 			ProbeAddr:   freeAddr(t),
 			MetricsAddr: freeAddr(t),
 			GRPCAddr:    freeAddr(t),
@@ -236,21 +275,17 @@ api:
 	if code, _ := get("http://" + o.ProbeAddr + "/healthz"); code != http.StatusOK {
 		t.Errorf("/healthz = %d, want 200", code)
 	}
-	// Before anyone has signed in, kubectl port-forward to the setup port is
-	// the way in; the API port asks who you are.
-	if code, body := get("http://" + o.SetupAddr + "/v1/me"); code != http.StatusOK || !strings.Contains(body, `"setup":true`) {
-		t.Errorf("/v1/me through the setup port = %d %q, want the setup admin", code, body)
-	}
+	// Reaching Themis, from localhost as kubectl port-forward does, proves
+	// nothing. The sign-in page offers the identity provider and accounts,
+	// and the configured admin account signs in and can set the model.
 	if code, _ := get("http://" + o.HTTPAddr + "/v1/me"); code != http.StatusUnauthorized {
-		t.Errorf("/v1/me through the API port = %d, want 401", code)
+		t.Errorf("/v1/me, signed out = %d, want 401", code)
 	}
-	// The sign-in page offers the identity provider, and the admin can set
-	// the model.
-	if code, body := get("http://" + o.HTTPAddr + "/v1/sign-in"); code != http.StatusOK || !strings.Contains(body, `"oidc":true`) {
-		t.Errorf("/v1/sign-in = %d %s, want the identity provider offered", code, body)
+	if code, body := get("http://" + o.HTTPAddr + "/v1/sign-in"); code != http.StatusOK || body != `{"oidc":true,"password":true,"token":true}` {
+		t.Errorf("/v1/sign-in = %d %s, want the identity provider and accounts offered", code, body)
 	}
-	if code, _ := get("http://" + o.SetupAddr + "/v1/settings/model"); code != http.StatusOK {
-		t.Errorf("/v1/settings/model = %d, want 200", code)
+	if code, body := asAdmin(t, o.HTTPAddr, "/v1/settings/model"); code != http.StatusOK {
+		t.Errorf("/v1/settings/model as the configured admin = %d %s, want 200", code, body)
 	}
 
 	payload := fmt.Sprintf(`{"version":"4","status":"firing","receiver":"themis","alerts":[{
@@ -273,7 +308,7 @@ api:
 	}
 	// The status page now says alerts arrive, through which receiver, that
 	// no model is set, and that the configured executor can't be reached.
-	if code, body := get("http://" + o.SetupAddr + "/v1/status"); code != http.StatusOK ||
+	if code, body := asAdmin(t, o.HTTPAddr, "/v1/status"); code != http.StatusOK ||
 		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through the \"themis\" receiver`) ||
 		!strings.Contains(body, `"name":"Model","state":"problem","summary":"Not set.`) ||
 		!strings.Contains(body, "Executor unreachable at "+executorAddr) {
@@ -507,8 +542,13 @@ func TestRun_RefusesToStart(t *testing.T) {
 		"profile naming an unknown template": {func(t *testing.T, o *core.Options) {
 			o.ConfigPath = writeFile(t, "typo.yaml", strings.ReplaceAll(readFile(t, o.ConfigPath), "pod_states", "pod_state"))
 		}, `unknown evidence template "pod_state"`},
-		"setup address others can reach": {func(_ *testing.T, o *core.Options) { o.SetupAddr = "0.0.0.0:8083" }, "must be a loopback address"},
-		"setup address without a port":   {func(_ *testing.T, o *core.Options) { o.SetupAddr = "localhost" }, `setup address "localhost"`},
+		// The admin account the install configures must be made, or Themis
+		// would start closed.
+		"an admin password hash Themis can't check with": {func(t *testing.T, o *core.Options) {
+			o.DatabaseURL = pgtest.NewDatabase(t)
+			o.ConfigPath = writeFile(t, "admin.yaml", strings.Replace(readFile(t, o.ConfigPath), "  adminAccount:\n",
+				"  adminAccount:\n    passwordHashFile: "+writeFile(t, "hash", "$1$md5$not-ours\n")+"\n", 1))
+		}, "api.adminAccount.passwordHashFile:"},
 		"unreadable executor token": {func(t *testing.T, o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
 			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n")

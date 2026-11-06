@@ -51,16 +51,33 @@ This installs `themis-executor` with a Role in each enrolled namespace: `get` an
 
 ## Use with Argo CD or Flux
 
-The chart generates Themis's tokens and the key that encrypts secret settings once, and keeps them across upgrades with Helm's `lookup`. GitOps tools don't run `lookup`, so every sync would make new ones, and a new settings key makes saved secrets, such as a model key set on the Setup page, unreadable. Create the Secret yourself instead, outside the synced manifests or with your secrets tool, and name it:
+The chart generates Themis's tokens, the key that encrypts secret settings and the initial admin password once, and keeps them across upgrades with Helm's `lookup`. GitOps tools don't run `lookup`, so every sync would make new ones, and a new settings key makes saved secrets, such as a model key set on the Setup page, unreadable. Create the Secrets yourself instead, outside the synced manifests or with your secrets tool, and name them.
+
+Under GitOps, configure the admin account too, so Themis starts with it and needs no initial admin password. Put the password's hash in a Secret. Values are kept in Git and in Helm's release history, so the chart refuses a password there. Use a bcrypt hash, as `htpasswd` makes it, or argon2id in the PHC string format:
 
 ```bash
 kubectl -n themis create secret generic themis-tokens-gitops \
   $(for k in intake investigator admin settings executor; do printf -- "--from-literal=%s=%s " $k "$(openssl rand -hex 32)"; done)
+read -rs PASSWORD   # at least 12 characters
+kubectl -n themis create secret generic themis-admin \
+  --from-literal=password-hash="$(htpasswd -nbBC 12 "" "$PASSWORD" | tr -d ':\n')"
 ```
 
 ```yaml
 tokens:
   existingSecret: themis-tokens-gitops
+initialAdmin:
+  account:
+    username: root
+    existingSecret: themis-admin
+```
+
+At startup, while no admin account exists, Themis creates `root` with that password, recorded as made by the Helm chart. It never changes the account after. Change its password in Themis, as for any account. A Secret tool that can't hash, such as External Secrets or Sealed Secrets holding the password itself, sets a `password` key instead. Themis hashes it and never logs it. `initialAdmin.account.passwordHashKey` and `.passwordKey` name other keys. The Secret is read only while the account must be created, and Themis refuses to start if it is missing or unusable then.
+
+To keep the initial admin password instead, create its Secret and set `initialAdmin.existingSecret`:
+
+```bash
+kubectl -n themis create secret generic themis-initial-admin-gitops --from-literal=password="$(openssl rand -hex 24)"
 ```
 
 ## Connect Alertmanager
@@ -70,10 +87,16 @@ The **Status** page shows the exact steps for your install while no alerts arriv
 ## Open the UI
 
 ```bash
-kubectl -n themis port-forward deploy/themis-core 8090:8083
+kubectl -n themis port-forward deploy/themis-core 8090:8080
 ```
 
-Then open <http://localhost:8090>. Until an admin signs in for real, whoever comes in through port-forward is an admin: the Setup page leads you to create your admin account. After that, the same command opens the sign-in page.
+Then open <http://localhost:8090>. Themis starts once an admin account exists, and serves nothing else until then. Alerts are refused, and Alertmanager sends them again later. Sign in with the initial admin password to create the first admin account. The chart generates it once, in the `themis-initial-admin` Secret, and keeps it across upgrades:
+
+```bash
+kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
+```
+
+Then sign in with the admin account and choose your own password. The initial admin password then stops working. Opening Themis grants nothing by itself. To have Themis create the admin account at startup instead, see [Use with Argo CD or Flux](#use-with-argo-cd-or-flux).
 
 ## Sign people in
 
@@ -120,7 +143,10 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `image.repository` | `ghcr.io/hzerrad` | Registry and path of the images |
 | `image.tag` | `main` | Image tag: `main`, or `sha-<commit>` to pin a build |
 | `image.pullPolicy` | `Always` | `main` moves, so it's pulled every time; use `IfNotPresent` with a pinned tag |
-| `setup.enabled` | `true` | Open Themis through `kubectl port-forward` to port 8083 as an admin until an admin signs in |
+| `initialAdmin.existingSecret` | `""` | A Secret with a `password` key, the initial admin password, for GitOps (see above). Empty, the chart generates `<release>-initial-admin` |
+| `initialAdmin.account.username` | `""` | An admin account Themis creates at startup while it has none. Set, no initial admin password exists |
+| `initialAdmin.account.existingSecret` | `""` | Required with the username. A Secret with the password's hash or the password itself (see above) |
+| `initialAdmin.account.passwordHashKey`, `.passwordKey` | `password-hash`, `password` | The keys of that Secret. A hash, bcrypt or argon2id, wins when both exist |
 | `tokens.existingSecret` | `""` | A Secret with Themis's tokens and settings key, for GitOps; see above. Empty, the chart generates one |
 | `logLevel` | `info` | Least severe level every component logs: `debug`, `info`, `warn` or `error` |
 | `telemetry.otlp.endpoint` | `""` | Where every component sends its traces over OTLP; empty, nothing is traced |
@@ -149,7 +175,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |
 | `notifications.externalURL` | `""` | Where people reach the UI, for links in notices |
-| `oidc.issuerURL` | `""` | The OIDC provider's issuer. Empty: only the admin token signs in. |
+| `oidc.issuerURL` | `""` | The OIDC provider's issuer. Empty: no one signs in through OIDC |
 | `oidc.clientID` | `""` | Required with `oidc.issuerURL` |
 | `oidc.redirectURL` | `""` | Required with `oidc.issuerURL`: Themis's `/auth/callback` as the browser reaches it |
 | `oidc.clientSecret.existingSecret` | `""` | Required with `oidc.issuerURL`: a Secret holding the client secret |

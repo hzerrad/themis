@@ -28,6 +28,18 @@ var (
 		Name: "themis_intake_alerts_processed_total",
 		Help: "Alerts processed, by outcome (created, joined, resolved, stale, rejected, retried) and, for rejections, reason.",
 	}, []string{"outcome", "reason"})
+
+	refused = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "themis_intake_refused_total",
+		Help: "Intake requests refused before their alerts were read, by source and reason (no_admin_account).",
+	}, []string{"source", "reason"})
+)
+
+// Why an intake request is refused before its alerts are read.
+const (
+	// RefusedNoAdminAccount: no admin account exists, so Themis takes no
+	// alerts.
+	RefusedNoAdminAccount = "no_admin_account"
 )
 
 // Outcomes of processing an alert.
@@ -41,7 +53,13 @@ const (
 )
 
 func init() {
-	metrics.Registry.MustRegister(requests, alertsReceived, truncatedAlerts, alertsProcessed)
+	metrics.Registry.MustRegister(requests, alertsReceived, truncatedAlerts, alertsProcessed, refused)
+}
+
+// ObserveRefused counts an intake request refused for reason before its
+// alerts were read.
+func ObserveRefused(source, reason string) {
+	refused.WithLabelValues(source, reason).Inc()
 }
 
 // ObserveRequest counts an intake HTTP request answered with code.

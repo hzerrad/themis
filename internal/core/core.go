@@ -58,12 +58,8 @@ type Options struct {
 	Kubernetes  *rest.Config
 
 	// MetricsAddr "0" disables metrics. GRPCAddr serves investigators.
-	HTTPAddr string
-	GRPCAddr string
-	// SetupAddr serves Themis to kubectl port-forward, letting whoever comes
-	// that way in as admin until an admin signs in for real. It must be a
-	// loopback address; empty disables it.
-	SetupAddr   string
+	HTTPAddr    string
+	GRPCAddr    string
 	ProbeAddr   string
 	MetricsAddr string
 
@@ -95,9 +91,6 @@ func Run(ctx context.Context, o Options) error {
 		log = slog.Default()
 	}
 	ctrl.SetLogger(logr.FromSlogHandler(log.Handler()))
-	if err := checkSetupAddr(o.SetupAddr); err != nil {
-		return err
-	}
 
 	shutdownTracing, err := telemetry.SetupTracing(ctx, "core")
 	if err != nil {
@@ -154,6 +147,17 @@ func Run(ctx context.Context, o Options) error {
 	if err != nil {
 		return err
 	}
+	// The admin account the install configures, made before anything is
+	// served, so Themis opens at once.
+	if a := cfg.API.AdminAccount; a != nil {
+		if err := identity.EnsureAdminAccount(ctx, s, *a, time.Now(), log); err != nil {
+			return err
+		}
+	}
+	// Without an admin account, Themis serves nothing but the making of the
+	// first, and takes no alerts.
+	gate := &identity.Gate{Store: s}
+
 	states := store.NewStateCollector(ctx, s)
 	if err := metrics.Registry.Register(states); err != nil {
 		return fmt.Errorf("register state metrics: %w", err)
@@ -241,15 +245,21 @@ func Run(ctx context.Context, o Options) error {
 	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Investigations: leases, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
-		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions,
+		Heartbeat: beat(store.HeartbeatInvestigator), Suggestions: suggestions, Gate: gate,
 	}
 	rpc := grpc.NewServer(telemetry.GRPCServerTracing("LeaseInvestigation"), grpc.ChainUnaryInterceptor(investigators.Interceptor(cfg.Investigators.BearerTokenFile)))
 	investigators.Register(rpc)
 
 	mux := http.NewServeMux()
-	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: s}
-	api.Sessions, api.Accounts = s, s
-	checker := &statuspage.Checker{Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, NoInvestigator: cfg.Investigators.Disabled, Metrics: usage}
+	// Setup is tracked whether or not the initial admin password is set, so
+	// one set later never signs in once an admin has.
+	setup := &identity.Setup{Store: s, Logger: log}
+	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: setup}
+	api.Sessions, api.Accounts, api.Gate = s, s, gate
+	checker := &statuspage.Checker{
+		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
+		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,
+	}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
 	}
@@ -269,6 +279,10 @@ func Run(ctx context.Context, o Options) error {
 		api.OIDC = true
 		(&identity.SignIn{Config: o.WithDefaults(), Store: s, Logger: log}).Register(mux)
 	}
+	if ia := cfg.API.InitialAdmin; ia != nil {
+		api.InitialAdmin = ia
+		(&identity.InitialAdmin{PasswordFile: ia.PasswordFile, Setup: setup, Gate: gate, Store: s, Logger: log}).Register(mux)
+	}
 	(&identity.Passwords{Store: s, Logger: log}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
 	api.Register(mux)
@@ -276,6 +290,7 @@ func Run(ctx context.Context, o Options) error {
 	mux.Handle(alertmanager.Route, &alertmanager.Handler{
 		Receiver:  intake.NewReceiver(s),
 		TokenFile: cfg.Intake.BearerTokenFile,
+		Gate:      gate,
 		Logger:    log,
 		Heartbeat: beat(store.HeartbeatAlertmanager),
 		Refused:   beat(store.HeartbeatAlertmanagerRefused),
@@ -293,34 +308,12 @@ func Run(ctx context.Context, o Options) error {
 	if err := mgr.Add(&server{addr: o.HTTPAddr, handler: otelhttp.NewHandler(mux, "http"), log: log}); err != nil {
 		return err
 	}
-	if o.SetupAddr != "" {
-		door := &identity.Door{Store: s, Next: mux, Logger: log}
-		if err := mgr.Add(&server{addr: o.SetupAddr, handler: otelhttp.NewHandler(door, "setup"), log: log}); err != nil {
-			return err
-		}
-	}
 	if err := mgr.Add(&grpcRunnable{addr: o.GRPCAddr, server: rpc}); err != nil {
 		return err
 	}
 
-	log.InfoContext(ctx, "starting themis-core", "http", o.HTTPAddr, "setup", o.SetupAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
+	log.InfoContext(ctx, "starting themis-core", "http", o.HTTPAddr, "grpc", o.GRPCAddr, "probes", o.ProbeAddr, "metrics", o.MetricsAddr)
 	return mgr.Start(ctx)
-}
-
-// checkSetupAddr refuses a setup address others could reach: whoever comes
-// in that way is an admin until setup finishes.
-func checkSetupAddr(addr string) error {
-	if addr == "" {
-		return nil
-	}
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("setup address %q: %w", addr, err)
-	}
-	if ip := net.ParseIP(host); host != "localhost" && (ip == nil || !ip.IsLoopback()) {
-		return fmt.Errorf("setup address %q must be a loopback address such as 127.0.0.1:8083, since whoever reaches it is an admin until setup finishes", addr)
-	}
-	return nil
 }
 
 // connect waits up to wait for the database to answer, retrying with backoff,

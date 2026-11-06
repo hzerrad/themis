@@ -40,15 +40,16 @@ func signedIn(t *testing.T) *env {
 		}
 	}
 	mux := http.NewServeMux()
+	log := telemetry.NewLogger(&e.logs, "core", slog.LevelDebug)
 	(&httpapi.API{
-		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Setup: s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
+		Store: s, TokenFile: file, Sessions: s, OIDC: true, Accounts: s, Fixes: catalog.Fixes(), Now: func() time.Time { return e.clock },
 		Access: []config.AccessBinding{
 			{Role: config.RoleViewer, Groups: []string{"viewers"}},
 			{Role: config.RoleResponder, Users: []string{"responder@example.com"}},
 			{Role: config.RoleApprover, Groups: []string{"approvers"}},
 			{Role: config.RoleAdmin, Users: []string{"admin@example.com"}},
 		},
-		Logger: telemetry.NewLogger(&e.logs, "core", slog.LevelDebug),
+		Logger: log,
 	}).Register(mux)
 	e.handler = mux
 	return e
@@ -196,34 +197,6 @@ func TestPeople_Me(t *testing.T) {
 	rec = e.do(t, http.MethodGet, "/v1/me", token, nil)
 	if err := json.Unmarshal(rec.Body.Bytes(), &me); err != nil || me.Role != config.RoleAdmin || !me.Token {
 		t.Errorf("me with the token = %+v, %v", me, err)
-	}
-}
-
-// Setup finishes when an admin signs in for real: not with the token, and
-// not as anyone less trusted.
-func TestPeople_AnAdminSigningInFinishesSetup(t *testing.T) {
-	e := signedIn(t)
-	finished := func() bool {
-		t.Helper()
-		done, err := e.store.SetupFinished(t.Context())
-		if err != nil {
-			t.Fatal(err)
-		}
-		return done
-	}
-	e.as(t, "approver", http.MethodGet, "/v1/me", nil)
-	e.do(t, http.MethodGet, "/v1/me", token, nil)
-	if finished() {
-		t.Fatal("setup finished without an admin signing in")
-	}
-	if rec := e.as(t, "admin", http.MethodGet, "/v1/me", nil); rec.Code != http.StatusOK {
-		t.Fatalf("me for admin = %d %q", rec.Code, rec.Body)
-	}
-	if !finished() {
-		t.Error("setup still open after an admin signed in")
-	}
-	if !strings.Contains(e.logs.String(), "setup finished") {
-		t.Errorf("no log says setup finished: %s", e.logs.String())
 	}
 }
 

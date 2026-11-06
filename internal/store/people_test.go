@@ -67,6 +67,42 @@ func TestAccount_LocksAfterWrongPasswords(t *testing.T) {
 	}
 }
 
+var byAdmin = store.AccountChange{By: "root", At: t0}
+
+// The last admin account can never be deleted or lose its role; once another
+// admin account exists, it can.
+func TestAccount_KeepsAnAdmin(t *testing.T) {
+	s, _ := newStore(t)
+	admin := func() bool {
+		t.Helper()
+		has, err := s.HasAdminAccount(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return has
+	}
+	newAccount(t, s, "alice")
+	if admin() {
+		t.Fatal("an approver counts as an admin account")
+	}
+	if err := s.SetRole(t.Context(), "alice", "admin", byAdmin); err != nil || !admin() {
+		t.Fatalf("making alice admin: %v, admin account %v", err, admin())
+	}
+	if err := s.SetRole(t.Context(), "alice", "viewer", byAdmin); !errors.Is(err, store.ErrLastAdmin) {
+		t.Errorf("demoting the last admin: %v, want ErrLastAdmin", err)
+	}
+	if err := s.DeleteAccount(t.Context(), "alice", byAdmin); !errors.Is(err, store.ErrLastAdmin) {
+		t.Errorf("deleting the last admin: %v, want ErrLastAdmin", err)
+	}
+	newAccount(t, s, "bob")
+	if err := s.SetRole(t.Context(), "bob", "admin", byAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAccount(t.Context(), "alice", byAdmin); err != nil {
+		t.Errorf("deleting alice while bob is admin: %v", err)
+	}
+}
+
 // Changing a password or deleting an account ends its sessions, and only its.
 func TestAccount_ChangesEndSessions(t *testing.T) {
 	s, _ := newStore(t)
@@ -86,7 +122,7 @@ func TestAccount_ChangesEndSessions(t *testing.T) {
 	}
 	session("alice-1", "alice")
 	session("bob-1", "bob")
-	if err := s.SetPassword(t.Context(), "alice", "hash-2"); err != nil {
+	if err := s.SetPassword(t.Context(), "alice", "hash-2", false, byAdmin); err != nil {
 		t.Fatal(err)
 	}
 	if live("alice-1") || !live("bob-1") {
@@ -95,22 +131,22 @@ func TestAccount_ChangesEndSessions(t *testing.T) {
 	if a, _ := s.Account(t.Context(), "alice"); a.PasswordHash != "hash-2" {
 		t.Errorf("password hash = %q", a.PasswordHash)
 	}
-	if err := s.SetRole(t.Context(), "bob", "admin"); err != nil {
+	if err := s.SetRole(t.Context(), "bob", "viewer", byAdmin); err != nil {
 		t.Fatal(err)
 	}
-	if a, _ := s.Account(t.Context(), "bob"); a.Role != "admin" {
+	if a, _ := s.Account(t.Context(), "bob"); a.Role != "viewer" {
 		t.Errorf("bob's role = %q", a.Role)
 	}
-	if err := s.DeleteAccount(t.Context(), "bob"); err != nil {
+	if err := s.DeleteAccount(t.Context(), "bob", byAdmin); err != nil {
 		t.Fatal(err)
 	}
 	if live("bob-1") {
 		t.Error("bob's session outlived his account")
 	}
 	for name, err := range map[string]error{
-		"SetPassword":   s.SetPassword(t.Context(), "nobody", "x"),
-		"SetRole":       s.SetRole(t.Context(), "nobody", "viewer"),
-		"DeleteAccount": s.DeleteAccount(t.Context(), "nobody"),
+		"SetPassword":   s.SetPassword(t.Context(), "nobody", "x", true, byAdmin),
+		"SetRole":       s.SetRole(t.Context(), "nobody", "viewer", byAdmin),
+		"DeleteAccount": s.DeleteAccount(t.Context(), "nobody", byAdmin),
 	} {
 		if !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("%s for an unknown account: %v, want ErrNotFound", name, err)
@@ -171,11 +207,11 @@ func TestSetup_FinishesOnce(t *testing.T) {
 	if finished, err := s.SetupFinished(t.Context()); err != nil || finished {
 		t.Fatalf("SetupFinished on a new install = %v, %v; want false", finished, err)
 	}
-	if err := s.FinishSetup(t.Context(), "alice@example.com", t0); err != nil {
-		t.Fatal(err)
+	if done, err := s.FinishSetup(t.Context(), "alice@example.com", t0); err != nil || !done {
+		t.Fatalf("first FinishSetup = %v, %v; want it to finish setup", done, err)
 	}
-	if err := s.FinishSetup(t.Context(), "bob@example.com", t0.Add(time.Hour)); err != nil {
-		t.Fatal(err)
+	if done, err := s.FinishSetup(t.Context(), "bob@example.com", t0.Add(time.Hour)); err != nil || done {
+		t.Fatalf("second FinishSetup = %v, %v; want no change", done, err)
 	}
 	if finished, err := s.SetupFinished(t.Context()); err != nil || !finished {
 		t.Fatalf("SetupFinished = %v, %v; want true", finished, err)
@@ -183,5 +219,36 @@ func TestSetup_FinishesOnce(t *testing.T) {
 	var by string
 	if err := pool.QueryRow(t.Context(), `SELECT finished_by FROM setup`).Scan(&by); err != nil || by != "alice@example.com" {
 		t.Errorf("finished_by = %q, %v; want the first admin", by, err)
+	}
+}
+
+// Wrong initial admin passwords lock it as an account's do, and the right one
+// forgets them.
+func TestInitialAdmin_LocksAfterWrongPasswords(t *testing.T) {
+	s, _ := newStore(t)
+	locked := func() time.Time {
+		t.Helper()
+		until, err := s.InitialAdminLockedUntil(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return until
+	}
+	if until := locked(); until.After(t0) {
+		t.Fatalf("a new install's initial admin password is locked until %s", until)
+	}
+	for range 3 {
+		if err := s.InitialAdminPasswordFailed(t.Context(), t0, 3, 15*time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if until := locked(); !until.Equal(t0.Add(15 * time.Minute)) {
+		t.Fatalf("after 3 wrong passwords: locked until %s, want 15 minutes", until)
+	}
+	if err := s.InitialAdminPasswordSucceeded(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if until := locked(); until.After(t0) {
+		t.Errorf("after the right password: locked until %s, want unlocked", until)
 	}
 }

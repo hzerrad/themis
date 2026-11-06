@@ -46,6 +46,10 @@ type Check struct {
 	Since string     `json:"since,omitempty"`
 }
 
+// RefusedNoAdminAccount is the refused heartbeat of alerts sent while no
+// admin account existed; a refusal without it was for a wrong token.
+const RefusedNoAdminAccount = "no_admin_account"
+
 // Store is what the checks read from the database.
 type Store interface {
 	Ping(ctx context.Context) error
@@ -69,6 +73,9 @@ type Checker struct {
 	Executor string
 	// OIDC says whether people can sign in through an identity provider.
 	OIDC bool
+	// InitialAdmin says whether the first admin signs in with the initial
+	// admin password.
+	InitialAdmin bool
 	// NoInvestigator says no investigator is installed, by choice.
 	NoInvestigator bool
 	// Model says what model the install and setup set. Nil means only the
@@ -221,7 +228,13 @@ func (c *Checker) alerts(ctx context.Context) Check {
 		return failed(ch, rerr)
 	}
 	if rerr == nil && (err != nil || refused.SeenAt.After(got.SeenAt)) {
-		ch.State, ch.Summary, ch.At, ch.Since = Problem, "Wrong intake token.", &refused.SeenAt, "Last refused"
+		ch.At, ch.Since = &refused.SeenAt, "Last refused"
+		if refused.Detail == RefusedNoAdminAccount {
+			// Alertmanager sends them again: the next arrival settles it.
+			ch.State, ch.Summary = Waiting, "Refused while no admin account existed."
+			return ch
+		}
+		ch.State, ch.Summary = Problem, "Wrong intake token."
 		ch.Fix = "Set the receiver's token to the intake key of the themis-tokens Secret."
 		return ch
 	}
@@ -418,14 +431,17 @@ func (c *Checker) signIn(ctx context.Context) Check {
 		ways = append(ways, "Themis accounts")
 	}
 	switch {
-	case !finished:
-		ch.State, ch.Summary = Warn, "Port-forward grants admin."
-		ch.Fix = "Create an admin account and sign in with it, or configure the identity provider."
+	case !finished && c.InitialAdmin:
+		ch.State, ch.Summary = Warn, "The initial admin password is not retired."
+		ch.Fix = "Sign in with an admin account. The initial admin password then stops working."
 	case len(ways) == 0:
 		ch.State, ch.Summary = Warn, "Only the break-glass token signs in."
 		ch.Fix = "Create accounts, or configure the identity provider."
 	default:
 		ch.State, ch.Summary = OK, "Through "+strings.Join(ways, " and ")+"."
+	}
+	if finished && c.InitialAdmin {
+		ch.Summary += " The initial admin password is retired."
 	}
 	return ch
 }

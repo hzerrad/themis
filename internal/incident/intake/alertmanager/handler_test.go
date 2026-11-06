@@ -16,6 +16,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -145,6 +146,31 @@ func TestHandler_TokenRotation(t *testing.T) {
 	}
 	if got := unauthorized(); got != 1 {
 		t.Errorf("401 count changed by %v, want 1", got)
+	}
+}
+
+// adminAccounts says whether an admin account exists.
+type adminAccounts bool
+
+func (a adminAccounts) HasAdminAccount(context.Context) (bool, error) { return bool(a), nil }
+
+// While no admin account exists, alerts are refused unread and counted, with
+// a 503, so Alertmanager sends them again once one does.
+func TestHandler_RefusesWithoutAnAdminAccount(t *testing.T) {
+	refused := metrictest.Delta(t, "themis_intake_refused_total", map[string]string{"source": alertmanager.Source, "reason": "no_admin_account"})
+	r := &fakeReceiver{}
+	h, _ := newHandler(t, r)
+	h.Gate = &identity.Gate{Store: adminAccounts(false)}
+	rec := post(h, "Bearer "+token, fixture(t))
+	if rec.Code != http.StatusServiceUnavailable || strings.TrimSpace(rec.Body.String()) != identity.ClosedMessage || r.calls != 0 {
+		t.Errorf("an alert without an admin account = %d %q, receiver called %d times; want 503, unread", rec.Code, rec.Body, r.calls)
+	}
+	if got := refused(); got != 1 {
+		t.Errorf("refusals counted %v, want 1", got)
+	}
+	h.Gate = &identity.Gate{Store: adminAccounts(true)}
+	if rec := post(h, "Bearer "+token, fixture(t)); rec.Code != http.StatusAccepted {
+		t.Errorf("an alert once an admin account exists = %d, want 202", rec.Code)
 	}
 }
 

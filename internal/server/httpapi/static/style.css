@@ -99,7 +99,6 @@ code, .val, pre, .mono { font-family: var(--mono); font-size: .88em; }
 .bar button { font: inherit; font-size: 14px; color: var(--bar-ink); background: transparent; border: 1px solid var(--bar-rule); border-radius: 3px; padding: 4px 10px; cursor: pointer; }
 .bar button:hover { color: var(--bar-ink-on); border-color: var(--bar-ink); }
 
-.banner { padding: 10px 32px; background: var(--plate); border-bottom: 1px solid var(--rule); border-left: 3px solid var(--ochre); color: var(--ink); }
 
 .page { max-width: 1120px; margin: 0 auto; padding: 36px 32px 80px; }
 
@@ -310,7 +309,6 @@ details.minor[open] > summary { margin-bottom: 10px; }
   .bar nav { order: 3; flex-basis: 100%; overflow-x: auto; gap: 18px; }
   .bar nav a { padding: 8px 0 10px; white-space: nowrap; }
   .who { margin-left: auto; font-size: 13px; }
-  .banner { padding: 10px 16px; }
   .page { padding: 24px 16px 64px; }
   .row { grid-template-columns: 1fr auto; gap: 2px 12px; padding: 14px 16px; }
   .row .wl { grid-column: 1; grid-row: 1; }

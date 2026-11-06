@@ -158,6 +158,14 @@ func TestIdentify_Account(t *testing.T) {
 		t.Errorf("role after a change = %q, want viewer", who.Role)
 	}
 	s.mu.Lock()
+	acc = s.accounts["alice"]
+	acc.TemporaryPassword = true
+	s.accounts["alice"] = acc
+	s.mu.Unlock()
+	if who, _ := identify(); !who.TemporaryPassword || who.Role != config.RoleViewer {
+		t.Errorf("identity with a temporary password = %+v, want it said, and the role kept", who)
+	}
+	s.mu.Lock()
 	delete(s.accounts, "alice")
 	s.mu.Unlock()
 	if _, err := identify(); !errors.Is(err, identity.ErrSignedOut) {
@@ -180,7 +188,7 @@ func TestPassword_HashAndRules(t *testing.T) {
 		"too short":       identity.CheckNewPassword("alice", "short"),
 		"the username":    identity.CheckNewPassword("alice-in-wonderland", "Alice-in-Wonderland"),
 		"uppercase name":  identity.CheckUsername("Alice"),
-		"reserved name":   identity.CheckUsername("setup"),
+		"reserved name":   identity.CheckUsername("initial-admin"),
 		"an email":        identity.CheckUsername("alice@example.com"),
 		"one letter name": identity.CheckUsername("a"),
 	} {

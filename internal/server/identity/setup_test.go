@@ -1,124 +1,233 @@
 package identity_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/store"
 )
 
-type setupStore struct {
-	finished bool
-	err      error
-	asked    int
+// firstRun is a new install in memory: whether setup finished, the initial
+// admin password's wrong tries, sessions, and accounts.
+type firstRun struct {
+	*memStore
+	finished    bool
+	err         error
+	asked       int
+	failures    int
+	lockedUntil time.Time
+	accounts    map[string]store.Account
 }
 
-func (s *setupStore) SetupFinished(context.Context) (bool, error) {
-	s.asked++
-	return s.finished, s.err
+func (f *firstRun) HasAdminAccount(context.Context) (bool, error) {
+	for _, a := range f.accounts {
+		if a.Role == config.RoleAdmin {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
-func (s *setupStore) FinishSetup(context.Context, string, time.Time) error {
-	s.finished = true
+func (f *firstRun) Account(_ context.Context, username string) (store.Account, error) {
+	a, ok := f.accounts[username]
+	if !ok {
+		return store.Account{}, store.ErrNotFound
+	}
+	return a, nil
+}
+
+func (f *firstRun) SetupFinished(context.Context) (bool, error) {
+	f.asked++
+	return f.finished, f.err
+}
+
+func (f *firstRun) FinishSetup(context.Context, string, time.Time) (bool, error) {
+	done := !f.finished
+	f.finished = true
+	return done, nil
+}
+
+func (f *firstRun) InitialAdminLockedUntil(context.Context) (time.Time, error) {
+	return f.lockedUntil, nil
+}
+
+func (f *firstRun) InitialAdminPasswordFailed(_ context.Context, now time.Time, maxFailures int, lockFor time.Duration) error {
+	f.failures++
+	if f.failures >= maxFailures {
+		f.failures, f.lockedUntil = 0, now.Add(lockFor)
+	}
 	return nil
 }
 
-// throughDoor sends req through a door and returns who Themis took the
-// sender for, and the door's own status if it answered.
-func throughDoor(t *testing.T, door *identity.Door, req *http.Request) (identity.Identity, int, error) {
+func (f *firstRun) InitialAdminPasswordSucceeded(context.Context) error {
+	f.failures, f.lockedUntil = 0, time.Time{}
+	return nil
+}
+
+func (f *firstRun) RecordAccountEvent(context.Context, store.AccountEvent) error { return nil }
+
+const initialPassword = "a long initial password"
+
+type firstRunRig struct {
+	store   *firstRun
+	setup   *identity.Setup
+	handler http.Handler
+	file    string
+	logs    *bytes.Buffer
+}
+
+func newFirstRun(t *testing.T) *firstRunRig {
 	t.Helper()
-	d := directory(t)
-	var who identity.Identity
-	var err error
-	door.Next = http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { who, err = d.Identify(r) })
-	door.Logger = slog.New(slog.DiscardHandler)
-	rec := httptest.NewRecorder()
-	door.ServeHTTP(rec, req)
-	return who, rec.Code, err
+	file := filepath.Join(t.TempDir(), "password")
+	if err := os.WriteFile(file, []byte(initialPassword+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := &firstRunRig{store: &firstRun{memStore: newMemStore(), accounts: map[string]store.Account{}}, file: file, logs: &bytes.Buffer{}}
+	log := slog.New(slog.NewTextHandler(r.logs, nil))
+	r.setup = &identity.Setup{Store: r.store, Logger: log}
+	mux := http.NewServeMux()
+	(&identity.InitialAdmin{
+		PasswordFile: file, Setup: r.setup, Gate: &identity.Gate{Store: r.store}, Store: r.store, Logger: log, Now: func() time.Time { return now },
+	}).Register(mux)
+	r.handler = mux
+	return r
 }
 
-func TestDoor_LetsInAsAdminUntilSetupFinishes(t *testing.T) {
-	store := &setupStore{}
-	door := &identity.Door{Store: store}
-
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/v1/me", nil)
-	who, _, err := throughDoor(t, door, req)
-	if err != nil || who.Username != identity.SetupUser || who.Role != config.RoleAdmin || !who.Setup {
-		t.Fatalf("before setup: identity = %+v, %v; want the setup admin", who, err)
-	}
-
-	store.finished = true
-	req = httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/v1/me", nil)
-	if who, _, err := throughDoor(t, door, req); !errors.Is(err, identity.ErrSignedOut) {
-		t.Fatalf("after setup: identity = %+v, %v; want signed out", who, err)
-	}
-	asked := store.asked
-	_, _, _ = throughDoor(t, door, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/", nil))
-	if store.asked != asked {
-		t.Error("the door asks the store again after setup finished; setup never reopens")
-	}
-}
-
-func TestDoor_Refuses(t *testing.T) {
-	for name, tc := range map[string]struct {
-		method, url string
-		storeErr    error
-		status      int
-		err         error
-	}{
-		// A page on another site that points its name at 127.0.0.1.
-		"another host name": {method: http.MethodGet, url: "http://evil.example:8090/v1/incidents", status: http.StatusMisdirectedRequest},
-		// A form on another site can post to localhost, but can't add the header.
-		"a change without the header": {method: http.MethodPost, url: "http://127.0.0.1:8090/v1/actions/x/approve", err: identity.ErrNoRequestHeader},
-		"the store is down":           {method: http.MethodGet, url: "http://localhost:8090/v1/me", storeErr: errors.New("down"), status: http.StatusServiceUnavailable},
-	} {
-		t.Run(name, func(t *testing.T) {
-			req := httptest.NewRequestWithContext(t.Context(), tc.method, tc.url, nil)
-			who, status, err := throughDoor(t, &identity.Door{Store: &setupStore{err: tc.storeErr}}, req)
-			if tc.status != 0 {
-				if status != tc.status {
-					t.Errorf("status = %d, want %d", status, tc.status)
-				}
-				return
-			}
-			if !errors.Is(err, tc.err) {
-				t.Errorf("identity = %+v, %v; want %v", who, err, tc.err)
-			}
-		})
-	}
-}
-
-func TestDoor_AcceptsLocalNames(t *testing.T) {
-	for _, url := range []string{"http://localhost:8090/", "http://127.0.0.1:8090/", "http://[::1]:8090/", "http://localhost/"} {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
+func (r *firstRunRig) signIn(t *testing.T, password string, header bool) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://localhost:8090/auth/initial-admin", strings.NewReader(`{"password":"`+password+`"}`))
+	if header {
 		req.Header.Set(identity.RequestHeader, "1")
-		if who, _, err := throughDoor(t, &identity.Door{Store: &setupStore{}}, req); err != nil || !who.Setup {
-			t.Errorf("%s: identity = %+v, %v; want the setup admin", url, who, err)
+	}
+	rec := httptest.NewRecorder()
+	r.handler.ServeHTTP(rec, req)
+	return rec
+}
+
+// The initial admin password signs in while no admin account exists. It is
+// retired once an admin signs in with an account and a password of their
+// own; an admin through the identity provider, or with a temporary password,
+// doesn't retire it. Then neither the password nor the sessions it started
+// sign anyone in, and the record says when it was retired.
+func TestInitialAdmin_RetiredWhenAnAdminAccountSignsIn(t *testing.T) {
+	r := newFirstRun(t)
+	// Space around it is from copying it.
+	rec := r.signIn(t, ` `+initialPassword+`\n`, true)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("sign-in = %d %q", rec.Code, rec.Body)
+	}
+	first := cookieNamed(t, rec, identity.SessionCookie)
+	d := &identity.Directory{Sessions: r.store, Accounts: r.store, Access: bindings, Setup: r.setup, Now: func() time.Time { return now }}
+	identify := func(session string) (identity.Identity, error) {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/me", nil)
+		req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: session, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		return d.Identify(req)
+	}
+	if who, err := identify(first.Value); err != nil || who.Username != identity.InitialAdminUser || who.Role != config.RoleAdmin || !who.InitialAdmin {
+		t.Fatalf("identity = %+v, %v; want the initial admin", who, err)
+	}
+
+	// root@example.com is an admin through the bindings; root's account is
+	// an admin's, first with a temporary password.
+	r.store.sessions["oidc-root"] = store.Session{Subject: "sub-root", Username: "root@example.com", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	r.store.sessions["account-root"] = store.Session{Subject: store.AccountSubjectPrefix + "root", Username: "root", CreatedAt: now, ExpiresAt: now.Add(time.Hour)}
+	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin, TemporaryPassword: true}
+	for _, session := range []string{"oidc-root", "account-root"} {
+		if who, err := identify(session); err != nil || who.Role != config.RoleAdmin {
+			t.Fatalf("%s = %+v, %v", session, who, err)
 		}
 	}
-}
-
-// A real session wins over the door, so a person who signs in is themselves.
-func TestDoor_SessionWins(t *testing.T) {
-	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8090/v1/me", nil)
-	req.AddCookie(&http.Cookie{Name: identity.SessionCookie, Value: "live", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-	if who, _, err := throughDoor(t, &identity.Door{Store: &setupStore{}}, req); err != nil || who.Username != "bob@example.com" || who.Setup {
-		t.Errorf("identity = %+v, %v; want bob", who, err)
+	if open, _ := r.setup.Open(t.Context()); !open {
+		t.Fatal("an admin through the identity provider, or with a temporary password, retired the initial admin password")
+	}
+	if rec := r.signIn(t, initialPassword, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "An admin account exists.") {
+		t.Errorf("the password once an admin account exists = %d %q, want 403", rec.Code, rec.Body)
+	}
+	r.store.accounts["root"] = store.Account{Username: "root", Role: config.RoleAdmin}
+	if _, err := identify("account-root"); err != nil {
+		t.Fatal(err)
+	}
+	if who, err := identify(first.Value); !errors.Is(err, identity.ErrSignedOut) {
+		t.Errorf("the initial admin's session once retired = %+v, %v; want signed out", who, err)
+	}
+	if rec := r.signIn(t, initialPassword, true); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "retired") {
+		t.Errorf("the password once retired = %d %q, want 403 saying it is retired", rec.Code, rec.Body)
+	}
+	logs := r.logs.String()
+	if strings.Count(logs, "signed in with the initial admin password") != 1 || strings.Count(logs, "initial admin password retired") != 1 || !strings.Contains(logs, "by=root") {
+		t.Errorf("logs = %s, want one sign-in and one retirement by root", logs)
+	}
+	if strings.Contains(logs, initialPassword) {
+		t.Error("the logs hold the initial admin password")
+	}
+	asked := r.store.asked
+	_, _ = r.setup.Open(t.Context())
+	if r.store.asked != asked {
+		t.Error("Themis asks the store again after setup finished; setup never reopens")
 	}
 }
 
-// With no logger set, the door logs a failure to the default logger.
-func TestDoor_WithoutALogger(t *testing.T) {
-	door := &identity.Door{Store: &setupStore{err: errors.New("database down")}, Next: http.NotFoundHandler()}
-	rec := httptest.NewRecorder()
-	door.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://localhost:8083/", nil))
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("door with the database down = %d, want 503", rec.Code)
+func TestInitialAdmin_Refuses(t *testing.T) {
+	locked := now.Add(15 * time.Minute)
+	for name, tc := range map[string]struct {
+		password  string
+		noHeader  bool
+		prepare   func(*firstRunRig)
+		code      int
+		says      string
+		failures  int
+		lockedTil time.Time
+	}{
+		// A form on another site can post to localhost, but can't add the header.
+		"without the request header": {password: initialPassword, noHeader: true, code: http.StatusForbidden, says: "Themis page"},
+		"a wrong password":           {password: "a guess", code: http.StatusUnauthorized, says: "Wrong password", failures: 1},
+		"the tenth wrong password": {
+			password: "a guess", prepare: func(r *firstRunRig) { r.store.failures = 9 },
+			code: http.StatusUnauthorized, says: "Wrong password", lockedTil: locked,
+		},
+		"the right one while locked": {
+			password: initialPassword, prepare: func(r *firstRunRig) { r.store.lockedUntil = locked },
+			code: http.StatusUnauthorized, says: "locked after 10 wrong tries, until 09:15 UTC", lockedTil: locked,
+		},
+		"once setup finished": {password: initialPassword, prepare: func(r *firstRunRig) { r.store.finished = true }, code: http.StatusForbidden, says: "retired"},
+		"the database down": {
+			password: initialPassword, prepare: func(r *firstRunRig) { r.store.err = errors.New("database down") },
+			code: http.StatusServiceUnavailable, says: "can't sign you in right now",
+		},
+		"no password to read": {
+			password: initialPassword, prepare: func(r *firstRunRig) { _ = os.Remove(r.file) },
+			code: http.StatusServiceUnavailable, says: "can't read the initial admin password",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newFirstRun(t)
+			if tc.prepare != nil {
+				tc.prepare(r)
+			}
+			rec := r.signIn(t, tc.password, !tc.noHeader)
+			if rec.Code != tc.code || !strings.Contains(rec.Body.String(), tc.says) {
+				t.Errorf("sign-in = %d %q, want %d saying %q", rec.Code, rec.Body, tc.code, tc.says)
+			}
+			if len(r.store.sessions) != 0 {
+				t.Errorf("a session was started: %v", r.store.sessions)
+			}
+			if r.store.failures != tc.failures || !r.store.lockedUntil.Equal(tc.lockedTil) {
+				t.Errorf("wrong tries = %d, locked until %s; want %d, %s", r.store.failures, r.store.lockedUntil, tc.failures, tc.lockedTil)
+			}
+			if strings.Contains(r.logs.String(), tc.password) {
+				t.Errorf("the logs hold the password tried: %s", r.logs)
+			}
+		})
 	}
 }

@@ -110,7 +110,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/workload` | The target as Themis reads it: whether it is still the same object, its template, revisions, pods and replica counts. Everything else asks here |
 | `internal/digest` | The action digest an approval is bound to, and the template hash it covers |
 | `internal/server/httpapi`, `internal/server/grpcapi` | The HTTP API and the UI, and the investigators' gRPC API: who is calling, and translating to and from the incident's stages |
-| `internal/server/identity` | Who is calling: accounts, sessions, sign-in, the setup door |
+| `internal/server/identity` | Who is calling: accounts, sessions, sign-in, the initial admin password, and the gate that keeps Themis closed without an admin account |
 | `internal/server/statuspage` | The status page: whether each part of an install works |
 | `internal/config`, `internal/config/resources`, `internal/config/settings` | Configuration from the file, from custom resources, and from the Setup page |
 | `internal/store` | PostgreSQL, and its migrations |

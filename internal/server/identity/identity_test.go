@@ -86,7 +86,7 @@ func TestIdentify(t *testing.T) {
 		"a session":                     {method: http.MethodGet, cookie: "live", want: identity.Identity{Username: "bob@example.com", Groups: []string{"sre"}, Role: config.RoleApprover}},
 		"an unknown session":            {method: http.MethodGet, cookie: "stolen", err: identity.ErrSignedOut},
 		"nothing":                       {method: http.MethodGet, err: identity.ErrSignedOut},
-		// Without the setup door, nothing is an admin for free.
+		// Reaching Themis from localhost, as kubectl port-forward does, proves nothing.
 		"nothing, from localhost": {method: http.MethodGet, url: "http://localhost:8090/v1/me", err: identity.ErrSignedOut},
 		"a change with a session": {method: http.MethodPost, cookie: "live", header: "1", want: identity.Identity{Username: "bob@example.com", Groups: []string{"sre"}, Role: config.RoleApprover}},
 		// A form on another site can post with the cookie, but can't add the header.

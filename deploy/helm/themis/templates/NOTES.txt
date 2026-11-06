@@ -2,34 +2,34 @@ Themis is running in namespace {{ .Release.Namespace }}.
 
 Open it:
 
-  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-core 8090:{{ if (include "themis.setupEnabled" .) }}8083{{ else }}8080{{ end }}
+  kubectl -n {{ .Release.Namespace }} port-forward deploy/{{ .Release.Name }}-core 8090:8080
 
 then go to http://localhost:8090.
-{{- if (include "themis.setupEnabled" .) }}
 
-Opening Themis this way makes you an admin until an admin signs in for
-real: Kubernetes has already checked that you may port-forward to it.
-{{- if not .Values.oidc.issuerURL }}
+{{- with include "themis.adminAccount" . }}
 
-Create your admin account there and sign in with it, or set the oidc
-values to sign in through your identity provider.
-{{- end }}
+Sign in as {{ . }}, with the password in the {{ $.Values.initialAdmin.account.existingSecret }} Secret.
+Themis creates that admin account at startup while it has none.
 {{- else }}
 
-Sign in {{ if .Values.oidc.issuerURL }}through {{ .Values.oidc.issuerURL }}, or {{ end }}with the admin token:
+Themis starts once an admin account exists. Sign in with the initial admin
+password to create it:
 
-  kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.tokensSecret" . }} -o jsonpath='{.data.admin}' | base64 -d
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.initialAdminSecret" . }} -o jsonpath='{.data.password}' | base64 -d
+
+Then sign in with the admin account and choose your own password. The
+initial admin password then stops working.
 {{- end }}
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}
-Fixes:    {{ if .Values.executor.enabled }}on, each one approved by a person{{ else }}off; Themis never applies a fix{{ end }}
+Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
 {{- if and .Values.model.baseURL .Values.model.name }}
 Model:    {{ .Values.model.name }} at {{ .Values.model.baseURL }}
 {{- else }}
-Model:    not set yet; set it on the Setup page
+Model:    Not set. Set it on the Setup page.
 {{- end }}
 {{- else }}
-Model:    none; each incident waits for a fix suggested by a person or a
-          tool outside Themis
+Model:    None. Each incident waits for a fix suggested by a person or a
+          tool outside Themis.
 {{- end }}

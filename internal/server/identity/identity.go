@@ -1,7 +1,7 @@
 // Package identity says who is calling the HTTP API and what they may do:
-// someone signed in through OIDC, with the roles their bindings give them, the
-// holder of the shared admin token, or, until setup finishes, whoever reached
-// Themis through kubectl port-forward.
+// someone signed in through OIDC, with the roles their bindings give them, or
+// with a Themis account, the holder of the shared admin token, or, until
+// setup finishes, whoever signed in with the initial admin password.
 package identity
 
 import (
@@ -36,11 +36,14 @@ type Identity struct {
 	Role string
 	// Token is set for the shared admin token: it proves the token, not who.
 	Token bool
-	// Setup is set for whoever came in through kubectl port-forward before
-	// setup finished: Kubernetes allowed them, but Themis doesn't know who.
-	Setup bool
+	// InitialAdmin is set for whoever signed in with the initial admin
+	// password: it proves the password, not who.
+	InitialAdmin bool
 	// Account is set for someone signed in with a Themis account's password.
 	Account bool
+	// TemporaryPassword is set while that password is one an admin set: they
+	// may only see who they are and choose their own.
+	TemporaryPassword bool
 }
 
 // Can reports whether i has role, or one more trusted.
@@ -88,7 +91,11 @@ type Directory struct {
 	// Accounts give people who sign in with a password their roles. Nil
 	// means no one does.
 	Accounts Accounts
-	Now      func() time.Time
+	// Setup is the install's first run: an admin signing in with an account
+	// or through OIDC finishes it, which retires the initial admin password.
+	// Nil means no one signs in with that password.
+	Setup *Setup
+	Now   func() time.Time
 }
 
 // Accounts look up the accounts people sign in to with a password.
@@ -97,7 +104,7 @@ type Accounts interface {
 }
 
 // Identify says who sent r. A bearer token must be the admin token; without
-// one, the session cookie decides, and without a session, the setup door.
+// one, the session cookie decides. Reaching Themis proves nothing by itself.
 func (d *Directory) Identify(r *http.Request) (Identity, error) {
 	if header := r.Header.Get("Authorization"); header != "" {
 		want, err := token.Read(d.TokenFile)
@@ -110,29 +117,26 @@ func (d *Directory) Identify(r *http.Request) (Identity, error) {
 		return Identity{Username: TokenUser, Role: config.RoleAdmin, Token: true}, nil
 	}
 	se, err := d.session(r)
-	switch {
-	case err == nil:
-		if !headerSent(r) {
-			return Identity{}, ErrNoRequestHeader
-		}
-		return d.sessionIdentity(r.Context(), se)
-	case !errors.Is(err, ErrSignedOut):
+	if err != nil {
 		return Identity{}, err
-	case throughSetup(r):
-		// The browser sends nothing that proves who, so a page on another
-		// site could post to localhost; it can't add the header.
-		if !headerSent(r) {
-			return Identity{}, ErrNoRequestHeader
-		}
-		return Identity{Username: SetupUser, Role: config.RoleAdmin, Setup: true}, nil
 	}
-	return Identity{}, ErrSignedOut
+	if !headerSent(r) {
+		return Identity{}, ErrNoRequestHeader
+	}
+	who, err := d.sessionIdentity(r.Context(), se)
+	if err == nil && d.Setup != nil {
+		d.Setup.finish(r.Context(), who, d.now())
+	}
+	return who, err
 }
 
 // sessionIdentity is who se signed in as. An account's role is read on every
 // request, so a change applies at once; OIDC roles come from the bindings.
 func (d *Directory) sessionIdentity(ctx context.Context, se store.Session) (Identity, error) {
-	if !strings.HasPrefix(se.Subject, store.AccountSubjectPrefix) {
+	switch {
+	case se.Subject == store.InitialAdminSubject:
+		return d.initialAdmin(ctx)
+	case !strings.HasPrefix(se.Subject, store.AccountSubjectPrefix):
 		return Identity{Username: se.Username, Groups: se.Groups, Role: RoleOf(d.Access, se.Username, se.Groups)}, nil
 	}
 	if d.Accounts == nil {
@@ -145,7 +149,23 @@ func (d *Directory) sessionIdentity(ctx context.Context, se store.Session) (Iden
 	if err != nil {
 		return Identity{}, errors.Join(ErrUnavailable, err)
 	}
-	return Identity{Username: a.Username, Role: a.Role, Account: true}, nil
+	return Identity{Username: a.Username, Role: a.Role, Account: true, TemporaryPassword: a.TemporaryPassword}, nil
+}
+
+// initialAdmin is whoever signed in with the initial admin password, while
+// setup is open: once it finishes, their session no longer signs anyone in.
+func (d *Directory) initialAdmin(ctx context.Context) (Identity, error) {
+	if d.Setup == nil {
+		return Identity{}, ErrSignedOut
+	}
+	open, err := d.Setup.Open(ctx)
+	if err != nil {
+		return Identity{}, errors.Join(ErrUnavailable, err)
+	}
+	if !open {
+		return Identity{}, ErrSignedOut
+	}
+	return Identity{Username: InitialAdminUser, Role: config.RoleAdmin, InitialAdmin: true}, nil
 }
 
 // session is the live session r's cookie names.

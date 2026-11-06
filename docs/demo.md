@@ -56,7 +56,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it. You're an admin because you came in through `kubectl port-forward`; there's no password to find. The list is empty for now.
+Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours, sign in with it, and choose your own password. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
 
 ## 5. Break the rollout
 
@@ -129,14 +129,13 @@ make demo-alert                           # once a checkout pod is crash looping
 | | 9090 | gRPC for the investigator |
 | | 8081 | `/healthz`, `/readyz` |
 | | 8082 | `/metrics` |
-| | 8083 | setup: the UI without sign-in, until an admin first signs in |
 | themis-executor | 9091 | gRPC for themis-core |
 | | 8091 | `/healthz`, `/readyz` |
 | | 8092 | `/metrics` |
 | investigator | none | its `/metrics` is off locally |
 | PostgreSQL (`make dev-db`) | 5432 | |
 
-The UI is on <http://127.0.0.1:8080>, with the token in `bin/dev/admin-token`.
+The UI is on <http://127.0.0.1:8080>. Sign in as `dev` with the password in `bin/dev/admin-password`. `make run` creates that admin account at startup. The break-glass token is in `bin/dev/admin-token`.
 
 `make run-intelligence` reads the same `MODEL_*` settings as the investigator in the cluster. Without them it uses Ollama: `OLLAMA_URL=...` points it at another Ollama, `MODEL_NAME=...` picks the model. For a hosted model, put the API key in a file:
 

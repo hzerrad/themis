@@ -56,14 +56,6 @@ missing key means on.
 {{- end }}
 
 {{/*
-Whether the setup port is on. A missing key means on, as above.
-*/}}
-{{- define "themis.setupEnabled" -}}
-{{- $setup := .Values.setup | default dict -}}
-{{- if not (and (hasKey $setup "enabled") (eq (toString $setup.enabled) "false")) }}true{{ end -}}
-{{- end }}
-
-{{/*
 Whether the core reads the Kubernetes metrics API. A missing key means on, as
 above.
 */}}
@@ -99,4 +91,30 @@ generates, or one the install provides, as GitOps tools need.
 */}}
 {{- define "themis.tokensSecret" -}}
 {{- (.Values.tokens | default dict).existingSecret | default (printf "%s-tokens" .Release.Name) -}}
+{{- end }}
+
+{{/*
+The username of the admin account the install configures, or nothing. A
+password in values is refused: Git and Helm's release history keep values.
+*/}}
+{{- define "themis.adminAccount" -}}
+{{- $initial := .Values.initialAdmin | default dict -}}
+{{- $account := $initial.account | default dict -}}
+{{- range $key := list "password" "passwordHash" }}
+{{- if or (hasKey $initial $key) (hasKey $account $key) }}
+{{- fail "Refused. initialAdmin holds a password. Values are kept in Git and in Helm's release history. Put the password or its hash in a Secret, and set initialAdmin.account.existingSecret." }}
+{{- end }}
+{{- end }}
+{{- with $account.username }}
+{{- $_ := required "initialAdmin.account.existingSecret is required with initialAdmin.account.username. Name the Secret that holds the password or its hash." $account.existingSecret }}
+{{- . }}
+{{- end }}
+{{- end }}
+
+{{/*
+The Secret holding the initial admin password: the one the chart generates,
+or one the install provides, as GitOps tools need.
+*/}}
+{{- define "themis.initialAdminSecret" -}}
+{{- (.Values.initialAdmin | default dict).existingSecret | default (printf "%s-initial-admin" .Release.Name) -}}
 {{- end }}

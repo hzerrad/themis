@@ -235,7 +235,9 @@ themis-down: ## Uninstall Themis from kind
 .PHONY: ui
 ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	@echo "UI: http://localhost:8090"
-	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8083
+	@echo "Until an admin account exists, the initial admin password signs in to create it:"
+	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
+	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind, alerting the in-cluster Themis
@@ -273,6 +275,7 @@ DEV_TOKEN              := bin/dev/intake-token
 DEV_INVESTIGATOR_TOKEN := bin/dev/investigator-token
 DEV_ADMIN_TOKEN        := bin/dev/admin-token
 DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
+DEV_ADMIN_PASSWORD     := bin/dev/admin-password
 DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
 MODEL_NAME             ?= qwen3:8b
 OLLAMA_URL             ?= http://127.0.0.1:11434/v1
@@ -297,14 +300,14 @@ dev-db: ## Start a development PostgreSQL on 127.0.0.1:5432
 .PHONY: dev-tokens
 dev-tokens:
 	@mkdir -p $(dir $(DEV_TOKEN))
-	@for f in $(DEV_TOKEN) $(DEV_INVESTIGATOR_TOKEN) $(DEV_ADMIN_TOKEN) $(DEV_EXECUTOR_TOKEN); do \
+	@for f in $(DEV_TOKEN) $(DEV_INVESTIGATOR_TOKEN) $(DEV_ADMIN_TOKEN) $(DEV_EXECUTOR_TOKEN) $(DEV_ADMIN_PASSWORD); do \
 		test -s $$f || { openssl rand -hex 32 > $$f && chmod 600 $$f; }; done
 
 .PHONY: run
 run: dev-tokens ## Run themis-core locally against the kind cluster and the dev-db database
 	$(DEV_DB_ENV) go run ./cmd/themis-core --config scripts/dev/themis.yaml --kube-context kind-$(KIND_CLUSTER) \
 		--http-addr 127.0.0.1:8080 --grpc-addr 127.0.0.1:9090 --probe-addr 127.0.0.1:8081 \
-		--metrics-addr 127.0.0.1:8082 --setup-addr 127.0.0.1:8083
+		--metrics-addr 127.0.0.1:8082
 
 .PHONY: run-executor
 run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and the dev-db database
