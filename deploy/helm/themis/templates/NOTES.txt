@@ -24,8 +24,10 @@ initial admin password then stops working.
 Watching: {{ join ", " .Values.enrolledNamespaces }}
 Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
-{{- if and .Values.model.baseURL .Values.model.name }}
-Model:    {{ .Values.model.name }} at {{ .Values.model.baseURL }}
+{{- $model := .Values.model }}
+{{- $anthropic := eq (include "themis.modelProvider" .) "anthropic" }}
+{{- if and $model.name (or $model.baseURL $anthropic) }}
+Model:    {{ $model.name }}{{ with $model.baseURL }} at {{ . }}{{ end }}{{ if $anthropic }} (Anthropic){{ end }}
 {{- else }}
 Model:    Not set. Set it on the Setup page.
 {{- end }}

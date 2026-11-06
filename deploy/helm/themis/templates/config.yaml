@@ -18,8 +18,11 @@ data:
     settings:
       keyFile: /var/run/secrets/themis/settings
     {{- with .Values.model }}
-    {{- if or .baseURL .name .apiKeySecret }}
+    {{- if or .provider .baseURL .name .apiKeySecret }}
     model:
+      {{- if .provider }}
+      provider: {{ include "themis.modelProvider" $ | quote }}
+      {{- end }}
       {{- with .baseURL }}
       baseURL: {{ . | quote }}
       {{- end }}

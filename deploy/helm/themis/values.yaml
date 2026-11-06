@@ -35,7 +35,8 @@ postgres:
   image: postgres:17-alpine
   storage: 1Gi
 
-# Bring your own model: any OpenAI-compatible endpoint, hosted or local.
+# Bring your own model: any OpenAI-compatible endpoint, hosted or local, or
+# Claude through Anthropic's API.
 model:
   # Off installs no investigator: Themis collects evidence and runs its
   # checks, then each incident waits for a fix suggested by a person or a

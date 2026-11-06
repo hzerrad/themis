@@ -261,6 +261,14 @@
     },
     "model": {
       "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "description": "Provider is the API the investigator speaks: openai, the default, or\nanthropic, which has its own address, so setup's doesn't apply."
+        },
         "baseURL": {
           "type": "string"
         },

@@ -564,14 +564,16 @@ function alertmanagerSetup() {
 let modelSaved = false;
 
 // modelStep sets the model the install left unset. What the install set is
-// shown locked: a change here would be undone by the next upgrade.
+// shown locked: a change here would be undone by the next upgrade. Anthropic's
+// API has its own address, so it shows no address or strict format.
 function modelStep(v) {
   const saved = modelSaved;
   modelSaved = false;
   const byInstall = (name) => v.byInstall.includes(name);
+  const anthropic = v.provider === "anthropic";
   const locked = "Set in Helm. Read-only here.";
   const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", disabled: byInstall("model.baseURL") });
-  const name = h("input", { type: "text", value: v.name, placeholder: "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name") });
+  const name = h("input", { type: "text", value: v.name, placeholder: anthropic ? "claude-haiku-5-5" : "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name") });
   const key = h("input", { type: "password", autocomplete: "off", disabled: byInstall("model.apiKey"),
     placeholder: v.apiKeySet ? "Set. Leave empty to keep it." : "Optional" });
   const strict = h("input", { type: "checkbox", checked: v.strictOutput, disabled: byInstall("model.strictOutput") });
@@ -592,16 +594,19 @@ function modelStep(v) {
     }
   };
   if (["model.baseURL", "model.name"].every(byInstall)) {
-    return [h("p", {}, "Set in Helm: ", h("code", {}, v.name), " at ", h("code", {}, v.baseURL), ".")];
+    return [h("p", {}, "Set in Helm: ", h("code", {}, v.name),
+      v.baseURL ? [" at ", h("code", {}, v.baseURL)] : null, anthropic ? " (Anthropic)" : null, ".")];
   }
   return [
     saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation. Done when the model answers.") : null,
-    h("p", { class: "quiet" }, "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. Used from the next investigation."),
+    h("p", { class: "quiet" }, anthropic
+      ? "Claude models, through Anthropic's API. Used from the next investigation."
+      : "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. Used from the next investigation."),
     h("form", { class: "form", onsubmit: save },
-      field("Address", url, byInstall("model.baseURL") ? locked : null),
+      anthropic ? null : field("Address", url, byInstall("model.baseURL") ? locked : null),
       field("Model", name, byInstall("model.name") ? locked : null),
       field("API key", key, byInstall("model.apiKey") ? locked : "Stored encrypted. Never shown again."),
-      h("label", { class: "check" }, strict,
+      anthropic ? null : h("label", { class: "check" }, strict,
         h("span", {}, "Strict format: the model must follow Themis's reply format exactly. For OpenAI, clear it, or install with ",
           h("code", {}, "model.schemaDialect=openai-strict"), ".", byInstall("model.strictOutput") ? " " + locked : "")),
       h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Save the model")),
