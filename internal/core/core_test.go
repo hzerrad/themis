@@ -249,6 +249,7 @@ func TestRun_AlertBecomesIncident(t *testing.T) {
 	// The executor is configured but not running. Themis makes the admin
 	// account the install configures at startup; people also sign in through
 	// an identity provider, and the model is set in setup, where none is yet.
+	// Alertmanager sends alerts, in push mode.
 	executorAddr := freeAddr(t)
 	configPath := writeFile(t, "with-executor.yaml", strings.Replace(readFile(t, writeConfig(t, ns)), "\napi:\n", fmt.Sprintf(`
 api:
@@ -257,7 +258,7 @@ api:
     clientID: themis
     clientSecretFile: %s
     redirectURL: https://themis.example/auth/callback
-`, writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("executor:\n  address: %s\n  bearerTokenFile: %s\nsettings:\n  keyFile: %s\n",
+`, writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("alerting:\n  mode: push\nexecutor:\n  address: %s\n  bearerTokenFile: %s\nsettings:\n  keyFile: %s\n",
 		executorAddr, writeFile(t, "executor-token", "executor-secret\n"), writeFile(t, "settings-key", "settings-key\n")))
 	o, exited, cancel := start(t, func() core.Options {
 		return core.Options{
@@ -306,10 +307,10 @@ api:
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("POST status = %d, want 202", resp.StatusCode)
 	}
-	// The status page now says alerts arrive, through which receiver, that
-	// no model is set, and that the configured executor can't be reached.
+	// The status page now says alerts arrive in push mode, that no model is
+	// set, and that the configured executor can't be reached.
 	if code, body := asAdmin(t, o.HTTPAddr, "/v1/status"); code != http.StatusOK ||
-		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `through the \"themis\" receiver`) ||
+		!strings.Contains(body, `"name":"Database","state":"ok"`) || !strings.Contains(body, `"name":"Alerts","state":"ok","summary":"Push mode."`) ||
 		!strings.Contains(body, `"name":"Model","state":"problem","summary":"Not set.`) ||
 		!strings.Contains(body, "Executor unreachable at "+executorAddr) {
 		t.Errorf("/v1/status = %d %s", code, body)

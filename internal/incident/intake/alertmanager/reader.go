@@ -71,8 +71,8 @@ func (w *ReadWorker) Work(ctx context.Context, _ *river.Job[ReadArgs]) error {
 	return w.Read(ctx)
 }
 
-// Read reads Alertmanager once. A failure to reach it is recorded, not
-// returned: the next read tries again.
+// Read reads Alertmanager once, in poll mode. A failure to reach it is
+// recorded, not returned: the next read tries again.
 func (w *ReadWorker) Read(ctx context.Context) error {
 	open, err := w.Gate.Open(ctx)
 	if err != nil || !open {

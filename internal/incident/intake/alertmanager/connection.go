@@ -11,10 +11,12 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// Addresses keeps the address of the Alertmanager Themis reads.
+// Addresses keeps how alerts reach Themis, and the address of the
+// Alertmanager Themis reads in poll mode.
 type Addresses interface {
 	Alertmanager(ctx context.Context) (settings.AlertmanagerView, error)
 	SetAlertmanager(ctx context.Context, address, by string) error
+	SetMode(ctx context.Context, mode, by string) error
 }
 
 // Reads says how Alertmanager was last read.
@@ -22,8 +24,9 @@ type Reads interface {
 	LastAlertRead(ctx context.Context, source string) (store.AlertRead, error)
 }
 
-// Connection is the Alertmanager Themis reads: what the install set, the
-// address in use, which the Setup page may set, and how the last read went.
+// Connection is how alerts reach Themis, and the Alertmanager Themis reads in
+// poll mode: what the install set, the mode and the address in use, which
+// the Setup page may set, and how the last read went.
 type Connection struct {
 	Install   config.Alertmanager
 	Addresses Addresses
@@ -44,16 +47,22 @@ func (c *Connection) SetAddress(ctx context.Context, address, by string) error {
 	return c.Addresses.SetAlertmanager(ctx, address, by)
 }
 
+// SetMode switches between poll and push mode, set by by.
+func (c *Connection) SetMode(ctx context.Context, mode, by string) error {
+	return c.Addresses.SetMode(ctx, mode, by)
+}
+
 // LastRead says how Alertmanager was last read, or store.ErrNotFound if
 // never.
 func (c *Connection) LastRead(ctx context.Context) (store.AlertRead, error) {
 	return c.Reads.LastAlertRead(ctx, Source)
 }
 
-// reader returns a client for the address in use, or nil without one.
+// reader returns a client for the address in use, or nil without one or in
+// push mode.
 func (c *Connection) reader(ctx context.Context) (*client, settings.AlertmanagerView, error) {
 	v, err := c.View(ctx)
-	if err != nil || v.Address == "" || !v.Reading {
+	if err != nil || v.Address == "" || !v.Polling() {
 		return nil, v, err
 	}
 	credentials := v.From == settings.FromInstall
