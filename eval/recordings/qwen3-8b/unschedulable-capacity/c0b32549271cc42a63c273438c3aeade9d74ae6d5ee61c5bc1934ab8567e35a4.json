@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Insufficient CPU resources prevent new pods from scheduling, but earlier_revision_healthy remains unknown. Rollback justified only if revision 1 was healthy, which cannot be confirmed.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Pods of revision 2 pending due to CPU insufficiency\",\"supporting\":[\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"earlier_revision_healthy\"],\"status\":\"open\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"No config changes detected between rollout and failure\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3601,
+        "output_tokens": 640
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

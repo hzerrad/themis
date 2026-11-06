@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Unable to determine root cause without memory usage metrics; container logs are empty and memory data is unavailable.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing memory usage metrics (memory_data_available=unknown) and empty container logs prevent analysis of memory consumption patterns.\",\n    \"supporting\": [\"memory_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"OOMKilled exit code 137 suggests memory limits may be insufficient, but lack of metrics and logs prevents confirmation.\",\n    \"supporting\": [\"oom_killed_current_revision\"],\n    \"contradicting\": [\"memory_at_limit_before_kill\"],\n    \"missing\": [\"container_memory\", \"memory_data_available\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4155,
+        "output_tokens": 585
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The API container in the search Deployment is throttled at its CPU limit, causing readiness probe failures. Raising the CPU limit from 500m to 750m should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Container 'api' is throttled at 0.5 CPU limit (usage 0.495), with 64% throttling ratio, causing readiness failures.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Earlier revision (1) has no pods left to assess, but rollout_recent is false, so this is unlikely.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"rollout_recent\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises CPU limit to 750m, clearing throttling and allowing the container to meet its CPU demand without hitting the limit.\",\n  \"rationale\": \"Throttling_data_available is true, cpu_throttled_at_limit and cpu_usage_near_limit are true, and readiness probes are failing. Raising the limit to 1.5x current (500m → 750m) addresses sustained throttling without affecting memory or other containers.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_recent\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3671,
+        "output_tokens": 1076
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

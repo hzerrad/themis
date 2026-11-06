@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to confirm memory limit issues; container logs are empty and memory data is unavailable.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Missing memory usage metrics (memory_data_available=unknown) and empty container logs prevent definitive analysis of memory consumption patterns.\", \"supporting\": [\"memory_data_available\"], \"contradicting\": [], \"missing\": [\"container_memory\"], \"status\": \"supported\"}, {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"OOMKilled exit code 137 suggests memory limits may be insufficient, but lack of memory metrics and logs prevents confirmation.\", \"supporting\": [\"oom_killed_current_revision\"], \"contradicting\": [\"memory_at_limit_before_kill\"], \"missing\": [\"container_memory\", \"memory_data_available\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3903,
+        "output_tokens": 662
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

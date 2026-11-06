@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to confirm CPU throttling; missing throttling metrics.\", \"hypotheses\": [{\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"CPU usage near limit (0.495/0.5) suggests potential throttling\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"throttling_data_available\"],\"status\": \"supported\"}, {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Rollout recent flag is false, but earlier revision health is unknown\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [\"rollout_recent\"], \"missing\": [\"earlier_revision_healthy\"],\"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling data unavailable; cannot confirm throttling or CPU usage impact\", \"supporting\": [\"throttling_data_available\"], \"contradicting\": [], \"missing\": [\"throttling_data_available\"],\"status\": \"supported\"}] }",
+      "usage": {
+        "input_tokens": 3513,
+        "output_tokens": 1115
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

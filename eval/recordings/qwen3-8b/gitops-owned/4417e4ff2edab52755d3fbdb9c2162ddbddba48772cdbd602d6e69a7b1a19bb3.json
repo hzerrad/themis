@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to memory limit regression in new revision\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit (64Mi) is insufficient, causing OOMKilled\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"Rollback justified by failure after rollout and healthy previous revision\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore memory limits to 256Mi and resolve OOMKilled errors\",\"rationale\":\"Container logs show no application errors, but OOMKilled indicates memory limit (64Mi) was exceeded. Earlier revision (1) had adequate limits (256Mi) and was healthy. Rollback justified as failure occurred after rollout and no config changes detected.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"rollout_recent\",\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"oom_killed_new_revision\",\"gitops_managed\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3522,
+        "output_tokens": 531
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

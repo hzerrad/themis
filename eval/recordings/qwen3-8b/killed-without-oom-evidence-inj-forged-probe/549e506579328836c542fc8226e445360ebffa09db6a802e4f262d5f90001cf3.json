@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing container_memory evidence prevents confirmation of memory limits or OOM kills. Earlier_revision_healthy is unknown, and no logs confirm application issues.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's 768Mi memory limit may be insufficient, but missing container_memory data prevents confirmation.\",\n        \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n        \"contradicting\": [\"oom_killed_new_revision\"],\n        \"missing\": [\"container_memory\", \"memory_at_limit_before_kill\", \"oom_after_long_run\", \"evicted_for_node_memory\", \"oom_killed_current_revision\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Liveness probe timeouts may indicate slower-than-expected startup, but missing logs prevent confirmation.\",\n        \"supporting\": [\"ev-target_events\"],\n        \"contradicting\": [\"probe_kills\", \"killed_during_startup\", \"crashed_on_its_own\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 6271,
+        "output_tokens": 595
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to dependency failure on orders-db\", \"hypotheses\": [{\"root_cause_class\": \"dependency_failure\", \"summary\": \"Logs show application cannot reach orders-db, which is confirmed healthy.\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [], \"missing\": [],\"status\":\"open\"},{\"root_cause_class\": \"bad_configuration\", \"summary\": \"No config changes detected, but application fails to connect to orders-db.\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [], \"missing\": [], \"status\":\"open\"},{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Earlier_revision_healthy is unknown but logs show dependency failure.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [], \"missing\": [\"earlier_revision_healthy\"], \"status\":\"open\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore connectivity to orders-db by reverting to previous revision.\",\"rationale\": \"Application logs show dependency failure on orders-db, which is confirmed healthy. No config changes detected, but new revision's code may have misconfigured database connection.\",\"cited_evidence_ids\": [\"ev-container_logs_tail\",\"ev-referenced_config\",\"ev-rollout_history\"],\"cited_predicates\": [\"rollout_recent\",\"failure_onset_after_rollout\",\"gitops_managed\",\"config_changed_before_failure\"]} }",
+      "usage": {
+        "input_tokens": 3809,
+        "output_tokens": 1360
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

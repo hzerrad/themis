@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new revision's memory limit is too low, causing OOM kills despite exit code 137 indicating memory issues.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"Pods of revision 5 exit with code 137 (OOM) but memory_data_available is unknown, suggesting insufficient limits.\",\"supporting\":[\"ev-pod_states\",\"ev-rollout_history\"],\"contradicting\":[\"oom_killed_current_revision\"],\"missing\":[\"container_memory\",\"memory_at_limit_before_kill\",\"oom_after_long_run\",\"evicted_for_node_memory\",\"oom_killed_new_revision\"],\"status\":\"open\"},{\"root_cause_class\":\"new_version_broken\",\"summary\":\"CrashLoopBackOff and exit code 137 suggest the new revision (5) introduced the issue, but earlier_revision_healthy is unknown.\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[\"rollout_recent\",\"earlier_revision_healthy\"],\"missing\":[\"container_memory\",\"oom_after_long_run\",\"evicted_for_node_memory\",\"oom_killed_new_revision\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"ledger\",\"uid\":\"uid-deployment-ledger\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"1Gi\"}}}},\"expected_effect\":\"Raise memory limit to 1Gi for containers in revision 5 to prevent OOM kills.\",\"rationale\":\"Pods of revision 5 exit with code 137 (OOM) but memory_data_available is unknown. Increasing the memory limit may prevent future OOM kills, even if the current revision's OOM_killed_current_revision is marked false due to missing data. The limit is set to 1Gi, 1.5 times the current 768Mi, to accommodate potential memory growth or increased load.\",\"cited_evidence_ids\":[\"ev-pod_states\",\"ev-rollout_history\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"rollout_recent\",\"failure_onset_after_rollout\"]}}",
+      "usage": {
+        "input_tokens": 5603,
+        "output_tokens": 830
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The exit code 137 (OOMKilled) conflicts with the predicate oom_killed_new_revision = false, but empty logs and missing memory metrics prevent confirmation. Earlier_revision_healthy is unknown, and no memory data exists to validate the memory_limit_regression hypothesis.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit may be too low, but missing memory metrics prevent confirmation.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [\"oom_killed_new_revision\"],\n    \"missing\": [\"container_memory\", \"memory_at_limit_before_kill\", \"oom_after_long_run\", \"evicted_for_node_memory\", \"oom_killed_current_revision\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeouts may indicate the app is slower than the probe's timeout, but missing logs prevent confirmation.\",\n    \"supporting\": [\"ev-target_events\"],\n    \"contradicting\": [\"probe_kills\", \"killed_during_startup\", \"crashed_on_its_own\"],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 5953,
+        "output_tokens": 819
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

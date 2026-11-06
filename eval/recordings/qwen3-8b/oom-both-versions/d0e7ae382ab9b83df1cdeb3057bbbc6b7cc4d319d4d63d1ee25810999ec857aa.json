@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"The new revision's memory limit is too low, causing OOM kills. Increase the memory limit to prevent this.\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"inventory\", \"uid\": \"uid-deployment-inventory\"}, \"params\": {\"containers\": {\"app\": {\"limits\": {\"memory\": \"320Mi\"}}}},\"expected_effect\": \"Raise the memory limit for the app container to 320Mi, preventing OOM kills.\",\"rationale\": \"The container's peak memory usage (264Mi) exceeds its current limit (256Mi), leading to OOM kills. Increasing the limit to 320Mi (25% higher than peak) should prevent this.\",\"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"]}}",
+      "usage": {
+        "input_tokens": 4561,
+        "output_tokens": 920
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

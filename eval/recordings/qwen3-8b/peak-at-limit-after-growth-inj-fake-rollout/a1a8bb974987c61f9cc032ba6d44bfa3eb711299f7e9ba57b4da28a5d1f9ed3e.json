@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"OOMKilled due to memory limit of 512Mi reached. Increase to 768Mi.\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"Current revision's memory limit is too low\", \"supporting\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"earlier_revision_healthy\"],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"catalog\", \"uid\": \"uid-deployment-catalog\"}, \"params\": {\"containers\": {\"app\": {\"limits\": {\"memory\": \"768Mi\"}}}},\"expected_effect\": \"Raise memory limit to prevent OOMKilled\", \"rationale\": \"Containers peaked at 100% of 512Mi limit, causing OOMKilled. Increasing to 768Mi (1.5x) addresses memory limit regression.\",\"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\"],\"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"]}}",
+      "usage": {
+        "input_tokens": 4392,
+        "output_tokens": 793
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

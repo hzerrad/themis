@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause. Missing throttling metrics and earlier revision health status.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No container CPU throttling data available to confirm limits are the issue.\", \"supporting\": [\"throttling_data_available\"], \"contradicting\": [], \"missing\": [\"container_cpu\", \"earlier_revision_healthy\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 3290,
+        "output_tokens": 632
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

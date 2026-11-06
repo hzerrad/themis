@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Raise memory limit for app container in sessions Deployment to prevent OOM kills\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Current memory limit of 1Gi is reached by the app's peak usage of 1Gi, causing OOM kills.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_data_available\", \"memory_at_limit_before_kill\"], \"contradicting\": [], \"missing\": [],\n    \"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision 3's memory limit is too low compared to its usage patterns.\", \"supporting\": [\"oom_killed_current_revision\", \"memory_data_available\", \"memory_at_limit_before_kill\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"earlier_revision_healthy\"], \"status\": \"supported\"},\n    {\"root_cause_class\": \"node_memory_pressure\", \"summary\": \"Node memory pressure is not the cause as no pods were evicted for node memory.\", \"supporting\": [\"evicted_for_node_memory\"], \"contradicting\": [], \"missing\": [], \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"sessions\", \"uid\": \"uid-deployment-sessions\"},\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"1250Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Raise memory limit for app container to 1250Mi to prevent OOM kills by providing more memory than the peak usage of 1Gi.\",\n    \"rationale\": \"The app's peak memory usage reaches 100% of its current 1Gi limit, causing OOM kills. Increasing the limit to 1250Mi (25% higher than peak) provides sufficient memory while avoiding unnecessary resource allocation. No earlier revision is available for comparison, and node memory pressure is not the cause.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-rollout_history\", \"ev-target_events\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_data_available\", \"memory_at_limit_before_kill\", \"evicted_for_node_memory\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3529,
+        "output_tokens": 1055
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

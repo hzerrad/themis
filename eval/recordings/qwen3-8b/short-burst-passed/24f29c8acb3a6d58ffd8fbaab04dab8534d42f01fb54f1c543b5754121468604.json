@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"cpu_throttled_at_limit is false and cpu_usage_near_limit is false, so no need to raise CPU limit. No evidence of CPU contention or throttling issues.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3205,
+        "output_tokens": 546
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short for application startup\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"Liveness probe failed during startup due to short timeout\",\n        \"supporting\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"open\"\n    },\n    {\n        \"root_cause_class\": \"new_version_broken\",\n        \"summary\": \"New revision introduced probe failure during startup\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-target_events\"],\n        \"contradicting\": [\"earlier_revision_healthy\"],\n        \"missing\": [],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"edge\", \"name\": \"api-gateway\", \"uid\": \"uid-deployment-api-gateway\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"initialDelaySeconds\": 20,\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Allow application to start before liveness probe timeout\",\n    \"rationale\": \"The pod failed liveness probe immediately after startup (killed_during_startup=true), but the probe timeout is 1s. Increasing timeout and delay gives the app time to initialize before being probed.\",\n    \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5884,
+        "output_tokens": 1211
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

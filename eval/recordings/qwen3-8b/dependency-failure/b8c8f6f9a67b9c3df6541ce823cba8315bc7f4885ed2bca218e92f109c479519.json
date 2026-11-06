@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes failing with 503 errors in new revision, but earlier revision health unknown. Need container logs to confirm application bug or configuration issues.\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Readiness probe failures may indicate application failure in new revision\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"No config changes detected, but need to verify if new revision's settings are correct\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"config_changed_before_failure\"], \"missing\": [],\"status\": \"open\"}, {\"root_cause_class\": \"other\", \"summary\": \"Unknown cause due to insufficient evidence\", \"supporting\": [\"earlier_revision_healthy\"], \"contradicting\": [\"rollout_recent\"], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3101,
+        "output_tokens": 608
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
