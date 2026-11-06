@@ -319,50 +319,55 @@ async function login() {
 const CLOSED = "No admin account. Create the first admin account to start Themis.";
 
 // firstAdmin is all Themis serves while no admin account exists: creating
-// the first.
+// the first. Its creator chooses its password, and creating it signs this
+// browser in as it, in place of the initial admin password or the
+// break-glass token.
 function firstAdmin() {
   if (!can("admin")) {
     render(h("div", { class: "plate centre" }, h("h1", {}, "Themis has not started"), h("p", {}, CLOSED)));
     return;
   }
-  const username = h("input", { type: "text", autocomplete: "off", autocapitalize: "none", required: true });
+  const username = h("input", { type: "text", autocomplete: "username", autocapitalize: "none", required: true });
   const password = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
+  const again = h("input", { type: "password", autocomplete: "new-password", minlength: "12", required: true });
   const error = h("div", { class: "error", role: "alert" });
   const submit = async (e) => {
     e.preventDefault();
     error.textContent = "";
-    const name = username.value.trim();
+    if (password.value !== again.value) {
+      error.textContent = "The passwords don't match.";
+      again.value = "";
+      again.focus();
+      return;
+    }
     try {
-      await api("/v1/accounts", { method: "POST", body: JSON.stringify({ username: name, role: "admin", password: password.value }) });
-      flash = "Account " + name + " created with a temporary password. " + name + " must choose a new one at first sign-in.";
-      me = null;
-      route();
+      await api("/v1/accounts", { method: "POST", body: JSON.stringify({ username: username.value.trim(), role: "admin", password: password.value }) });
     } catch (err) {
       error.textContent = err.message;
+      return;
     }
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+    location.hash = "#/setup";
+    me = null;
+    route();
   };
   render(h("div", { class: "plate centre" },
     h("h1", {}, "Create the first admin account"),
     h("p", {}, CLOSED),
     h("form", { class: "form", onsubmit: submit },
       field("Username", username),
-      field("Temporary password", password, "12 characters or more. A new one is chosen at the first sign-in."),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Create the admin account")),
+      field("Password", password, "12 characters or more."),
+      field("Password again", again),
+      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Create and sign in")),
       error)));
   username.focus();
 }
 
-// signInAsAdmin follows the first admin account's making by the initial
-// admin password, whose only use that was.
+// signInAsAdmin follows the first admin account's making when this browser
+// still holds the initial admin password's session.
 function signInAsAdmin() {
   const pw = passwordForm(true);
-  const said = flash;
-  flash = null;
-  render(h("div", { class: "plate centre" },
-    h("h1", {}, "Sign in with the admin account"),
-    said ? h("p", { class: "flash", role: "status" }, said) : null,
-    h("p", {}, "Then choose your own password. The initial admin password then stops working."),
-    pw.form));
+  render(h("div", { class: "plate centre" }, h("h1", {}, "Sign in with the admin account"), pw.form));
   pw.focus();
 }
 

@@ -168,20 +168,20 @@ as() {
   shift 3
   curl -s -o /dev/null -w '%{http_code}' -b "$jar" -c "$jar" -X "$method" -H 'X-Themis-Request: 1' "$API$path" "$@"
 }
+# BROWSER is the browser's cookies; FIRST keeps the initial admin password's
+# session, which creating the account replaces in the browser.
+BROWSER=$ART/browser.cookies
 FIRST=$ART/initial-admin.cookies
-OWNER=$ART/e2e-admin.cookies
-rm -f "$FIRST" "$OWNER"
-TEMPORARY=e2e-temporary-$RUN
+rm -f "$BROWSER" "$FIRST"
 OWN=e2e-own-password-$RUN
 check "before an admin account, the token is refused" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 409 ]
 check "before an admin account, alerts are refused" [ "$(code -H "Authorization: Bearer $INTAKE" -d '{}')" = 503 ]
-check "the initial admin password in the chart's Secret signs in" [ "$(as "$FIRST" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
-check "it creates the first admin account" [ "$(as "$FIRST" POST /v1/accounts -d "{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$TEMPORARY\"}")" = 201 ]
-check "the account signs in with its temporary password" [ "$(as "$OWNER" POST /auth/password -d "{\"username\":\"e2e-admin\",\"password\":\"$TEMPORARY\"}")" = 204 ]
-check "and chooses its own" [ "$(as "$OWNER" POST /v1/me/password -d "{\"current\":\"$TEMPORARY\",\"new\":\"$OWN\"}")" = 204 ]
-check "it signs in with its own password" [ "$(as "$OWNER" POST /auth/password -d "{\"username\":\"e2e-admin\",\"password\":\"$OWN\"}")" = 204 ]
-check "which retires the initial admin password" [ "$(as "$OWNER" GET /v1/me)" = 200 ]
-check "and ends its session" [ "$(as "$FIRST" GET /v1/me)" = 401 ]
+check "the initial admin password in the chart's Secret signs in" [ "$(as "$BROWSER" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
+cp "$BROWSER" "$FIRST"
+check "it creates the first admin account, with its own password" [ "$(as "$BROWSER" POST /v1/accounts -d "{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$OWN\"}")" = 201 ]
+check "which signs the browser in as it" [ "$(curl -s -b "$BROWSER" "$API/v1/me" | field 'd["username"] + " " + str(d.get("temporaryPassword", False))')" = "e2e-admin False" ]
+check "and retires the initial admin password's session" [ "$(as "$FIRST" GET /v1/me)" = 401 ]
+check "and the password" [ "$(as "$FIRST" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 403 ]
 check "then the token reaches the API" [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $ADMIN" "$API/v1/incidents")" = 200 ]
 
 # --- Intake ------------------------------------------------------------------

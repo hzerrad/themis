@@ -25,6 +25,7 @@ Themis brings no model. Pick one the cluster can reach.
 kubectl --context kind-themis-dev create namespace themis
 kubectl --context kind-themis-dev -n themis create secret generic model-key --from-literal=apiKey=sk-...
 # then, in step 3: MODEL_URL=https://api.openai.com/v1 MODEL_NAME=gpt-4.1 MODEL_KEY_SECRET=model-key
+# or, for Claude: MODEL_PROVIDER=anthropic MODEL_NAME=claude-haiku-5-5 MODEL_KEY_SECRET=model-key
 ```
 
 **Ollama on your machine.** Pods reach your machine at the kind network's gateway. Bind Ollama to that address only, so it is not exposed on your network:
@@ -56,7 +57,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours, sign in with it, and choose your own password. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
+Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
 
 ## 5. Break the rollout
 

@@ -31,16 +31,19 @@ func reserved(username string) bool {
 	return username == TokenUser || username == InitialAdminUser || username == SetupUser || username == ChartUser
 }
 
-// SetupStore says whether setup has finished, and records when it does.
+// SetupStore says whether setup has finished, records when it does, and keeps
+// the session that signs in the first admin account's creator.
 type SetupStore interface {
+	SessionStore
 	SetupFinished(ctx context.Context) (bool, error)
 	FinishSetup(ctx context.Context, by string, at time.Time) (bool, error)
 }
 
 // Setup is an install's first run. It is open until an admin signs in with a
-// Themis account and a password of their own. While it is open, the initial
-// admin password signs in to make the first admin account; once it
-// finishes, the password and the sessions it started are retired for good.
+// Themis account and a password of their own, as creating the first admin
+// account does. While it is open, the initial admin password signs in to
+// make that account; once it finishes, the password and the sessions it
+// started are retired for good.
 type Setup struct {
 	Store  SetupStore
 	Logger *slog.Logger
@@ -77,6 +80,19 @@ func (s *Setup) finish(ctx context.Context, who Identity, at time.Time) {
 	if done {
 		s.logger().InfoContext(ctx, "initial admin password retired", "by", who.Username)
 	}
+}
+
+// SignInFirstAdmin signs whoever created a, the first admin account, in as
+// it, at now. They chose its password, so the account is theirs: this is an
+// admin signing in with a password of their own, which finishes setup at
+// once, whether or not the caller keeps the cookie. The session is a
+// password sign-in's, and its cookie replaces the one the browser held.
+func (s *Setup) SignInFirstAdmin(w http.ResponseWriter, r *http.Request, a store.Account, now time.Time) error {
+	if err := startAccountSession(w, r, s.Store, s.logger(), a.Username, now); err != nil {
+		return err
+	}
+	s.finish(r.Context(), Identity{Username: a.Username, Role: a.Role, Account: true, TemporaryPassword: a.TemporaryPassword}, now)
+	return nil
 }
 
 func (s *Setup) logger() *slog.Logger {

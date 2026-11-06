@@ -26,6 +26,7 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
 | OpenRouter | `https://openrouter.ai/api/v1` | a Secret with an `apiKey` key |
 | Ollama in the cluster | `http://ollama.ollama.svc:11434/v1` | none |
 | vLLM | `http://vllm.<namespace>.svc:8000/v1` | none, or a Secret if you set `--api-key` |
+| Anthropic, with `model.provider=anthropic` | none | a Secret with an `apiKey` key |
 
 ```bash
 kubectl -n themis create secret generic model-key --from-literal=apiKey=sk-...
@@ -35,7 +36,7 @@ Container logs are classified `sensitive`, and with the default `model.ceiling: 
 
 ### Images
 
-Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. By default they come from `ghcr.io/hzerrad`, published on every merge to main and signed: `main` is the latest, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
+Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. By default they come from `ghcr.io/hzerrad`, published for linux/amd64 and linux/arm64 on every merge to main, and signed: `main` is the latest, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
 
 ## Let Themis act
 
@@ -96,7 +97,7 @@ Then open <http://localhost:8090>. Themis starts once an admin account exists, a
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Then sign in with the admin account and choose your own password. The initial admin password then stops working. Opening Themis grants nothing by itself. To have Themis create the admin account at startup instead, see [Use with Argo CD or Flux](#use-with-argo-cd-or-flux).
+Then create the admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. To have Themis create the admin account at startup instead, see [Use with Argo CD or Flux](#use-with-argo-cd-or-flux).
 
 ## Sign people in
 

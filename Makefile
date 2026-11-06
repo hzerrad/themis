@@ -215,18 +215,20 @@ kind-down: ## Delete the local kind cluster
 
 # Themis and monitoring on the kind cluster. Bring your own model:
 # make themis-up MODEL_URL=https://... MODEL_NAME=... [MODEL_KEY_SECRET=...]
+# make themis-up MODEL_PROVIDER=anthropic MODEL_NAME=claude-... MODEL_KEY_SECRET=...
 MODEL_URL        ?=
 MODEL_KEY_SECRET ?=
 PROMETHEUS_CHART := 29.39.0
 
 .PHONY: themis-up themis-down
-themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_URL and MODEL_NAME
-	@test -n "$(MODEL_URL)" || { echo "set MODEL_URL (and MODEL_NAME) to an OpenAI-compatible endpoint"; exit 1; }
+themis-up: kind-load ## Install Themis on kind with the executor, using MODEL_URL and MODEL_NAME, or MODEL_PROVIDER=anthropic and MODEL_NAME
+	@test -n "$(MODEL_URL)" || test "$(MODEL_PROVIDER)" = anthropic || { echo "Set MODEL_URL and MODEL_NAME for an OpenAI-compatible endpoint, or MODEL_PROVIDER=anthropic and MODEL_NAME for Claude."; exit 1; }
 	@# Themis gets its access in each enrolled namespace at install, so it must exist.
 	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
 		--set image.repository= --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=IfNotPresent \
-		--set executor.enabled=true --set model.baseURL=$(MODEL_URL) --set model.name=$(MODEL_NAME) \
+		--set executor.enabled=true --set model.provider=$(MODEL_PROVIDER) \
+		$(if $(MODEL_URL),--set model.baseURL=$(MODEL_URL)) --set model.name=$(MODEL_NAME) \
 		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) --wait --timeout 5m
 
 themis-down: ## Uninstall Themis from kind
@@ -237,6 +239,7 @@ ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	@echo "UI: http://localhost:8090"
 	@echo "Until an admin account exists, the initial admin password signs in to create it:"
 	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
+	@echo "Creating the admin account signs you in with it."
 	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
 .PHONY: monitoring-up monitoring-down
@@ -277,15 +280,17 @@ DEV_ADMIN_TOKEN        := bin/dev/admin-token
 DEV_EXECUTOR_TOKEN     := bin/dev/executor-token
 DEV_ADMIN_PASSWORD     := bin/dev/admin-password
 DEV_DATABASE_URL       := postgres://themis:themis@127.0.0.1:5432/themis?sslmode=disable
-MODEL_NAME             ?= qwen3:8b
 OLLAMA_URL             ?= http://127.0.0.1:11434/v1
 # run-intelligence talks to Ollama unless MODEL_PROVIDER or MODEL_BASE_URL say
-# otherwise; anthropic with no MODEL_BASE_URL uses Anthropic's own API.
+# otherwise. anthropic with no MODEL_BASE_URL uses Anthropic's own API. Each
+# provider has its own default MODEL_NAME.
 MODEL_PROVIDER         ?= openai
 ifeq ($(MODEL_PROVIDER),anthropic)
 MODEL_BASE_URL         ?=
+MODEL_NAME             ?= claude-haiku-5-5
 else
 MODEL_BASE_URL         ?= $(OLLAMA_URL)
+MODEL_NAME             ?= qwen3:8b
 endif
 # `make run` and `make run-executor` use the dev-db database unless DATABASE_URL is set.
 DEV_DB_ENV             = DATABASE_URL="$${DATABASE_URL:-$(DEV_DATABASE_URL)}"

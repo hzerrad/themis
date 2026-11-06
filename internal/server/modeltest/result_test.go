@@ -21,7 +21,9 @@ func TestResult_Text(t *testing.T) {
 		return r
 	}
 	none := func(string) bool { return false }
-	helmDialect := func(name string) bool { return name == settings.ModelSchemaDialect || name == settings.ModelStrictOutput }
+	helmDialect := func(name string) bool {
+		return name == settings.ModelSchemaDialect || name == settings.ModelStrictOutput
+	}
 	for _, c := range []struct {
 		result    modeltest.Result
 		byInstall func(string) bool
@@ -35,7 +37,9 @@ func TestResult_Text(t *testing.T) {
 		{with(openai, func(r *modeltest.Result) {
 			r.Outcome, r.Status, r.Detail = modeltest.Refused, 404, "The model `gpt-4.2` does not exist"
 		}), none, "Failed. No model named gpt-4.2 at https://api.openai.com/v1 (404)."},
-		{with(ollama, func(r *modeltest.Result) { r.Outcome, r.Status, r.Detail = modeltest.Refused, 404, "404 page not found" }), none,
+		{with(ollama, func(r *modeltest.Result) {
+			r.Outcome, r.Status, r.Detail = modeltest.Refused, 404, "404 page not found"
+		}), none,
 			"Failed. No chat completions at http://ollama:11434/v1 (404). Check the address, such as https://api.openai.com/v1."},
 		{with(ollama, func(r *modeltest.Result) { r.Outcome, r.Latency = modeltest.NoAnswer, 20*time.Second }), none,
 			"Failed. No answer from http://ollama:11434/v1 within 20 s."},
@@ -56,7 +60,9 @@ func TestResult_Text(t *testing.T) {
 		{with(openai, func(r *modeltest.Result) {
 			r.Outcome, r.Status, r.Detail = modeltest.Refused, 400, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
 		}), none, "Failed. https://api.openai.com/v1 refused the request (400): Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead. Install with model.outputLimitField=max_completion_tokens."},
-		{with(openai, func(r *modeltest.Result) { r.Outcome, r.Status, r.Detail = modeltest.Refused, 429, "You exceeded your current quota" }), none,
+		{with(openai, func(r *modeltest.Result) {
+			r.Outcome, r.Status, r.Detail = modeltest.Refused, 429, "You exceeded your current quota"
+		}), none,
 			"Failed. https://api.openai.com/v1 refused the request (429): You exceeded your current quota."},
 		{with(ollama, func(r *modeltest.Result) { r.Outcome, r.OutputLimit = modeltest.CutOff, 512 }), none,
 			"Failed. The reply was cut off at 512 tokens. Raise model.maxOutputTokens for a model that reasons."},

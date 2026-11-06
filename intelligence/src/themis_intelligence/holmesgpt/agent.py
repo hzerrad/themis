@@ -91,20 +91,27 @@ class Agent:
 
     async def run(self) -> None:
         # Themis may start after the adapter: until it first answers, waiting
-        # for it is expected, not a problem.
-        connected, said_waiting = False, False
+        # for it is expected, not a problem. An outage after that is logged
+        # when it starts, when its cause changes and when it ends, not on
+        # every poll.
+        connected = False
+        outage: grpc.StatusCode | None = None
         while True:
             try:
                 await self.run_once()
-                connected = True
             except grpc.RpcError as e:
                 code = cast(grpc.Call, e).code()
-                error = code.name if code else str(e)
-                if connected:
-                    log.warning("Themis can't be reached", extra={"error": error})
-                elif not said_waiting:
-                    log.info("waiting for Themis to start", extra={"error": error})
-                    said_waiting = True
+                if code != outage:
+                    error = code.name if code else str(e)
+                    if connected:
+                        log.warning("Themis can't be reached", extra={"error": error})
+                    else:
+                        log.info("waiting for Themis to start", extra={"error": error})
+                    outage = code
+            else:
+                if connected and outage is not None:
+                    log.info("Themis reachable again")
+                connected, outage = True, None
             await asyncio.sleep(self.poll_s)
 
     async def run_once(self) -> int:

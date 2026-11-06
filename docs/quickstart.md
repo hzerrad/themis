@@ -9,8 +9,8 @@ Each step has a **kind** path and a **your cluster** path. The kind path uses th
 ## What you need
 
 - Docker, Helm and kubectl. The kind path also needs Go: kind runs through `go tool`.
-- A clone of this repository, for the chart and the sample workload. The images are published, so there's nothing to build.
-- A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM. You can also set it after install, on the Setup page, or run Themis without one and suggest fixes yourself or through HolmesGPT.
+- A clone of this repository, for the chart and the sample workload. The images are published for amd64 and arm64, so there's nothing to build.
+- A model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM, or Claude through Anthropic's API. You can also set it after install, on the Setup page, or run Themis without one and suggest fixes yourself or through HolmesGPT.
 - For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and an Alertmanager you can configure.
 
 If the model needs a key, put it in a Secret first:
@@ -40,14 +40,27 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
   --wait
 ```
 
+For Claude, set the provider instead of an address. Anthropic's API has only one:
+
+```bash
+helm install themis deploy/helm/themis -n themis --create-namespace \
+  --set enrolledNamespaces='{shop}' \
+  --set executor.enabled=true \
+  --set model.provider=anthropic \
+  --set model.name=claude-haiku-5-5 \
+  --set model.apiKeySecret=model-key \
+  --wait
+```
+
 Leave out `model.apiKeySecret` if the model needs no key. `model.schemaDialect=openai-strict` is for OpenAI, which accepts Themis's reply schema in strict mode only in that form; leave it out for Ollama and vLLM. OpenAI's newer models also need `--set model.outputLimitField=max_completion_tokens --set model.temperature=default`. The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one.
 
-To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODEL_NAME=...` builds the images, loads them into kind, and installs the chart.
+To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODEL_NAME=... MODEL_KEY_SECRET=model-key` builds the images, loads them into kind, and installs the chart. For Claude, give `MODEL_PROVIDER=anthropic` instead of `MODEL_URL`.
 
 | Value | What it does |
 |---|---|
 | `enrolledNamespaces` | The namespaces Themis may read and, with the executor, change. It gets a Role in each, and nothing else. |
 | `executor.enabled` | Installs the only part that can change workloads. Without it, Themis only diagnoses and suggests. |
+| `model.provider` | `anthropic` for Claude through Anthropic's API, which needs no `model.baseURL`. Empty means an OpenAI-compatible endpoint. |
 | `model.baseURL`, `model.name` | Your model. Leave them out to set the model on the **Setup** page instead, where its key is kept encrypted. With `model.enabled=false`, Themis installs no investigator, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT. |
 | `model.apiKeySecret` | The Secret with an `apiKey` key, if the model needs one |
 
@@ -140,7 +153,7 @@ Open <http://localhost:8090> and sign in with the initial admin password. The ch
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Themis starts once an admin account exists, and serves nothing else until then. Alerts sent before are refused, and Alertmanager sends them again later. The initial admin password only creates that account. Create your admin account, sign in with it, and choose your own password. The initial admin password then stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
+Themis starts once an admin account exists, and serves nothing else until then. Alerts sent before are refused, and Alertmanager sends them again later. The initial admin password only creates that account. Create your admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
 
 The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 

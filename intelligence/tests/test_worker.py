@@ -1,7 +1,9 @@
 import asyncio
+import contextlib
 from typing import Any
 
 import grpc
+import pytest
 
 from tests.investigation.fakes import FakeCore, FakeRpcError, ScriptedModel, job
 from themis.v1 import investigation_pb2
@@ -62,6 +64,40 @@ async def test_completes_a_leased_investigation() -> None:
 async def test_nothing_to_lease() -> None:
     worker = Worker(core=LeasingCore(leases=0), new_model=ScriptedModel)
     assert await worker.run_once() is False
+
+
+class ClosedCore(LeasingCore):
+    """Refuses calls, as the core does until its first admin account exists."""
+
+    def __init__(self, refusals: int) -> None:
+        super().__init__(leases=0)
+        self.refusals = refusals
+        self.opened = asyncio.Event()
+
+    async def lease(self, worker_id: str) -> investigation_pb2.Investigation | None:
+        if self.refusals:
+            self.refusals -= 1
+            raise FakeRpcError(grpc.StatusCode.FAILED_PRECONDITION, "No admin account.")
+        self.opened.set()
+        return await super().lease(worker_id)
+
+
+# The worker keeps retrying, but logs the outage once when it starts and once
+# when it ends.
+async def test_an_outage_is_logged_when_it_starts_and_ends(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("INFO")
+    core = ClosedCore(refusals=5)
+    task = asyncio.create_task(Worker(core=core, new_model=ScriptedModel).run(idle_s=0))
+    await asyncio.wait_for(core.opened.wait(), 1)
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    records = [r for r in caplog.records if r.name == "themis_intelligence.worker"]
+    said = [(r.levelname, r.getMessage()) for r in records]
+    assert said == [("WARNING", "core unavailable"), ("INFO", "core available again")]
+    assert records[0].__dict__["error"] == "FAILED_PRECONDITION: No admin account."
 
 
 async def test_failure_is_reported() -> None:
