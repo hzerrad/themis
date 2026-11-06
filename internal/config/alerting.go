@@ -11,6 +11,19 @@ import (
 type Alerting struct {
 	// Alertmanager is the Alertmanager whose active alerts Themis reads.
 	Alertmanager Alertmanager `json:"alertmanager,omitzero"`
+
+	// Prometheus is where Themis checks that the alerts the profiles answer
+	// have alerting rules, when metrics.prometheus has no address: the
+	// metrics source is asked first.
+	Prometheus PrometheusRules `json:"prometheus,omitzero"`
+}
+
+// PrometheusRules is a server answering Prometheus's API whose alerting
+// rules Themis reads, without credentials.
+type PrometheusRules struct {
+	// Address is its base URL, under which /api/v1/rules is served. The
+	// chart sets it to the Prometheus it finds in the cluster at install.
+	Address string `json:"address,omitempty"`
 }
 
 // Alertmanager configures reading the active alerts from Alertmanager's API.
@@ -113,6 +126,19 @@ func (a Alertmanager) validate(add func(path, format string, args ...any)) {
 	if d := a.Interval.Duration; d != 0 && d < time.Second {
 		add(path+".interval", "must be at least 1s, got %s", d)
 	}
+}
+
+// RulesSource returns the server whose alerting rules Themis reads: the
+// metrics source, with its credentials, or else alerting.prometheus. False
+// when there is none.
+func (c Config) RulesSource() (Prometheus, bool) {
+	if p := c.Metrics.Prometheus; p != nil {
+		return *p, true
+	}
+	if a := c.Alerting.Prometheus.Address; a != "" {
+		return Prometheus{Address: a}, true
+	}
+	return Prometheus{}, false
 }
 
 // AlertNames are the alerts some profile answers, sorted, each once.

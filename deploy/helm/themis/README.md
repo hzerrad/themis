@@ -91,7 +91,9 @@ helm upgrade themis deploy/helm/themis -n themis --reuse-values \
   --set 'alerting.alertmanager.matchers={cluster="prod-eu"}'   # for an Alertmanager several clusters share
 ```
 
-An Alertmanager that needs a token, basic auth or its own CA gets them with its address, in `alerting.alertmanager`. To have Alertmanager send alerts to Themis's webhook instead, set `alerting.alertmanager.enabled=false`: the **Setup** page then shows the steps for your install. Alertmanager sends to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
+An Alertmanager that needs a token, basic auth or its own CA gets them with its address, in `alerting.alertmanager`.
+
+The Setup page and the Status page say which of the alerts Themis answers have a rule in Prometheus: the one at `metrics.prometheus.address`, or the one the chart finds at install. kube-prometheus-stack lacks `KubePodOOMKilled`. With the Prometheus Operator, `--set alerting.rules.install=true` installs a PrometheusRule with the rules the usual stacks lack, labelled as the first `Prometheus` resource found selects rules, or with `alerting.rules.labels`. `alerting.rules.standard=true` adds the rest, for a Prometheus without kube-prometheus-stack's rules. To have Alertmanager send alerts to Themis's webhook instead, set `alerting.alertmanager.enabled=false`: the **Setup** page then shows the steps for your install. Alertmanager sends to `http://themis-core.<namespace>.svc:8080/v1/intake/alertmanager` with the intake token, the `intake` key of the `themis-tokens` Secret the chart generates (or of `tokens.existingSecret`). See [Connecting your Alertmanager](../../../docs/configuration.md#connecting-your-alertmanager).
 
 ## Open the UI
 
@@ -171,6 +173,9 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `alerting.alertmanager.tls.insecureSkipVerify` | `false` | Accept any certificate. Only for trying Themis |
 | `alerting.alertmanager.matchers` | `[]` | Matchers that narrow the alerts read, such as `cluster="prod-eu"` |
 | `alerting.alertmanager.interval` | `15s` | How often Alertmanager is read |
+| `alerting.rules.install` | `false` | Install a PrometheusRule with the alerting rules the usual stacks lack, such as `KubePodOOMKilled`, when the cluster serves PrometheusRule |
+| `alerting.rules.standard` | `false` | Also the rules kube-prometheus-stack has, for a Prometheus without them |
+| `alerting.rules.labels` | `{}` | The PrometheusRule's labels, which your Prometheus selects rules by. Empty: those of the first `Prometheus` resource found at install |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |

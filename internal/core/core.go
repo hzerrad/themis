@@ -34,11 +34,13 @@ import (
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/incident/intake/rules"
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/incident/notification"
 	"github.com/hzerrad/themis/internal/incident/reconciliation"
 	"github.com/hzerrad/themis/internal/incident/suggestion"
 	"github.com/hzerrad/themis/internal/incident/verification"
+	"github.com/hzerrad/themis/internal/platform/fetch"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/platform/token"
 	"github.com/hzerrad/themis/internal/server/grpcapi"
@@ -231,6 +233,10 @@ func Run(ctx context.Context, o Options) error {
 	telemetry.AddUnscopedWorker(workers, &alertmanager.ReadWorker{
 		Connection: connection, Config: current, Store: s, Receiver: intake.NewReceiver(s), Gate: gate, Logger: log,
 	})
+	alertRules, err := rulesSource(cfg)
+	if err != nil {
+		return err
+	}
 
 	periodic := []*river.PeriodicJob{
 		river.NewPeriodicJob(river.PeriodicInterval(time.Minute), func() (river.JobArgs, *river.InsertOpts) {
@@ -278,6 +284,9 @@ func Run(ctx context.Context, o Options) error {
 		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
 		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,
 		Alertmanager: connection, ReadEvery: reading.EffectiveInterval(),
+	}
+	if alertRules != nil {
+		checker.Rules, api.Rules = alertRules, alertRules
 	}
 	if cfg.Executor != nil {
 		checker.Executor = cfg.Executor.Address
@@ -410,6 +419,20 @@ func (s *server) Start(ctx context.Context) error {
 }
 
 func (s *server) NeedLeaderElection() bool { return false }
+
+// rulesSource reads the alerting rules of the Prometheus the install knows,
+// or returns nil when it knows none.
+func rulesSource(cfg config.Config) (*rules.Prometheus, error) {
+	p, ok := cfg.RulesSource()
+	if !ok {
+		return nil, nil
+	}
+	tlsConfig, err := p.TLS.ClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("metrics.prometheus.tls: %w", err)
+	}
+	return rules.NewPrometheus(p.Address, fetch.Credentials{BearerTokenFile: p.BearerTokenFile}, tlsConfig)
+}
 
 // dialExecutor connects to the executor, or returns nil when none is
 // configured.

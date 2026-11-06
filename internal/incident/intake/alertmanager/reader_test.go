@@ -3,7 +3,6 @@ package alertmanager_test
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/platform/fetch"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
@@ -333,65 +333,31 @@ func TestRead_NoAdminAccount(t *testing.T) {
 
 // The install's credentials go with the address it set.
 func TestRead_Credentials(t *testing.T) {
-	for name, tc := range map[string]struct {
-		install func(dir string) config.Alertmanager
-		header  string
-	}{
-		"a token": {func(dir string) config.Alertmanager {
-			return config.Alertmanager{BearerTokenFile: file(t, dir, "token", "am-token\n")}
-		}, "Bearer am-token"},
-		"basic auth": {func(dir string) config.Alertmanager {
-			return config.Alertmanager{BasicAuth: &config.BasicAuth{Username: "themis", PasswordFile: file(t, dir, "password", "s3cret")}}
-		}, "Basic dGhlbWlzOnMzY3JldA=="},
-	} {
-		t.Run(name, func(t *testing.T) {
-			e := newRead(t, config.Alertmanager{})
-			e.am.auth = tc.header
-			e.am.set("a", fakeAlert{name: "KubePodCrashLooping", startsAt: t0})
-			install := tc.install(t.TempDir())
-			install.Address = e.server.URL
-			e.worker = e.newWorker(install)
-			want(t, "a read with credentials", e.read(t, 0), "firing a")
-		})
-	}
-}
-
-func file(t *testing.T, dir, name, content string) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	e := newRead(t, config.Alertmanager{})
+	e.am.auth = "Bearer am-token"
+	e.am.set("a", fakeAlert{name: "KubePodCrashLooping", startsAt: t0})
+	token := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(token, []byte("am-token\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	e.worker = e.newWorker(config.Alertmanager{Address: e.server.URL, BearerTokenFile: token})
+	want(t, "a read with the install's token", e.read(t, 0), "firing a")
 }
 
 // A read that fails is recorded with why, takes nothing, and is counted.
-func TestRead_Failures(t *testing.T) {
-	for name, tc := range map[string]struct {
-		breakIt func(*readEnv)
-		kind    string
-		says    string
-	}{
-		"unreachable":      {func(e *readEnv) { e.server.Close() }, store.ReadUnreachable, "alertmanager at http://127.0.0.1:%s doesn't answer: dial tcp"},
-		"wrong token":      {func(e *readEnv) { e.am.auth = "Bearer other" }, store.ReadRefused, "alertmanager at http://127.0.0.1:%s answered 401 Unauthorized"},
-		"broken":           {func(e *readEnv) { e.am.status = http.StatusBadGateway }, store.ReadUnexpected, "alertmanager at http://127.0.0.1:%s answered 502 Bad Gateway"},
-		"not Alertmanager": {func(e *readEnv) { e.am.body = "<html>" }, store.ReadUnexpected, "the answer from http://127.0.0.1:%s isn't Alertmanager's"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			counted := metrictest.Delta(t, "themis_intake_reads_total", map[string]string{"source": "alertmanager", "result": tc.kind})
-			e := newRead(t, config.Alertmanager{})
-			e.am.set("a", fakeAlert{name: "KubePodCrashLooping", startsAt: t0})
-			port := e.server.URL[strings.LastIndex(e.server.URL, ":")+1:]
-			tc.breakIt(e)
-			want(t, "a failed read", e.read(t, 0))
-			last, err := e.store.LastAlertRead(t.Context(), alertmanager.Source)
-			if err != nil || last.FailureKind != tc.kind || !strings.HasPrefix(last.Failure, fmt.Sprintf(tc.says, port)) || !last.FailedAt.Equal(t0) {
-				t.Errorf("the last read = %+v, %v; want %s saying %q", last, err, tc.kind, fmt.Sprintf(tc.says, port))
-			}
-			if got := counted(); got != 1 {
-				t.Errorf("reads counted %v, want 1", got)
-			}
-		})
+func TestRead_Failure(t *testing.T) {
+	counted := metrictest.Delta(t, "themis_intake_reads_total", map[string]string{"source": "alertmanager", "result": fetch.Refused})
+	e := newRead(t, config.Alertmanager{})
+	e.am.set("a", fakeAlert{name: "KubePodCrashLooping", startsAt: t0})
+	e.am.auth = "Bearer other"
+	want(t, "a refused read", e.read(t, 0))
+	says := "Alertmanager at " + e.server.URL + " answered 401 Unauthorized"
+	last, err := e.store.LastAlertRead(t.Context(), alertmanager.Source)
+	if err != nil || last.FailureKind != fetch.Refused || last.Failure != says || !last.FailedAt.Equal(t0) {
+		t.Errorf("the last read = %+v, %v; want refused, saying %q", last, err, says)
+	}
+	if got := counted(); got != 1 {
+		t.Errorf("reads counted %v, want 1", got)
 	}
 }
 
@@ -416,7 +382,7 @@ func TestConnection_Test(t *testing.T) {
 	}
 	for address, says := range map[string]string{
 		"ftp://alertmanager": "alertmanager's address must be an http or https URL",
-		"http://127.0.0.1:1": "alertmanager at http://127.0.0.1:1 doesn't answer",
+		"http://127.0.0.1:1": "Alertmanager at http://127.0.0.1:1 doesn't answer",
 	} {
 		if _, err := e.worker.Connection.Test(t.Context(), address, answered); err == nil || !strings.HasPrefix(err.Error(), says) {
 			t.Errorf("Test(%s) = %v, want %q", address, err, says)

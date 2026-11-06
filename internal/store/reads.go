@@ -9,16 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Why a read of a source of alerts failed.
-const (
-	// ReadUnreachable: the source didn't answer.
-	ReadUnreachable = "unreachable"
-	// ReadRefused: the source refused Themis's credentials.
-	ReadRefused = "refused"
-	// ReadUnexpected: the source answered, but not as it should.
-	ReadUnexpected = "unexpected"
-)
-
 // AlertRead is how Themis last read a source of alerts. A zero time means
 // never.
 type AlertRead struct {

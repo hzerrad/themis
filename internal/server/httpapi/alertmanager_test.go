@@ -1,7 +1,9 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/config/settings"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
+	"github.com/hzerrad/themis/internal/incident/intake/rules"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
@@ -71,5 +74,49 @@ func TestAlertmanagerSettings(t *testing.T) {
 	installed := alertmanagerAPI(t, config.Alertmanager{Address: am.URL})
 	if rec := send(t, installed, http.MethodPut, "/v1/settings/alertmanager", map[string]string{"address": "http://other:9093"}); rec.Code != http.StatusConflict {
 		t.Errorf("changing the install's address = %d %q, want 409", rec.Code, rec.Body)
+	}
+}
+
+// missingOOM is a Prometheus with every rule but KubePodOOMKilled's.
+type missingOOM struct{}
+
+func (missingOOM) Check(_ context.Context, answered []string) (rules.Result, error) {
+	res := rules.Result{Address: "http://prometheus:9090", Exist: []string{}, Missing: []string{}}
+	for _, name := range answered {
+		if name == "KubePodOOMKilled" {
+			res.Missing = append(res.Missing, name)
+		} else {
+			res.Exist = append(res.Exist, name)
+		}
+	}
+	return res, nil
+}
+
+// The Setup page says which alerts have rules in Prometheus, and gives the
+// rules Themis ships for those missing: for every alert, without Prometheus.
+func TestAlertRules(t *testing.T) {
+	s, _ := pgtest.NewStore(t)
+	cfg := config.Config{Profiles: []config.Profile{{Match: config.Match{AlertNames: []string{"KubePodCrashLooping", "KubePodOOMKilled", "Custom.Alert"}}}}}
+	get := func(r httpapi.AlertRules) map[string]any {
+		t.Helper()
+		mux := http.NewServeMux()
+		(&httpapi.API{Store: s, TokenFile: tokenFile(t), Config: cfg, Rules: r}).Register(mux)
+		rec := send(t, mux, http.MethodGet, "/v1/setup/alert-rules", nil)
+		var v map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
+			t.Fatalf("GET = %d %q", rec.Code, rec.Body)
+		}
+		return v
+	}
+
+	v := get(nil)
+	if v["checked"] != false || v["standard"] != true || fmt.Sprint(v["unshipped"]) != "[Custom.Alert]" ||
+		!strings.Contains(v["ruleFile"].(string), "alert: KubePodCrashLooping") || !strings.Contains(v["ruleFile"].(string), "alert: KubePodOOMKilled") {
+		t.Errorf("without Prometheus = %v", v)
+	}
+	v = get(missingOOM{})
+	if v["checked"] != true || fmt.Sprint(v["missing"]) != "[KubePodOOMKilled]" || v["standard"] != false ||
+		strings.Contains(v["ruleFile"].(string), "KubePodCrashLooping") || !strings.Contains(v["prometheusRule"].(string), "kind: PrometheusRule") {
+		t.Errorf("with KubePodOOMKilled missing = %v", v)
 	}
 }

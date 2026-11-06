@@ -16,6 +16,7 @@ import (
 
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident/intake"
+	"github.com/hzerrad/themis/internal/platform/fetch"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
@@ -163,7 +164,7 @@ func (w *ReadWorker) failed(ctx context.Context, err error, at time.Time) error 
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	kind, msg := failureKind(err), err.Error()
+	kind, msg := fetch.KindOf(err), err.Error()
 	intake.ObserveRead(Source, kind)
 	level := slog.LevelWarn
 	if last, lerr := w.Store.LastAlertRead(ctx, Source); lerr == nil && last.FailedAt.After(last.ReadAt) && last.Failure == msg {

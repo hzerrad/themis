@@ -51,6 +51,10 @@ data:
         {{- else }}
         disabled: true
         {{- end }}
+      {{- with include "themis.prometheusFound" . }}
+      prometheus:
+        address: {{ . | quote }}
+      {{- end }}
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
       {{- if not (include "themis.modelEnabled" .) }}

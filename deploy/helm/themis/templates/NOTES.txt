@@ -35,6 +35,17 @@ Alerts:   Read from {{ . }} every {{ $am.interval | default "15s" }}.
 Alerts:   No Alertmanager found in the cluster. Set its address on the Setup page.
 {{- end }}
 {{- end }}
+{{- $rules := include "themis.rulesValues" . | fromJson }}
+{{- if $rules.install }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule" }}
+Rules:    Installed as PrometheusRule {{ .Release.Name }}-alert-rules
+          {{- with include "themis.ruleLabels" . | fromJson }}, labelled
+          {{- range $k, $v := . }} {{ $k }}={{ $v }}{{ end }}{{ end }}.
+{{- else }}
+Rules:    Not installed: this cluster serves no PrometheusRule. The Setup page
+          shows the rules to add to Prometheus.
+{{- end }}
+{{- end }}
 Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
 {{- $model := .Values.model }}

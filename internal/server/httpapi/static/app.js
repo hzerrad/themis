@@ -584,6 +584,42 @@ function testFinding(r) {
   ];
 }
 
+// alertRules says which of the alerts Themis answers have rules in
+// Prometheus, and offers the rules Themis ships for those missing.
+function alertRules() {
+  const out = h("div", { class: "sub" });
+  (async () => {
+    let v;
+    try {
+      v = await api("/v1/setup/alert-rules");
+    } catch (e) {
+      out.replaceChildren(h("div", { class: "error" }, e.message));
+      return;
+    }
+    const finding = v.checked
+      ? (v.missing.length
+        ? v.exist.length + " of " + v.answered.length + " alerts exist in Prometheus at " + v.address + ". Missing: " + v.missing.join(", ") + "."
+        : "All " + v.exist.length + " alerts exist in Prometheus at " + v.address + ".")
+      : (v.error ? v.error + " " : "Not checked: no Prometheus address. ") + "Check by hand that Prometheus has rules for " + v.answered.join(", ") + ".";
+    const values = "alerting:\n  rules:\n    install: true" + (v.standard ? "\n    standard: true" : "");
+    out.replaceChildren(
+      h("h3", {}, "Alert rules"),
+      h("p", {}, finding),
+      v.unshipped.length ? h("p", { class: "quiet" }, "Themis ships no rule for " + v.unshipped.join(", ") + ". Add one for each.") : null,
+      v.ruleFile ? h("details", { class: "fold sub", "data-key": "alert-rules" },
+        h("summary", {}, v.checked ? "The rules missing" : "The rules Themis ships for them"),
+        h("h3", {}, "With the Prometheus Operator"),
+        h("p", { class: "quiet" }, "Install them with the chart, labelled as the first Prometheus it finds selects rules. For another Prometheus, set alerting.rules.labels too."),
+        copyable(values),
+        h("p", { class: "quiet" }, "Or apply them yourself, with those labels."),
+        copyable(v.prometheusRule),
+        h("h3", {}, "Any other Prometheus"),
+        h("p", { class: "quiet" }, "Add this file to Prometheus's rule files."),
+        copyable(v.ruleFile)) : null);
+  })();
+  return out;
+}
+
 // alertsStep reads alerts from Alertmanager: the address in use, where it
 // comes from, and a test. Sending them to Themis is the other way.
 function alertsStep(v, check) {
@@ -593,7 +629,8 @@ function alertsStep(v, check) {
     h("summary", {}, "Or let Alertmanager send alerts to Themis"), alertmanagerSetup());
   if (!v.reading) {
     return [h("p", {}, partFinding(check)),
-      check.state === "ok" ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]];
+      check.state === "ok" ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()],
+      alertRules()];
   }
   const locked = v.from === "install";
   const address = h("input", { type: "text", value: v.address, placeholder: "http://alertmanager-operated.monitoring:9093", autocapitalize: "none", disabled: locked });
@@ -633,6 +670,7 @@ function alertsStep(v, check) {
         locked ? null : h("button", { class: "btn primary", type: "submit" }, "Save the address"),
         h("button", { class: "btn", type: "button", onclick: test }, "Test")),
       error, result),
+    alertRules(),
     webhook];
 }
 

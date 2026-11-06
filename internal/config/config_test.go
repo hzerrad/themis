@@ -122,6 +122,7 @@ func TestValidate_Errors(t *testing.T) {
 			c.Metrics.Prometheus = &config.Prometheus{Address: "https://prometheus", TLS: config.TLS{CertFile: "/c"}}
 		}, "metrics.prometheus.tls"},
 		{"alertmanager not http", func(c *config.Config) { c.Alerting.Alertmanager.Address = "alertmanager:9093" }, "alerting.alertmanager.address"},
+		{"rules prometheus not http", func(c *config.Config) { c.Alerting.Prometheus.Address = "prometheus:9090" }, "alerting.prometheus.address"},
 		{"credentials for an address found", func(c *config.Config) {
 			c.Alerting.Alertmanager = config.Alertmanager{Address: "http://am:9093", Found: true, BearerTokenFile: "/t"}
 		}, "alerting.alertmanager"},
