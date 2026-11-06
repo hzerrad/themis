@@ -68,12 +68,23 @@ class Worker:
         self.retry_s = retry_s
 
     async def run(self, idle_s: float = 2.0) -> None:
+        # The core can refuse every call for a long time, as it does until its
+        # first admin account exists. An outage is logged when it starts, when
+        # its cause changes and when it ends, not on every retry.
+        outage: grpc.StatusCode | None = None
         while True:
             try:
                 worked = await self.run_once()
             except grpc.RpcError as e:
-                log.warning("core unavailable", extra={"error": rpc_error(e)})
+                code = cast(grpc.Call, e).code()
+                if code != outage:
+                    log.warning("core unavailable", extra={"error": rpc_error(e)})
+                    outage = code
                 worked = False
+            else:
+                if outage is not None:
+                    log.info("core available again")
+                    outage = None
             if not worked:
                 await asyncio.sleep(idle_s)
 
