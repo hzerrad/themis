@@ -14,7 +14,7 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `intake.tokenSecret` | no | The Secret, in Themis's namespace, whose `intake` key holds the token, for the same steps. The chart sets it. |
 | `investigators.bearerTokenFile` | yes | Token the investigator must send to the core's gRPC API. |
 | `settings.keyFile` | no | File holding the secret that encrypts secret settings made on the Setup page, such as the model's key. The chart generates it once, in the `themis-tokens` Secret, and keeps it across upgrades. Losing or changing it makes those settings unreadable: set them again. |
-| `model.provider`, `model.baseURL`, `model.name`, `model.apiKey` | no | What the install set for the investigator's model; the chart sets them from its values. The Setup page can't change these, and sets only what's left. `model.provider` is the API the investigator speaks: `openai` (the default) for any OpenAI-compatible API, or `anthropic` for Claude models through Anthropic's own API. Anthropic's needs no address, so the Setup page shows only its model name and key. How an OpenAI-compatible API is asked for its reply is the chart's too: `model.outputLimitField`, `max_tokens` (the default) or `max_completion_tokens`; `model.temperature`, a number (`0` by default) or `default` to send none; and `model.schemaDialect`, `as-is` (the default) or `openai-strict`, which sends the reply schema in the form OpenAI's strict mode accepts: every object closed, every field required, an optional one allowed to be null, and a map such as a fix's containers as a list of entries. Themis turns each reply back and checks it against its own schema. For OpenAI's newer models, set all three: `max_completion_tokens`, `default` and `openai-strict`. Ollama and vLLM take the defaults. |
+| `model.provider`, `model.baseURL`, `model.name`, `model.apiKey`, `model.strictOutput`, `model.schemaDialect` | no | What the install set for the investigator's model; the chart sets them from its values. The Setup page can't change these, and sets only what's left; see [The model on the Setup page](#the-model-on-the-setup-page). `model.provider` is the API the investigator speaks: `openai` (the default) for any OpenAI-compatible API, or `anthropic` for Claude models through Anthropic's own API. Anthropic's needs no address, so the Setup page shows only its model name and key. An address set at install fixes the provider, `model.strictOutput` and `model.schemaDialect` with it. How an OpenAI-compatible API is asked for its reply is the chart's too: `model.outputLimitField`, `max_tokens` (the default) or `max_completion_tokens`; `model.temperature`, a number (`0` by default) or `default` to send none; and `model.schemaDialect`, `as-is` (the default) or `openai-strict`, which sends the reply schema in the form OpenAI's strict mode accepts: every object closed, every field required, an optional one allowed to be null, and a map such as a fix's containers as a list of entries. Themis turns each reply back and checks it against its own schema. For OpenAI's newer models, set all three: `max_completion_tokens`, `default` and `openai-strict`. Ollama and vLLM take the defaults. |
 | `investigators.disabled` | no | No investigator is installed. Themis collects evidence and runs its checks, then each incident waits (`awaiting_suggestion`) for a fix suggested by a person or a tool outside Themis, and closes without action if none comes within `externalProposals.window`. The chart sets it with `model.enabled: false`. |
 | `api.bearerTokenFile` | yes | Admin token for the HTTP API and the UI. It keeps working when people sign in through OIDC. |
 | `api.initialAdmin.passwordFile` | no | File holding the initial admin password, which signs in only to create the first admin account (see [People and roles](#people-and-roles)). The chart generates it. It can't be set with `api.adminAccount`. |
@@ -32,6 +32,33 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `metrics` | no | Where Themis reads how much memory and CPU containers use; see [Metrics](#metrics). The Kubernetes metrics API is on by default. |
 | `scenarios.disabled` | no | [Scenario packs](scenarios.md) to turn off, by name. Every pack is on otherwise, each bringing its profile and checks. A name no pack has stops Themis from starting. |
 | `profiles` | no | Incident classes of your own, below, on top of the scenario packs'. Set either this or `resources`, not both. |
+
+## The model on the Setup page
+
+The Setup page's model step sets what the chart left unset for the investigator's model, and tests its connection. What Helm set is listed once, under "Set in Helm.", and isn't offered. The rest is asked for by provider:
+
+| Provider | Asked for |
+|---|---|
+| OpenAI-compatible (`openai`) | Address, model, API key (optional), reply format |
+| Anthropic (`anthropic`) | Model, API key |
+
+The reply format is the chart's `model.strictOutput` and `model.schemaDialect` together: **Strict** (`true`, `as-is`), as Ollama and vLLM take it; **OpenAI's strict form** (`true`, `openai-strict`), which OpenAI needs; and **Not strict** (`false`). The key is encrypted with `settings.keyFile` and never shown again. A saved change applies from the next investigation. The step is done once the model has a name, and an address unless its provider is Anthropic. The save button shows only when something is left to set.
+
+**Test the connection** sends the model one small request with the values in the form, saved or not. Nothing is saved. The investigator makes the request, since only it may reach the model, and makes it as in an investigation: the same provider, address, key, reply format, output limit field and temperature. The reply schema has two fields, and the output limit is 512 tokens unless `model.maxOutputTokens` sets one. A key typed and not saved goes to the investigator for that request only. Without one, the test uses the key stored on the page or set in Helm. The model has 20 s to answer. One test runs at a time, and only admins can run one. The core logs one line per test with its outcome, provider, HTTP status and latency, never the key or what the model was sent.
+
+| Result | Means |
+|---|---|
+| Connected. claude-haiku-5-5 answered in 1.2 s in the reply format. | Investigations can use the model. |
+| Failed. Anthropic refused the key (401). | The key is wrong or revoked. |
+| Failed. No model named gpt-4.2 at https://api.openai.com/v1 (404). | The endpoint serves no model by that name. |
+| Failed. No chat completions at http://ollama:11434 (404). Check the address, such as https://api.openai.com/v1. | The address lacks its API path, usually `/v1`. |
+| Failed. No answer from http://ollama:11434/v1 within 20 s. | The model is too slow or overloaded. |
+| Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that model.egressCIDR allows it. | Nothing listens at the address, or the NetworkPolicy blocks it. |
+| Failed. https://api.openai.com/v1 refused the request (400): *the provider's text*. *Remedy.* | The provider refused a setting. The remedy names it when the text does, such as `model.outputLimitField=max_completion_tokens`. |
+| Failed. The model answered, but not in the reply format. *Remedy.* | The one remedy that applies: OpenAI's strict form, Not strict, its Helm value, or a larger model. |
+| Failed. The reply was cut off at 512 tokens. Raise model.maxOutputTokens for a model that reasons. | The model reasons past the output limit. |
+| No investigator is connected. Themis can't reach the model without it. | The investigator isn't running, or isn't connected to the core. Status says which. |
+| Not tested. Enter the address and the model first. | The form lacks what the provider needs. |
 
 ## People and roles
 
@@ -171,6 +198,8 @@ externalProposals:
       perMinute: 6
       ceiling: internal                   # sensitive also lets it read container logs
 ```
+
+**People** with the `approver` role suggest a fix on the incident's page, while Themis investigates or the incident waits for a suggestion. The page offers every fix the incident's profiles offer, each with its values, such as a revision, a memory limit or a probe timeout, and cites all the evidence Themis collected.
 
 **Agents** call the `ProposalService` gRPC API on port 9090: `ListIncidents`, `GetIncident`, and `SubmitProposal` with `incident_id` instead of `lease_id`. `GetIncident` lists the fixes the agent may suggest for that incident, each with what it does and the JSON Schema of its parameters. A suggestion names the fix in `capability_name` and gives `params` as that schema describes, for example `"capability_name": "deployment.rollback-to-revision", "params": {"revision": 1}`; parameters that don't fit are rejected with the reason. The older `rollback_to_revision` field still works. Each sends a Kubernetes ServiceAccount token issued for the audience `themis`, for example from a [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/#serviceaccounttoken), and Themis checks it with the API server. A token for another audience is refused. Add the agent's namespace to the chart's `networkPolicy.agentNamespaces`.
 

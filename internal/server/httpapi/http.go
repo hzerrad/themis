@@ -21,6 +21,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/modeltest"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -50,7 +51,7 @@ type API struct {
 	// fix. Without it, nobody can.
 	Again Reinvestigation
 	// Fixes are the fixes Themis can carry out, which show what an action
-	// changes.
+	// changes and how a person suggests one.
 	Fixes capability.Registry
 	// CheckList is the checks Themis runs, which say what each answer means.
 	CheckList check.List
@@ -58,7 +59,7 @@ type API struct {
 	// which say what each means.
 	RootCauses catalog.RootCauses
 	// Config is Themis's live configuration, for the alerts its profiles
-	// handle.
+	// handle and the fixes they offer.
 	Config config.Provider
 	// Intake is where Alertmanager reaches Themis, and Namespace Themis's own,
 	// for the commands Themis shows.
@@ -67,6 +68,9 @@ type API struct {
 	// Settings are the model settings made in Themis's setup. Nil means
 	// setup can't change them.
 	Settings ModelSettings
+	// ModelTests test the model's connection through the investigator. Nil
+	// means no test is offered.
+	ModelTests *modeltest.Tests
 	// Checks say whether each part of the install works. Nil means the
 	// status page isn't served.
 	Checks interface {
@@ -118,6 +122,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	if a.Settings != nil {
 		mux.Handle("GET /v1/settings/model", a.authed(config.RoleAdmin, a.modelSettings, nil))
 		mux.Handle("PUT /v1/settings/model", a.authed(config.RoleAdmin, a.setModelSettings, nil))
+		if a.ModelTests != nil {
+			mux.Handle("POST /v1/settings/model/test", a.authed(config.RoleAdmin, a.testModel, nil))
+		}
 	}
 }
 

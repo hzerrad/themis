@@ -568,54 +568,115 @@ function alertmanagerSetup() {
 // modelSaved says the model was just saved, so Setup says so once.
 let modelSaved = false;
 
-// modelStep sets the model the install left unset. What the install set is
-// shown locked: a change here would be undone by the next upgrade. Anthropic's
-// API has its own address, so it shows no address or strict format.
+// PROVIDERS name the APIs the investigator speaks; PROVIDER_CHOICES offer them.
+const PROVIDERS = { openai: "OpenAI-compatible", anthropic: "Anthropic" };
+const PROVIDER_CHOICES = { openai: "OpenAI-compatible: OpenAI, OpenRouter, Ollama, vLLM", anthropic: "Anthropic" };
+
+// REPLY_FORMATS are how an OpenAI-compatible API is asked for its reply: the
+// name on the page, strict output, and the form the schema is sent in.
+const REPLY_FORMATS = {
+  strict: ["Strict", true, "as-is"],
+  "openai-strict": ["OpenAI's strict form", true, "openai-strict"],
+  loose: ["Not strict", false, "as-is"],
+};
+const replyFormat = (v) => (!v.strictOutput ? "loose" : v.schemaDialect === "openai-strict" ? "openai-strict" : "strict");
+
+// choice is a select of options, {value: label}, with value chosen.
+function choice(options, value) {
+  return h("select", {}, Object.entries(options).map(([k, text]) => h("option", { value: k, selected: k === value }, text)));
+}
+
+// modelStep sets the model the install left unset, and tests its connection.
+// What the install set is shown, not offered: a change here would be undone by
+// the next upgrade. Only the settings the chosen provider uses are asked for.
 function modelStep(v) {
   const saved = modelSaved;
   modelSaved = false;
   const byInstall = (name) => v.byInstall.includes(name);
-  const anthropic = v.provider === "anthropic";
-  const locked = "Set in Helm. Read-only here.";
-  const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", disabled: byInstall("model.baseURL") });
-  const name = h("input", { type: "text", value: v.name, placeholder: anthropic ? "claude-haiku-5-5" : "gpt-4.1 or qwen3:8b", disabled: byInstall("model.name") });
-  const key = h("input", { type: "password", autocomplete: "off", disabled: byInstall("model.apiKey"),
-    placeholder: v.apiKeySet ? "Set. Leave empty to keep it." : "Optional" });
-  const strict = h("input", { type: "checkbox", checked: v.strictOutput, disabled: byInstall("model.strictOutput") });
+  // The reply format is two settings: the install may have made either.
+  const formatByInstall = byInstall("model.strictOutput") || byInstall("model.schemaDialect");
+  const provider = choice(PROVIDER_CHOICES, v.provider);
+  const chosen = () => (byInstall("model.provider") ? v.provider : provider.value);
+  const url = h("input", { type: "text", value: v.baseURL, placeholder: "https://api.openai.com/v1", autocapitalize: "none" });
+  const name = h("input", { type: "text", value: v.name, autocapitalize: "none" });
+  const key = h("input", { type: "password", autocomplete: "off" });
+  const format = choice(Object.fromEntries(Object.entries(REPLY_FORMATS).map(([k, [text]]) => [k, text])), replyFormat(v));
   const error = h("div", { class: "error", role: "alert" });
+  const result = h("p", { class: "test-result", role: "status" });
+
+  // change is what the form sets: what the install left, and the provider uses.
+  const change = () => {
+    const c = {};
+    const openai = chosen() === "openai";
+    if (!byInstall("model.provider")) c.provider = provider.value;
+    if (openai && !byInstall("model.baseURL")) c.baseURL = url.value.trim();
+    if (!byInstall("model.name")) c.name = name.value.trim();
+    if (!byInstall("model.apiKey") && key.value) c.apiKey = key.value;
+    if (openai && !formatByInstall) [, c.strictOutput, c.schemaDialect] = REPLY_FORMATS[format.value];
+    return c;
+  };
   const save = async (e) => {
     e.preventDefault();
     error.textContent = "";
-    const change = {};
-    if (!byInstall("model.baseURL")) { change.baseURL = url.value.trim(); change.strictOutput = strict.checked; }
-    if (!byInstall("model.name")) change.name = name.value.trim();
-    if (!byInstall("model.apiKey") && key.value) change.apiKey = key.value;
     try {
-      await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change) });
+      await api("/v1/settings/model", { method: "PUT", body: JSON.stringify(change()) });
       modelSaved = true;
       route();
     } catch (err) {
       error.textContent = err.message;
     }
   };
-  if (["model.baseURL", "model.name"].every(byInstall)) {
-    return [h("p", {}, "Set in Helm: ", h("code", {}, v.name),
-      v.baseURL ? [" at ", h("code", {}, v.baseURL)] : null, anthropic ? " (Anthropic)" : null, ".")];
-  }
+  // The test sends what the form holds, saved or not; nothing is saved.
+  const test = h("button", { class: "btn", type: "button", onclick: async () => {
+    test.disabled = true;
+    error.textContent = "";
+    result.className = "test-result";
+    result.replaceChildren("Testing. The model has 20 s to answer.");
+    try {
+      const r = await api("/v1/settings/model/test", { method: "POST", body: JSON.stringify(change()) });
+      result.className = "test-result " + (r.ok ? "good" : "bad");
+      result.replaceChildren(r.text, ...(r.outcome === "no_investigator" ? [" ", h("a", { href: "#/status" }, "Open Status")] : []));
+    } catch (err) {
+      result.className = "test-result bad";
+      result.replaceChildren(err.message);
+    } finally {
+      test.disabled = false;
+    }
+  } }, "Test the connection");
+
+  const form = h("form", { class: "form", onsubmit: save });
+  const fill = () => {
+    const anthropic = chosen() === "anthropic";
+    name.placeholder = anthropic ? "claude-sonnet-5-5" : "gpt-5 or qwen3:8b";
+    key.placeholder = v.apiKeySet ? "Set. Leave empty to keep it." : anthropic ? "Required" : "Optional";
+    const asked = [
+      byInstall("model.provider") ? null : field("Provider", provider),
+      anthropic || byInstall("model.baseURL") ? null : field("Address", url),
+      byInstall("model.name") ? null : field("Model", name),
+      byInstall("model.apiKey") ? null : field("API key", key, "Stored encrypted. Never shown again."),
+      anthropic || formatByInstall ? null : field("Reply format", format, "For OpenAI, choose OpenAI's strict form."),
+    ].filter(Boolean);
+    form.replaceChildren(...asked,
+      h("div", { class: "inline" }, asked.length ? h("button", { class: "btn primary", type: "submit" }, "Save the model") : null, test),
+      result, error);
+  };
+  provider.addEventListener("change", fill);
+  fill();
+
+  // What Helm set, once, as facts.
+  const fixed = [
+    byInstall("model.provider") ? ["Provider", PROVIDERS[v.provider] || v.provider] : null,
+    byInstall("model.baseURL") && v.baseURL ? ["Address", h("code", {}, v.baseURL)] : null,
+    byInstall("model.name") ? ["Model", h("code", {}, v.name)] : null,
+    byInstall("model.apiKey") ? ["API key", "Set"] : null,
+    formatByInstall && v.provider === "openai" ? ["Reply format", REPLY_FORMATS[replyFormat(v)][0]] : null,
+  ].filter(Boolean);
+  if (fixed.length) form.classList.add("sub");
   return [
-    saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation. Done when the model answers.") : null,
-    h("p", { class: "quiet" }, anthropic
-      ? "Claude models, through Anthropic's API. Used from the next investigation."
-      : "Any OpenAI-compatible endpoint: OpenAI, OpenRouter, Ollama, vLLM. Used from the next investigation."),
-    h("form", { class: "form", onsubmit: save },
-      anthropic ? null : field("Address", url, byInstall("model.baseURL") ? locked : null),
-      field("Model", name, byInstall("model.name") ? locked : null),
-      field("API key", key, byInstall("model.apiKey") ? locked : "Stored encrypted. Never shown again."),
-      anthropic ? null : h("label", { class: "check" }, strict,
-        h("span", {}, "Strict format: the model must follow Themis's reply format exactly. For OpenAI, clear it, or install with ",
-          h("code", {}, "model.schemaDialect=openai-strict"), ".", byInstall("model.strictOutput") ? " " + locked : "")),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Save the model")),
-      error)];
+    saved ? h("p", { class: "flash", role: "status" }, "Model saved. Used from the next investigation.") : null,
+    fixed.length ? [h("p", { class: "quiet" }, "Set in Helm."),
+      h("dl", { class: "tech" }, fixed.map(([k, value]) => [h("dt", {}, k), h("dd", {}, value)]))] : null,
+    form];
 }
 
 // setup walks through what an install needs, in order, each step marked
@@ -637,7 +698,7 @@ async function setup() {
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
     investigatorOff
       ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
-      : model ? { title: "The model", status: done("Model") ? "Done" : model.complete ? "Set" : "Not done", body: modelStep(model) } : null,
+      : model ? { title: "The model", status: model.complete ? "Done" : "Not done", body: modelStep(model) } : null,
     { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: [
       h("p", {}, partFinding(check("Alerts"))),
       done("Alerts") ? null : [h("p", { class: "quiet" }, "Done when Themis receives its first alert."), alertmanagerSetup()]] },
@@ -1181,17 +1242,307 @@ function technical(d, action) {
     h("summary", {}, "Technical details"), h("dl", { class: "tech" }, rows));
 }
 
-// suggestForm lets a person suggest a rollback. Themis checks it exactly as
-// it checks the investigator's: against the cluster, then the policy.
-function suggestForm(inc, evidence, reload) {
-  const t = workload(inc.target);
+// Suggesting a fix. The form offers every fix the incident's profiles offer:
+// the shipped ones with forms of their own, any other from the JSON Schema
+// of its values. Each form's params() returns the fix's values, or throws
+// what to correct.
+
+// fixNoun names a fix the incident's profiles offer: in this page's words
+// when it has them, or in the fix's own.
+function fixNoun(f) {
+  const noun = fixWords(f.name, {}, "").noun;
+  return noun !== "change" ? noun : String(f.noun || f.name).replace(/^an? /, "");
+}
+
+const NO_CHANGE = "Change at least one value.";
+
+// currentContainers are the workload's containers as its current revision
+// has them, with their resources and probes, from the rollout history.
+function currentContainers(evidence) {
+  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const now = history ? (history.Data.revisions || []).find((r) => r.current) : null;
+  return now ? now.containers || [] : [];
+}
+
+// containerPicker chooses one of the workload's containers, or takes a name
+// when the evidence doesn't list them.
+function containerPicker(containers, onchange) {
+  if (!containers.length) return h("input", { type: "text", required: true, autocapitalize: "none", spellcheck: "false" });
+  return h("select", { onchange }, containers.map((c) => h("option", { value: c.name }, c.name)));
+}
+
+// rollbackFields choose an earlier revision from the rollout history.
+function rollbackFields(f, evidence) {
   const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
   const earlier = history ? (history.Data.revisions || []).filter((r) => !r.current)
     .sort((a, b) => Number(b.revision) - Number(a.revision)) : [];
   const revision = earlier.length
     ? h("select", {}, earlier.map((r) => h("option", { value: r.revision },
       "Revision " + r.revision + " · " + (r.containers || []).map((c) => c.image).join(", ") + (r.createdAt ? " · " + when(r.createdAt) : ""))))
-    : h("input", { type: "number", min: "1", required: true });
+    : h("input", { type: "number", min: "1", step: "1", required: true });
+  return { nodes: field("Roll back to", revision), params: () => ({ revision: Number(revision.value) }) };
+}
+
+// SUFFIX is what each Kubernetes quantity suffix multiplies by.
+const SUFFIX = {
+  "": 1, n: 1e-9, u: 1e-6, m: 1e-3, k: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15, E: 1e18,
+  Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40, Pi: 2 ** 50, Ei: 2 ** 60,
+};
+// amount is a Kubernetes quantity, such as 512Mi or 250m, as a number; null
+// when it isn't one.
+function amount(q) {
+  const m = String(q).match(/^\+?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?(Ki|Mi|Gi|Ti|Pi|Ei|[numkMGTPE])?$/);
+  return m ? Number(m[1] + (m[2] || "")) * SUFFIX[m[3] || ""] : null;
+}
+// sameAmount says two quantities are the same amount, however written, such
+// as 0.1 and 100m.
+function sameAmount(a, b) {
+  const x = amount(a);
+  const y = amount(b);
+  return x !== null && y !== null && !(Math.abs(x - y) > Math.abs(y) * 1e-9);
+}
+
+// RESOURCES are the values a memory and CPU change sets, in the order shown.
+const RESOURCES = [
+  { kind: "limits", res: "memory", label: "Memory limit", example: "1Gi" },
+  { kind: "requests", res: "memory", label: "Memory request", example: "512Mi" },
+  { kind: "limits", res: "cpu", label: "CPU limit", example: "500m" },
+  { kind: "requests", res: "cpu", label: "CPU request", example: "250m" },
+];
+
+// usedBy says how much memory and CPU a container used, when a metrics
+// source could tell.
+function usedBy(evidence, name) {
+  const of = (template) => {
+    const e = evidence.find((x) => x.Template === template && x.Data);
+    return e ? (e.Data.containers || []).find((c) => c.name === name) || {} : {};
+  };
+  const memory = of("container_memory").peakBytes;
+  const cpu = of("container_cpu").usageCores;
+  return [
+    typeof memory === "number" ? "Peak memory use " + Math.ceil(memory / 2 ** 20) + "Mi." : "",
+    typeof cpu === "number" ? "Highest CPU use " + Math.ceil(cpu * 1000) + "m." : "",
+  ].filter(Boolean).join(" ");
+}
+
+// resourceFields set a container's memory and CPU limits and requests,
+// starting from the values it has now. An empty field keeps its value.
+function resourceFields(f, evidence) {
+  const containers = currentContainers(evidence);
+  const values = RESOURCES.map((r) => ({ ...r,
+    input: h("input", { type: "text", autocapitalize: "none", spellcheck: "false", placeholder: r.example }),
+    hint: h("span", { class: "hint" }) }));
+  const use = h("p", { class: "quiet small" });
+  const now = () => containers.find((c) => c.name === picker.value) || {};
+  const was = (c, r) => (c[r.kind] || {})[r.res] || "";
+  const fill = () => {
+    const c = now();
+    for (const r of values) {
+      r.input.value = was(c, r);
+      r.hint.textContent = !containers.length ? "" : was(c, r) ? "Currently " + was(c, r) + "." : "Currently not set.";
+    }
+    use.textContent = usedBy(evidence, picker.value);
+  };
+  const picker = containerPicker(containers, fill);
+  fill();
+  const params = () => {
+    const c = now();
+    const set = {};
+    const after = {};
+    for (const r of values) {
+      const v = r.input.value.trim();
+      after[r.kind + "." + r.res] = v || was(c, r);
+      if (!v) continue;
+      if (amount(v) === null) throw new Error(r.label + ": " + v + " isn't a Kubernetes quantity, such as " + r.example + ".");
+      if (sameAmount(v, was(c, r))) continue;
+      (set[r.kind] = set[r.kind] || {})[r.res] = v;
+    }
+    if (!Object.keys(set).length) throw new Error(NO_CHANGE);
+    for (const [res, name] of [["memory", "memory"], ["cpu", "CPU"]]) {
+      const request = after["requests." + res];
+      const limit = after["limits." + res];
+      if (request && limit && amount(request) > amount(limit)) {
+        throw new Error(cap(name) + " request " + request + " is above the " + name + " limit of " + limit + ".");
+      }
+    }
+    return { containers: { [picker.value.trim()]: set } };
+  };
+  const box = (r) => h("label", { class: "field" }, r.label, r.input, r.hint);
+  return {
+    nodes: [field("Container", picker), use,
+      h("div", { class: "inline" }, box(values[0]), box(values[1])),
+      h("div", { class: "inline" }, box(values[2]), box(values[3]))],
+    params,
+  };
+}
+
+// PROBES are a container's probes, and TIMING the fields of each, in the
+// order shown. Only a readiness probe takes a success threshold.
+const PROBES = ["liveness", "readiness", "startup"];
+const TIMING = [
+  { name: "initialDelaySeconds", label: "Initial delay, seconds", min: 0 },
+  { name: "periodSeconds", label: "Period, seconds", min: 1 },
+  { name: "timeoutSeconds", label: "Timeout, seconds", min: 1 },
+  { name: "failureThreshold", label: "Failure threshold", min: 1 },
+  { name: "successThreshold", label: "Success threshold", min: 1, readiness: true },
+];
+
+// probeFields change the timing of one of a container's probes, starting
+// from the values it has now. An empty field keeps its value.
+function probeFields(f, evidence) {
+  const containers = currentContainers(evidence);
+  const kind = h("select", { onchange: () => fill() });
+  const kindField = field("Probe", kind);
+  const none = h("p", { class: "quiet small" });
+  const box = h("div", { class: "inline" });
+  let inputs = [];
+  // probes are the container's, or null when the evidence doesn't say.
+  const probes = () => {
+    const c = containers.find((x) => x.name === picker.value);
+    return c ? c.probes || {} : null;
+  };
+  const fill = () => {
+    const p = (probes() || {})[kind.value] || null;
+    inputs = !kind.value ? [] : TIMING.filter((t) => !t.readiness || kind.value === "readiness").map((t) => {
+      const was = p ? p[t.name] : undefined;
+      return { ...t, was, input: h("input", { type: "number", min: t.min, step: "1", value: was }) };
+    });
+    box.replaceChildren(...inputs.map((t) => field(t.label, t.input, t.was === undefined ? null : "Currently " + t.was + ".")));
+  };
+  const fillKinds = () => {
+    const p = probes();
+    const kinds = p ? PROBES.filter((k) => p[k]) : PROBES;
+    kind.replaceChildren(...kinds.map((k) => h("option", { value: k }, cap(k))));
+    kindField.hidden = !kinds.length;
+    none.textContent = kinds.length ? "" : "Container " + picker.value + " has no probes to change.";
+    fill();
+  };
+  const picker = containerPicker(containers, fillKinds);
+  fillKinds();
+  const params = () => {
+    if (!kind.value) throw new Error(none.textContent);
+    const set = {};
+    for (const t of inputs) {
+      const v = t.input.value.trim();
+      if (v !== "" && Number(v) !== t.was) set[t.name] = Number(v);
+    }
+    if (!Object.keys(set).length) throw new Error(NO_CHANGE);
+    return { container: picker.value.trim(), [kind.value]: set };
+  };
+  return { nodes: [field("Container", picker), kindField, none, box], params };
+}
+
+// words makes a value's name a label: initialDelaySeconds reads "Initial
+// delay seconds".
+const words = (name) => cap(String(name).replace(/([a-z0-9])([A-Z])/g, "$1 $2").replaceAll("_", " ").toLowerCase());
+
+// schemaInput is a field for one value of a fix this page has no form for,
+// from its JSON Schema: text, a number, a choice, yes or no, or an object of
+// those. Anything else is written as JSON. needed says the value is
+// required; an empty value is left out otherwise.
+function schemaInput(name, schema, needed) {
+  const s = schema || {};
+  const type = Array.isArray(s.type) ? s.type.find((t) => t !== "null") : s.type;
+  const title = words(name);
+  if (type === "object" && s.properties) {
+    const required = s.required || [];
+    const parts = Object.entries(s.properties).map(([k, v]) => [k, schemaInput(k, v, needed && required.includes(k))]);
+    return {
+      nodes: h("fieldset", { class: "group" }, h("legend", {}, title),
+        s.description ? h("p", { class: "quiet small" }, s.description) : null, parts.map(([, p]) => p.nodes)),
+      value: () => {
+        const out = {};
+        for (const [k, p] of parts) {
+          const v = p.value();
+          if (v !== undefined) out[k] = v;
+        }
+        return Object.keys(out).length || needed ? out : undefined;
+      },
+    };
+  }
+  if (type === "boolean") {
+    const box = h("input", { type: "checkbox" });
+    return {
+      nodes: h("label", { class: "check" }, box, h("span", {}, title, s.description ? ". " + s.description : "")),
+      value: () => (box.checked || needed ? box.checked : undefined),
+    };
+  }
+  let input;
+  let read;
+  if (Array.isArray(s.enum)) {
+    input = h("select", { required: needed }, needed ? null : h("option", { value: "" }, "—"),
+      s.enum.map((v, i) => h("option", { value: String(i) }, String(v))));
+    read = (v) => s.enum[Number(v)];
+  } else if (type === "integer" || type === "number") {
+    input = h("input", { type: "number", required: needed, min: s.minimum, max: s.maximum, step: type === "integer" ? "1" : "any" });
+    read = Number;
+  } else if (type === "string") {
+    input = h("input", { type: "text", required: needed, autocapitalize: "none", spellcheck: "false" });
+    read = (v) => v;
+  } else {
+    input = h("textarea", { rows: "3", required: needed, spellcheck: "false", placeholder: "JSON" });
+    read = (v) => {
+      try { return JSON.parse(v); } catch { throw new Error(title + ": not valid JSON."); }
+    };
+  }
+  return {
+    nodes: field(title, input, s.description),
+    value: () => (input.value.trim() === "" ? undefined : read(input.value.trim())),
+  };
+}
+
+// schemaFields are the fields of a fix this page has no form for, from the
+// JSON Schema of its values, after what the fix does.
+function schemaFields(f) {
+  const s = f.schema || {};
+  const about = f.description ? h("p", { class: "quiet small" }, f.description) : null;
+  if (s.type !== "object" || !s.properties) {
+    const all = schemaInput("values", {}, true);
+    return { nodes: [about, all.nodes], params: () => all.value() };
+  }
+  const required = s.required || [];
+  const parts = Object.entries(s.properties).map(([k, v]) => [k, schemaInput(k, v, required.includes(k))]);
+  return {
+    nodes: [about, parts.map(([, p]) => p.nodes)],
+    params: () => {
+      const out = {};
+      for (const [k, p] of parts) {
+        const v = p.value();
+        if (v !== undefined) out[k] = v;
+      }
+      return out;
+    },
+  };
+}
+
+// FIX_FIELDS are the forms of the fixes Themis ships with.
+const FIX_FIELDS = {
+  [ROLLBACK]: rollbackFields,
+  "deployment.set-resources": resourceFields,
+  "deployment.set-probes": probeFields,
+};
+
+// suggestForm lets a person suggest any fix the incident's profiles offer.
+// Themis checks it exactly as it checks the investigator's: against the
+// cluster, then the policy. It cites all the evidence collected.
+function suggestForm(d, reload) {
+  const inc = d.Incident;
+  const t = workload(inc.target);
+  const evidence = d.Evidence || [];
+  const fixes = (d.Fixes || []).map((f) => ({ ...f, noun: fixNoun(f), fields: (FIX_FIELDS[f.name] || schemaFields)(f, evidence) }));
+  if (!fixes.length) return null;
+  let chosen = fixes[0];
+  const fields = h("div", { class: "form" });
+  const button = h("button", { class: "btn primary", type: "submit" });
+  const show = () => {
+    fields.replaceChildren(...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
+    button.textContent = "Suggest the " + chosen.noun;
+  };
+  const choice = fixes.length > 1
+    ? h("select", { onchange: (e) => { chosen = fixes[e.target.selectedIndex]; show(); } },
+      fixes.map((f) => h("option", { value: f.name }, cap(f.noun))))
+    : null;
+  show();
   const why = h("textarea", { rows: "3", placeholder: "Why this fixes it. Shown to the approver." });
   const effect = h("input", { type: "text", placeholder: "For example: pods stop crash-looping" });
   const error = h("div", { class: "error", role: "alert" });
@@ -1202,11 +1553,18 @@ function suggestForm(inc, evidence, reload) {
       error.textContent = "A reason is required.";
       return;
     }
+    let params;
+    try {
+      params = chosen.fields.params();
+    } catch (err) {
+      error.textContent = err.message;
+      return;
+    }
     const body = {
       clientProposalId: "ui-" + Date.now(),
       target: { group: t.group || "apps", kind: t.kind, namespace: t.namespace, name: t.name, uid: t.uid },
-      capabilityName: ROLLBACK,
-      params: { revision: Number(revision.value) },
+      capabilityName: chosen.name,
+      params,
       rationale: why.value.trim(),
       expectedEffect: effect.value.trim(),
       citedEvidenceIds: evidence.map((x) => x.ID),
@@ -1218,7 +1576,7 @@ function suggestForm(inc, evidence, reload) {
         error.textContent = REJECTION_LABEL[r.rejectionReason] || r.message || "Refused.";
         return;
       }
-      flash = "Rollback suggested. Checking it against the cluster and the policy.";
+      flash = cap(chosen.noun) + " suggested. Checking it against the cluster and the policy.";
       reload();
     } catch (err) {
       error.textContent = err.message;
@@ -1228,11 +1586,11 @@ function suggestForm(inc, evidence, reload) {
   return h("details", { class: "fold", open: waiting, "data-key": "suggest" },
     h("summary", {}, waiting ? "Suggest a fix" : "Suggest a fix while Themis investigates"),
     h("form", { class: "form", onsubmit: submit },
-      field("Roll back to", revision),
+      choice ? field("Fix", choice) : null,
+      fields,
       field("Reason", why),
       field("Expected effect", effect),
-      h("div", {}, h("button", { class: "btn primary", type: "submit" }, "Suggest the rollback")),
-      h("p", { class: "quiet small" }, "Cites the evidence on this page."),
+      h("div", {}, button),
       error));
 }
 
@@ -1270,7 +1628,8 @@ function headline(d, ctx) {
     return ["Collecting and weighing evidence.", got.length ? "Collected so far: " + got.join(", ") + "." : "Nothing collected yet."];
   }
   if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + fx.short.toLowerCase() + "." : reason];
-  const suggest = can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
+  const suggest = !(d.Fixes || []).length ? "Themis has no fix for this kind of incident."
+    : can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
   if (s === "awaiting_suggestion") return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
   if (s === "inconclusive") return [d.Headline || "No fix proposed.", suggest];
   if ((s === "authorized" || s === "executing") && fx) {
@@ -1330,6 +1689,7 @@ async function detail(id) {
   const mine = new Set([...actions.map((a) => a.ProposalID), accepted && accepted.ID].filter(Boolean));
   const others = proposals.filter((p) => !mine.has(p.ID));
   const fromPerson = source && !source.LeaseID ? source : null;
+  const suggesting = SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(d, reload) : null;
   const said = flash;
   flash = null;
 
@@ -1345,7 +1705,7 @@ async function detail(id) {
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
 
     action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
-    SUGGESTABLE.includes(inc.state) && can("approver") ? h("div", { class: "more" }, suggestForm(inc, d.Evidence || [], reload)) : null,
+    suggesting ? h("div", { class: "more" }, suggesting) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix"),
 
@@ -1365,7 +1725,7 @@ async function detail(id) {
       technical(d, action)));
 
   // Refreshing would discard what an approver or suggester is typing.
-  const typing = actions.some((a) => a.State === "awaiting_approval") || (SUGGESTABLE.includes(inc.state) && can("approver"));
+  const typing = actions.some((a) => a.State === "awaiting_approval") || Boolean(suggesting);
   if (!typing) timer = setTimeout(reload, POLL_MS * 2);
 }
 

@@ -44,6 +44,7 @@ import (
 	"github.com/hzerrad/themis/internal/server/grpcapi"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/server/modeltest"
 	"github.com/hzerrad/themis/internal/server/statuspage"
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/scenarios"
@@ -270,6 +271,9 @@ func Run(ctx context.Context, o Options) error {
 		api.Settings, investigators.Settings = modelSettings, modelSettings
 		if !cfg.Investigators.Disabled {
 			checker.Model = modelSettings
+			tests := modeltest.New()
+			context.AfterFunc(ctx, tests.Close)
+			api.ModelTests, investigators.ModelTests = tests, tests
 		}
 	}
 	api.Config, api.Intake = current, cfg.Intake

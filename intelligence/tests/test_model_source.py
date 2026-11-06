@@ -106,6 +106,30 @@ async def test_anthropic_needs_only_a_model() -> None:
     assert (made.adapter.base_url, made.adapter.api_key) == (None, "k")
 
 
+# What the install leaves unset, setup chooses: the provider, and for an
+# OpenAI-compatible API how the reply schema is sent. An address set at install
+# keeps the install's.
+async def test_setup_chooses_the_provider_and_the_dialect() -> None:
+    s, made = source(NOTHING, SetupCore(provider="anthropic", base_url="http://x/v1", model="m"))
+    assert await s.ready()
+    s.new_model()
+    assert isinstance(made.adapter, AnthropicAdapter) and made.adapter.base_url is None
+
+    core = SetupCore(base_url="http://a/v1", model="m", schema_dialect="openai-strict")
+    s, made = source(NOTHING, core)
+    assert await s.ready()
+    s.new_model()
+    assert made.endpoint is not None and made.endpoint.schema_dialect == "openai-strict"
+
+    installed = Installed(base_url="http://ollama:11434/v1", model=None, api_key=None)
+    core = SetupCore(provider="anthropic", model="m", schema_dialect="openai-strict")
+    s, made = source(installed, core)
+    assert await s.ready()
+    s.new_model()
+    assert made.adapter is not None and made.adapter.base_url == "http://ollama:11434/v1"
+    assert made.endpoint is not None and made.endpoint.schema_dialect == "as-is"
+
+
 def test_new_model_before_ready() -> None:
     s, _ = source(NOTHING, SetupCore())
     with pytest.raises(RuntimeError):

@@ -18,7 +18,7 @@ data:
     settings:
       keyFile: /var/run/secrets/themis/settings
     {{- with .Values.model }}
-    {{- if or .provider .baseURL .name .apiKeySecret }}
+    {{- if or .provider .baseURL .name .apiKeySecret .schemaDialect }}
     model:
       {{- if .provider }}
       provider: {{ include "themis.modelProvider" $ | quote }}
@@ -31,6 +31,12 @@ data:
       {{- end }}
       {{- if .apiKeySecret }}
       apiKey: true
+      {{- end }}
+      {{- if and .baseURL (not .strictOutput) }}
+      strictOutput: false
+      {{- end }}
+      {{- with .schemaDialect }}
+      schemaDialect: {{ . | quote }}
       {{- end }}
     {{- end }}
     {{- end }}

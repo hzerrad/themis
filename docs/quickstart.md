@@ -155,7 +155,7 @@ kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}'
 
 Themis starts once an admin account exists, and serves nothing else until then. Alerts sent before are refused, and Alertmanager sends them again later. The initial admin password only creates that account. Create your admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. Under GitOps, configure the admin account in the chart instead, and Themis creates it at startup. See [the chart README](../deploy/helm/themis/README.md#use-with-argo-cd-or-flux).
 
-The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
+The first page is then **Setup**. Its steps are sign-in, where you can add your identity provider (step 6), the model if you didn't set it at install, with **Test the connection** to check it, and connecting Alertmanager. What Helm already set is shown as done. **Status** then checks every part and says how to fix what doesn't work. Then break the rollout, in another terminal:
 
 **kind:**
 

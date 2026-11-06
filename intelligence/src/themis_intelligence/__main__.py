@@ -5,7 +5,8 @@ Configuration comes from the environment:
     THEMIS_CORE_ADDR         themis-core's gRPC address (localhost:9090)
     THEMIS_TOKEN_FILE        file holding the investigator bearer token
     MODEL_PROVIDER           openai (the default): an OpenAI-compatible API, as Ollama,
-                             vLLM and OpenAI serve; or anthropic: Anthropic's Messages API
+                             vLLM and OpenAI serve; or anthropic: Anthropic's Messages API.
+                             Unset with no address here, Themis's setup chooses it
     MODEL_BASE_URL           the API's address, such as http://localhost:11434/v1; for
                              anthropic, unset uses Anthropic's
     MODEL_NAME               the model, such as qwen3:8b
@@ -25,7 +26,8 @@ Configuration comes from the environment:
     MODEL_STRICT_OUTPUT      true or false (true): ask the provider to follow the reply
                              schema exactly
     MODEL_SCHEMA_DIALECT     as-is (the default) or openai-strict: how the reply schema
-                             is sent; OpenAI's strict mode accepts it only as openai-strict
+                             is sent; OpenAI's strict mode accepts it only as openai-strict.
+                             Unset with no address here, Themis's setup chooses it
     MODEL_OUTPUT_LIMIT_FIELD max_tokens (the default) or max_completion_tokens: the
                              field the output limit is sent in; OpenAI's newer models
                              need max_completion_tokens
@@ -45,6 +47,7 @@ from pathlib import Path
 from typing import cast
 
 from themis_intelligence import telemetry, tracing
+from themis_intelligence.connection import ConnectionTester
 from themis_intelligence.model_source import Installed, ModelSource
 from themis_intelligence.platform.adapters import PROVIDERS, Provider
 from themis_intelligence.platform.client import Endpoint, ModelClient, Price, read_temperature
@@ -94,16 +97,20 @@ def read_price() -> Price | None:
         raise SystemExit("Model prices must be numbers: US dollars per million tokens.") from None
 
 
-def read_provider() -> Provider:
-    value = os.environ.get("MODEL_PROVIDER", "").strip().lower() or "openai"
+def read_provider() -> Provider | None:
+    """The provider the install chose; None leaves it to Themis's setup."""
+    value = os.environ.get("MODEL_PROVIDER", "").strip().lower()
+    if value == "":
+        return None
     if value not in PROVIDERS:
         raise SystemExit(f"MODEL_PROVIDER must be one of {', '.join(PROVIDERS)}.")
     return cast(Provider, value)
 
 
-def read_sampling() -> tuple[OutputLimitField, float | None, SchemaDialect]:
+def read_sampling() -> tuple[OutputLimitField, float | None, SchemaDialect | None]:
     """How an OpenAI-compatible API is asked for its reply: the field the output
-    limit goes in, the temperature, None to send none, and the schema's dialect."""
+    limit goes in, the temperature, None to send none, and the schema's dialect,
+    None to leave it to Themis's setup."""
     env = os.environ.get
     field = env("MODEL_OUTPUT_LIMIT_FIELD", "").strip() or "max_tokens"
     if field not in OUTPUT_LIMIT_FIELDS:
@@ -114,10 +121,14 @@ def read_sampling() -> tuple[OutputLimitField, float | None, SchemaDialect]:
         temperature = read_temperature(env("MODEL_TEMPERATURE", "").strip() or "0")
     except ValueError:
         raise SystemExit('MODEL_TEMPERATURE must be a number, or "default".') from None
-    dialect = env("MODEL_SCHEMA_DIALECT", "").strip() or "as-is"
-    if dialect not in SCHEMA_DIALECTS:
+    dialect = env("MODEL_SCHEMA_DIALECT", "").strip()
+    if dialect and dialect not in SCHEMA_DIALECTS:
         raise SystemExit(f"MODEL_SCHEMA_DIALECT must be one of {', '.join(SCHEMA_DIALECTS)}.")
-    return cast(OutputLimitField, field), temperature, cast(SchemaDialect, dialect)
+    return (
+        cast(OutputLimitField, field),
+        temperature,
+        cast(SchemaDialect, dialect) if dialect else None,
+    )
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -140,6 +151,7 @@ async def main() -> None:
     if ceiling not in CLASSIFICATION_RANK:
         raise SystemExit(f"MODEL_CEILING must be one of {', '.join(CLASSIFICATION_RANK)}.")
     key_file = env("MODEL_API_KEY_FILE")
+    output_limit_field, temperature, schema_dialect = read_sampling()
     # What the install left unset comes from Themis's setup, read before each lease.
     installed = Installed(
         base_url=env("MODEL_BASE_URL") or None,
@@ -147,9 +159,9 @@ async def main() -> None:
         api_key=read_secret(key_file) if key_file else None,
         strict_output=read_flag("MODEL_STRICT_OUTPUT", default=True),
         provider=read_provider(),
+        schema_dialect=schema_dialect,
     )
     max_output = env("MODEL_MAX_OUTPUT_TOKENS")
-    output_limit_field, temperature, schema_dialect = read_sampling()
     endpoint = Endpoint(
         name=env("MODEL_ENDPOINT", "default"),
         model="",
@@ -158,7 +170,6 @@ async def main() -> None:
         max_output_tokens=int(max_output) if max_output else None,
         output_limit_field=output_limit_field,
         temperature=temperature,
-        schema_dialect=schema_dialect,
     )
     token_budget = int(env("MODEL_TOKEN_BUDGET", "200000"))
     price = read_price()
@@ -181,9 +192,13 @@ async def main() -> None:
     worker = Worker(
         core=core, new_model=source.new_model, ready=source.ready, token_budget=token_budget
     )
+    # Tests of the model's connection run beside investigations, not after them.
+    tester = ConnectionTester(core, installed, endpoint)
     stop_tracing = tracing.setup_tracing()
     try:
-        await worker.run()
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(worker.run())
+            tasks.create_task(tester.run())
     finally:
         await core.close()
         stop_tracing()

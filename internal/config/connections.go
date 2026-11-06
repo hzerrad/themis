@@ -24,10 +24,21 @@ type Model struct {
 	Name     string `json:"name,omitempty"`
 	// APIKey says the install gives the investigator a key.
 	APIKey bool `json:"apiKey,omitempty"`
+	// StrictOutput is the install's strict output, which applies with its
+	// address. Nil means on.
+	StrictOutput *bool `json:"strictOutput,omitempty"`
+	// SchemaDialect is how the reply schema is sent to an OpenAI-compatible
+	// API: as-is, or openai-strict, the form OpenAI's strict mode accepts.
+	// Empty leaves it to setup.
+	SchemaDialect string `json:"schemaDialect,omitempty" jsonschema:"enum=as-is,enum=openai-strict"`
 }
 
 // ModelProviders are the APIs the investigator speaks.
 var ModelProviders = []string{"openai", "anthropic"}
+
+// SchemaDialects are the forms an OpenAI-compatible API can be sent the reply
+// schema in.
+var SchemaDialects = []string{"as-is", "openai-strict"}
 
 // OwnAddress says the provider's API has a single address of its own, so a
 // model there needs only a name.
