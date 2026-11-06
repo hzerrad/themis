@@ -56,7 +56,7 @@ make demo-up                                  # the healthy checkout workload in
 make ui   # serves the UI on http://localhost:8090
 ```
 
-Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours, sign in with it, and choose your own password. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
+Open it and sign in with the initial admin password. `make ui` prints the command that reads it. Themis starts once an admin account exists. Create yours with a password of your own. Creating it signs you in. Alerts sent before that are refused, and Alertmanager sends them again. The list is empty for now.
 
 ## 5. Break the rollout
 

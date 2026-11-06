@@ -237,6 +237,7 @@ ui: ## Open the in-cluster Themis UI on http://localhost:8090
 	@echo "UI: http://localhost:8090"
 	@echo "Until an admin account exists, the initial admin password signs in to create it:"
 	@echo "  $(KUBECTL) -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d"
+	@echo "Creating the admin account signs you in with it."
 	$(KUBECTL) -n themis port-forward deploy/themis-core 8090:8080
 
 .PHONY: monitoring-up monitoring-down

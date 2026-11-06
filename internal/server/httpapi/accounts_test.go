@@ -18,6 +18,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/server/httpapi"
 	"github.com/hzerrad/themis/internal/server/identity"
+	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
 )
 
@@ -27,6 +28,7 @@ import (
 type fresh struct {
 	t       *testing.T
 	handler http.Handler
+	store   *store.Store
 	pool    *pgxpool.Pool
 }
 
@@ -57,7 +59,7 @@ func newFresh(t *testing.T, access ...config.AccessBinding) *fresh {
 	(&identity.InitialAdmin{PasswordFile: password, Setup: setup, Gate: gate, Store: s, Logger: log, Now: clock}).Register(mux)
 	(&identity.Passwords{Store: s, Logger: log, Now: clock}).Register(mux)
 	(&identity.SignOut{Store: s, Logger: log}).Register(mux)
-	return &fresh{t: t, handler: mux, pool: pool}
+	return &fresh{t: t, handler: mux, store: s, pool: pool}
 }
 
 // send sends a request from localhost, with session's cookie if any, and the
@@ -95,19 +97,19 @@ func (f *fresh) serve(method, path string, body any, prepare func(*http.Request)
 
 func (f *fresh) signIn(username, password string) *http.Cookie {
 	f.t.Helper()
-	return f.session(username, f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": username, "password": password}))
+	return f.session(username+" signing in", f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": username, "password": password}), http.StatusNoContent)
 }
 
 func (f *fresh) signInFirst() *http.Cookie {
 	f.t.Helper()
-	return f.session("the initial admin", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}))
+	return f.session("the initial admin signing in", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}), http.StatusNoContent)
 }
 
-// session is the session rec started, as who.
-func (f *fresh) session(who string, rec *httptest.ResponseRecorder) *http.Cookie {
+// session is the session rec started, answering what with code.
+func (f *fresh) session(what string, rec *httptest.ResponseRecorder, code int) *http.Cookie {
 	f.t.Helper()
-	if rec.Code != http.StatusNoContent {
-		f.t.Fatalf("%s signing in = %d %q", who, rec.Code, rec.Body)
+	if rec.Code != code {
+		f.t.Fatalf("%s = %d %q, want %d", what, rec.Code, rec.Body, code)
 	}
 	for _, c := range rec.Result().Cookies() {
 		if c.Name == identity.SessionCookie {
@@ -129,12 +131,19 @@ func (f *fresh) choose(username, temporary, own string) *http.Cookie {
 	return f.signIn(username, own)
 }
 
-// admin is root, an admin account the initial admin made, signed in with a
-// password of root's own.
+// admin is root, the first admin account, as making it with the initial
+// admin password signed the browser in.
 func (f *fresh) admin() *http.Cookie {
 	f.t.Helper()
-	expect(f.t, "creating root", f.send(http.MethodPost, "/v1/accounts", f.signInFirst(), map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
-	return f.choose("root", rootPassword, rootOwnPassword)
+	return f.createRoot(f.signInFirst())
+}
+
+// createRoot makes root, the first admin account, with by's session, and is
+// the session that signs the browser in as root.
+func (f *fresh) createRoot(by *http.Cookie) *http.Cookie {
+	f.t.Helper()
+	rec := f.send(http.MethodPost, "/v1/accounts", by, map[string]string{"username": "root", "role": "admin", "password": rootPassword})
+	return f.session("creating root", rec, http.StatusCreated)
 }
 
 func (f *fresh) me(session *http.Cookie) (int, map[string]any) {
@@ -182,16 +191,13 @@ func expectRecord(t *testing.T, got, want []string) {
 	}
 }
 
-const (
-	rootPassword    = "a long root password"
-	rootOwnPassword = "a long password of root"
-)
+const rootPassword = "a long root password"
 
 // Reaching a new install from localhost, as kubectl port-forward does, grants
 // nothing. The first admin signs in with the initial admin password, whose
-// only use is making the first admin account. Its password is temporary, so
-// its holder chooses their own, and signing in with it retires the initial
-// admin password.
+// only use is making the first admin account. Its creator chooses its
+// password, so it isn't temporary, and making it signs the browser in as it,
+// as a password sign-in does. That retires the initial admin password at once.
 func TestAccounts_SetupFlow(t *testing.T) {
 	f := newFresh(t)
 	if code, me := f.me(nil); code != http.StatusUnauthorized {
@@ -206,7 +212,40 @@ func TestAccounts_SetupFlow(t *testing.T) {
 		t.Fatalf("me as the initial admin = %d %v", code, me)
 	}
 	expect(t, "the initial admin making a viewer first", f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "bob", "role": "viewer", "password": rootPassword}), http.StatusConflict)
-	expect(t, "creating the first admin", f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
+	root := f.createRoot(first)
+	if code, me := f.me(root); code != http.StatusOK || me["username"] != "root" || me["role"] != config.RoleAdmin || me["account"] != true || me["temporaryPassword"] != false || me["closed"] != false {
+		t.Fatalf("me as root = %d %v, want root's own password", code, me)
+	}
+	if code, _ := f.me(first); code != http.StatusUnauthorized {
+		t.Errorf("the initial admin's session once root exists = %d, want 401", code)
+	}
+	if rec := f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "retired") {
+		t.Errorf("the initial admin password once root exists = %d %q, want it retired", rec.Code, rec.Body)
+	}
+	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != `{"oidc":false,"password":true,"token":true}` {
+		t.Errorf("sign-in methods once root exists = %s, want no initial admin password", rec.Body)
+	}
+	f.signIn("root", rootPassword)
+	expectRecord(t, f.record(root), []string{
+		"root initial_admin_retired",
+		"initial-admin account_created root admin",
+		"initial-admin initial_admin_signed_in",
+	})
+}
+
+// Should Themis fail to sign the first admin account's creator in, the
+// initial admin password's session stays, and still does nothing but create
+// that account. Signing in with the account retires it.
+func TestAccounts_TheInitialAdminPasswordOnlyCreatesTheFirstAdmin(t *testing.T) {
+	f := newFresh(t)
+	first := f.signInFirst()
+	hash, err := identity.HashPassword(t.Context(), rootPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.CreateAccount(t.Context(), store.Account{Username: "root", PasswordHash: hash, Role: config.RoleAdmin, CreatedAt: now, CreatedBy: identity.InitialAdminUser}); err != nil {
+		t.Fatal(err)
+	}
 	for _, rec := range []*httptest.ResponseRecorder{
 		f.send(http.MethodPost, "/v1/accounts", first, map[string]string{"username": "carol", "role": "admin", "password": rootPassword}),
 		f.send(http.MethodGet, "/v1/accounts", first, nil),
@@ -215,30 +254,10 @@ func TestAccounts_SetupFlow(t *testing.T) {
 			t.Errorf("the initial admin once root exists = %d %q, want 403", rec.Code, rec.Body)
 		}
 	}
-	if rec := f.send(http.MethodGet, "/v1/sign-in", nil, nil); rec.Body.String() != `{"oidc":false,"password":true,"token":true}` {
-		t.Errorf("sign-in methods once root exists = %s, want no initial admin password", rec.Body)
-	}
-	temporary := f.signIn("root", rootPassword)
-	if code, me := f.me(temporary); code != http.StatusOK || me["temporaryPassword"] != true || me["closed"] != false {
-		t.Fatalf("me as root, with the password the initial admin chose = %d %v, want it temporary", code, me)
-	}
-	if code, _ := f.me(first); code != http.StatusOK {
-		t.Errorf("the initial admin's session before root chose a password = %d, want 200: setup isn't complete", code)
-	}
-	root := f.choose("root", rootPassword, rootOwnPassword)
-	if code, me := f.me(root); code != http.StatusOK || me["username"] != "root" || me["role"] != config.RoleAdmin || me["account"] != true || me["temporaryPassword"] != false {
-		t.Fatalf("me as root = %d %v", code, me)
-	}
+	f.me(f.signIn("root", rootPassword))
 	if code, _ := f.me(first); code != http.StatusUnauthorized {
 		t.Errorf("the initial admin's session once root signed in = %d, want 401", code)
 	}
-	expect(t, "the initial admin password once root signed in", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}), http.StatusForbidden)
-	expectRecord(t, f.record(root), []string{
-		"root initial_admin_retired",
-		"root password_changed root",
-		"initial-admin account_created root admin",
-		"initial-admin initial_admin_signed_in",
-	})
 }
 
 func TestAccounts_AdminsManageThem(t *testing.T) {
@@ -363,6 +382,11 @@ func TestAccounts_ClosedWithoutAnAdminAccount(t *testing.T) {
 	expect(t, "the token making a viewer first", f.withToken(http.MethodPost, "/v1/accounts", map[string]string{"username": "bob", "role": "viewer", "password": rootPassword}), http.StatusConflict)
 	expect(t, "the token making the first admin", f.withToken(http.MethodPost, "/v1/accounts", map[string]string{"username": "root", "role": "admin", "password": rootPassword}), http.StatusCreated)
 	expect(t, "incidents once an admin account exists", f.withToken(http.MethodGet, "/v1/incidents", nil), http.StatusOK)
+	// A script keeps no cookie, but making the account was its first sign-in.
+	expect(t, "the initial admin password once the token made the first admin", f.send(http.MethodPost, "/auth/initial-admin", nil, map[string]string{"password": initialPassword}), http.StatusForbidden)
+	if _, me := f.me(f.signIn("root", rootPassword)); me["temporaryPassword"] != false {
+		t.Errorf("me as root, made with the token = %v, want root's own password", me)
+	}
 	if _, err := f.pool.Exec(t.Context(), `DELETE FROM accounts`); err != nil {
 		t.Fatal(err)
 	}
@@ -380,10 +404,10 @@ func TestAccounts_ChangingYourPasswordLocksAfterWrongTries(t *testing.T) {
 	for i := range 10 {
 		expect(t, fmt.Sprintf("wrong current password %d", i+1), change("a guess"), http.StatusForbidden)
 	}
-	rec := change(rootOwnPassword)
+	rec := change(rootPassword)
 	expect(t, "the right password once locked", rec, http.StatusForbidden)
 	if !strings.Contains(rec.Body.String(), "locked") {
 		t.Errorf("a locked change says %q, want it to say the account is locked", rec.Body)
 	}
-	expect(t, "signing in once locked", f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": "root", "password": rootOwnPassword}), http.StatusUnauthorized)
+	expect(t, "signing in once locked", f.send(http.MethodPost, "/auth/password", nil, map[string]string{"username": "root", "password": rootPassword}), http.StatusUnauthorized)
 }

@@ -17,8 +17,8 @@ password to create it:
 
   kubectl -n {{ .Release.Namespace }} get secret {{ include "themis.initialAdminSecret" . }} -o jsonpath='{.data.password}' | base64 -d
 
-Then sign in with the admin account and choose your own password. The
-initial admin password then stops working.
+Then create the admin account with a password of your own. Creating it
+signs you in, and the initial admin password stops working.
 {{- end }}
 
 Watching: {{ join ", " .Values.enrolledNamespaces }}

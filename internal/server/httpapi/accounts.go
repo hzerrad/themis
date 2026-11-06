@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hzerrad/themis/internal/config"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/identity"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -86,7 +87,9 @@ func (a *API) accountRecord(w http.ResponseWriter, r *http.Request) {
 }
 
 // createAccount makes an account with a temporary password: an admin chose
-// it, so its holder must choose their own at the first sign-in.
+// it, so its holder must choose their own at the first sign-in. The first
+// admin account, made while none exists, is its creator's own: its password
+// isn't temporary, and making it signs them in as it, which finishes setup.
 func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Username string `json:"username"`
@@ -118,7 +121,9 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	err = a.Accounts.CreateAccount(r.Context(), store.Account{Username: in.Username, PasswordHash: hash, Role: in.Role, TemporaryPassword: true, CreatedAt: a.now(), CreatedBy: actor(r)})
+	first := !open
+	account := store.Account{Username: in.Username, PasswordHash: hash, Role: in.Role, TemporaryPassword: !first, CreatedAt: a.now(), CreatedBy: actor(r)}
+	err = a.Accounts.CreateAccount(r.Context(), account)
 	if errors.Is(err, store.ErrAccountExists) {
 		http.Error(w, "There's already an account called "+in.Username+".", http.StatusConflict)
 		return
@@ -128,6 +133,13 @@ func (a *API) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.logger().InfoContext(r.Context(), "an account was created", "username", in.Username, "role", in.Role, "by", actor(r))
+	if first && a.Setup != nil {
+		// The account exists either way: without the session, its creator
+		// signs in with it.
+		if err := a.Setup.SignInFirstAdmin(w, r, account, account.CreatedAt); err != nil {
+			a.logger().ErrorContext(r.Context(), "cannot sign in the first admin account", "username", in.Username, telemetry.FieldError, err)
+		}
+	}
 	w.WriteHeader(http.StatusCreated)
 }
 

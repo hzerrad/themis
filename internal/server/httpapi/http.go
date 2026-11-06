@@ -68,8 +68,9 @@ type API struct {
 	Checks interface {
 		Checks(ctx context.Context) []statuspage.Check
 	}
-	// Setup is the install's first run, which an admin signing in with an
-	// account finishes. Nil means no one signs in with the initial admin
+	// Setup is the install's first run, which creating the first admin
+	// account finishes, as an admin signing in with an account and a password
+	// of their own does. Nil means no one signs in with the initial admin
 	// password.
 	Setup *identity.Setup
 	// InitialAdmin is the password that signs in to make the first admin

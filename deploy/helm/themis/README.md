@@ -96,7 +96,7 @@ Then open <http://localhost:8090>. Themis starts once an admin account exists, a
 kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Then sign in with the admin account and choose your own password. The initial admin password then stops working. Opening Themis grants nothing by itself. To have Themis create the admin account at startup instead, see [Use with Argo CD or Flux](#use-with-argo-cd-or-flux).
+Then create the admin account with a password of your own. Creating it signs you in, and the initial admin password stops working. Opening Themis grants nothing by itself. To have Themis create the admin account at startup instead, see [Use with Argo CD or Flux](#use-with-argo-cd-or-flux).
 
 ## Sign people in
 
