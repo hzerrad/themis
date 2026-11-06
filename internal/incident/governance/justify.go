@@ -27,13 +27,15 @@ func justified(offering config.Matched, fix capability.Capability, predicates ma
 		for _, name := range names {
 			answers = append(answers, answer(name, predicates))
 		}
-		if len(names) == 1 {
-			reason = fmt.Sprintf("Refused: the check that justifies %s isn't true: %s.", fix.Noun(), answers[0])
-		} else {
-			reason = fmt.Sprintf("Refused: none of the checks that justify %s is true: %s.", fix.Noun(), strings.Join(answers, ", "))
-		}
+		// Of several profiles offering the fix, the one whose checks refuse it.
+		whose := "the "
 		if len(offering) > 1 {
-			reason += " They are the " + p.Name + " profile's."
+			whose = "the " + p.Name + " profile's "
+		}
+		if len(names) == 1 {
+			reason = fmt.Sprintf("Refused: %scheck that justifies %s isn't true: %s.", whose, fix.Noun(), answers[0])
+		} else {
+			reason = fmt.Sprintf("Refused: none of %schecks that justify %s is true: %s.", whose, fix.Noun(), strings.Join(answers, ", "))
 		}
 		return reason, false
 	}
@@ -62,9 +64,8 @@ func answer(name string, predicates map[string]string) string {
 
 // Unproposed says which fixes the incident's profiles offer that its checks
 // justify and that no policy of theirs forbids whatever the fix would change,
-// for an investigation that suggested none: "Themis's checks support a
-// rollback (failure_onset_after_rollout is true), but the investigator didn't
-// propose it." It is empty when there is none. What a fix would change isn't
+// for an investigation that suggested none: "The checks support a rollback
+// (failure_onset_after_rollout is true)." It is empty when there is none. What a fix would change isn't
 // known without one, so a rule that reads the change is passed over, and the
 // cluster isn't read: GitOps may still keep Themis from applying it.
 func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry, checks []check.Result, namespace string) (string, error) {
@@ -98,8 +99,15 @@ func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry,
 			}
 		}
 		if !forbidden {
-			notes = append(notes, fmt.Sprintf("Themis's checks support %s (%s), but the investigator didn't propose it.", fix.Noun(), strings.Join(support, ", ")))
+			notes = append(notes, fmt.Sprintf("%s (%s)", fix.Noun(), strings.Join(support, ", ")))
 		}
 	}
-	return strings.Join(notes, " "), nil
+	switch len(notes) {
+	case 0:
+		return "", nil
+	case 1:
+		return "The checks support " + notes[0] + ".", nil
+	default:
+		return "The checks support " + strings.Join(notes[:len(notes)-1], ", ") + " and " + notes[len(notes)-1] + ".", nil
+	}
 }

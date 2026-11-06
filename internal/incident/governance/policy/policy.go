@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/google/cel-go/cel"
 	celast "github.com/google/cel-go/common/ast"
@@ -41,6 +42,26 @@ type Decision struct {
 
 	// Failed means a rule could not be evaluated, which denies.
 	Failed bool
+}
+
+// noRule opens the reason for a decision no rule gave.
+const noRule = "No policy rule matched"
+
+// Of names, in d's reason, the profile whose policy gave d, for an incident
+// several profiles govern: "Policy rule rollback-needs-approval of the
+// rollout-regression profile requires a person's approval."
+func (d Decision) Of(profile string) Decision {
+	of := " of the " + profile + " profile"
+	rule := "olicy rule " + d.PolicyID
+	switch {
+	case d.PolicyID != "" && strings.Contains(d.Reason, rule):
+		d.Reason = strings.Replace(d.Reason, rule, rule+of, 1)
+	case strings.HasPrefix(d.Reason, noRule):
+		d.Reason = "No policy rule" + of + " matched" + strings.TrimPrefix(d.Reason, noRule)
+	default:
+		d.Reason += " Decided by the " + profile + " profile's policy."
+	}
+	return d
 }
 
 // Input is what rules see.
@@ -183,12 +204,12 @@ func checksRead(a *cel.Ast) []string {
 func (p *Policy) Evaluate(in Input) Decision {
 	d, matched := p.Rule(in)
 	if !matched {
-		d = Decision{Outcome: RequireApproval, Reason: "No policy rule matched: the fix needs a person's approval.", PolicyDigest: p.digest}
+		d = Decision{Outcome: RequireApproval, Reason: noRule + ": the fix needs a person's approval.", PolicyDigest: p.digest}
 		if in.Restore {
 			// Putting back what Themis changed needs no approval unless a
 			// rule asks for one: it returns the workload to how a person
 			// left it.
-			d = Decision{Outcome: Allow, Reason: "No policy rule matched: Themis may restore the previous state.", PolicyDigest: p.digest}
+			d = Decision{Outcome: Allow, Reason: noRule + ": Themis may restore the previous state.", PolicyDigest: p.digest}
 		}
 	}
 	if d.Failed {

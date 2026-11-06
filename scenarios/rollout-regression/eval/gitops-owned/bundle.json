@@ -215,5 +215,5 @@
     "outcome": "deny",
     "reason": "Recommended, not applied: Argo CD manages this workload. Apply the change in Git."
   },
-  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a rollback (failure_onset_after_rollout is true)."
 }

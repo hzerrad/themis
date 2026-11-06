@@ -231,7 +231,7 @@ func TestListIncidents(t *testing.T) {
 				Capability string
 				Params     map[string]any
 			}
-			Reason, From string
+			Rule, Reason, From string
 		}
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
@@ -247,8 +247,8 @@ func TestListIncidents(t *testing.T) {
 	if sum.Fix.Capability != "deployment.rollback-to-revision" || sum.Fix.Params["revision"] != float64(1) {
 		t.Errorf("fix = %+v", sum.Fix)
 	}
-	if sum.From != "proposed" || sum.Reason != "test" {
-		t.Errorf("last change = %q from %q", sum.Reason, sum.From)
+	if sum.From != "proposed" || sum.Reason != "test" || sum.Rule != a.PolicyID {
+		t.Errorf("last change = %q from %q, decided by %q", sum.Reason, sum.From, sum.Rule)
 	}
 }
 
@@ -326,7 +326,8 @@ func (e *env) detail(t *testing.T, id string) map[string]any {
 	return d
 }
 
-// The page tells the operator what Themis couldn't see, and how to let it.
+// The page tells the operator what evidence was missing, and how to let
+// Themis read it.
 func TestIncidentDetail_ShowsWhatWasMissingWithRemedies(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
@@ -337,7 +338,7 @@ func TestIncidentDetail_ShowsWhatWasMissingWithRemedies(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing, _ := e.detail(t, a.IncidentID)["Missing"].([]any)
-	if len(missing) != 1 || !strings.Contains(missing[0].(string), "add shop to enrolledNamespaces") {
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Add shop to enrolledNamespaces.") {
 		t.Errorf("Missing = %v", missing)
 	}
 }

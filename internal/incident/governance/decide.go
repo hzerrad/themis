@@ -184,7 +184,7 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 		}
 	}
 	if len(fix.Profiles) > 1 {
-		out.Reason += " It is the " + from + " profile's policy."
+		out = out.Of(from)
 	}
 	return out, nil
 }

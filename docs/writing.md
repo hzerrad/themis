@@ -17,9 +17,9 @@ A judge's manner, not a courtroom costume. Use a legal word only when it is the 
 
 1. **State first, then what follows.** "Waiting for your approval. Roll payments back to revision 1?"
 2. **Give grounds.** A refusal, escalation or closure says why, in terms of the checks, policy or evidence. "Refused: none of the checks that justify a probe change is true."
-3. **Distinguish findings from claims.** Themis's checks are findings. The investigator's text is a claim, labelled as written by the model. Text from the cluster (logs, events) is material, never a finding.
+3. **Distinguish findings from claims.** Themis's checks are findings. The investigator's text is a claim, labelled as written by the model. Text from the cluster (logs, events) is material, never a finding. What the investigator or a suggester wrote is shown exactly as written: this guide governs only what Themis writes.
 4. **Never apologise or soften.** Not "Sorry", "unfortunately", "it seems", "we couldn't". Write "Approval expired at 11:05.", not "Sorry, this approval has expired."
-5. **Errors name the cause and the remedy.** "The events couldn't be read: Themis isn't allowed to read them in shop. Grant it in the Role Themis has in shop."
+5. **Errors name the cause and the remedy.** "Events: access denied in shop. Grant read access in the Role Themis has in shop." Say the remedy once, however many things it fixes.
 6. **Name actions by what they do, and keep the name.** The button "Approve the rollback" produces "Rollback approved."
 7. **One name per state, everywhere.** See the states below.
 8. **Exact numbers and times.** "3 pods", "13 Nov, 11:05", "2 of 3 pods ready". Never "a few", "soon", "some".
@@ -74,3 +74,8 @@ A judge's manner, not a courtroom costume. Use a legal word only when it is the 
 | A metrics source says how much memory the containers used at their peak — Unknown | ? Peak memory use: unknown — no container memory |
 | Metrics: The Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address. Fix: Install metrics-server, or set a Prometheus address. | Metrics · Action required · No metrics source. Install metrics-server, or set metrics.prometheus.address. |
 | No incidents yet. | No incidents on record. One opens when Alertmanager sends an alert about a workload Themis watches. |
+| The investigator couldn't decide. An image can't be pulled: inventory-…/app, …. Themis has no fix for this kind of incident, so it refers it to a person. | No fix proposed. Finding: an image can't be pulled (inventory-…/app, …). No fix applies to this kind of incident. Referred to a person. |
+| The investigator couldn't decide. Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it. | No fix proposed. The checks support a rollback (failure_onset_after_rollout is true). Referred to a person. |
+| The investigation failed 3 times. The last time, the model couldn't be reached. | Investigation failed after 3 attempts: the model was unreachable. Referred to a person. |
+| What Themis couldn't see: Containers' memory use couldn't be read: collect container_memory: no figures: the Kubernetes metrics API isn't served in this cluster: install metrics-server, or set a Prometheus address | Missing evidence: Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address. |
+| Policy rule rollback-needs-approval requires a person's approval. It is the rollout-regression profile's policy. | Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval. |

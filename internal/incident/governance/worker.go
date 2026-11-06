@@ -63,7 +63,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	}
 	f, ok := w.Fixes[p.Capability]
 	if !ok {
-		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
+		return w.close(ctx, in.ID, "Refused: Themis can't carry out this kind of fix.")
 	}
 	checks, err := w.Store.Predicates(ctx, in.ID)
 	if err != nil {
@@ -79,7 +79,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
 	})
 	if errors.Is(err, capability.ErrInvalidParams) {
-		return w.close(ctx, in.ID, "The suggested fix isn't one Themis can carry out.")
+		return w.close(ctx, in.ID, "Refused: the suggested fix's values are invalid.")
 	}
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		return w.close(ctx, in.ID, refusal.Reason)

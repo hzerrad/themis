@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
+	"regexp"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -128,7 +128,7 @@ func TestDecide(t *testing.T) {
 		// Without the evidence that says when the failures started, no rollback.
 		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: governance.UnjustifiedRule},
 		// Every profile offering the fix must find it justified.
-		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused: the check that justifies a rollback isn't true: oom_killed_new_revision is false. They are the watching profile's."},
+		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused: the watching profile's check that justifies a rollback isn't true: oom_killed_new_revision is false."},
 		// A referenced ConfigMap changed between the rollout and the failures:
 		// rolling back wouldn't undo it.
 		{name: "config changed before the failure", checks: set(facts(check.True), 3, check.True), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
@@ -198,7 +198,7 @@ func TestDecide(t *testing.T) {
 				t.Errorf("reason = %q, want %q", d.Decision.Reason, tt.reason)
 			}
 			// With several profiles, the reason says whose profile decided.
-			if len(tt.also) > 0 && !strings.HasSuffix(d.Decision.Reason, " profile's policy.") && !strings.HasSuffix(d.Decision.Reason, " profile's.") {
+			if len(tt.also) > 0 && !regexp.MustCompile(` of the [a-z-]+ profile |the [a-z-]+ profile's `).MatchString(d.Decision.Reason) {
 				t.Errorf("reason %q doesn't say which profile's policy decided", d.Decision.Reason)
 			}
 			a := d.Action

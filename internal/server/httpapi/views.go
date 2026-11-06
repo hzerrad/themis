@@ -35,6 +35,9 @@ type summaryView struct {
 	Cause *causeView `json:"cause,omitempty"`
 	// Fix is the latest fix for the incident.
 	Fix *fixView `json:"fix,omitempty"`
+	// Rule is the policy rule that decided the latest change, such as
+	// gitops-owns-the-target for one Themis only recommends.
+	Rule string `json:"rule,omitempty"`
 	// Reason is why the incident last changed state, and From the state it
 	// left.
 	Reason string `json:"reason,omitempty"`
@@ -52,7 +55,7 @@ type fixView struct {
 }
 
 func viewSummary(s store.IncidentSummary, causes []catalog.RootCause) *summaryView {
-	v := &summaryView{Reason: s.Reason, From: string(s.From)}
+	v := &summaryView{Reason: s.Reason, From: string(s.From), Rule: s.Rule}
 	if s.Cause != "" {
 		v.Cause = &causeView{Name: s.Cause}
 		for _, c := range causes {

@@ -96,7 +96,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/catalog/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. The checks themselves are in the scenario packs; see [checks.md](checks.md) |
 | `internal/catalog/evidence` | **What Themis can read** about a target: pod states, events, logs, rollout history, memory and CPU use |
 | `internal/catalog/evidence/metrics` | How much memory and CPU a workload's containers use, asked the same way of any metrics source: the Kubernetes metrics API, or a server answering Prometheus queries. A new source is one more adapter here; nothing that reads evidence changes |
-| `internal/catalog/evidence/hint` | Plain advice when Themis couldn't see something it needed |
+| `internal/catalog/evidence/hint` | One line per piece of missing evidence: what is missing, and the change that lets Themis read it |
 | `scenarios/` | **The incidents Themis handles**, one scenario pack per folder: its profile, its checks and the evaluation cases that prove it, built into the binary; see [scenarios.md](scenarios.md) |
 | `internal/incident` | An incident and its states |
 | `internal/incident/intake` | Alerts in, incidents out (`alertmanager/`, and `target/` to find the workload an alert is about) |

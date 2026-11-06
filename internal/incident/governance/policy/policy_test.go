@@ -105,6 +105,23 @@ func TestPolicy_ReasonsArePlainSentences(t *testing.T) {
 	}
 }
 
+// For an incident several profiles govern, the reason names the profile
+// whose policy decided, next to its rule.
+func TestDecision_Of(t *testing.T) {
+	for _, c := range []struct {
+		p    *policy.Policy
+		want string
+	}{
+		{compile(t, config.ModeObserve, rule("r", `true`, config.DecisionAllow)), "Policy rule r of the payments profile allows this fix. Themis is in observe mode, so it never makes changes."},
+		{compile(t, config.ModeGuarded, rule("r", `predicates["missing"] == "true"`, config.DecisionAllow)), "Refused: policy rule r of the payments profile couldn't be evaluated (no such key: missing)."},
+		{compile(t, config.ModeGuarded), "No policy rule of the payments profile matched: the fix needs a person's approval."},
+	} {
+		if got := c.p.Evaluate(input()).Of("payments").Reason; got != c.want {
+			t.Errorf("reason = %q, want %q", got, c.want)
+		}
+	}
+}
+
 func restore() policy.Input {
 	in := input()
 	in.Restore = true

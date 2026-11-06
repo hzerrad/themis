@@ -203,8 +203,8 @@ const ACTION_LABEL = {
   denied: "Denied", expired: "Approval expired", canceled: "Canceled",
 };
 const OUTCOME_LABEL = {
-  resolved: "Worked", contained: "Partly recovered", unchanged: "Didn't help",
-  worsened: "Made it worse", inconclusive: "Undetermined",
+  resolved: "Fixed", contained: "Partly recovered", unchanged: "Didn't help",
+  worsened: "Worse after the fix", inconclusive: "Undetermined",
 };
 const INVESTIGATION_LABEL = { pending: "Waiting to start", leased: "In progress", completed: "Finished", failed: "Failed" };
 const CAUSE_STATUS = {
@@ -217,7 +217,7 @@ const REJECTION_LABEL = {
   REJECTION_REASON_INVALID_PARAMS: "Refused: its values are invalid.",
   REJECTION_REASON_UNKNOWN_EVIDENCE: "Refused: it cites evidence Themis didn't collect.",
   REJECTION_REASON_UNKNOWN_PREDICATE: "Refused: it cites a check that doesn't exist.",
-  REJECTION_REASON_INCIDENT_CLOSED: "Refused: the incident no longer took suggestions.",
+  REJECTION_REASON_INCIDENT_CLOSED: "Refused: the incident no longer takes suggestions.",
 };
 
 // Sign-in -----------------------------------------------------------------
@@ -574,9 +574,19 @@ function queueGroup(i) {
   return TERMINAL.includes(i.state) ? "closed" : "open";
 }
 
+// GITOPS is the rule by which Themis only recommends a fix: Argo CD or Flux
+// manages the workload. A fix denied or set aside passes through the same
+// state, but isn't recommended.
+const GITOPS = "gitops-owns-the-target";
+
+// listHow tells apart, from an incident's summary, a fix undone and one only
+// recommended. A restore that didn't happen says "Not restored".
 function listHow(i) {
   const s = i.summary || {};
-  return { restored: i.state === "escalated" && s.from === "restoring", recommended: s.from === "recommended" };
+  return {
+    restored: i.state === "escalated" && s.from === "restoring" && !String(s.reason || "").startsWith("Not restored"),
+    recommended: s.rule === GITOPS,
+  };
 }
 
 // rowWhat is one plain sentence of what happened and what Themis proposes.
@@ -666,6 +676,12 @@ function suspicion(d, approving) {
       approving ? " Check the change against the cluster before approving." : ""));
 }
 
+// observed is what verifying a change found, such as 2 of 3 pods ready.
+function observed(a) {
+  const o = a && a.Verification && a.Verification.Observation;
+  return o ? (o.Facts || (o.ReadyReplicas + " of " + o.DesiredReplicas + " pods ready.")) : null;
+}
+
 // result says what became of a change once decided.
 function result(a) {
   const rows = [];
@@ -677,8 +693,7 @@ function result(a) {
       a.Execution.FinishedAt ? h("div", { class: "quiet small" }, when(a.Execution.FinishedAt)) : null);
   }
   if (a.Verification) {
-    const o = a.Verification.Observation;
-    const facts = o ? (o.Facts || (o.ReadyReplicas + " of " + o.DesiredReplicas + " pods ready.")) : null;
+    const facts = observed(a);
     add("Outcome", a.Verification.Outcome ? label(OUTCOME_LABEL, a.Verification.Outcome) : "Verifying",
       facts ? h("div", { class: "quiet small" }, facts) : null);
   }
@@ -691,7 +706,7 @@ function decision(a, d, ctx, latest, reload) {
   const t = workload(d.Incident.target);
   const fx = fixWords(a.Capability, a.Params, t.name);
   const awaiting = a.State === "awaiting_approval";
-  const gitOps = a.PolicyID === "gitops-owns-the-target";
+  const gitOps = a.PolicyID === GITOPS;
   const replicas = a.BlastRadius && a.BlastRadius.replicas;
   const facts = [
     replicas !== undefined ? ["Affects ", h("b", {}, plural(Number(replicas), "pod", "pods")), ". "] : null,
@@ -808,7 +823,7 @@ function findings(d, cited, noun) {
   const pan = (cls, title, items, empty) => h("div", { class: "pan " + cls },
     h("h3", {}, title), items.length ? h("ul", {}, items) : h("p", { class: "empty" }, empty));
   const blind = d.Missing && d.Missing.length ? h("div", { class: "blind" },
-    h("b", {}, "What Themis couldn't see"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
+    h("b", {}, "Missing evidence"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
   const weigh = [plural(forFix.length, "finding supports", "findings support") + " the " + noun + ".",
     against.length ? plural(against.length, "is", "are") + " against it." : "None is against it.",
     unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""].filter(Boolean).join(" ");
@@ -881,7 +896,7 @@ function investigatorNote(inv, p, d) {
   const causes = inv.Hypotheses || [];
   return h("details", { class: "fold", "data-key": "note" },
     h("summary", {}, "The investigator's note", h("span", { class: "claim" }, "Written by the model, not checked by Themis")),
-    inv.Failure ? h("p", { class: "fix" }, "Investigation failed: " + inv.Failure) : null,
+    inv.Failure ? h("p", { class: "fix" }, "Investigation failed. " + inv.Failure) : null,
     inv.Summary ? h("p", {}, inv.Summary) : null,
     p ? suggestionText(p, d) : null,
     causes.length ? [h("h3", { class: "sub" }, "Causes it considered"), causes.map((x) => h("div", { class: "cause" },
@@ -921,14 +936,20 @@ function evidenceFold(d) {
         : h("pre", {}, JSON.stringify(e.Data, null, 2)))));
 }
 
+// timelineFold lists every change of state, each reason as recorded. A step
+// taken for the same reason as the one before it reads as the state it
+// reached, not the reason again.
 function timelineFold(d) {
   const ts = d.Transitions || [];
   if (!ts.length) return null;
   return h("details", { class: "fold", "data-key": "timeline" },
     h("summary", {}, "Timeline", h("span", { class: "n" }, plural(ts.length, "event", "events"))),
-    h("ol", { class: "timeline" }, ts.map((t) => h("li", {},
-      h("time", { datetime: t.At }, when(t.At)),
-      h("span", {}, sentence(t.Reason) || stateOf(t.To)[0] + ".", " ", h("span", { class: "by" }, label(ACTOR_LABEL, t.Actor)))))));
+    h("ol", { class: "timeline" }, ts.map((t, i) => {
+      const again = i > 0 && t.Reason && t.Reason === ts[i - 1].Reason;
+      return h("li", {},
+        h("time", { datetime: t.At }, when(t.At)),
+        h("span", {}, (!again && t.Reason) || stateOf(t.To)[0] + ".", " ", h("span", { class: "by" }, label(ACTOR_LABEL, t.Actor))));
+    })));
 }
 
 function usage(u) {
@@ -1024,18 +1045,26 @@ function suggestForm(inc, evidence, reload) {
       error));
 }
 
+// opening splits a reason Themis wrote into what happened, its first
+// sentence, and the grounds after it.
+function opening(reason, otherwise) {
+  const cut = reason.indexOf(". ");
+  return cut > 0 ? [reason.slice(0, cut + 1), reason.slice(cut + 2)] : [reason || otherwise, ""];
+}
+
 // headline is the decision first: the question when a fix waits, or else
 // what happened; then one sentence of why.
 function headline(d, ctx) {
   const inc = d.Incident;
   const ts = d.Transitions || [];
   const last = ts[ts.length - 1];
-  const reason = last ? sentence(last.Reason) : "";
+  // Reasons are shown as recorded: a person's grounds for denying are theirs.
+  const reason = last ? last.Reason : "";
   const { fx, cause, action } = ctx;
   const s = inc.state;
   if (s === "awaiting_approval" && fx) return [fx.question, cause || reason];
   if (ctx.recommended && fx && !["resolved", "self_resolved", "canceled"].includes(s)) {
-    return [sentence(fx.short + " in Git"), action ? sentence(action.DecisionReason) : reason];
+    return [sentence(fx.short + " in Git"), action ? action.DecisionReason : reason];
   }
   if (s === "received" || s === "investigating") {
     const got = [...new Set((d.Evidence || []).map((e) => label(EVIDENCE_LABEL, e.Template).toLowerCase()))];
@@ -1045,19 +1074,26 @@ function headline(d, ctx) {
   if (s === "awaiting_suggestion") {
     return ["Waiting for a suggested fix.", "No investigator is installed. A fix suggested by a person or a tool such as HolmesGPT is checked against the cluster and the policy."];
   }
-  if (s === "inconclusive") return [d.Headline || "No clear cause found.", "A suggested fix is checked against the cluster and the policy."];
+  if (s === "inconclusive") return [d.Headline || "No fix proposed.", "A fix suggested by a person or a tool is checked against the cluster and the policy."];
   if ((s === "authorized" || s === "executing") && fx) {
     const approved = ts.filter((t) => t.To === "authorized").pop();
-    return [fx.doing, approved ? sentence(approved.Reason) : reason];
+    return [fx.doing, approved ? approved.Reason : reason];
   }
   if (s === "verifying" && fx) return ["Verifying the " + fx.noun + ".", reason];
-  if (s === "restoring" && fx) return ["The " + fx.noun + " didn't help. Restoring the previous state.", reason];
+  if (s === "restoring" && ctx.undone) {
+    const fixed = (d.Actions || []).filter((a) => !(a.Params || {}).restores && a.Verification).pop();
+    return ["The " + ctx.undone.noun + " didn't help. Restoring the previous state.", observed(fixed) || ""];
+  }
   if (s === "resolved" && fx) return [fx.done, reason];
-  if (s === "escalated" && ctx.restored && fx) return ["The " + fx.noun + " didn't help and was undone.", reason];
-  if (REFERRED.includes(s)) return [reason || "Referred to a person.", "No further action by Themis. A person takes over."];
+  if (s === "escalated" && ctx.restored && ctx.undone) return ["The " + ctx.undone.noun + " didn't help and was undone.", reason];
+  if (REFERRED.includes(s)) return opening(reason, "Referred to a person.");
   if (s === "closed_no_action") {
-    const leading = cause ? "The investigator's leading cause: " + cause.charAt(0).toLowerCase() + cause.slice(1) : null;
-    return [d.Headline || "No fix met the checks and policy.", leading || (d.Headline ? "" : reason)];
+    const leading = cause ? "The investigator's leading cause: " + cause.charAt(0).toLowerCase() + cause.slice(1) : "";
+    if (d.Headline) return [d.Headline, leading];
+    // A person's grounds for denying follow as they wrote them.
+    if (action && action.State === "denied" && action.Decision !== "deny" && fx) return [cap(fx.noun) + " denied.", reason];
+    const [title, rest] = opening(reason, "No fix met the checks and policy.");
+    return [title, rest || leading];
   }
   if (s === "self_resolved") return ["Recovered before Themis acted.", reason];
   return [reason || stateOf(s)[0] + ".", ""];
@@ -1076,12 +1112,15 @@ async function detail(id) {
   const accepted = proposals.filter((p) => p.Status === "accepted").pop() || null;
   const fixed = action || accepted;
   const fx = fixed ? fixWords(fixed.Capability, fixed.Params, t.name) : null;
+  // The fix a restore undoes, for saying what didn't help.
+  const undone = actions.filter((a) => !(a.Params || {}).restores).pop();
   const lead = leadCause(inv);
   const ctx = {
     fx, action,
+    undone: undone ? fixWords(undone.Capability, undone.Params, t.name) : fx,
     cause: lead ? causeText(lead.rootCauseClass, (d.Causes || {})[lead.rootCauseClass]) : null,
-    restored: ts.some((x) => x.To === "restoring"),
-    recommended: ts.some((x) => x.To === "recommended") || actions.some((a) => a.PolicyID === "gitops-owns-the-target"),
+    restored: actions.some((a) => (a.Params || {}).restores && a.Execution && a.Execution.Status === "succeeded"),
+    recommended: actions.some((a) => a.PolicyID === GITOPS),
   };
   const [word, tone] = stateOf(inc.state, ctx);
   const [title, because] = headline(d, ctx);

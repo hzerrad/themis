@@ -154,7 +154,7 @@ func TestChecks_Problems(t *testing.T) {
 			s.outcome = &store.InvestigationOutcome{FailureKind: "budget_exhausted", At: now}
 		}, "Model", statuspage.Warn, "budget"},
 		"unknown failure": {func(_ *statuspage.Checker, s *fakeStore) {
-			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "The investigation failed because the investigator hit an internal error: boom", At: now}
+			s.outcome = &store.InvestigationOutcome{FailureKind: "internal", Failure: "An internal error in the investigator: boom", At: now}
 		}, "Model", statuspage.Problem, "internal error"},
 		"no alerts yet": {
 			func(_ *statuspage.Checker, s *fakeStore) { delete(s.heartbeats, store.HeartbeatAlertmanager) },

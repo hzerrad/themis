@@ -347,7 +347,7 @@
       }
     },
     "outcome": "require_approval",
-    "reason": "Policy rule rollback-needs-approval requires a person's approval. It is the rollout-regression profile's policy."
+    "reason": "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval."
   },
-  "unproposed": "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it. Themis's checks support a probe change (probe_kills is true), but the investigator didn't propose it."
+  "unproposed": "The checks support a rollback (failure_onset_after_rollout is true) and a probe change (probe_kills is true)."
 }

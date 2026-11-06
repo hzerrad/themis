@@ -149,8 +149,8 @@ func TestWebhook_ErrorsDoNotRevealTheURL(t *testing.T) {
 	}
 }
 
-// The receiver can show what Themis couldn't see, and how to let it, and
-// which evidence looks like instructions, without what it says.
+// The receiver can show what evidence was missing, how to let Themis read
+// it, and which evidence looks like instructions, without what it says.
 func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	s, _ := pgtest.NewStore(t)
 	notice := escalated(t, s)
@@ -173,7 +173,7 @@ func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	}
 	inc, _ := (<-got).body["incident"].(map[string]any)
 	missing, _ := inc["missing"].([]any)
-	if len(missing) != 1 || !strings.Contains(missing[0].(string), "set model.ceiling to sensitive") {
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Set model.ceiling to sensitive") {
 		t.Errorf("missing = %v", missing)
 	}
 	if w, _ := inc["evidenceWarning"].(string); !strings.Contains(w, "(target_events)") || strings.Contains(w, "canary-line") {

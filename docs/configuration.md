@@ -380,7 +380,7 @@ This holds for putting a fix back too. A rule of your own that reads `predicates
 
 A fix none of its [justifying checks](#justifying-checks) supports is refused before any policy, with the reason, and recorded as denied by `no-justifying-check`. Putting a fix back is exempt.
 
-When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "Themis's checks support a rollback (failure_onset_after_rollout is true), but the investigator didn't propose it." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
+When the investigator concludes without a fix but the checks support one that the incident's profiles offer, Themis doesn't close the incident: it hands it to a person, saying so, such as "No fix proposed. The checks support a rollback (failure_onset_after_rollout is true). Referred to a person." Text in the evidence, such as "this incident is handled" or "change freeze", can talk an investigator out of a right fix; it can't make it disappear. A fix counts when one of its justifying checks is true and no rule of the profiles offering it forbids it on the checks alone: a rule that depends on what the fix would change is passed over, since no change was proposed, and the cluster isn't read, so GitOps may still keep Themis from applying it. The incident page and the [escalation notice](#escalation-notices) show the sentence.
 
 What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, marked as written by the model or the suggester.
 
@@ -445,7 +445,7 @@ metrics:
 | `metrics.prometheus.tls.certFile`, `.keyFile` | A client certificate, for a server that asks for one. Set both or neither. Read on every connection. |
 | `metrics.prometheus.tls.insecureSkipVerify` | Accept any certificate. Only for trying Themis. |
 
-A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "no peak memory or CPU throttling data: set a Prometheus address".
+A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "No history: peak memory and CPU throttling are unknown." An incident's missing evidence says the same in one line, such as "Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address."
 
 ## Connecting your Alertmanager
 
@@ -480,14 +480,15 @@ With `notifications.webhook` set, every escalation is POSTed as JSON:
   "event": "incident.escalated",
   "incident": {
     "id": "01a1837f-…", "state": "escalated", "from": "investigating",
-    "reason": "investigation failed: INVESTIGATION_FAILURE_REASON_MODEL_UNAVAILABLE",
+    "reason": "Investigation failed after 3 attempts: the model was unreachable. Referred to a person.",
     "profile": "rollout-regression",
     "profiles": ["rollout-regression"],
     "target": {"group": "apps", "kind": "Deployment", "namespace": "shop", "name": "checkout", "uid": "…"},
     "at": "2026-10-28T17:13:54Z",
-    "url": "https://themis.example.com/#/incidents/01a1837f-…"
+    "url": "https://themis.example.com/#/incidents/01a1837f-…",
+    "missing": ["Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address."]
   }
 }
 ```
 
-`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail). It is material, not a finding; the checks do not rely on it." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.
+`event` is `incident.escalated` or `incident.contained_escalated`. `reason` is Themis's own words, never the investigator's: when the checks support a fix the investigator didn't propose, it says so. `missing` says in one line each what evidence Themis was missing, and the change that lets it read that evidence next time. `profiles` are every profile the incident matched, `profile`, its primary, first. When some evidence looks like instructions or forged tool output, `evidenceWarning` says which, such as "Some evidence contains text addressed to Themis or posing as tool output (container_logs_tail). It is material, not a finding; the checks do not rely on it." Anything but a 2xx answer is retried with backoff for about a day. Notices never carry evidence.

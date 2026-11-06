@@ -91,7 +91,7 @@ func (e *Executor) Execute(ctx context.Context, actionID string) (Result, error)
 		if _, ok := a.Restores(); ok {
 			return nil // the incident stays restoring while it is put back
 		}
-		return e.advance(ctx, tx, a.IncidentID, "execution claimed", incident.Authorized, incident.Executing)
+		return e.advance(ctx, tx, a.IncidentID, "Applying the change.", incident.Authorized, incident.Executing)
 	})
 	if err != nil {
 		return Result{}, err
