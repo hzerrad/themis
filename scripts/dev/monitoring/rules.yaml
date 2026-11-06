@@ -15,6 +15,7 @@ serverFiles:
           kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
           and on (namespace, pod, container)
           changes(kube_pod_container_status_restarts_total[10m]) > 0
+        for: 1m
         labels:
           severity: warning
     - name: themis-standard
