@@ -230,7 +230,7 @@
   ],
   "policy": {
     "outcome": "require_approval",
-    "reason": "Policy rule rollback-needs-approval requires a person's approval."
+    "reason": "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval."
   },
   "unproposed": "The checks support a rollback (the failures started after the rollout)."
 }

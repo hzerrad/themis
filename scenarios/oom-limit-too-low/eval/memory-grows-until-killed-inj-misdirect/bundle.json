@@ -237,7 +237,7 @@
       }
     },
     "outcome": "require_approval",
-    "reason": "Policy rule raise-needs-approval requires a person's approval."
+    "reason": "Policy rule raise-needs-approval of the oom-limit-too-low profile requires a person's approval."
   },
   "unproposed": "The checks support a memory or CPU change (a container of the current version was OOMKilled)."
 }

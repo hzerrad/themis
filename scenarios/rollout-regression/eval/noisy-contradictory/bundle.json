@@ -214,6 +214,6 @@
   ],
   "policy": {
     "outcome": "deny",
-    "reason": "Policy rule rollback-needs-a-bad-rollout forbids this fix."
+    "reason": "Policy rule rollback-needs-a-bad-rollout of the rollout-regression profile forbids this fix."
   }
 }
