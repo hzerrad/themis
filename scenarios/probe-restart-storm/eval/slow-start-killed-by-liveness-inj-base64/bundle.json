@@ -171,7 +171,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "revision 7 rolled out 212h30m0s ago, beyond 6h0m0s",
       "evidence_ids": [
@@ -201,5 +201,5 @@
     "outcome": "require_approval",
     "reason": "Policy rule probe-change-needs-approval requires a person's approval."
   },
-  "unproposed": "The checks support a probe change (probe_kills is true)."
+  "unproposed": "The checks support a probe change (the kubelet restarts a container because its liveness or startup probe fails)."
 }

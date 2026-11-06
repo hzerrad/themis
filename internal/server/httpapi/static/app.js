@@ -158,6 +158,10 @@ function fixWords(name, params, target) {
     doing: "Applying a change to " + target + ".", done: "Changed " + target + "." };
 }
 
+// REFERRAL ends what Themis says when it hands an incident to a person: one
+// with no fix applied then waits for the fix they suggest.
+const REFERRAL = /\s*Referred to a person\.\s*$/;
+
 // States. One name per state, everywhere: docs/writing.md lists them.
 const TERMINAL = ["resolved", "contained_escalated", "escalated", "closed_no_action", "self_resolved", "rejected", "canceled"];
 const REFERRED = ["escalated", "contained_escalated"];
@@ -197,8 +201,31 @@ function causeText(name, description) {
 // A finding's mark says what it means for the decision.
 const MARK = { for: "✓", against: "✕", unknown: "?", found: "✓" };
 const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", found: "Found" };
-// AGAINST_WHEN_TRUE are checks whose finding, when true, weighs against a fix.
-const AGAINST_WHEN_TRUE = ["gitops_managed", "config_changed_before_failure", "oom_without_recent_rollout", "evidence_has_instructions"];
+// AGAINST says which answer of a check is a fact against a fix: against any
+// fix ("*"), or against the fix named. Any other check weighs for a fix
+// when true. No earlier revision rules out a rollback; a healthy one rules
+// out raising a limit, since the new version is what fails.
+const AGAINST = {
+  gitops_managed: { "*": "true" },
+  config_changed_before_failure: { "*": "true" },
+  evidence_has_instructions: { "*": "true" },
+  earlier_revision_healthy: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
+  failure_onset_after_rollout: { [ROLLBACK]: "false" },
+};
+
+// against says whether p's answer is a fact against one of fixes.
+function against(p, fixes) {
+  const a = AGAINST[p.Name] || {};
+  return p.Value !== "unknown" && ["*", ...fixes].some((f) => a[f] === p.Value);
+}
+
+// supports says whether p's answer weighs for fix: the answer that isn't
+// against it, or true for a check with no bearing of its own on it.
+function supports(p, fix) {
+  const a = AGAINST[p.Name] || {};
+  const no = a["*"] || a[fix];
+  return no ? p.Value !== no && p.Value !== "unknown" : p.Value === "true";
+}
 const EVIDENCE_LABEL = {
   rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs",
   referenced_config: "Referenced config", container_memory: "Container memory", container_cpu: "Container CPU",
@@ -917,6 +944,7 @@ function rowWhat(i) {
   if (i.supersededBy) return ["Changed outside Themis and still failing. ", em("A newer incident covers it.")];
   if (i.state === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(fx.short + "?")];
   if (WORKING.includes(i.state)) return "Collecting and weighing evidence.";
+  if (i.state === "awaiting_suggestion" && REFERRAL.test(s.reason || "")) return [cause ? cause + " " : null, em("Referred to a person.")];
   if (i.state === "awaiting_suggestion" && s.from === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(cap(fx.noun) + " denied. Waiting for another fix.")];
   if (i.state === "awaiting_suggestion" && REFUSING.includes(s.from)) return [cause ? cause + " " : null, em("Suggested fix refused. Waiting for another fix.")];
   if (i.state === "awaiting_suggestion" || i.state === "inconclusive") return [cause ? cause + " " : null, em("No fix proposed yet.")];
@@ -1157,14 +1185,14 @@ function statement(d, p) {
 
 // sameFindings joins checks, often of different packs, that found the same
 // fact: the same answer, on the same grounds, from the same evidence, with
-// the same bearing on the fix. The cited one leads.
+// the same bearing on the fix. The cited one leads, and the fact shows once.
 function sameFindings(all, cited) {
   const out = [];
   const byKey = new Map();
   for (const p of all) {
     const ids = [...(p.EvidenceIDs || [])].sort().join(",");
     const key = p.Value !== "unknown" && p.Reason && ids
-      ? [p.Value, p.Reason, ids, AGAINST_WHEN_TRUE.includes(p.Name)].join("|") : null;
+      ? [p.Value, p.Reason, ids, JSON.stringify(AGAINST[p.Name] || {})].join("|") : null;
     const same = key ? byKey.get(key) : null;
     if (!same) {
       const g = { p, also: [] };
@@ -1189,24 +1217,24 @@ function finding(g, d, side) {
     h("span", { class: "k " + (side || "none"), "aria-hidden": "true" }, side ? MARK[side] : "·"),
     h("span", {}, side ? h("span", { class: "vh" }, MARK_WORD[side] + ": ") : null,
       statement(d, p) + (unknown && p.Reason ? " — " + p.Reason : ""),
-      h("span", { class: "src" }, [unknown ? null : p.Reason, sources(d, p.EvidenceIDs),
-        g.also.length ? "Also: " + g.also.map((x) => statement(d, x)).join("; ") : null].filter(Boolean).join(" · "))));
+      h("span", { class: "src" }, [unknown ? null : p.Reason, sources(d, p.EvidenceIDs)].filter(Boolean).join(" · "))));
 }
 
-// findings weighs Themis's checks: for and against the fix when there is
-// one, each fact once.
-function findings(d, cited, noun) {
+// findings weighs Themis's checks: for and against fix, the fix weighed,
+// when there is one, each fact once. Without one, a fact against any fix
+// the incident offers, such as no earlier revision to roll back to, is
+// against, and what the checks found true is found.
+function findings(d, cited, noun, fix) {
   const all = d.Predicates || [];
   if (!all.length) return null;
-  const forFix = [], against = [], unknown = [], other = [];
+  const fixes = cited ? [fix] : (d.Fixes || []).map((f) => f.name);
+  const forFix = [], againstFix = [], unknown = [], other = [];
   for (const g of sameFindings(all, cited)) {
     const p = g.p;
-    const flips = AGAINST_WHEN_TRUE.includes(p.Name);
-    const supports = p.Value === (flips ? "false" : "true");
     const isCited = cited && [p, ...g.also].some((x) => cited.includes(x.Name));
     if (p.Value === "unknown") unknown.push(finding(g, d, "unknown"));
-    else if (isCited) (supports ? forFix : against).push(finding(g, d, supports ? "for" : "against"));
-    else if (!supports && flips) against.push(finding(g, d, "against"));
+    else if (against(p, cited || p.Value === "false" ? fixes : [])) againstFix.push(finding(g, d, "against"));
+    else if (isCited) (supports(p, fix) ? forFix : againstFix).push(finding(g, d, supports(p, fix) ? "for" : "against"));
     else if (!cited && p.Value === "true") forFix.push(finding(g, d, "found"));
     else other.push(finding(g, d, null));
   }
@@ -1215,13 +1243,13 @@ function findings(d, cited, noun) {
   const blind = d.Missing && d.Missing.length ? h("div", { class: "blind" },
     h("b", {}, "Missing evidence"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
   const weigh = [plural(forFix.length, "check supports", "checks support") + " the " + noun + ".",
-    against.length ? plural(against.length, "is", "are") + " against it." : "None is against it.",
+    againstFix.length ? plural(againstFix.length, "is", "are") + " against it." : "None is against it.",
     unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""].filter(Boolean).join(" ");
   return h("section", { class: "findings", "aria-label": "Findings" },
     h("div", { class: "pans" },
       cited ? pan("for", "Supports the " + noun, forFix, "No check supports it.") : pan("for", "Found", forFix, "No check came out true."),
-      cited ? pan("against", "Against, or unknown", [...against, ...unknown], "No check is against it.")
-        : pan("against", "Unknown, or against", [...against, ...unknown], "Every check has an answer.")),
+      cited ? pan("against", "Against, or unknown", [...againstFix, ...unknown], "No check is against it.")
+        : pan("against", "Unknown, or against", [...againstFix, ...unknown], "Every check has an answer.")),
     cited ? h("p", { class: "weigh" }, weigh) : null,
     blind,
     other.length ? h("details", { class: "fold sub", "data-key": "other-checks" },
@@ -1801,22 +1829,29 @@ function headline(d, ctx) {
   return [reason || stateOf(s)[0] + ".", ""];
 }
 
-// waitingFor says why an incident waits for a suggested fix: a person
-// denied its fix, a fix suggested was refused, investigating it again found
-// none, or no investigator is installed.
+// waitingFor says why an incident waits for a suggested fix: Themis referred
+// it to a person, a person denied its fix, a fix suggested was refused,
+// investigating it again found none, or no investigator is installed.
 function waitingFor(d, last, fx, suggest) {
   const from = last ? last.From : "";
-  const reason = last ? last.Reason : "";
-  const next = " Waiting for another fix.";
+  const referred = REFERRAL.test(last ? last.Reason : "");
+  // A referral says, after why Themis stopped, which fix the checks support
+  // or what they found: the person suggests the fix.
+  const reason = last ? last.Reason.replace(REFERRAL, "") : "";
+  const next = referred ? " Referred to a person." : " Waiting for another fix.";
   // A person's reason for denying follows as they wrote it.
-  if (from === "awaiting_approval" && fx) return [cap(fx.noun) + " denied." + next, reason];
+  if (from === "awaiting_approval" && fx && !referred) return [cap(fx.noun) + " denied." + next, reason];
   if (REFUSING.includes(from)) {
     // The fix refused: a suggestion kept with the refusal, or the change
     // policy refused.
-    const p = (d.Proposals || []).filter((x) => x.Message === reason).pop()
-      || (d.Actions || []).filter((a) => a.DecisionReason === reason).pop();
+    const p = (d.Proposals || []).filter((x) => x.Message && reason.startsWith(x.Message)).pop()
+      || (d.Actions || []).filter((a) => a.DecisionReason && reason.startsWith(a.DecisionReason)).pop();
     const noun = p ? fixWords(p.Capability, p.Params, workload(d.Incident.target).name).noun : "suggested fix";
-    return [cap(noun) + " refused." + next, reason.replace(/^Refused\. /, "")];
+    return [cap(noun) + " refused." + next, [reason.replace(/^Refused\. /, ""), referred ? suggest : ""].filter(Boolean).join(" ")];
+  }
+  if (referred) {
+    const [title, rest] = opening(reason, "");
+    return [title + next, [rest, suggest].filter(Boolean).join(" ")];
   }
   if (from === "investigating") return [reason + next, suggest];
   return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
@@ -1896,7 +1931,7 @@ async function detail(id) {
     action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
     again || suggesting ? h("div", { class: "more" }, again, suggesting) : null,
 
-    findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix"),
+    findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix", fixed ? fixed.Capability : ""),
 
     h("div", { class: "more" },
       actions.length > 1 ? h("details", { class: "fold", "data-key": "earlier" },

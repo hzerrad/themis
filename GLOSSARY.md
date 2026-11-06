@@ -33,7 +33,7 @@ To close an incident because its target changed or was replaced, and open a new 
 _Avoid_: merge, reopen
 
 **Escalate**:
-To hand an incident to a person, with what Themis knows, because Themis won't or can't go further.
+To hand an incident to a person, with what Themis knows, because Themis won't or can't go further. When Themis applied no fix, the incident then waits for the fix the person suggests; Themis never closes it with no change on its own while a symptom is true.
 _Avoid_: page, alert
 
 ## Investigation
@@ -65,6 +65,10 @@ _Avoid_: remedy, fix
 **Check**:
 A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout". It is unknown when the evidence it reads is missing or doesn't settle it, never guessed.
 _Avoid_: predicate, rule, signal
+
+**Symptom**:
+A check a profile names because it finds the failure itself, such as OOM kills or throttling at the CPU limit, rather than whether a fix is right.
+_Avoid_: signal, indicator
 
 **Root cause**:
 Why an incident happened, named from a short list its scenario pack gives, such as "the new version's memory limit is too low" or "the evidence can't tell". Lists make answers comparable.

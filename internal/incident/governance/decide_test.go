@@ -53,6 +53,16 @@ func shippedProfile(t *testing.T) config.Profile {
 	return p
 }
 
+// shippedChecks are the checks Themis ships, which say what each finds.
+func shippedChecks(t *testing.T) check.List {
+	t.Helper()
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cat.Checks
+}
+
 func facts(onset check.Truth) []check.Result {
 	return []check.Result{
 		{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x"},
@@ -60,7 +70,7 @@ func facts(onset check.Truth) []check.Result {
 		{Name: "failure_onset_after_rollout", Version: "1", Value: onset, Reason: "x"},
 		{Name: "config_changed_before_failure", Version: "1", Value: check.False, Reason: "x"},
 		{Name: "rollout_recent", Version: "1", Value: check.True, Reason: "x"},
-		{Name: "prior_revision_was_healthy", Version: "1", Value: check.True, Reason: "x"},
+		{Name: "earlier_revision_healthy", Version: "1", Value: check.True, Reason: "x"},
 	}
 }
 
@@ -92,7 +102,7 @@ var investigator = governance.Suggester{Source: "themis-intelligence", Authentic
 // profile offering the fix decides it and the strictest decision wins; a
 // profile's rules govern only its own fixes.
 func TestDecide(t *testing.T) {
-	shipped := shippedProfile(t)
+	shipped, words := shippedProfile(t), shippedChecks(t)
 	outsiders := profile("outsiders")
 	outsiders.Policy.Rules = []config.PolicyRule{{Name: "no-unproven-outsiders", When: `proposal.external == "true" && proposal.authenticated != "true"`, Decision: config.DecisionDeny}}
 	// A profile offering another fix, whose rules forbid anything else, and
@@ -124,11 +134,12 @@ func TestDecide(t *testing.T) {
 		{name: "bad rollout without OOM", checks: set(facts(check.True), 0, check.False), want: policy.RequireApproval, rule: "rollback-needs-approval"},
 		// The crash loop began before the rollout: the check that justifies a
 		// rollback is false, so Themis refuses it before any rule.
-		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused. The rollout-regression profile allows a rollback only when failure_onset_after_rollout is true, and it's false."},
+		// People read the reason: it says what the check finds, never its name.
+		{name: "crash loop older than the rollout", checks: facts(check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks found otherwise (x)."},
 		// Without the evidence that says when the failures started, no rollback.
-		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: governance.UnjustifiedRule},
+		{name: "missing evidence", checks: facts(check.Unknown), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused. The rollout-regression profile allows a rollback only when the failures started after the rollout, and the checks couldn't tell (x)."},
 		// Every profile offering the fix must find it justified.
-		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused. The watching profile allows a rollback only when oom_killed_new_revision is true, and it's false."},
+		{name: "another profile offering it doesn't find it justified", also: []config.Profile{watching}, checks: set(facts(check.True), 0, check.False), want: policy.Deny, rule: governance.UnjustifiedRule, reason: "Refused. The watching profile allows a rollback only when the new version runs out of memory, and the checks found otherwise (x)."},
 		// A referenced ConfigMap changed between the rollout and the failures:
 		// rolling back wouldn't undo it.
 		{name: "config changed before the failure", checks: set(facts(check.True), 3, check.True), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
@@ -137,7 +148,10 @@ func TestDecide(t *testing.T) {
 		{name: "old rollout", checks: set(facts(check.True), 4, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		// No memory kill and no healthy version to go back to.
 		{name: "no sign of a bad revision", checks: set(set(facts(check.True), 0, check.False), 5, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		{name: "prior revision's health unknown", checks: set(set(facts(check.True), 0, check.False), 5, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		{name: "earlier revision's health unknown", checks: set(set(facts(check.True), 0, check.False), 5, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		// No earlier revision, or one that failed too: nothing healthy to go
+		// back to, though the new version runs out of memory.
+		{name: "no healthy earlier revision", checks: set(facts(check.True), 5, check.False), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		// Themis never changes a workload GitOps manages, or may manage, before
 		// any profile's policy, which here would ask for approval: it only
 		// recommends the fix. Ownership is read live too, so a stale check
@@ -178,7 +192,7 @@ func TestDecide(t *testing.T) {
 			}
 			var decider governance.Decider
 			d, err := decider.Decide(t.Context(), k8s, governance.Fix{
-				Incident: "incident-1", Target: target, Profiles: append(config.Matched{p}, tt.also...), Checks: tt.checks,
+				Incident: "incident-1", Target: target, Profiles: append(config.Matched{p}, tt.also...), Checks: tt.checks, Words: words,
 				Capability: rollback.Capability{}, Params: map[string]any{"revision": revision},
 				By: by, Restores: tt.restores,
 			})

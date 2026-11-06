@@ -53,10 +53,11 @@ profile:
   evidence:
     initial: [rollout_history, pod_states, target_events, referenced_config]
     allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail]
-  checks: [rollout_recent, failure_onset_after_rollout, oom_killed_new_revision, gitops_managed]
+  checks: [rollout_recent, failure_onset_after_rollout, earlier_revision_healthy, oom_killed_new_revision, gitops_managed]
   capabilities: [deployment.rollback-to-revision]
   justifiedBy:
     deployment.rollback-to-revision: [failure_onset_after_rollout]
+  symptoms: [failure_onset_after_rollout, oom_killed_new_revision]
   guidance: |
     A rollback is right when the current revision introduced the failure and
     a prior revision was healthy. ...
@@ -81,13 +82,17 @@ A pack's rules govern only its own fixes. The fixes another pack offers are deci
 
 List the checks the profile runs: with none, it runs every check of every pack. Without `capabilities`, the pack only diagnoses and hands the incident to a person.
 
-`justifiedBy` names, for each fix the pack offers, the checks that justify it: Themis refuses the fix unless one of them is true, whoever suggests it, and hands the incident to a person when they are true and the investigator suggested nothing. Name the checks that show the fix addresses what is wrong, such as `probe_kills` for a probe change, and write a policy rule only for what else must hold, such as no recent rollout. See [justifying checks](configuration.md#justifying-checks).
+`justifiedBy` names, for each fix the pack offers, the checks that justify it: Themis refuses the fix unless one of them is true, whoever suggests it, and hands the incident to a person when they are true and the investigator suggested nothing. Name the checks that show the fix addresses what is wrong, such as `probe_kills` for a probe change, and write a policy rule only for what else must hold, such as a healthy earlier version to roll back to. See [justifying checks](configuration.md#justifying-checks).
+
+`symptoms` names the checks that find the failure itself, such as `oom_killed_current_revision` or `cpu_throttled_at_limit`. While one is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person, saying which fix the checks support or what they found, and waits for the fix they suggest. Name every check that finds something wrong, including those that rule the pack's fix out, such as `crashed_on_its_own` for a probe change. Without `symptoms`, the justifying checks are the pack's symptoms. See [symptoms](configuration.md#symptoms).
+
+Whether a new version brought the failure is a question for Themis's own `earlier_revision_healthy`: is there a healthy version before this one to go back to? A pack whose fix is right only when the version isn't to blame, such as a higher limit, refuses it while that check is true. A Deployment's first revision has none, so `earlier_revision_healthy`, `rollout_recent` and `failure_onset_after_rollout` are all false for it: creating a Deployment isn't a rollout.
 
 `guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
 
 ## Checks
 
-`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run Themis's own checks, `rollout_recent` and `gitops_managed`, as it runs the pack's. Don't rely on another pack's checks: it may be disabled. A check name belongs to one pack, and Themis's own names can't be defined again.
+`checks.yaml` holds the checks the pack adds, in the format [checks.md](checks.md) describes. A profile can run Themis's own checks, `rollout_recent`, `earlier_revision_healthy` and `gitops_managed`, as it runs the pack's. Don't rely on another pack's checks: it may be disabled. A check name belongs to one pack, and Themis's own names can't be defined again.
 
 ## Cases and look-alikes
 

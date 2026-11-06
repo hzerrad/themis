@@ -1,0 +1,9 @@
+search: the feed sends 250m of CPU work
+search: 2s of CPU work behind the feed
+search: 4s of CPU work behind the feed
+search: 9s of CPU work behind the feed
+search: 15s of CPU work behind the feed
+search: 22s of CPU work behind the feed
+search: 31s of CPU work behind the feed
+search: 40s of CPU work behind the feed
+search: 48s of CPU work behind the feed

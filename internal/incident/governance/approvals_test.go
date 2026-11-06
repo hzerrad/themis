@@ -184,9 +184,10 @@ func TestApprove_AnotherApprover(t *testing.T) {
 	}
 }
 
-// Nobody answered: unlike a denial, the incident is still live. A second
-// sweep finds nothing left to expire, so the expiry is counted once.
-func TestExpire_Escalates(t *testing.T) {
+// Nobody answered: a person takes the incident over, told so, and Themis
+// waits for the fix they suggest, as nothing was applied. A second sweep
+// finds nothing left to expire, so the expiry is counted once.
+func TestExpire_RefersToAPerson(t *testing.T) {
 	e := newEnv(t)
 	a := e.awaiting(t)
 	expired := approvals(t, "expired")
@@ -196,8 +197,11 @@ func TestExpire_Escalates(t *testing.T) {
 			t.Fatalf("Expire: %v", err)
 		}
 	}
-	if got := e.state(t, a.IncidentID); got != incident.Escalated {
-		t.Errorf("state = %s, want escalated", got)
+	if got := e.state(t, a.IncidentID); got != incident.AwaitingSuggestion {
+		t.Errorf("state = %s, want awaiting_suggestion", got)
+	}
+	if n := e.notices(t, a.IncidentID); n != 1 {
+		t.Errorf("%d escalation notices, want 1", n)
 	}
 	if got := expired(); got != 1 {
 		t.Errorf("counted %v expiries, want 1", got)

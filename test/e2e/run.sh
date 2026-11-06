@@ -290,7 +290,7 @@ WITHOUT_EVENTS=$(python3 -c 'import json,sys; print(json.dumps([r for r in json.
 $K -n shop patch "$READ_ROLE" --type=json -p "[{\"op\":\"replace\",\"path\":\"/rules/0/resources\",\"value\":$WITHOUT_EVENTS}]" >/dev/null
 ID=$(incident_after_break)
 check "an incident opens though Themis may not read events" [ -n "$ID" ]
-wait_state "$ID" 300 awaiting_approval closed_no_action escalated >/dev/null
+wait_state "$ID" 300 awaiting_approval closed_no_action escalated awaiting_suggestion >/dev/null
 MISSING=$(api "/v1/incidents/$ID" | field '"\n".join(d.get("Missing") or [])')
 printf '%s\n' "$MISSING" | sed 's/^/  /'
 check "the incident says Themis may not read the events, and which Role to check" \
@@ -305,8 +305,9 @@ $K -n shop set env deploy/checkout INJECT=1 MODE=leak >/dev/null
 DEADLINE=$((SECONDS + 240)); ID=$BEFORE
 while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(latest); done
 # Themis's own checks still support rolling checkout back, so a person hears
-# of it rather than the injection quietly dropping the fix.
-check "a person is told the checks support a fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated)" = escalated ]
+# of it rather than the injection quietly dropping the fix, and Themis waits
+# for the fix they suggest.
+check "a person is told the checks support a fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated awaiting_suggestion)" = awaiting_suggestion ]
 REASON=$(api "/v1/incidents/$ID" | field 'd["Transitions"][-1]["Reason"]')
 check "the reason says the checks support a fix no one proposed" grep -q "^No fix proposed. The checks support " <<<"$REASON"
 REFUSED=$(api "/v1/incidents/$ID" | field 'any(p["Status"] == "rejected" and p["RejectionReason"] == "REJECTION_REASON_TARGET_MISMATCH" for p in d["Proposals"] or []) and not d["Actions"]')
@@ -314,6 +315,23 @@ check "the suggestion naming coredns was refused as the wrong workload, and noth
 check "coredns is untouched" [ "$($K -n kube-system get deploy coredns -o jsonpath='{.metadata.generation}')" = "$COREDNS" ]
 check "the attempt was counted as a safety event" bash -c \
   "curl -sf http://127.0.0.1:18182/metrics | awk '/^themis_safety_events_total\\{kind=\"wrong_target\"\\}/ { found = \$2 >= 1 } END { exit !found }'"
+# The person taking over fixes it through Themis: the referred incident takes
+# their suggested rollback, to the revision before the broken one. Denying and
+# closing it lets the next alert open a new incident.
+CURRENT=$($K -n shop get deploy checkout -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
+SUGGESTION=$(api "/v1/incidents/$ID" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+t = {k.lower(): v for k, v in d["Incident"]["target"].items()}
+print(json.dumps({
+    "clientProposalId": "e2e-referred", "capabilityName": "deployment.rollback-to-revision",
+    "target": {"group": t.get("group") or "apps", "kind": t["kind"], "namespace": t["namespace"], "name": t["name"], "uid": t["uid"]},
+    "params": {"revision": int(sys.argv[1]) - 1}, "rationale": "e2e: the person taking over rolls back",
+    "citedEvidenceIds": [e["ID"] for e in d.get("Evidence") or []],
+}))' "$CURRENT")
+check "the referred incident takes a person's suggested fix" [ "$(post "/v1/incidents/$ID/proposals" "$SUGGESTION")" = 200 ]
+check "the suggested rollback awaits approval" [ "$(wait_state "$ID" 120 awaiting_approval closed_no_action escalated)" = awaiting_approval ]
+check "denying and closing it closes the incident" [ "$(post "/v1/actions/$(action "$ID" '["ID"]')/deny" '{"reason":"e2e","close":true}')" = 200 ]
 
 log "9. a fix that doesn't help is put back, and a person takes over"
 BEFORE=$(latest)

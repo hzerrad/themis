@@ -54,7 +54,7 @@ def decide(messages: list[dict[str, str]]) -> dict[str, object]:
             "expected_effect": "pods stop being OOMKilled",
             "rationale": f"revision {current} is OOMKilled since its rollout; revision {prior} served without failures",
             "cited_evidence_ids": cited,
-            "cited_predicates": ["oom_killed_new_revision", "failure_onset_after_rollout", "prior_revision_was_healthy"],
+            "cited_predicates": ["oom_killed_new_revision", "failure_onset_after_rollout", "earlier_revision_healthy"],
         },
     }
 

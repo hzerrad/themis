@@ -1,0 +1,155 @@
+# search was created 29 minutes ago: revision 1 is its only one. Its feed sends
+# 250m of CPU work, more than its 200m limit: the kernel throttles it in 90% of
+# its CPU periods, it uses nearly all of its limit, and its logs say how far
+# behind it falls. With no earlier revision, no new version brought this:
+# raising the CPU limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  creationTimestamp: '2026-11-04T13:31:00Z'
+  labels:
+    app: search
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+      - name: app
+        image: example/search:1.0.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 8Mi
+          limits:
+            cpu: 200m
+            memory: 32Mi
+status:
+  observedGeneration: 1
+  replicas: 1
+  updatedReplicas: 1
+  readyReplicas: 1
+  availableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-11-04T13:31:10Z'
+    lastTransitionTime: '2026-11-04T13:31:10Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-11-04T13:31:10Z'
+    lastTransitionTime: '2026-11-04T13:31:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-7c4e8b2a6
+  creationTimestamp: '2026-11-04T13:31:00Z'
+  labels:
+    app: search
+    pod-template-hash: 7c4e8b2a6
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 7c4e8b2a6
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 7c4e8b2a6
+    spec:
+      containers:
+      - name: app
+        image: example/search:1.0.0
+        resources:
+          requests:
+            cpu: 50m
+            memory: 8Mi
+          limits:
+            cpu: 200m
+            memory: 32Mi
+status:
+  replicas: 1
+  fullyLabeledReplicas: 1
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-7c4e8b2a6-m3n5p
+  creationTimestamp: '2026-11-04T13:31:00Z'
+  labels:
+    app: search
+    pod-template-hash: 7c4e8b2a6
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-7c4e8b2a6
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/search:1.0.0
+    resources:
+      requests:
+        cpu: 50m
+        memory: 8Mi
+      limits:
+        cpu: 200m
+        memory: 32Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:31:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-04T13:31:10Z'
+  containerStatuses:
+  - name: app
+    image: example/search:1.0.0
+    imageID: example/search@sha256:7777777777777777777777777777777777777777777777777777777777777777
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-04T13:31:05Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search.scaled-up
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: search
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled up replica set search-7c4e8b2a6 from 0 to 1'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-04T13:31:00Z'
+lastTimestamp: '2026-11-04T13:31:00Z'

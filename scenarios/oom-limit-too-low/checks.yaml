@@ -1,8 +1,9 @@
 # The checks of the oom-limit-too-low pack, in the order Themis reports them.
-# They read the pod states, the rollout history, the events, and
-# container_memory, what the install's metrics source says of the current
-# revision's containers. docs/checks.md says what each field means and what the
-# expressions see.
+# They read the pod states, the events, and container_memory, what the
+# install's metrics source says of the current revision's containers. Whether
+# a new version brought the kills is for Themis's own earlier_revision_healthy
+# and rollout_recent, which the profile runs too. docs/checks.md says what each
+# field means and what the expressions see.
 
 # A container of the current revision was killed for running out of memory.
 - name: oom_killed_current_revision
@@ -30,38 +31,6 @@
     - answer: false
       reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
       cite: [ids.pod_states]
-
-# The current revision is OOMKilled and rolled out more than 6 hours ago: it
-# ran before the kills, so a rollout didn't bring them, or not obviously.
-- name: oom_without_recent_rollout
-  version: "1"
-  description: The current version is OOMKilled, and it rolled out more than 6 hours ago
-  topic: OOM kills long after the rollout
-  whenFalse: The current version is not OOMKilled, or it rolled out within the last 6 hours
-  reads: [pod_states, rollout_history]
-  let:
-    pods: pod_states.pods.filter(p, p.revision == current_revision)
-    killed: >-
-      pods.filter(p, p.containers.exists(c,
-        [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled")))
-  answers:
-    - when: size(pods) == 0
-      answer: unknown
-      reason: no pods of the current revision
-    - when: size(killed) == 0
-      answer: false
-      reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
-      cite: [ids.pod_states]
-    - when: rollout_at == null
-      answer: unknown
-      reason: the current revision or its rollout time is unknown
-    - when: now - rollout_at <= duration("6h")
-      answer: false
-      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, within ${duration("6h")}, and its pods are OOMKilled
-      cite: [ids.rollout_history, ids.pod_states]
-    - answer: true
-      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, and its pod ${killed[0].name} was OOMKilled
-      cite: [ids.rollout_history, ids.pod_states]
 
 # A metrics source says how much memory the containers used at their peak.
 # Only a source with history, such as Prometheus, can; the Kubernetes metrics

@@ -27,5 +27,6 @@ truth:
     cpu_throttled_at_limit: 'true'
     cpu_usage_near_limit: 'true'
     rollout_recent: 'true'
+    earlier_revision_healthy: 'unknown'
     gitops_managed: 'false'
   policy: deny

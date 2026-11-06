@@ -49,6 +49,9 @@ profile:
   # container, or they time out.
   justifiedBy:
     deployment.set-probes: [probe_kills, probe_timeouts]
+  # The failure itself: while one is true, Themis never closes the incident
+  # with no change on its own. It refers it to a person.
+  symptoms: [probe_kills, probe_timeouts, killed_during_startup, crashed_on_its_own]
   # What the investigator is told about these incidents: when changing a
   # probe's timing is right and when it is wrong. It names checks, never root
   # causes. The checks and the policy below decide.

@@ -26,12 +26,14 @@ Each API is behind its own bearer token: the alert webhook's, the investigator's
 ```
 received → investigating → diagnosed → proposed → awaiting_approval → authorized → executing → verifying → resolved
     │            │             │           │              │                                      │
- rejected   escalated    closed_no_action  recommended   escalated (expired)        escalated / contained_escalated
+ rejected   escalated    closed_no_action  recommended   awaiting_suggestion (expired)   escalated / contained_escalated
             canceled     self_resolved     closed_no_action  awaiting_suggestion (denied)   restoring → escalated
-                                                         closed_no_action (denied and closed)
+            awaiting_suggestion (referred)                       closed_no_action (denied and closed)
 ```
 
 A denied fix leaves the incident `awaiting_suggestion`, waiting for another: one a person or an agent suggests, or one found by investigating it again. The new investigation is told which fixes people denied, and their reasons, as text for the model to weigh, never instructions, and it draws on the incident's token budget. A fix a person or an agent suggests that the checks or policy refuse leaves the incident waiting too, as does any refused fix, or an investigation that finds none, once a person has denied one or had the incident investigated again. Themis only recommending a fix, because GitOps owns the workload, still closes it.
+
+Themis never closes an incident with no change on its own while its checks find the failure. When no fix was applied and none goes ahead, because the investigation found none or failed, the fix it proposed was refused, or nobody approved it in time, Themis refers the incident to a person and it waits (`awaiting_suggestion`) for the fix they suggest, saying which fix the checks support or what they found, with an escalation notice. A fix Themis applied that didn't help still ends `escalated`: the incident's evidence and checks describe the workload before Themis changed it, so the person starts from the cluster as it is, and a new alert opens a new incident.
 
 When a fix is applied and the workload is unchanged or worse at the end of the verification window, Themis puts it back as it was before it acted (`restoring`), checks that Kubernetes rolled that version out, and hands the incident to a person (`escalated`). People then investigate the workload as they left it, not a mix of the incident and Themis's attempt. Putting it back is an action of its own: a rollback to the revision the fix replaced, with every check a fix has, decided by policy. It needs no approval unless a rule matching `action.restore == "true"` asks for one; then, or when Kubernetes no longer keeps that revision, Themis leaves its change in place and escalates at once. If someone changed the pod template after the fix, Themis leaves their change alone and escalates. If the restore can't be carried out, it escalates with its change still in place, so an incident is never left waiting. A fix that partly helped (`contained_escalated`) is kept, and an outcome changed by someone else during the window (`inconclusive`) is never put back.
 

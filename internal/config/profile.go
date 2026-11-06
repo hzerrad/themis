@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"slices"
 	"time"
 )
@@ -45,6 +46,13 @@ type Profile struct {
 	// incident, whoever suggests it. Each must be a check the profile runs.
 	JustifiedBy map[string][]string `json:"justifiedBy,omitempty"`
 
+	// Symptoms are the checks that find the failure itself, such as OOM
+	// kills or throttling at the limit. While one is true and no fix has been
+	// applied, Themis never closes the incident with no change on its own: it
+	// refers it to a person and waits for a suggested fix. None means the
+	// checks in JustifiedBy. Each must be a check the profile runs.
+	Symptoms []string `json:"symptoms,omitempty" jsonschema:"uniqueItems=true"`
+
 	// Guidance tells the investigator, in plain words, when this profile's
 	// fixes are right and when they are wrong. It guides; checks and policy
 	// decide.
@@ -58,6 +66,19 @@ type Profile struct {
 
 	// Verification measures an action's outcome; zero fields take defaults.
 	Verification Verification `json:"verification,omitzero"`
+}
+
+// EffectiveSymptoms are the checks that find p's failure: its symptoms, or
+// without any, the checks that justify its fixes.
+func (p Profile) EffectiveSymptoms() []string {
+	if len(p.Symptoms) > 0 {
+		return p.Symptoms
+	}
+	var out []string
+	for _, fix := range slices.Sorted(maps.Keys(p.JustifiedBy)) {
+		out = union(out, p.JustifiedBy[fix])
+	}
+	return out
 }
 
 // Verification bounds how an action's outcome is measured.

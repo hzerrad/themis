@@ -50,9 +50,11 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
 // another: one a person or an agent suggested, or any once a person denied
 // a fix for it or had it investigated again. They can suggest another fix,
 // or have it investigated again.
-// The investigator's own refused fix closes it otherwise, as an
-// investigation that proposes nothing does. Themis only recommending a fix,
-// GitOps owning the workload, ends it either way.
+// The investigator's own refused fix hands the incident to a person, who
+// suggests another, while its checks find its failure or support a fix, and
+// closes it otherwise, as an investigation that proposes nothing does.
+// Themis only recommending a fix, GitOps owning the workload, ends it
+// either way.
 func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	p, err := w.Store.Proposal(ctx, w.Store.DB(), proposalID)
 	if err != nil {
@@ -73,28 +75,36 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if err != nil {
 		return err
 	}
-	f, ok := w.Fixes[p.Capability]
-	if !ok {
-		return w.refuse(ctx, p, waits, "Refused. Themis can't carry out this kind of fix.")
-	}
 	checks, err := w.Store.Predicates(ctx, in.ID)
 	if err != nil {
 		return err
+	}
+	// What a person is told when the investigator's fix is refused and the
+	// checks still find the failure: they take the incident over.
+	referral := ""
+	if !waits {
+		if referral, err = w.decider.Referral(matched, w.Fixes, checks, w.Checks, in.Target.Namespace); err != nil {
+			return err
+		}
+	}
+	f, ok := w.Fixes[p.Capability]
+	if !ok {
+		return w.refuse(ctx, p, waits, referral, "Refused. Themis can't carry out this kind of fix.")
 	}
 	redecided, err := w.redecide(ctx, in.ID, checks)
 	if err != nil {
 		return err
 	}
 	d, err := w.decider.Decide(ctx, w.Reader, Fix{
-		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks,
+		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks,
 		Capability: f, Params: p.Params,
 		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
 	})
 	if errors.Is(err, capability.ErrInvalidParams) {
-		return w.refuse(ctx, p, waits, "Refused. The suggested fix's values are invalid.")
+		return w.refuse(ctx, p, waits, referral, "Refused. The suggested fix's values are invalid.")
 	}
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
-		return w.refuse(ctx, p, waits, refusal.Reason)
+		return w.refuse(ctx, p, waits, referral, refusal.Reason)
 	}
 	if err != nil {
 		return err
@@ -136,6 +146,9 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		if d.Decision.Outcome == policy.Deny && waits && d.Decision.PolicyID != GitOpsRule {
 			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingSuggestion)
 		}
+		if d.Decision.Outcome == policy.Deny && referral != "" && d.Decision.PolicyID != GitOpsRule {
+			return w.Store.ReferPath(ctx, tx, in.ID, referred(d.Decision.Reason, referral), actor, incident.Diagnosed, incident.Proposed, incident.AwaitingSuggestion)
+		}
 		if d.Decision.Outcome == policy.Deny {
 			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
 		}
@@ -176,17 +189,29 @@ func (w *Worker) waits(ctx context.Context, p store.Proposal) (bool, error) {
 }
 
 // refuse ends the governing of p, refused for reason: its incident waits
-// for another fix, with p kept as refused so it never goes again, or closes.
-func (w *Worker) refuse(ctx context.Context, p store.Proposal, waits bool, reason string) error {
-	if !waits {
+// for another fix, with p kept as refused so it never goes again. It waits
+// handed to a person when referral says what they should know, and closes
+// when no one waits for a fix and nothing keeps it open.
+func (w *Worker) refuse(ctx context.Context, p store.Proposal, waits bool, referral, reason string) error {
+	if !waits && referral == "" {
 		return w.close(ctx, p.IncidentID, reason)
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		if err := w.Store.SetProposalStatus(ctx, tx, p.ID, store.ProposalRejected, reason); err != nil {
 			return err
 		}
-		return w.Store.TransitionPath(ctx, tx, p.IncidentID, reason, actor, incident.Diagnosed, incident.AwaitingSuggestion)
+		if waits {
+			return w.Store.TransitionPath(ctx, tx, p.IncidentID, reason, actor, incident.Diagnosed, incident.AwaitingSuggestion)
+		}
+		return w.Store.ReferPath(ctx, tx, p.IncidentID, referred(reason, referral), actor, incident.Diagnosed, incident.AwaitingSuggestion)
 	})
+}
+
+// referred is why a person takes over an incident whose fix was refused for
+// reason: the refusal, then what the checks found or support. "Refused. …
+// The checks support a memory or CPU change (…). Referred to a person."
+func referred(reason, referral string) string {
+	return reason + " " + referral + " Referred to a person."
 }
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {

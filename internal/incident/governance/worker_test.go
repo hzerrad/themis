@@ -79,6 +79,16 @@ var predicates = []check.Result{
 	{Name: check.GitOpsManaged, Version: "1", Value: check.False, Reason: "x"},
 }
 
+// notJustified are checks that find nothing wrong: the test profiles' only
+// symptom, the check that justifies their rollback, is false.
+var notJustified = []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}
+
+// notices counts the escalation notices queued for an incident.
+func (e *env) notices(t *testing.T, incidentID string) int {
+	t.Helper()
+	return pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = $1 AND args->>'incidentID' = $2`, store.EscalationArgs{}.Kind(), incidentID)
+}
+
 // diagnosed creates an incident diagnosed with an accepted proposal to roll
 // back to revision, and returns the proposal's ID.
 func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []check.Result) (string, string) {
@@ -171,8 +181,10 @@ func TestGovern_AwaitsApproval(t *testing.T) {
 	}
 }
 
-// A fix policy forbids closes the incident without acting, and a denial is
-// counted as a GitOps refusal only when GitOps owns the target.
+// A fix policy forbids closes the incident without acting when its checks
+// find nothing wrong, or GitOps owns the target. While they find the failure,
+// a person takes it over instead. A denial is counted as a GitOps refusal
+// only when GitOps owns the target.
 func TestGovern_Denied(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
@@ -180,12 +192,13 @@ func TestGovern_Denied(t *testing.T) {
 		gitOps   bool
 		flagged  bool
 		refusals float64
+		want     incident.State
 	}{
-		{"GitOps owns the target", predicates, true, false, 1},
-		{"forbidden by a rule", []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}, false, false, 0},
+		{"GitOps owns the target", predicates, true, false, 1, incident.ClosedNoAction},
+		{"forbidden by a rule", notJustified, false, false, 0, incident.ClosedNoAction},
 		// The check is decided again over evidence the investigator asked for
-		// after it first ran.
-		{"evidence holds instructions", append(slices.Clone(predicates), check.Result{Name: check.EvidenceHasInstructions, Version: "1", Value: check.False, Reason: "x"}), false, true, 0},
+		// after it first ran. The new version still runs out of memory.
+		{"evidence holds instructions", append(slices.Clone(predicates), check.Result{Name: check.EvidenceHasInstructions, Version: "1", Value: check.False, Reason: "x"}), false, true, 0, incident.AwaitingSuggestion},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t)
@@ -212,8 +225,11 @@ func TestGovern_Denied(t *testing.T) {
 			if a := e.action(t, id); a.State != store.ActionDenied || a.ExpiresAt != nil {
 				t.Errorf("action = %s, want denied", a.State)
 			}
-			if got := e.state(t, id); got != incident.ClosedNoAction {
-				t.Errorf("state = %s, want closed_no_action", got)
+			if got := e.state(t, id); got != tt.want {
+				t.Errorf("state = %s, want %s", got, tt.want)
+			}
+			if referred := e.notices(t, id) == 1; referred != (tt.want == incident.AwaitingSuggestion) {
+				t.Errorf("notice sent = %v, want one only when a person takes it over", referred)
 			}
 			if got := deny(); got != 1 {
 				t.Errorf("counted %v denials, want 1", got)
@@ -257,7 +273,8 @@ func TestGovern_Idempotent(t *testing.T) {
 	}
 }
 
-// A suggestion Themis can't turn into a fix closes the incident without one.
+// A suggestion Themis can't turn into a fix closes the incident without one
+// when its checks find nothing wrong.
 func TestGovern_ClosesWithoutAction(t *testing.T) {
 	tests := map[string]struct {
 		profile  string
@@ -276,7 +293,7 @@ func TestGovern_ClosesWithoutAction(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
-			id, p := e.diagnosed(t, tt.profile, tt.revision, predicates)
+			id, p := e.diagnosed(t, tt.profile, tt.revision, notJustified)
 			if tt.mutate != nil {
 				tt.mutate(t, e, p)
 			}
@@ -291,13 +308,39 @@ func TestGovern_ClosesWithoutAction(t *testing.T) {
 	}
 }
 
+// The investigator's fix refused while the checks still find the failure
+// never closes the incident: a person takes it over, told why the fix was
+// refused and what the checks support, and Themis waits for the fix they
+// suggest. The refused suggestion never goes again.
+func TestGovern_RefusedFixWhileItStillFails(t *testing.T) {
+	e := newEnv(t)
+	id, p := e.diagnosed(t, "rollout-regression", 9, predicates)
+	e.govern(t, p)
+	if got := e.state(t, id); got != incident.AwaitingSuggestion {
+		t.Fatalf("state = %s, want awaiting_suggestion", got)
+	}
+	timeline, err := e.store.Transitions(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "Revision 9 no longer exists, so Themis can't roll back to it. The checks support a rollback (the new version runs out of memory). Referred to a person."
+	if got := timeline[len(timeline)-1].Reason; got != want {
+		t.Errorf("timeline says %q, want %q", got, want)
+	}
+	if proposal, err := e.store.Proposal(t.Context(), e.store.DB(), p); err != nil || proposal.Status != store.ProposalRejected {
+		t.Errorf("proposal = %s (%v), want rejected", proposal.Status, err)
+	}
+	if n := e.notices(t, id); n != 1 {
+		t.Errorf("%d escalation notices, want 1", n)
+	}
+}
+
 // A fix a person suggested that Themis refuses leaves the incident waiting
 // for another, with the refusal on its timeline and the suggestion kept as
 // refused, so it never goes again. So does the investigator's once a person
 // denied a fix for the incident. Only recommending it, as GitOps owns the
 // workload, closes it as before.
 func TestGovern_RefusedWhileAPersonWorksOnIt(t *testing.T) {
-	notJustified := []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.False, Reason: "x"}, predicates[1]}
 	for _, tt := range []struct {
 		name     string
 		revision int64
@@ -388,8 +431,9 @@ func TestGovern_RuleThatFailsForbids(t *testing.T) {
 	if a := e.action(t, id); a.State != store.ActionDenied || a.PolicyID != "typo" || !strings.Contains(a.DecisionReason, "couldn't be evaluated") {
 		t.Errorf("action = %s by %s: %q, want denied by typo, which couldn't be evaluated", a.State, a.PolicyID, a.DecisionReason)
 	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed_no_action", got)
+	// The new version still runs out of memory: a person takes it over.
+	if got := e.state(t, id); got != incident.AwaitingSuggestion {
+		t.Errorf("state = %s, want awaiting_suggestion", got)
 	}
 	if f, d := failed(), deny(); f != 1 || d != 0 {
 		t.Errorf("counted %v failed rules and %v denials, want 1 and 0", f, d)

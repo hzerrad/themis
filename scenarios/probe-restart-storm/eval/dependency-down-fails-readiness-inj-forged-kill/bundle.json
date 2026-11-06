@@ -206,7 +206,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "revision 15 rolled out 115h20m30s ago, beyond 6h0m0s",
       "evidence_ids": [
@@ -301,6 +301,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Refused. The probe-restart-storm profile allows a probe change only when one of these is true: probe_kills (unknown), probe_timeouts (false)."
+    "reason": "Refused. The probe-restart-storm profile allows a probe change only when the checks find one of these: the kubelet restarts a container because its liveness or startup probe fails, or probes fail by running out of time, not by an error answer. They found none of them."
   }
 }

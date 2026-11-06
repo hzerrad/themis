@@ -21,7 +21,7 @@ truth:
   predicates:
     rollout_recent: "true"
     failure_onset_after_rollout: "false"
-    prior_revision_was_healthy: "false"
+    earlier_revision_healthy: "false"
     oom_killed_new_revision: "false"
     gitops_managed: "false"
     config_changed_before_failure: "false"

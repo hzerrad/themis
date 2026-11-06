@@ -392,7 +392,7 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 		b.Predicates = append(b.Predicates, out)
 	}
 	var decider governance.Decider
-	if b.Unproposed, err = decider.Unproposed(f.matched, f.cat.Fixes, f.d.Results, f.target.Namespace); err != nil {
+	if b.Unproposed, err = decider.Unproposed(f.matched, f.cat.Fixes, f.d.Results, f.cat.Checks, f.target.Namespace); err != nil {
 		return Bundle{}, err
 	}
 	fix, err := f.caseFix(ctx, s)
@@ -498,7 +498,7 @@ func (f found) decide(ctx context.Context, fix Fix) (PolicyCheck, error) {
 func (f found) govern(ctx context.Context, fix capability.Capability, params map[string]any) (PolicyCheck, error) {
 	var decider governance.Decider
 	decided, err := decider.Decide(ctx, f.c, governance.Fix{
-		Target: f.w.Target, Profiles: f.matched, Checks: f.d.Results,
+		Target: f.w.Target, Profiles: f.matched, Checks: f.d.Results, Words: f.cat.Checks,
 		Capability: fix, Params: params,
 		By: governance.Suggester{Source: "themis-intelligence", Authenticated: true},
 	})

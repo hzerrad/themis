@@ -5,9 +5,10 @@
 # it, and governance decides it again over all the incident's evidence.
 # docs/checks.md says what each field means and what the expressions see.
 
-# The current revision rolled out within the last 6 hours.
+# The current revision replaced an earlier one within the last 6 hours. A
+# Deployment's first revision replaced none: creating it isn't a rollout.
 - name: rollout_recent
-  version: "1"
+  version: "2"
   description: A rollout happened recently
   topic: Recent rollout
   whenFalse: No recent rollout
@@ -16,6 +17,10 @@
     - when: rollout_at == null
       answer: unknown
       reason: the current revision or its rollout time is unknown
+    - when: prior == null
+      answer: false
+      reason: there is no revision before revision ${current.revision}, so no rollout replaced one
+      cite: [ids.rollout_history]
     - when: now - rollout_at <= duration("6h")
       answer: true
       reason: revision ${current.revision} rolled out ${now - rollout_at} ago
@@ -23,6 +28,45 @@
     - answer: false
       reason: revision ${current.revision} rolled out ${now - rollout_at} ago, beyond ${duration("6h")}
       cite: [ids.rollout_history]
+
+# The revision before the current one runs ready pods that never failed: a
+# version to go back to. Without an earlier revision there is none, and one
+# whose pods failed is no better. Once its pods are gone, nothing tells.
+- name: earlier_revision_healthy
+  version: "1"
+  description: The version before it is healthy, to go back to
+  topic: Health of the version before it
+  whenFalse: No healthy earlier version to go back to
+  reads: [rollout_history, pod_states]
+  let:
+    pods: pod_states.pods.filter(p, p.revision == prior.revision)
+    # What is wrong with each pod, in order: its containers that died, then
+    # that it isn't ready.
+    problems: >-
+      pods.map(p,
+        p.containers
+          .filter(c, c.lastTermination != null && c.lastTermination.reason != "Completed")
+          .map(c, "pod " + p.name + " of revision " + prior.revision + ": " + c.name + " " + c.lastTermination.reason)
+        + (p.ready ? [] : ["pod " + p.name + " of revision " + prior.revision + " is not ready"])
+      ).flatten()
+  answers:
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: prior == null
+      answer: false
+      reason: ${rollout_history.deployment.name} has no earlier revision to roll back to
+      cite: [ids.rollout_history]
+    - when: size(problems) > 0
+      answer: false
+      reason: ${problems[0]}
+      cite: [ids.rollout_history, ids.pod_states]
+    - when: size(pods) == 0
+      answer: unknown
+      reason: revision ${prior.revision} has no pods left to judge
+    - answer: true
+      reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
+      cite: [ids.rollout_history, ids.pod_states]
 
 # The target carries GitOps markers or is written by a GitOps controller.
 - name: gitops_managed

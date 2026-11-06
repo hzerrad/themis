@@ -38,6 +38,8 @@ Some causes can't be read from Themis's evidence, and are left to the investigat
 
 None: this pack diagnoses and escalates, and its policy refuses every fix. When `stuck_pods_new_revision_only` is true, the new version may be broken and a rollback right; the investigator may say so, and the person it escalates to, or the rollout-regression incident on the same Deployment, decides.
 
+Its other checks are its symptoms. When an incident gets this pack with one that offers a fix, such as probe-restart-storm for `KubePodNotReady`, Themis never closes it with no change on its own while one of them is true: it refers it to a person and waits for the fix they suggest.
+
 ## Cases
 
 | Case | Root cause |

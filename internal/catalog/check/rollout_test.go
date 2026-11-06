@@ -175,6 +175,20 @@ func TestFailureOnsetAfterRollout(t *testing.T) {
 	assertTruth(t, run("failure_onset_after_rollout", replace(t, without(b, evidence.TargetEvents), evidence.PodStates, pods(crashedBefore))), check.False)
 }
 
+// A Deployment's first revision replaced none: its creation is no rollout to
+// blame, nor one recent, and there is nothing healthy to go back to.
+func TestFirstRevision(t *testing.T) {
+	h := history()
+	h.Revisions = h.Revisions[:1]
+	b := replace(t, scenario1(t), evidence.RolloutHistory, h)
+	for _, name := range []string{"failure_onset_after_rollout", "rollout_recent", "earlier_revision_healthy"} {
+		assertTruth(t, run(name, b), check.False)
+	}
+	if r := run("earlier_revision_healthy", b); r.Reason != "checkout has no earlier revision to roll back to" {
+		t.Errorf("reason = %q, want it to say there is nothing to roll back to", r.Reason)
+	}
+}
+
 // A failure without a time could predate the rollout (Review Focus 5).
 func TestTimelinePredicates_UnknownOnMissingTimestamps(t *testing.T) {
 	undated := evidence.EventView{Object: "Pod/checkout-7d9f8b6c4-x2kqp", Type: "Warning", Reason: "BackOff"}
@@ -201,26 +215,24 @@ func TestRolloutRecent(t *testing.T) {
 	assertTruth(t, runAt("rollout_recent", without(b, evidence.RolloutHistory), now), check.Unknown)
 }
 
-func TestPriorRevisionWasHealthy(t *testing.T) {
+func TestEarlierRevisionHealthy(t *testing.T) {
 	b := scenario1(t)
-	assertTruth(t, run("prior_revision_was_healthy", b), check.True)
+	assertTruth(t, run("earlier_revision_healthy", b), check.True)
 
 	// Both revisions fail (scenario 2).
 	old := oomPod()
 	old.Name, old.Revision = "checkout-5c6a1e2f3-a1b2c", "1"
-	assertTruth(t, run("prior_revision_was_healthy", replace(t, b, evidence.PodStates, pods(oomPod(), old))), check.False)
+	assertTruth(t, run("earlier_revision_healthy", replace(t, b, evidence.PodStates, pods(oomPod(), old))), check.False)
 
-	h := history()
-	h.Revisions = h.Revisions[:1]
-	assertTruth(t, run("prior_revision_was_healthy", replace(t, b, evidence.RolloutHistory, h)), check.Unknown)
+	assertTruth(t, run("earlier_revision_healthy", without(b, evidence.RolloutHistory)), check.Unknown)
 }
 
 // The prior revision was scaled down, so only its ReplicaSet is left to judge.
-func TestPriorRevisionWasHealthy_ScaledDown(t *testing.T) {
+func TestEarlierRevisionHealthy_ScaledDown(t *testing.T) {
 	h := history()
 	h.Revisions[1].Replicas, h.Revisions[1].ReadyReplicas = 0, 0
 	b := replace(t, replace(t, scenario1(t), evidence.RolloutHistory, h), evidence.PodStates, pods(oomPod()))
-	assertTruth(t, run("prior_revision_was_healthy", b), check.Unknown)
+	assertTruth(t, run("earlier_revision_healthy", b), check.Unknown)
 }
 
 func TestGitOpsManaged(t *testing.T) {

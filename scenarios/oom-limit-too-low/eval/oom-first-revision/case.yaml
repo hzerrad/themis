@@ -1,0 +1,35 @@
+name: oom-first-revision
+version: 1
+description: catalog was created 25 minutes ago and has only revision 1. It loads more data at start than its 60Mi limit
+  holds, and is OOMKilled at 95% of it. There is no earlier revision to roll back to; raising the limit is right.
+tags: [memory, oom, combined]
+source: synthetic
+difficulty: easy
+incident_class: oom_limit_too_low
+alert: KubePodOOMKilled
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: catalog}
+evidence:
+  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config]
+  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          memory: 72Mi
+truth:
+  root_causes: [memory_limit_too_low]
+  decision: propose
+  required_citations: [pod_states]
+  predicates:
+    oom_killed_current_revision: 'true'
+    earlier_revision_healthy: 'false'
+    rollout_recent: 'false'
+    failure_onset_after_rollout: 'false'
+    memory_data_available: 'true'
+    memory_at_limit_before_kill: 'true'
+    oom_after_long_run: 'false'
+    evicted_for_node_memory: 'false'
+  policy: require_approval

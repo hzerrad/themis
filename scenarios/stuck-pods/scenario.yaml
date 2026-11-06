@@ -59,6 +59,16 @@ profile:
     - config_error_on_start
     - quota_refused_pods
     - stuck_pods_new_revision_only
+  # What keeps the pods from running. Alone, this pack refers every incident
+  # to a person; with a pack that offers a fix, one of these being true keeps
+  # Themis from closing the incident with no change on its own.
+  symptoms:
+    - scheduler_rejected_pods
+    - image_pull_failing
+    - volume_not_bound
+    - init_container_stuck
+    - config_error_on_start
+    - quota_refused_pods
   # Diagnosis only: no fix is offered, so Themis refuses any fix suggested
   # for an incident only this pack matched. The rule below says so to the
   # evaluation, which decides a rollback anyway. A pack's rules govern only
