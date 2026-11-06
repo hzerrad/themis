@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/store"
 )
@@ -33,14 +36,17 @@ const (
 const (
 	couldntDecide = "The investigator couldn't decide."
 	suggestedFix  = "The investigator suggested a fix."
+	noFixAccepted = "The investigation suggested no fix that Themis could accept."
 )
 
 // Complete ends the investigation leaseID holds with r, keeping the gaps the
 // investigator reported. The accepted suggestion that goes next is handed to
-// governance. Without one, an inconclusive investigation is handed to a
-// person when the incident's checks support a fix the investigator didn't
-// propose; otherwise it waits for a suggestion if the install gives time for
-// one, and otherwise, like a proposed one, closes the incident.
+// governance. Without one, a person takes over an incident none of whose
+// profiles offers a fix, told what the checks found. Otherwise an
+// inconclusive investigation is handed to a person when the incident's checks
+// support a fix the investigator didn't propose; failing that it waits for a
+// suggestion if the install gives time for one, and otherwise, like a
+// proposed one, closes the incident.
 func (l *Leases) Complete(ctx context.Context, leaseID string, r store.InvestigationResult, reported []catalog.Gap) error {
 	return l.Store.InTx(ctx, func(tx pgx.Tx) error {
 		inv, err := l.Store.LeasedInvestigation(ctx, tx, leaseID, l.now())
@@ -68,14 +74,18 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		if err := l.Store.CompleteInvestigation(ctx, tx, inv.LeaseID, r); err != nil {
 			return err
 		}
+		matched := l.Config.Current().Matched(inv.Profiles)
 		if r.Conclusion == Inconclusive {
 			store.CountInvestigation(tx, store.InvestigationAbstained)
 			if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, couldntDecide, incident.Investigating, incident.Inconclusive); handed || err != nil {
 				return err
 			}
+			if referred, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, couldntDecide); referred || err != nil {
+				return err
+			}
 			// Text in the evidence may have talked the investigator out of a
 			// fix the checks support: a person decides.
-			note, err := l.Suggestions.Unproposed(ctx, inv.IncidentID, l.Config.Current().Matched(inv.Profiles), inv.Target.Namespace)
+			note, err := l.Suggestions.Unproposed(ctx, inv.IncidentID, matched, inv.Target.Namespace)
 			if err != nil {
 				return err
 			}
@@ -93,8 +103,43 @@ func (l *Leases) Complete(ctx context.Context, leaseID string, r store.Investiga
 		if handed, err := l.Suggestions.HandOver(ctx, tx, inv.IncidentID, inv.LeaseID, suggestedFix, incident.Investigating); handed || err != nil {
 			return err
 		}
-		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, "The investigation suggested no fix that Themis could accept.", investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
+		if referred, err := l.referDiagnosis(ctx, tx, inv.IncidentID, matched, noFixAccepted); referred || err != nil {
+			return err
+		}
+		return l.Store.TransitionPath(ctx, tx, inv.IncidentID, noFixAccepted, investigator, incident.Investigating, incident.Diagnosed, incident.ClosedNoAction)
 	})
+}
+
+// referDiagnosis hands an incident none of whose profiles offers a fix to a
+// person, saying after conclusion what the checks found, or that they found
+// nothing. Themis can only diagnose such an incident: closing it would drop
+// the diagnosis, and nobody can suggest a fix it would take. It reports
+// whether it did; it doesn't for an incident whose profiles are all gone.
+func (l *Leases) referDiagnosis(ctx context.Context, tx pgx.Tx, incidentID string, profiles config.Matched, conclusion string) (bool, error) {
+	if len(profiles) == 0 || len(profiles.Capabilities()) > 0 {
+		return false, nil
+	}
+	results, err := l.Store.Predicates(ctx, incidentID)
+	if err != nil {
+		return false, err
+	}
+	names := profiles.Checks()
+	var found []string
+	for _, r := range results {
+		if r.Value != check.True || (names != nil && !slices.Contains(names, r.Name)) {
+			continue
+		}
+		what := r.Name + " is true"
+		if c, ok := l.Checks.Get(r.Name); ok && c.Description != "" {
+			what = c.Description
+		}
+		found = append(found, what+": "+strings.TrimSuffix(r.Reason, ".")+".")
+	}
+	if len(found) == 0 {
+		found = []string{"Themis's checks found no cause."}
+	}
+	reason := conclusion + " " + strings.Join(found, " ") + " Themis has no fix for this kind of incident, so it refers it to a person."
+	return true, l.Store.TransitionPath(ctx, tx, incidentID, reason, investigator, incident.Investigating, incident.Escalated)
 }
 
 // Reason is why an investigation failed, as stored, such as

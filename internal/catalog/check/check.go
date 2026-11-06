@@ -88,6 +88,10 @@ func (l List) Get(name string) (*Check, bool) {
 	return l[i], true
 }
 
+// Needs are the evidence templates without which c is always unknown: those
+// its first answer reads.
+func (c *Check) Needs() []string { return c.answers[0].needs }
+
 // For is the checks a profile runs: those it names, in the order named, or
 // all of l when it names none. Names l doesn't have are left out, and a name
 // given twice runs once.

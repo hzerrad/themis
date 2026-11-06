@@ -20,38 +20,5 @@ executor:
   address: 127.0.0.1:9091
   bearerTokenFile: bin/dev/executor-token
 
-profiles:
-  - name: rollout-regression
-    priority: 100
-    match:
-      alertNames:
-        - KubePodCrashLooping
-        - KubeDeploymentReplicasMismatch
-        - KubePodOOMKilled
-      targetKinds:
-        - Deployment.apps
-    evidence:
-      initial: [rollout_history, pod_states, target_events]
-      allowed: [rollout_history, pod_states, target_events, container_logs_tail]
-    capabilities: [deployment.rollback-to-revision]
-    justifiedBy:
-      deployment.rollback-to-revision: [failure_onset_after_rollout]
-    policy:
-      mode: guarded
-      approvalTimeout: 30m
-      rules:
-        - name: rollback-needs-a-bad-rollout
-          when: >-
-            action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
-            (predicates.rollout_recent != "true" ||
-             predicates.failure_onset_after_rollout != "true" ||
-             predicates.config_changed_before_failure != "false" ||
-             (predicates.oom_killed_new_revision != "true" &&
-              predicates.prior_revision_was_healthy != "true"))
-          decision: deny
-        - name: rollback-needs-approval
-          when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
-          decision: require_approval
-    verification:
-      window: 5m
-      stability: 2m
+# The profiles are the scenario packs' (scenarios/), as shipped: a profile
+# here named like a pack's would replace it entirely.

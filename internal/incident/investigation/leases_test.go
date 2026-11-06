@@ -27,7 +27,7 @@ func (e *env) leases(t *testing.T) *investigation.Leases {
 	t.Helper()
 	cfg := e.worker.Config.Current()
 	l := &investigation.Leases{
-		Store: e.store, Config: cfg, Evidence: e.cat.Evidence, Reader: k8s, Now: e.clock, For: time.Minute,
+		Store: e.store, Config: cfg, Evidence: e.cat.Evidence, Checks: e.cat.Checks, Reader: k8s, Now: e.clock, For: time.Minute,
 		Suggestions: &suggestion.Inbox{Store: e.store, Config: cfg, Fixes: e.cat.Fixes, Now: e.clock},
 	}
 	if err := e.worker.Prepare(t.Context(), e.newIncident(t, "rollout-regression", e.target)); err != nil {
@@ -255,17 +255,20 @@ func TestCollect(t *testing.T) {
 // A completed investigation hands the suggestion that goes next to
 // governance. Without one, it closes the incident, unless the install gives
 // time for a suggestion, or the checks support a fix the investigator didn't
-// propose: then a person is told. One that couldn't decide is blind when it
+// propose: then a person is told. So is one whose profile offers no fix, with
+// what the checks found. One that couldn't decide is blind when it
 // missed evidence Themis could have had, and ambiguous otherwise. The
 // timeline says what Themis saw, never the investigator's summary.
 func TestComplete(t *testing.T) {
 	logs := catalog.Gap{Template: evidence.ContainerLogsTail, Cause: evidence.GapDataCeiling, Detail: "logs are sensitive"}
 	noFix := "The investigation suggested no fix that Themis could accept."
+	referred := "Themis has no fix for this kind of incident, so it refers it to a person."
 	for name, tc := range map[string]struct {
 		conclusion string
 		suggested  string
 		window     bool
-		justified  bool // the profile names a check that is true to justify its fix
+		justified  bool     // the profile names a check that is true to justify its fix
+		diagnoses  []string // the profile offers no fix, and runs these checks
 		reported   []catalog.Gap
 		want       []incident.State
 		reason     string // the last transition's, when not the conclusion's
@@ -288,6 +291,14 @@ func TestComplete(t *testing.T) {
 		"inconclusive, with a suggestion from outside": {
 			conclusion: investigation.Inconclusive, suggested: outside, want: []incident.State{incident.Inconclusive, incident.Diagnosed}, abstained: "ambiguous",
 		},
+		"inconclusive, on an incident Themis only diagnoses": {
+			conclusion: investigation.Inconclusive, diagnoses: []string{"oom_killed_new_revision"}, window: true, want: []incident.State{incident.Escalated}, abstained: "ambiguous",
+			reason: "The investigator couldn't decide. The new version runs out of memory: checkout-7d9f8b6c4-x2kqp/app of revision 2 was OOMKilled. " + referred,
+		},
+		"proposed, on an incident Themis only diagnoses, with no cause found": {
+			conclusion: investigation.Proposed, suggested: rejected, diagnoses: []string{"config_changed_before_failure"}, want: []incident.State{incident.Escalated},
+			reason: noFix + " Themis's checks found no cause. " + referred,
+		},
 		"proposed": {conclusion: investigation.Proposed, suggested: own, want: []incident.State{incident.Diagnosed}},
 		"proposed, with no fix accepted": {
 			conclusion: investigation.Proposed, suggested: rejected, want: []incident.State{incident.Diagnosed, incident.ClosedNoAction}, reason: noFix,
@@ -302,6 +313,9 @@ func TestComplete(t *testing.T) {
 			}
 			if tc.justified {
 				cfg.Profiles[0].JustifiedBy = map[string][]string{rollback.Name: {"oom_killed_new_revision"}}
+			}
+			if tc.diagnoses != nil {
+				cfg.Profiles[0].Capabilities, cfg.Profiles[0].Checks = nil, tc.diagnoses
 			}
 			l.Config = cfg
 			outcome := investigation.Proposed
