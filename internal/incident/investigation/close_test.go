@@ -3,15 +3,19 @@ package investigation_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
+	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/testutil/kubetest"
 	"github.com/hzerrad/themis/internal/workload"
 )
 
@@ -62,6 +66,60 @@ func TestCloseUndecided_KeepsAFailingIncidentOpen(t *testing.T) {
 	}
 	if _, reason := e.path(t, id); reason != "Recovered before a fix. The checks now find that "+e.cat.Checks.Found(check.Result{Name: "oom_killed_new_revision", Value: check.False, Reason: "found false"})+"." {
 		t.Errorf("reason = %q", reason)
+	}
+}
+
+// still finds every symptom asked about, and records whose.
+type still struct{ namespaces []string }
+
+func (s *still) Recheck(_ context.Context, _ client.Reader, w *workload.Workload, names []string, _ time.Duration, _ time.Time) []check.Result {
+	s.namespaces = append(s.namespaces, w.Target.Namespace)
+	return symptoms{check.True}.Recheck(context.Background(), nil, w, names, 0, time.Time{})
+}
+
+// With more incidents waiting than one run looks at, those that keep
+// failing don't keep the others from their turn: each run looks at those it
+// looked at longest ago first.
+func TestCloseUndecided_EveryWaitingIncidentTakesItsTurn(t *testing.T) {
+	e := newEnv(t)
+	p := profile()
+	p.Symptoms = []string{"oom_killed_new_revision"}
+	cfg := config.Config{Profiles: []config.Profile{p}}
+	var namespaces []string
+	for range 3 {
+		ns := k8s.NewNamespace(t)
+		var target incident.TargetRef
+		for _, obj := range k8s.Load(t, ns, scenario1) {
+			if obj.GetKind() == "Deployment" {
+				target = kubetest.TargetOf(obj)
+			}
+		}
+		id := e.newIncident(t, p.Name, target)
+		err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+			return e.store.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.AwaitingSuggestion, Reason: "x", Actor: "test"})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		namespaces = append(namespaces, ns)
+	}
+	checks := &still{}
+	w := &investigation.CloseUndecidedWorker{
+		Config: cfg, Store: e.store, Reader: k8s, Checks: checks, Words: e.cat.Checks, PerRun: 2,
+		Now: func() time.Time { return time.Now().Add(time.Hour) },
+	}
+	for range 2 {
+		if err := w.Close(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(checks.namespaces) != 4 {
+		t.Fatalf("looked at %d incidents in 2 runs of 2, want 4", len(checks.namespaces))
+	}
+	for _, ns := range namespaces {
+		if !slices.Contains(checks.namespaces, ns) {
+			t.Errorf("the incident in %s was never looked at: %v", ns, checks.namespaces)
+		}
 	}
 }
 
