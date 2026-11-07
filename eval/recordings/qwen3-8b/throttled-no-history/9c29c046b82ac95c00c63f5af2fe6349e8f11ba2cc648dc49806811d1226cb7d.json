@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version of the container is using more CPU, causing throttling and readiness probe failures. Increase the CPU limit to 750m.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The rollout changed the container image, and the new version is hitting its CPU limit, causing throttling and readiness issues.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"ev-revision_health\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Throttling_came_with_rollout is unknown, and revision 1's metrics are missing, making it hard to confirm if the new version caused the issue.\",\n    \"supporting\": [\"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [\"throttling_came_with_rollout\", \"revision_1_metrics\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"requests\": {\n          \"cpu\": \"250m\"\n        },\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise the CPU limit of the 'api' container to 750m, which should alleviate throttling and allow the container to meet its CPU demands without hitting the limit.\",\n  \"rationale\": \"The container is currently throttled at 64% of its 500m CPU limit, with usage near the limit (0.495/0.5). The rollout changed the container image, and readiness probes are failing due to timeouts, indicating CPU contention. Raising the limit to 750m (1.5x current) should clear the throttling without affecting memory or other resources.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4585,
+        "output_tokens": 1201
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

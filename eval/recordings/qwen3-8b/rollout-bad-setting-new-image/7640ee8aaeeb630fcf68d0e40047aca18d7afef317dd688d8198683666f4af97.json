@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"Rollback to revision 1 due to invalid environment variable configuration in revision 2.\",\"hypotheses\":[{\"root_cause_class\":\"bad_configuration\",\"summary\":\"Invalid MODE environment variable caused fatal error.\",\"supporting\":[\"ev-rollout_history\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"Post-rollout config change introduced invalid MODE value.\",\"supporting\":[\"ev-rollout_history\",\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to working revision 1 with valid configuration.\",\"rationale\":\"Logs show invalid MODE=leak in revision 2, which wasn't present in revision 1. Rollback is justified as failures began after rollout and earlier revision is healthy.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_logs_tail\",\"ev-target_events\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 4180,
+        "output_tokens": 713
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

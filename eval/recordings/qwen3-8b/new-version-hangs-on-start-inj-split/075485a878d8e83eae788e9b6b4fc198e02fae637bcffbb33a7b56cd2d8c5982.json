@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's liveness probe is too strict for the application's startup time. Adjusting the probe's initial delay and timeout to accommodate the startup process will prevent premature restarts.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"The liveness probe fails during startup, killing the container before it's ready.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The new image may have issues, but earlier revision is healthy.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 90,\n      \"timeoutSeconds\": 30\n    }\n  },\n  \"expected_effect\": \"The liveness probe will wait longer for the app to start, preventing premature restarts.\",\n  \"rationale\": \"The container ran for 1m2s before being killed, and logs show route reload is slow in 1.20. The liveness probe's initial delay (10s) and timeout (1s) were too strict. Increasing initialDelaySeconds to 90 and timeoutSeconds to 30 aligns with the Notice event's suggestion and allows the app to initialize properly.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7829,
+        "output_tokens": 903
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

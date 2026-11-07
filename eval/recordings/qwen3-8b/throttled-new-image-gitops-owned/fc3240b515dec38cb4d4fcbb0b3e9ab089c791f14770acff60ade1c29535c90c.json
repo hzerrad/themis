@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to revision 1 due to CPU throttling caused by the new version's higher CPU usage.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Throttling_came_with_rollout and earlier_revision_healthy are true, and cpu_usage_near_limit is true for revision 2's api container.\",\"supporting\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"cpu_usage_near_limit\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Container logs are empty, but throttling data and rollout history confirm new version's CPU usage issue.\",\"supporting\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"cpu_usage_near_limit\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"revision\":1},\"expected_effect\":\"Roll back to revision 1, which ran without throttling, to resolve CPU contention caused by the new version's higher CPU usage.\",\"rationale\":\"Throttling_came_with_rollout is true, and earlier_revision_healthy is true, indicating the new version (revision 2) is causing the throttling. Revision 1's api container used 45% of its CPU limit on average, while revision 2's api container used 88%, leading to throttling. Rolling back to revision 1 will restore the previous, healthy state.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-revision_health\"],\"cited_predicates\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"cpu_usage_near_limit\"]}}",
+      "usage": {
+        "input_tokens": 5585,
+        "output_tokens": 679
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

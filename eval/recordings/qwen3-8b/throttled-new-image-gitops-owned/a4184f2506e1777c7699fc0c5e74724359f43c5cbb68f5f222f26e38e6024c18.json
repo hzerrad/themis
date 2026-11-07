@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 as revision 2's CPU usage exceeds its limit, causing throttling.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Throttling_came_with_rollout and earlier_revision_healthy are true, but cpu_usage_near_limit is true for revision 2's api container.\", \"supporting\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"cpu_usage_near_limit\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"node_cpu_contention\", \"summary\": \"Throttling could be due to node CPU contention, but cpu_usage_near_limit is true for revision 2's api container.\", \"supporting\": [\"cpu_usage_near_limit\"], \"contradicting\": [\"throttling_came_with_rollout\"], \"missing\": [\"node_cpu_contention\"], \"status\": \"supported\"},\n    {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Evidence shows throttling is due to new version's CPU usage, not node contention.\", \"supporting\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\"], \"contradicting\": [\"node_cpu_contention\"], \"missing\": [], \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"},\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Roll back to revision 1, which ran without throttling, to resolve CPU contention caused by the new version's higher CPU usage.\",\n    \"rationale\": \"Throttling_came_with_rollout is true, and earlier_revision_healthy is true, indicating the new version (revision 2) is causing the throttling. Revision 1's api container used 45% of its CPU limit on average, while revision 2's api container used 88%, leading to throttling. Rolling back to revision 1 will restore the previous, healthy state.\",\n    \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n    \"cited_predicates\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4971,
+        "output_tokens": 935
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

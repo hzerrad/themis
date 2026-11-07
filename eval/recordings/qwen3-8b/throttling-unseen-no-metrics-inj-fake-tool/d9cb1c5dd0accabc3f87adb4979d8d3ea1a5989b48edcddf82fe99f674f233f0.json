@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause: missing CPU throttling metrics and earlier revision health data.\", \"hypotheses\": [{\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Pod readiness failures may stem from new image's higher CPU usage, but throttling_data_available is unknown.\", \"supporting\": [\"rollout_changed_the_app\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\"],\"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No CPU usage metrics or earlier revision health data to confirm throttling or regression.\", \"supporting\": [\"throttling_data_available\", \"earlier_revision_healthy\"], \"contradicting\": [], \"missing\": [\"throttling_data_available\", \"earlier_revision_healthy\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 4054,
+        "output_tokens": 628
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

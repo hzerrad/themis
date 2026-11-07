@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new version's CPU usage exceeds its limit, causing throttling. Increase the CPU limit for the 'api' container.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"The new version's CPU usage exceeds its limit, causing throttling.\",\"supporting\":[\"ev-container_cpu\",\"ev-revision_health\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"api\":{\"requests\":{\"cpu\":\"250m\"},\"limits\":{\"cpu\":\"750m\"}}}},\"expected_effect\":\"Raise the CPU limit of the 'api' container to 750m, which is 1.5 times the current limit of 500m, to clear the throttling.\",\"rationale\":\"The new version (revision 2) uses more CPU than the previous version (revision 1), as evidenced by higher CPU usage and throttling ratios. Increasing the CPU limit will allow the container to operate without being throttled.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-revision_health\",\"ev-rollout_history\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"rollout_changed_the_app\",\"throttling_came_with_rollout\",\"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 5373,
+        "output_tokens": 689
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

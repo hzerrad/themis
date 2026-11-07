@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Memory limit in new revision caused OOMKilled\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit (64Mi) is too low, causing OOMKilled.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Roll back to revision 1 with higher memory limit (256Mi) to prevent OOMKilled.\",\"rationale\": \"New revision's memory limit (64Mi) is too low, causing OOMKilled as evidenced by pod_states and rollout_history.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 3696,
+        "output_tokens": 677
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

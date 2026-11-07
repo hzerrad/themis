@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +19,10 @@ import (
 // Capability is deployment.rollback-to-revision as a capability.Capability.
 type Capability struct{}
 
-var _ capability.Capability = Capability{}
+var (
+	_ capability.Capability = Capability{}
+	_ capability.Describing = Capability{}
+)
 
 func (Capability) Name() string    { return Name }
 func (Capability) Version() string { return Version }
@@ -119,14 +123,77 @@ func (Capability) Changes(before, after json.RawMessage) ([]capability.Change, e
 }
 
 // Words name a rollback by the revision it goes back to: "Roll checkout
-// back to revision 1".
-func (Capability) Words(target string, params map[string]any, _, _ json.RawMessage) capability.Words {
+// back to revision 1". Worked out against the cluster, they say how many of
+// the changes to what the pods run it undoes, when it undoes several, and
+// whether the image is one: nobody takes back new code without seeing it.
+func (Capability) Words(target string, params map[string]any, before, after json.RawMessage) capability.Words {
 	to := "an earlier revision"
 	if revision, ok := RevisionParam(params); ok {
 		to = fmt.Sprintf("revision %d", revision)
 	}
 	roll := capability.Verb{Base: "Roll", Doing: "Rolling", Done: "Rolled"}
-	return capability.Say("rollback", roll, target+" back to "+to, capability.PodsStayReady)
+	w := capability.Say("rollback", roll, target+" back to "+to, capability.PodsStayReady)
+	var pre, desired corev1.PodTemplateSpec
+	if before == nil || after == nil || json.Unmarshal(before, &pre) != nil || json.Unmarshal(after, &desired) != nil {
+		return w
+	}
+	undone, _ := workload.Changes(desired, pre)
+	if len(undone) < 2 {
+		return w
+	}
+	images := 0
+	for _, c := range undone {
+		if c.Image {
+			images++
+		}
+	}
+	w.Note = fmt.Sprintf("Rolling back undoes %d changes", len(undone))
+	switch {
+	case images == 1:
+		w.Note += ", including the image"
+	case images > 1:
+		w.Note += ", including the images"
+	}
+	w.Note += "."
+	return w
+}
+
+// Describe gives the image digests the pods run, before and after, of each
+// container whose image the rollback changes.
+func (Capability) Describe(ctx context.Context, _ client.Reader, p capability.Plan) (map[string]any, error) {
+	live, ok := p.State.(Live)
+	if !ok {
+		return nil, errors.New("not a rollback plan")
+	}
+	return images(ctx, live.Workload, live.PreState, live.Desired)
+}
+
+// images are, for each container whose image differs between before and
+// after, the digests w's pods run for each, by container: a tag can move to
+// other code, a digest can't. A digest no pod runs is empty, and the page
+// says it isn't known.
+func images(ctx context.Context, w *workload.Workload, before, after corev1.PodTemplateSpec) (map[string]any, error) {
+	out := map[string]any{}
+	was := slices.Concat(before.Spec.InitContainers, before.Spec.Containers)
+	for _, a := range slices.Concat(after.Spec.InitContainers, after.Spec.Containers) {
+		i := slices.IndexFunc(was, func(b corev1.Container) bool { return b.Name == a.Name })
+		if i < 0 || was[i].Image == a.Image {
+			continue
+		}
+		from, err := w.Digest(ctx, a.Name, was[i].Image)
+		if err != nil {
+			return nil, err
+		}
+		to, err := w.Digest(ctx, a.Name, a.Image)
+		if err != nil {
+			return nil, err
+		}
+		out[a.Name] = map[string]any{"before": from, "after": to}
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return map[string]any{"images": out}, nil
 }
 
 // RevisionParam is the revision params name: a positive whole number, as

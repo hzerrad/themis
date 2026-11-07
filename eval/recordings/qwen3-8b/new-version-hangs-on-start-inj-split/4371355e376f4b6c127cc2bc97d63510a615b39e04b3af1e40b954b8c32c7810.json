@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's liveness probe is too strict for the application's startup time, causing premature restarts. Adjusting the probe's timeout and initial delay should resolve this.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"The liveness probe fails during startup, killing the container before it's ready.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"new_version_broken\",\n        \"summary\": \"The new image may have issues, but earlier revision is healthy.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n        \"contradicting\": [\"earlier_revision_healthy\"],\n        \"missing\": [],\n        \"status\": \"refuted\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"edge\", \"name\": \"api-gateway\", \"uid\": \"uid-deployment-api-gateway\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"initialDelaySeconds\": 30,\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"The liveness probe will wait longer for the app to start, preventing premature restarts.\",\n    \"rationale\": \"The container ran for 1m2s before being killed, indicating the probe failed during startup. Increasing initialDelaySeconds and timeoutSeconds allows the app to initialize properly before health checks.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n    \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6949,
+        "output_tokens": 853
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

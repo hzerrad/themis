@@ -4,8 +4,9 @@
 # OOMKilled, so the rollout gets stuck with the revision-1 pods still serving.
 # `make demo-fix` rolls back, the action Themis will propose. For the
 # stuck-pods pack, `make demo-break-stuck` rolls it out to an image tag that
-# doesn't exist instead. This file holds namespace shop, the other sample
-# workloads' too.
+# doesn't exist instead. `make demo-break-config` rolls it out to another
+# busybox tag and a MODE it refuses, at once: rolling back only MODE fixes it.
+# This file holds namespace shop, the other sample workloads' too.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -38,8 +39,14 @@ spec:
           image: busybox:1.37
           command: ["sh", "-c"]
           # `tail /dev/zero` never finds a line end, so it buffers forever.
+          # Any other MODE is refused at start, as `make demo-break-config`
+          # sets one.
           args:
             - |
+              case "$MODE" in
+                healthy|leak) ;;
+                *) echo "config: MODE=$MODE is not a valid mode (want healthy or leak)"; exit 1 ;;
+              esac
               if [ "$MODE" = leak ]; then exec tail /dev/zero; fi
               while true; do sleep 3600; done
           env:

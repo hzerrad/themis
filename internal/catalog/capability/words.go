@@ -20,6 +20,10 @@ type Words struct {
 	// Verifies is what checking the change looks for, to follow "Then checks
 	// that": "the pods become ready and stay ready". Empty when nothing is.
 	Verifies string `json:"verifies,omitempty"`
+	// Note is what else the approver should know of the change's reach, in
+	// a sentence, once the fix is worked out: "Rolling back undoes 3
+	// changes, including the image." Empty when there is nothing to add.
+	Note string `json:"note,omitempty"`
 }
 
 // Verb is a verb in the forms Words use.

@@ -12,6 +12,7 @@ from themis_intelligence.evaluation.bundle import Bundle, job_of
 from themis_intelligence.evaluation.replay import ModelUse, RecordingModel, ReplayCore
 from themis_intelligence.evaluation.score import (
     ROLLBACK,
+    ROLLBACKS,
     Conclusion,
     HypothesisSeen,
     ProposalSeen,
@@ -102,7 +103,7 @@ def _record(
                 name=p.target.name,
                 uid=p.target.uid,
             ),
-            revision=int(params.get("revision", 0)) if capability == ROLLBACK else 0,
+            revision=int(params.get("revision", 0)) if capability in ROLLBACKS else 0,
             cited_evidence_ids=list(p.cited_evidence_ids),
             cited_predicates=list(p.cited_predicates),
             expected_effect=p.expected_effect,

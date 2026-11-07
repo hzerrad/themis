@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 3 due to rollout regression\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"Failure started after rollout to revision 4, which changed the image, and revision 3 pods are healthy\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\", \"oom_after_long_run\", \"evicted_for_node_memory\", \"probe_timeouts\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Pod failed liveness probe during startup, but probe timeout is 1s which may be too short\",\n    \"supporting\": [\"ev-target_events\", \"ev-pod_states\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"revision\": 3\n  },\n  \"expected_effect\": \"Revert to revision 3 which has healthy pods\",\n  \"rationale\": \"Rollback justified as rollout changed the app (image) and revision 3 is healthy, while revision 4 fails with probe issues and OOM kill (despite predicate saying false).\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"earlier_revision_healthy\", \"failures_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6759,
+        "output_tokens": 2354
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

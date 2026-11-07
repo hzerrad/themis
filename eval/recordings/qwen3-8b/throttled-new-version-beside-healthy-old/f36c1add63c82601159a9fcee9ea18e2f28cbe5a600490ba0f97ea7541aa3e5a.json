@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Roll back to revision 1 as the new version causes CPU throttling.\", \"hypotheses\": [{\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Throttling started with rollout 2, which changed the image, and revision 1 was healthy.\", \"supporting\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"rollout_changed_the_app\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Revert to revision 1 which had no throttling issues.\",\"rationale\": \"Throttling began with the rollout that changed the image, and the previous revision was healthy. Rolling back to revision 1 should resolve the CPU throttling issue.\",\"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\"cited_predicates\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 4716,
+        "output_tokens": 868
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

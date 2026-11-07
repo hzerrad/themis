@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Rolling back to revision 1 will restore the previous memory limit.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is 64Mi, while revision 1 had 256Mi. OOMKilled confirms memory exhaustion.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"},\n  {\"root_cause_class\": \"bad_configuration\", \"summary\": \"The new revision's memory limit is incorrectly set to 64Mi.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"},\n  {\"root_cause_class\": \"other\", \"summary\": \"No other evidence suggests a different cause.\", \"supporting\": [\"ev-referenced_config\", \"ev-target_events\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Restores the memory limit to 256Mi, preventing OOMKilled errors.\",\n  \"rationale\": \"The new revision's memory limit is 64Mi, which is insufficient for the application. Revision 1's pods are healthy with 256Mi. Rolling back to revision 1 will resolve the OOMKilled issue without affecting other changes in the rollout.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-referenced_config\", \"ev-target_events\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"earlier_revision_healthy\", \"rollout_changed_the_app\", \"failures_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3902,
+        "output_tokens": 856
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

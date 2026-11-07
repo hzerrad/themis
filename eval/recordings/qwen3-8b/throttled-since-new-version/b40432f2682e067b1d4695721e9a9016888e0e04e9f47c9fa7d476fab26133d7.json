@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to revision 2 to resolve CPU throttling caused by the new version.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Throttling started with the rollout (throttling_came_with_rollout=true) and earlier revision was healthy (earlier_revision_healthy=true).\",\"supporting\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"Current CPU limit (0.5) is nearly reached (0.498), but throttling is already at 58%.\",\"supporting\":[\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"],\"contradicting\":[\"throttling_came_with_rollout\"],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling data is available, so this is not applicable.\",\"supporting\":[\"throttling_data_available\"],\"contradicting\":[],\"missing\":[],\"status\":\"refuted\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"revision\":2},\"expected_effect\":\"Roll back to revision 2 which was healthy and unthrottled, resolving the CPU throttling issue introduced by the new version.\",\"rationale\":\"The new version (revision 3) introduced CPU throttling (throttling_came_with_rollout=true) while the previous version (revision 2) was healthy (earlier_revision_healthy=true). Rolling back to revision 2 will revert to the stable state before the issue emerged.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-revision_health\",\"ev-container_cpu\"],\"cited_predicates\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"throttling_data_available\"]}}",
+      "usage": {
+        "input_tokens": 5666,
+        "output_tokens": 885
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

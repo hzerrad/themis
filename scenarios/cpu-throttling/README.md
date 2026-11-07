@@ -40,20 +40,20 @@ Two fixes, and `throttling_came_with_rollout` decides between them:
 | The latest rollout | Fix | Justified by |
 |---|---|---|
 | Didn't bring the throttling: `throttling_came_with_rollout` is false | `deployment.set-resources`, raising the CPU limit of the throttled container | `cpu_throttled_at_limit` |
-| Brought it, and the version before it ran healthy: `throttling_came_with_rollout` and `earlier_revision_healthy` are true | `deployment.rollback-to-revision`, to the revision before the current one | `throttling_came_with_rollout` |
+| Brought it, and the version before it ran healthy: `throttling_came_with_rollout` and `earlier_revision_healthy` are true | `deployment.rollback-to-revision`, to the revision before the current one, or `deployment.roll-back-changes`, a partial rollback of the change that makes it use more CPU, which keeps the rollout's others | `throttling_came_with_rollout` |
 | Brought it with no healthy version before it, or nothing shows whether it brought it | Neither: a person decides | |
 
-The investigator decides by how much to raise the limit, from the evidence; 1.5 times the current limit is the starting point its guidance suggests. Themis checks the values are valid and that the cluster can run them, never how big they are. A rollback goes to the newest revision before the current one, the one the checks compared.
+The investigator decides by how much to raise the limit, from the evidence; 1.5 times the current limit is the starting point its guidance suggests. Themis checks the values are valid and that the cluster can run them, never how big they are. A rollback goes to the newest revision before the current one, the one the checks compared. A partial rollback goes back to the same revision, and rolls back only the changes it names, of those the rollout made to what the pods run, such as a setting that makes each request do more work; Themis refuses any other change.
 
 Themis never changes a Deployment GitOps manages, or may manage: GitOps would put the old limit or version back, so Themis only recommends the fix. It refuses a fix unless the check the profile names to justify it is true: without throttling figures there is nothing to act on. Beyond that, the policy enforces, whoever suggests the fix:
 
 | Rule | Decision | Why |
 |---|---|---|
 | `no-raise-for-a-new-version` | deny | A raise, unless `throttling_came_with_rollout` is false. When it is true, the new version is what uses more CPU, and a rollback is the fix; when it is unknown, nothing shows which, and a person decides |
-| `rollback-needs-a-bad-rollout` | deny | A rollback, unless `throttling_came_with_rollout`, `earlier_revision_healthy` and `cpu_throttled_at_limit` are all true: the new version brought the throttling, the version before it is one to go back to, and the container is still throttled at its limit |
+| `rollback-needs-a-bad-rollout` | deny | A rollback, whole or partial, unless `throttling_came_with_rollout`, `earlier_revision_healthy` and `cpu_throttled_at_limit` are all true: the new version brought the throttling, the version before it is one to go back to, and the container is still throttled at its limit |
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
-| `rollback-needs-approval` | require_approval | A person approves every rollback |
+| `rollback-needs-approval` | require_approval | A person approves every rollback, whole or partial |
 
 There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`.
 

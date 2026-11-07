@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient evidence to confirm if the new version caused CPU throttling. Missing metrics for revision 1 and empty logs prevent definitive conclusions.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling_came_with_rollout is unknown, and revision 1's metrics are missing, making it hard to confirm if the new version caused the issue.\",\"supporting\":[\"ev-revision_health\"],\"contradicting\":[],\"missing\":[\"throttling_came_with_rollout\",\"revision_1_metrics\"],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"Empty container logs provide no diagnostic information about the cause of throttling or memory issues.\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 5184,
+        "output_tokens": 548
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

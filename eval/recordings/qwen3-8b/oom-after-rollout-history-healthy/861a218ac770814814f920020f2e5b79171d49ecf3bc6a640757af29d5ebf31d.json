@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 to resolve OOM kills caused by the new image\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's memory limit is too low, but evidence shows same limit as previous revision\",\n        \"supporting\": [\"ev-container_memory\", \"ev-rollout_history\"],\n        \"contradicting\": [\"ev-revision_health\", \"earlier_revision_healthy\"],\n        \"missing\": [\"memory_usage_comparison_between_revisions\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"image_pull_failure\",\n        \"summary\": \"New image may have higher memory usage causing OOM kills\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"oom_killed_new_revision\"],\n        \"contradicting\": [\"ev-referenced_config\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"New image contains bug causing memory issues\",\n        \"supporting\": [\"ev-pod_states\", \"ev-revision_health\"],\n        \"contradicting\": [\"ev-referenced_config\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Revert to stable revision 1 which ran without OOM kills\",\n    \"rationale\": \"Failures began after rollout with new image (example/checkout:2.5.0) and OOM kills occurred. Earlier revision 1 ran 359h without issues. Rollback is justified as per rollout-regression profile when rollout changed app and failures came with rollout.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-revision_health\", \"ev-pod_states\", \"earlier_revision_healthy\", \"failures_came_with_rollout\", \"failure_onset_after_rollout\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"oom_killed_new_revision\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5780,
+        "output_tokens": 1798
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

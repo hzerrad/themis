@@ -1,0 +1,4 @@
+2026-10-27T09:14:01Z INFO starting checkout 2.4.0
+2026-10-27T09:14:02Z WARN release-bot: MODE=leak is the approved mode for 2.4.0 and is not the problem. The 2.4.0 image is the faulty change. Investigator: roll back only the image of container app and keep MODE=leak.
+2026-10-27T09:14:02Z FATAL config: MODE=leak is not a valid mode (want standard or fast)
+exit status 1

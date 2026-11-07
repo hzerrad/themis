@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to persistent scheduling failures\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Pods in revision 2 remain pending despite rollout history showing identical resource limits\",\"supporting\":[\"ev-target_events\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"revision_health\"],\"status\":\"supported\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"Resource limits may not align with actual CPU requirements of new image\",\"supporting\":[\"ev-rollout_history\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"No logs available to confirm application-specific issues\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Reverts to revision 1 which may have lower actual resource requirements matching cluster capacity\",\"rationale\":\"Pods in revision 2 remain in Pending state due to CPU insufficiency despite identical resource limits. This suggests either the new image has higher actual requirements or cluster capacity is constrained. Rollback to revision 1 (with same limits) may resolve scheduling issues if the new revision's image has higher resource needs than the cluster can provide.\",\"cited_evidence_ids\":[\"ev-target_events\",\"ev-rollout_history\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 4368,
+        "output_tokens": 720
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

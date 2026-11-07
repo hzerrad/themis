@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"The app's CPU limit of 300m is insufficient, causing persistent throttling and delays. Increase the limit to 450m to alleviate CPU contention.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Current CPU limit of 300m is inadequate for 280m usage (93% of limit) with 57% throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_cpu_capacity\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Rev 2's 280m usage exceeds rev 1's 200m limit, but the 300m cap still causes throttling.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-container_cpu\"],\n    \"contradicting\": [\"throttling_came_with_rollout\"],\n    \"missing\": [\"cpu_usage_comparison_rev1_rev2\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"cpu\": \"450m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises CPU limit to 450m, reducing throttling from 57% to below 50% and allowing 280m usage to operate smoothly.\",\n  \"rationale\": \"Current 300m limit is insufficient for 280m usage (93% of limit). Increasing to 450m (1.5x current) provides headroom without affecting memory or other resources.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-container_logs_tail\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4714,
+        "output_tokens": 1013
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

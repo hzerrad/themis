@@ -43,12 +43,14 @@ profile:
     - throttling_came_with_rollout
     - earlier_revision_healthy
     - gitops_managed
-  capabilities: [deployment.set-resources, deployment.rollback-to-revision]
+  capabilities: [deployment.set-resources, deployment.rollback-to-revision, deployment.roll-back-changes]
   # A raise is refused unless the container is throttled at its limit, and a
-  # rollback unless the latest rollout brought the throttling.
+  # rollback, whole or partial, unless the latest rollout brought the
+  # throttling.
   justifiedBy:
     deployment.set-resources: [cpu_throttled_at_limit]
     deployment.rollback-to-revision: [throttling_came_with_rollout]
+    deployment.roll-back-changes: [throttling_came_with_rollout]
   # The failure itself: while it is true, Themis never closes the incident
   # with no change on its own. It refers it to a person.
   symptoms: [cpu_throttled_at_limit]
@@ -100,6 +102,12 @@ profile:
     earlier_revision_healthy is false, the version before it failed too;
     when it is unknown, nothing shows how it ran. Then propose neither fix,
     and say so.
+
+    A partial rollback rolls back only the changes of the rollout you name,
+    from rollout_history's change.app, and keeps the others, such as a new
+    image. The same conditions justify it as a rollback. Prefer it when one
+    change clearly explains the extra CPU, such as a setting that makes each
+    request do more work; otherwise roll back the whole rollout.
   policy:
     mode: guarded
     approvalTimeout: 30m
@@ -124,10 +132,10 @@ profile:
       # where this one is throttled, or used clearly less of its CPU limit at
       # the same age. That version must also be one to go back to, healthy,
       # and the container still throttled at its limit. When any of them is
-      # unknown, a person decides.
+      # unknown, a person decides. A partial rollback needs the same.
       - name: rollback-needs-a-bad-rollout
         when: >-
-          action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
+          action.capability in ["deployment.rollback-to-revision", "deployment.roll-back-changes"] && action.restore != "true" &&
           (predicates.throttling_came_with_rollout != "true" ||
            predicates.earlier_revision_healthy != "true" ||
            predicates.cpu_throttled_at_limit != "true")
@@ -146,7 +154,7 @@ profile:
         when: action.capability == "deployment.set-resources" && action.restore != "true"
         decision: require_approval
       - name: rollback-needs-approval
-        when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
+        when: action.capability in ["deployment.rollback-to-revision", "deployment.roll-back-changes"] && action.restore != "true"
         decision: require_approval
   # Throttled pods are ready, so their readiness can't tell whether a raise
   # or a rollback worked: it worked only when the container is no longer

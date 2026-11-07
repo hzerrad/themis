@@ -55,16 +55,19 @@ profile:
     - oom_killed_new_revision
     - gitops_managed
     - config_changed_before_failure
-  capabilities: [deployment.rollback-to-revision]
-  # A rollback is refused unless the failures started after the rollout.
+  # A rollback takes back the whole rollout; a partial rollback only the
+  # changes it names, of those the rollout made, and keeps the others.
+  capabilities: [deployment.rollback-to-revision, deployment.roll-back-changes]
+  # Either is refused unless the failures started after the rollout.
   justifiedBy:
     deployment.rollback-to-revision: [failure_onset_after_rollout]
+    deployment.roll-back-changes: [failure_onset_after_rollout]
   # The failure itself: while one is true, Themis never closes the incident
   # with no change on its own. It refers it to a person.
   symptoms: [failure_onset_after_rollout, oom_killed_new_revision]
   # What the investigator is told about these incidents: when a rollback is
-  # right and when it is wrong. Guidance only: the checks and the policy
-  # below decide.
+  # right and when it is wrong, and when to roll back only some of the
+  # rollout's changes. Guidance only: the checks and the policy below decide.
   guidance: |
     A rollback is right when the latest rollout brought the failures: it
     changed what the pods run (rollout_changed_the_app is true), and the
@@ -86,6 +89,14 @@ profile:
     before it is justified, even if the logs are empty: a process killed for
     memory often writes nothing.
 
+    The same conditions justify a partial rollback, which rolls back only the
+    changes you name and keeps the rollout's others, such as a new image.
+    Prefer it when one change clearly explains the failure, as when the logs
+    reject a setting the rollout changed: name that change exactly as
+    rollout_history's change.app says it, and the revision before the
+    current one. Otherwise, or when the new image may be the cause, propose
+    the full rollback.
+
     Naming a cause doesn't make a rollback right: these conditions do.
   policy:
     mode: guarded
@@ -97,15 +108,17 @@ profile:
       # rollout must also have brought them: it changed what the pods run,
       # and the version before it does better, by its pods or the metrics
       # history. And no config may have changed before the failures. How
-      # long ago the rollout was decides nothing.
+      # long ago the rollout was decides nothing. A partial rollback needs
+      # the same: Themis itself refuses one naming a change the rollout
+      # didn't make.
       - name: rollback-needs-a-bad-rollout
         when: >-
-          action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
+          action.capability in ["deployment.rollback-to-revision", "deployment.roll-back-changes"] && action.restore != "true" &&
           (predicates.failures_came_with_rollout != "true" ||
            predicates.config_changed_before_failure != "false")
         decision: deny
       - name: rollback-needs-approval
-        when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
+        when: action.capability in ["deployment.rollback-to-revision", "deployment.roll-back-changes"] && action.restore != "true"
         decision: require_approval
   verification:
     window: 5m

@@ -88,7 +88,7 @@ List the checks the profile runs: with none, it runs every check of every pack. 
 
 `verification.checks` names the checks that find what the pack's fix is meant to cure, when its pods' readiness can't show it: `cpu_throttled_at_limit` for the cpu-throttling pack's raise and rollback, since throttled pods are ready. After the fix, Themis decides them again from what the new pods did since the change, and calls the fix fixed only when each is false. Name checks that read the current revision's pods or figures over a window, never events, which keep the old pods' failures for an hour. Without it, a fix is judged by its pods' readiness, restarts and OOM kills. See [verification](configuration.md#verification).
 
-Whether the latest rollout brought the failure is a question for Themis's own `failures_came_with_rollout`. A rollout that changed only labels and annotations, such as a restart, didn't bring it: `rollout_changed_the_app` says which. One that changed what the pods run brought it when the new version does worse than the one before it: from the earlier version's pods while they are there, and once they are gone, from Themis's own record when the current version is a fix Themis made, and from the metrics history, which compares how much of their limits the two versions used at the same age. A pack whose fix is right only when the rollout isn't to blame, such as a higher limit, refuses it unless that check is false, and a rollback needs it true. A pack may offer both, as cpu-throttling does: its own `throttling_came_with_rollout` decides between a higher CPU limit and a rollback to the version before. When it is `unknown`, as without a metrics history of the earlier version, neither goes ahead and a person decides. A Deployment's first revision has no earlier one, so `earlier_revision_healthy`, `rollout_changed_the_app`, `failures_came_with_rollout` and `failure_onset_after_rollout` are all false for it: creating a Deployment isn't a rollout. No pack decides a fix by how long ago something happened: write a check that compares what the evidence shows instead, and let it be `unknown` when the evidence is missing.
+Whether the latest rollout brought the failure is a question for Themis's own `failures_came_with_rollout`. A rollout that changed only labels and annotations, such as a restart, didn't bring it: `rollout_changed_the_app` says which. One that changed what the pods run brought it when the new version does worse than the one before it: from the earlier version's pods while they are there, and once they are gone, from Themis's own record when the current version is a fix Themis made, and from the metrics history, which compares how much of their limits the two versions used at the same age. A pack whose fix is right only when the rollout isn't to blame, such as a higher limit, refuses it unless that check is false, and a rollback needs it true. A pack may offer both, as cpu-throttling does: its own `throttling_came_with_rollout` decides between a higher CPU limit and a rollback to the version before. A pack that offers a rollback may also offer a partial rollback, `deployment.roll-back-changes`, which rolls back only the changes it names, of those the latest rollout made to what the pods run, and keeps the others, such as a new image: rollout-regression and cpu-throttling justify and decide it as they do a rollback, and their guidance says when it is the better fix. Themis itself refuses one that names a change the rollout didn't make. When it is `unknown`, as without a metrics history of the earlier version, neither goes ahead and a person decides. A Deployment's first revision has no earlier one, so `earlier_revision_healthy`, `rollout_changed_the_app`, `failures_came_with_rollout` and `failure_onset_after_rollout` are all false for it: creating a Deployment isn't a rollout. No pack decides a fix by how long ago something happened: write a check that compares what the evidence shows instead, and let it be `unknown` when the evidence is missing.
 
 `guidance` is what the investigator should know about this kind of incident: when the pack's fixes are right and when they are wrong, which checks settle it, and what evidence misleads. The investigator's instructions are the same for every pack, so this is the only place they learn it. A pack without fixes says how to tell its causes apart. Write it in plain words, and don't name the pack's root causes: the investigator chooses among them. It is guidance, not a rule: what must hold before a fix runs belongs in the pack's checks and policy, which Themis enforces on every suggested fix, whoever suggests it.
 
@@ -152,6 +152,19 @@ truth:
     params: {revision: 1}
   acceptable_revisions: [1]
 ```
+
+When another fix is just as right, `truth.also_right` lists it: a proposal that changes what one of them changes is right too. Where a new image broke a rollout that also changed a setting, a rollback is right, and so is a partial rollback of the image alone:
+
+```yaml
+truth:
+  decision: propose
+  acceptable_revisions: [1]
+  also_right:
+  - capability: deployment.roll-back-changes
+    params: {revision: 1, changes: ["the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0"]}
+```
+
+A partial rollback is the same change as another when it rolls back the same changes of the rollout, and it, too, must go back to one of `acceptable_revisions`. A fix that is wrong but does no harm, such as a full rollback where rolling back one setting was enough, is neither right nor harmful.
 
 A case that needs metrics adds a `metrics.yaml`, saying what the install's metrics source reads; see [eval/README.md](../eval/README.md). Without one, the install has no metrics source.
 

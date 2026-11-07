@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout due to startup delays\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Pod failed liveness probe during startup with timeout 1s, but logs show it took 1m2s to start\",\n    \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\", \"ev-pod_states\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"Failure started after rollout to revision 4 with image change, but logs show app starts normally\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [\"ev-container_logs_tail\"],\n    \"missing\": [\"memory_data_available\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 10\n    }\n  },\n  \"expected_effect\": \"Allow 10s for app to start before liveness probe timeout\",\n  \"rationale\": \"Logs show app took 1m2s to start but probe timeout is 1s. Increasing timeout to 10s matches initialDelaySeconds and allows startup completion.\",\n  \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"killed_during_startup\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7591,
+        "output_tokens": 1541
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

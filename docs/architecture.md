@@ -95,7 +95,7 @@ eval/           the packs' evaluation: bundles, conformance, scaffold
 | `internal/executor` | themis-executor: the only code that writes to workloads |
 | `internal/catalog` | Everything this install can read, check and change, built once and handed out in parts: it loads the scenario packs, and says whether a profile asks for anything it doesn't have |
 | `internal/catalog/capability` | **What Themis can change.** The interface every fix implements, and the registry |
-| `internal/catalog/capability/rollback` | `deployment.rollback-to-revision` |
+| `internal/catalog/capability/rollback` | `deployment.rollback-to-revision`, and `deployment.roll-back-changes`: a partial rollback, which rolls back some of the latest rollout's changes and keeps the others |
 | `internal/catalog/capability/probes` | `deployment.set-probes`: the timing of a container's existing liveness, readiness and startup probes |
 | `internal/catalog/capability/resources` | `deployment.set-resources`: containers' memory and CPU requests and limits, checked against the namespace's LimitRanges and ResourceQuotas and the nodes' allocatable |
 | `internal/catalog/check` | **What Themis decides from evidence**, such as "the crash started with the rollout": checks written in YAML with CEL expressions, compiled at start-up, and the variables they see. The checks themselves are in the scenario packs; see [checks.md](checks.md) |

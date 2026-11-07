@@ -28,13 +28,19 @@
     "UID": "uid-deployment-checkout"
   },
   "capabilities": [
-    "deployment.rollback-to-revision"
+    "deployment.rollback-to-revision",
+    "deployment.roll-back-changes"
   ],
   "fixes": [
     {
       "name": "deployment.rollback-to-revision",
       "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
       "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
+    },
+    {
+      "name": "deployment.roll-back-changes",
+      "description": "Roll back some of the changes the latest rollout made to the Deployment's pod template, and keep the others, such as putting an environment variable back while the new image stays. revision is the revision before the current one, from the rollout history; changes are the changes to roll back, each written exactly as rollout_history's change.app lists it.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\",\"changes\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The revision before the current one, whose values the changes go back to.\"},\"changes\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300},\"description\":\"The changes to roll back, each exactly as rollout_history's change.app lists it.\"}}}"
     }
   ],
   "root_causes": [
@@ -87,7 +93,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "A rollback is right when the latest rollout brought the failures: it\nchanged what the pods run (rollout_changed_the_app is true), and the\nrevision before it does better, running without failing beside the\nfailing pods, or using clearly less of its memory limit at the same age\n(failures_came_with_rollout is true). If the rollout changed only labels\nor annotations, such as a restart, if the failure started before the\nrollout, if there is no earlier revision or it failed too, if the\ncurrent revision uses no more of its limit than the one before it did\nat the same age or by its end, so demand grew (failures_came_with_rollout\nis false), if the target is managed by GitOps, if its config changed\nbefore the failure, or if the evidence is missing, such as no history of\nthe revision before it (failures_came_with_rollout is unknown), do not\npropose a rollback: conclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nfailures_came_with_rollout are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
+  "guidance": "A rollback is right when the latest rollout brought the failures: it\nchanged what the pods run (rollout_changed_the_app is true), and the\nrevision before it does better, running without failing beside the\nfailing pods, or using clearly less of its memory limit at the same age\n(failures_came_with_rollout is true). If the rollout changed only labels\nor annotations, such as a restart, if the failure started before the\nrollout, if there is no earlier revision or it failed too, if the\ncurrent revision uses no more of its limit than the one before it did\nat the same age or by its end, so demand grew (failures_came_with_rollout\nis false), if the target is managed by GitOps, if its config changed\nbefore the failure, or if the evidence is missing, such as no history of\nthe revision before it (failures_came_with_rollout is unknown), do not\npropose a rollback: conclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nfailures_came_with_rollout are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nThe same conditions justify a partial rollback, which rolls back only the\nchanges you name and keeps the rollout's others, such as a new image.\nPrefer it when one change clearly explains the failure, as when the logs\nreject a setting the rollout changed: name that change exactly as\nrollout_history's change.app says it, and the revision before the\ncurrent one. Otherwise, or when the new image may be the cause, propose\nthe full rollback.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Inconclusive: Missing memory usage data to confirm OOM cause\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"Exit code 137 (OOM) in pods after image change\",\n    \"supporting\": [\"ev-pod_states\"],\n    \"contradicting\": [\"oom_killed_new_revision\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New image may require more memory than limit\",\n    \"supporting\": [\"ev-pod_states\"],\n    \"contradicting\": [\"oom_killed_current_revision\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"configuration_change\",\n    \"summary\": \"No config changes detected\",\n    \"supporting\": [\"ev-referenced_config\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 6304,
+        "output_tokens": 675
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

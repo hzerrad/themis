@@ -145,11 +145,12 @@ const can = (role) => me && ROLES.indexOf(me.role) >= ROLES.indexOf(role);
 // the change: an action's, a suggestion's, or an incident's in brief. The
 // button "Approve the raise" makes "Raise approved.", and so on for each.
 const ROLLBACK = "deployment.rollback-to-revision";
+const PARTIAL_ROLLBACK = "deployment.roll-back-changes";
 function fixWords(x) {
   const w = (x && (x.Words || x.words)) || {};
   const act = w.act || "Apply a change";
   return { noun: w.noun || "change", short: act, question: act + "?", doing: w.doing || "Applying the change.",
-    done: w.done || "Changed.", verifies: w.verifies || "" };
+    done: w.done || "Changed.", verifies: w.verifies || "", note: w.note || "" };
 }
 
 // REFERRAL ends what Themis says when it hands an incident to a person: one
@@ -1074,15 +1075,28 @@ function withheld(changes) {
   ].filter(Boolean).join(" ");
 }
 
-function changesTable(changes) {
+// digestOf shows an image's digest below its tag, which can move to other
+// code: shortened, with the whole digest on hover, or that it isn't known,
+// as when no pod runs that image any more.
+function digestOf(d) {
+  if (!d) return h("div", { class: "sha" }, "Image digest unknown");
+  return h("div", { class: "sha", title: d }, d.length > 19 ? d.slice(0, 19) + "…" : d);
+}
+
+// changesTable lists what a change does to the pod template. An image shows
+// the digest its pods run too, from radius.images, so nobody takes back new
+// code without seeing which.
+function changesTable(changes, radius) {
   if (!changes || changes.length === 0) return h("p", { class: "quiet" }, "No field of the pod template changes.");
   const note = withheld(changes);
+  const images = (radius && radius.images) || {};
+  const value = (c, side) => (c.field === "image" ? [c[side], digestOf((images[c.container] || {})[side])] : c[side]);
   return [
     h("table", { class: "diff" },
       h("thead", {}, h("tr", {}, h("th", {}, "Container"), h("th", {}, "Field"), h("th", {}, "Now"), h("th", {}, "After"))),
       h("tbody", {}, changes.map((c) => h("tr", {},
         h("td", {}, h("code", {}, c.container)), h("td", {}, h("code", {}, c.field)),
-        h("td", { class: "val from" }, c.before), h("td", { class: "val to" }, c.after))))),
+        h("td", { class: "val from" }, value(c, "before")), h("td", { class: "val to" }, value(c, "after")))))),
     note ? h("p", { class: "quiet small sub" }, note) : null,
   ];
 }
@@ -1259,11 +1273,16 @@ function decision(a, d, ctx, latest, reload) {
   } else {
     side = h("div", {}, h("h3", {}, "Decision"), result(a));
   }
+  // Something else deploys the workload, such as Helm: its next deploy writes
+  // the template it has over this change. GitOps is only recommended to.
+  const deployer = awaiting && !gitOps && !(a.Params || {}).restores && (a.BlastRadius || {}).deployedBy;
   return h("section", { class: "decide", "aria-label": latest ? "The change" : "An earlier change" },
     h("div", {},
       h("h3", {}, latest ? (gitOps ? "The recommended change" : "The exact change") : cap(fx.short)),
-      changesTable(a.Changes),
+      changesTable(a.Changes, a.BlastRadius),
+      fx.note ? h("p", { class: "terms" }, fx.note) : null,
       facts.some(Boolean) ? h("p", { class: "terms" }, facts) : null,
+      deployer ? h("p", { class: "terms", title: "Deployed by " + deployer }, "Apply the same change where " + t.name + "'s manifest lives, or the next deploy undoes it.") : null,
       latest ? suspicion(d, a, fx.noun) : null),
     side);
 }
@@ -1758,6 +1777,37 @@ function rollbackFields(f, evidence) {
   return { first: field("Roll back to", revision), nodes: [], params: () => ({ revision: Number(revision.value) }) };
 }
 
+// partialFields choose which of the latest rollout's changes to roll back,
+// as the rollout history says them: no value is typed, each goes back as the
+// revision before had it.
+function partialFields(f, evidence) {
+  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const change = history ? history.Data.change : null;
+  const app = (change && change.app) || [];
+  if (!app.length) {
+    const why = change ? "The latest rollout changed nothing the pods run." : "The rollout history doesn't say what the latest rollout changed.";
+    return { nodes: [h("p", { class: "quiet small" }, why)], params: () => { throw new Error(why); } };
+  }
+  const boxes = app.map((c) => ({ said: c, box: h("input", { type: "checkbox", value: c }) }));
+  const all = h("p", { class: "quiet small" });
+  const ticked = () => boxes.filter((b) => b.box.checked).map((b) => b.said);
+  const count = () => {
+    all.textContent = ticked().length === app.length
+      ? "Every change is ticked, the same as a rollback to revision " + change.from + "." : "";
+  };
+  const list = h("fieldset", { class: "group changes-pick", onchange: count },
+    h("legend", {}, "Changes revision " + change.to + " made, to roll back to revision " + change.from),
+    boxes.map((b) => h("label", { class: "check" }, b.box, h("span", {}, cap(b.said) + "."))));
+  return {
+    nodes: [list, all],
+    params: () => {
+      const changes = ticked();
+      if (!changes.length) throw new Error("Tick at least one change.");
+      return { revision: Number(change.from), changes };
+    },
+  };
+}
+
 // SUFFIX is what each Kubernetes quantity suffix multiplies by.
 const SUFFIX = {
   "": 1, n: 1e-9, u: 1e-6, m: 1e-3, k: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15, E: 1e18,
@@ -1992,6 +2042,7 @@ function schemaFields(f) {
 // FIX_FIELDS are the forms of the fixes Themis ships with.
 const FIX_FIELDS = {
   [ROLLBACK]: rollbackFields,
+  [PARTIAL_ROLLBACK]: partialFields,
   "deployment.set-resources": resourceFields,
   "deployment.set-probes": probeFields,
 };
@@ -2069,6 +2120,7 @@ function suggestForm(d, reload) {
     preview.className = "preview" + (r ? (r.accepted ? " ok" : " no") : "");
     setChildren(preview, r ? [
       h("div", { class: "verdict" }, r.verdict),
+      r.note ? h("p", { class: "small" }, r.note) : null,
       r.reason ? h("p", { class: "small" }, r.reason) : null,
       (r.for || []).length || (r.against || []).length ? h("ul", { class: "checklist" }, checksOf(r.for || [], "for"), checksOf(r.against || [], "against")) : null,
       r.then ? h("p", { class: "small then" }, r.then) : null,

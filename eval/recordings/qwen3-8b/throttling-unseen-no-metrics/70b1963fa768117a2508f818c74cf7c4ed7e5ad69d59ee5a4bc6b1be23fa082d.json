@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing critical CPU throttling metrics and previous revision health data\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Readiness probe failures may indicate new image (4.2.0) causes performance issues\",\n    \"supporting\": [\"ev-pod_states\", \"ev-target_events\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"container_cpu\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing metrics on CPU throttling and previous revision health\",\n    \"supporting\": [\"throttling_data_available\", \"earlier_revision_healthy\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_cpu\", \"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 4356,
+        "output_tokens": 535
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

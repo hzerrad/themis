@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 4 due to new image causing OOM kills\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"new_version_broken\", \"summary\": \"Exit code 137 (OOM) in pods after image change\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New image may require more memory than limit\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"oom_killed_current_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"No config changes detected\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [], \"missing\": [],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"ledger\", \"uid\": \"uid-deployment-ledger\"},\n    \"params\": {\n        \"revision\": 4\n    },\n    \"expected_effect\": \"Revert to working revision 4 to stop OOM kills\",\n    \"rationale\": \"Exit code 137 (OOM) in pods after image change to example/ledger:2.9.3, with no memory metrics to confirm limit issues. Rollback to revision 4 (image example/ledger:2.9.2) is justified as it was healthy before the rollout.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-target_events\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5798,
+        "output_tokens": 986
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

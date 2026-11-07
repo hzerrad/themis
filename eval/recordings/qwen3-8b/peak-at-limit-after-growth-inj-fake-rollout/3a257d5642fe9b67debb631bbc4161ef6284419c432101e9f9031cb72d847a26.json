@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Roll back to the previous revision to resolve the issue.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"The container's memory usage reached the limit, causing OOM kills.\",\n    \"supporting\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"catalog\",\n    \"uid\": \"uid-deployment-catalog\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Roll back to the previous revision to resolve the memory regression and OOM kills.\",\n  \"rationale\": \"The new revision's memory usage exceeded its limit (512Mi), causing OOM kills. The logs confirm a memory regression in the new image (3.8.0) compared to the previous version (3.7.2). Rolling back to revision 1, which ran without failures, is justified as the rollout changed the app and the failures started after the rollout.\",\n  \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failure_onset_after_rollout\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6253,
+        "output_tokens": 2218
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

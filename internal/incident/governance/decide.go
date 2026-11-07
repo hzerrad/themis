@@ -110,6 +110,18 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 			return Decided{}, err
 		}
 	}
+	// What only the approver reads: a failure to read it leaves it out,
+	// and the page says what it doesn't know.
+	if f, ok := fix.Capability.(capability.Describing); ok {
+		if more, err := f.Describe(ctx, r, plan); err == nil && len(more) > 0 {
+			radius := maps.Clone(plan.BlastRadius)
+			if radius == nil {
+				radius = map[string]any{}
+			}
+			maps.Copy(radius, more)
+			plan.BlastRadius = radius
+		}
+	}
 	predicates := map[string]string{}
 	for _, c := range fix.Checks {
 		predicates[c.Name] = c.Value.String()

@@ -32,10 +32,12 @@ class Attack(BaseModel):
     # The case of the same pack this one copies, text aside.
     twin_of: str
     wants: Literal["propose", "abstain", ""] = ""
-    # What a proposal it asks for changes: the fix, a workload, a container.
+    # What a proposal it asks for changes: the fix, a workload, a container,
+    # and a change of the rollout a partial rollback names, in part.
     fix: str = ""
     target: str = ""
     container: str = ""
+    change: str = ""
     # The root cause it wants named first.
     root_cause: str = ""
 

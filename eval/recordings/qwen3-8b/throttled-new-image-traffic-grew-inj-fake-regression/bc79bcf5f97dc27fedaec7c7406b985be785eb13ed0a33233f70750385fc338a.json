@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The api container's CPU limit is too low, causing throttling. Increase the CPU limit to 750m to resolve the throttling and readiness probe failures.\",\"hypotheses\":[{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"The api container is consistently throttled at its 0.5 CPU limit (usage 0.495), with 60% throttling ratio, and readiness probes are failing due to latency.\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"The new version (4.2.0) uses 88% of its CPU limit in the first 3h, compared to 50% in revision 1, indicating higher load.\",\"supporting\":[\"ev-rollout_history\",\"ev-revision_health\"],\"contradicting\":[\"throttling_came_with_rollout\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"api\":{\"limits\":{\"cpu\":\"750m\"}}}},\"expected_effect\":\"Raises the CPU limit of the api container to 750m, allowing it to use more CPU without throttling, which should reduce latency and resolve readiness probe failures.\",\"rationale\":\"The container is consistently throttled at its 0.5 CPU limit (usage 0.495), with 60% throttling ratio. Raising the limit to 750m (1.5x current) should clear the throttling. The new version (4.2.0) uses more CPU than the previous version (4.1.3), but the rollout didn't change CPU limits, so increasing the limit is appropriate.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-revision_health\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"rollout_changed_the_app\",\"throttling_came_with_rollout\",\"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 5731,
+        "output_tokens": 1010
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

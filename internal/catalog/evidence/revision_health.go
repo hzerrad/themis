@@ -1,9 +1,12 @@
 package evidence
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -228,4 +231,20 @@ func viewRecord(r *workload.Revision, current bool, since time.Time, rec metrics
 		OOMKilled: rec.OOMKilled, FirstOOMKillAt: rec.FirstOOMKill,
 		ThrottledRatio: rounded(rec.Throttled), FirstThrottledAt: rec.FirstThrottled,
 	}
+}
+
+// keys are the keys of a and b, sorted.
+func keys[K cmp.Ordered, V any](a, b map[K]V) []K {
+	return slices.Sorted(maps.Keys(maps.Collect(func(yield func(K, V) bool) {
+		for k, v := range a {
+			if !yield(k, v) {
+				return
+			}
+		}
+		for k, v := range b {
+			if !yield(k, v) {
+				return
+			}
+		}
+	})))
 }

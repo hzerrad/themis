@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"request_evidence\",\n\"template\": \"revision_health\",\n\"params\": {\n  \"revision\": \"\",\n  \"previousRevision\": \"\"\n}\n}",
+      "usage": {
+        "input_tokens": 5133,
+        "output_tokens": 453
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

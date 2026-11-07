@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Image pull failure for new revision, rollback to revision 1\", \"hypotheses\": [{\"root_cause_class\": \"image_pull_failure\", \"summary\": \"New image example/checkout:2.4.O not found in registry\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}, {\"root_cause_class\": \"configuration_change\", \"summary\": \"No ConfigMap changes detected before failure\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore working image example/checkout:2.3.1\", \"rationale\": \"New image not found, older revision works without issues.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 3691,
+        "output_tokens": 673
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -72,6 +72,10 @@ var internalWords = []string{
 	"blast radius", "safety event", "abstain", "proposal", "remediation", "derived",
 }
 
+// kubernetesWords hold an internal word in Kubernetes' own sense: an image
+// digest is what a container runs, not the digest an approval binds.
+var kubernetesWords = []string{"image digest"}
+
 // literal matches the string literals of the script, and the text of the page.
 var literal = regexp.MustCompile("\"[^\"\\n]*\"|`[^`]*`|>[^<]+<")
 
@@ -88,7 +92,10 @@ func TestPage_SpeaksPlainly(t *testing.T) {
 			if strings.HasPrefix(lit, "\"/") || strings.HasPrefix(lit, "`/") {
 				continue // API paths
 			}
-			text := interpolation.ReplaceAllString(lit, "")
+			text := strings.ToLower(interpolation.ReplaceAllString(lit, ""))
+			for _, k := range kubernetesWords {
+				text = strings.ReplaceAll(text, k, "")
+			}
 			for _, w := range internalWords {
 				if strings.Contains(strings.ToLower(text), w) {
 					t.Errorf("%s shows %q, which uses the internal word %q", path, lit, w)

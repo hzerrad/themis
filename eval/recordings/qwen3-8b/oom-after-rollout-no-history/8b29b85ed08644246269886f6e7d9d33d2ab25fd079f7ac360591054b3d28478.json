@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new image caused OOM kills; rolling back to revision 1 resolves the issue.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"image_pull_failure\",\n    \"summary\": \"The new image (example/checkout:2.5.0) caused OOM kills.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit is insufficient for its workload.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-container_memory\"],\n    \"contradicting\": [\"ev-rollout_history\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"configuration_change\",\n    \"summary\": \"The rollout changed the image, leading to OOM kills.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Rolls back to revision 1, reverting to the previous image and resource limits, resolving the OOM kills.\",\n  \"rationale\": \"The rollout introduced a new image (example/checkout:2.5.0) that caused OOM kills. Rolling back to revision 1, which used example/checkout:2.4.0, should resolve the issue as it did not exhibit the same failures. The memory limit (512Mi) was sufficient for the previous version, indicating the new image's resource requirements exceeded the limit, leading to OOM kills. No configuration changes or node issues are indicated, making rollback the justified fix under the rollout-regression profile conditions (failure_onset_after_rollout=true, gitops_managed=false, config_changed_before_failure=false).\",\n  \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-container_memory\", \"ev-target_events\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"oom_killed_current_revision\", \"rollout_changed_the_app\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5936,
+        "output_tokens": 1438
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

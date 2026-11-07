@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"The container's CPU limit is too low, causing throttling and readiness probe failures. Increase the CPU limit to 400m.\", \"hypotheses\": [{\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"The container's CPU limit of 300m is too low, as usage is 296m (98.7% of the limit) and throttling is 55%.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"}, \"params\": {\"containers\": {\"api\": {\"limits\": {\"cpu\": \"400m\"}}}},\"expected_effect\": \"Raise the CPU limit to 400m, which should clear the throttling and allow the container to operate without hitting the limit.\",\"rationale\": \"The container is consistently using 296m of its 300m CPU limit, leading to 55% throttling. Increasing the limit to 400m would provide sufficient headroom to prevent throttling and resolve the readiness probe failures.\",\"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"],\"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 4722,
+        "output_tokens": 958
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

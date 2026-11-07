@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Insufficient evidence to determine root cause\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling_came_with_rollout is unknown, and cpu_throttled_at_limit is false despite higher throttling ratio in revision 2. Need to confirm if throttling is due to rollout or node contention.\",\"supporting\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-revision_health\"],\"contradicting\":[],\"missing\":[\"throttling_came_with_rollout\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4700,
+        "output_tokens": 1069
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause. Missing throttling data and empty logs do not confirm CPU throttling or memory issues.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Throttling_data_available is false, and empty logs do not confirm CPU throttling or memory issues.\",\n    \"supporting\": [\"throttling_data_available\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"throttling_came_with_rollout\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"CPU usage near limit (0.99) and image change suggest new version uses more CPU.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"throttling_came_with_rollout\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"Empty logs may indicate memory issues, but no memory data is available.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"memory_usage_data\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4856,
+        "output_tokens": 677
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

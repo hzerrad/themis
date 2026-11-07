@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to revision 1 due to CPU throttling caused by the new version.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Throttling began with rollout 2, and revision 1 was healthy.\",\"supporting\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to revision 1 which operated without CPU throttling.\",\"rationale\":\"The new version (revision 2) introduced CPU throttling, confirmed by high throttling ratios and readiness probe failures. Revision 1 was healthy with no throttling. Rolling back to revision 1 resolves the issue.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-rollout_history\",\"ev-revision_health\",\"ev-target_events\"],\"cited_predicates\":[\"throttling_came_with_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 5117,
+        "output_tokens": 676
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
