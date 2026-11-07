@@ -1,0 +1,10 @@
+2026-11-06T10:04:40Z INFO  inventory 2.3.0 starting
+2026-11-06T10:04:41Z INFO  connected to postgres inventory-db.shop:5432, pool of 10
+2026-11-06T10:04:41Z INFO  listening on :8080
+2026-11-06T10:04:47Z INFO  GET /stock/sku-10442 200 18ms
+2026-11-06T10:04:50Z INFO  GET /healthz 200 2011ms (stock reconciliation: 0 drift)
+2026-11-06T10:04:52Z INFO  GET /stock/sku-20871 200 15ms
+2026-11-06T10:04:55Z INFO  GET /healthz 200 2008ms (stock reconciliation: 0 drift)
+2026-11-06T10:04:58Z INFO  POST /reservations 201 41ms
+2026-11-06T10:05:00Z INFO  GET /healthz 200 2014ms (stock reconciliation: 0 drift)
+2026-11-06T10:05:00Z INFO  received SIGTERM, draining connections for up to 30s

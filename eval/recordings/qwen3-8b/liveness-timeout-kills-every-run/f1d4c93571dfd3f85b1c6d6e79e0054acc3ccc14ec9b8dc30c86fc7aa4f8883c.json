@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout to match application startup time\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeout of 1s is too short for application startup\",\n    \"supporting\": [\"probe_timeouts\", \"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"New version's probe configuration causes failures\",\n    \"supporting\": [\"rollout_changed_the_app\", \"probe_timeouts\"],\n    \"contradicting\": [\"failure_onset_after_rollout\"],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"inventory\",\n    \"uid\": \"uid-deployment-inventory\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 5\n    }\n  },\n  \"expected_effect\": \"Increase liveness probe timeout to 5s to accommodate application startup time\",\n  \"rationale\": \"The liveness probe timeout of 1s is too short for the application's startup time (25s). Logs show the healthz endpoint takes 2s to respond, but the probe fails before it completes. Increasing the timeout to 5s aligns with the observed startup duration.\",\n  \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"probe_timeouts\", \"killed_during_startup\", \"failure_onset_after_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7261,
+        "output_tokens": 724
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

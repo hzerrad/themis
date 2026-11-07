@@ -133,7 +133,7 @@
   "predicates": [
     {
       "name": "probe_kills",
-      "version": "3",
+      "version": "4",
       "value": "true",
       "reason": "Pod/search-api-58f7c9d2b-f8h1v: Container app failed liveness probe, will be restarted, 3 times",
       "evidence_ids": [
@@ -143,7 +143,7 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "3",
+      "version": "4",
       "value": "true",
       "reason": "every probe failure is a timeout, such as Pod/search-api-58f7c9d2b-b3n6q: Readiness probe failed: Get \"http://10.42.4.17:8080/ready\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
       "evidence_ids": [
@@ -153,7 +153,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "3",
+      "version": "4",
       "value": "false",
       "reason": "no container of revision 12 was stopped as soon as its liveness probe could fail it",
       "evidence_ids": [

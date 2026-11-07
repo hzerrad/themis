@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 4 due to OOM kills after image change\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"new_version_broken\", \"summary\": \"Exit code 137 OOM kills in revision 5 after image change to 2.9.3\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New image may use more memory than limit\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [\"oom_killed_current_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"No config changes detected before failure\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [\"config_changed_before_failure\"], \"missing\": [],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"ledger\",\n        \"uid\": \"uid-deployment-ledger\"\n    },\n    \"params\": {\n        \"revision\": 4\n    },\n    \"expected_effect\": \"Revert to working revision 4 before OOM failures started\",\n    \"rationale\": \"Failure onset matches rollout, OOM kills occurred after image change with no prior memory issues in revision 4. No config changes detected. Memory data unavailable but OOM pattern matches new version's behavior.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6159,
+        "output_tokens": 919
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

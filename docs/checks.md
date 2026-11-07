@@ -51,11 +51,13 @@ This is one of them:
 
 **Event text alone never makes a check true.** Anyone who may create events in a namespace can write one that reads word for word like the kubelet's or the scheduler's. A check that decides from an event's message must also find what the event says in status that only Kubernetes' own components write in practice: a pod's container states and restart counts, its phase, or a Deployment's conditions. When the status doesn't show it, the check answers `unknown`, not `true`, and the policy treats `unknown` as not safe wherever that matters. An event may still make a check `false`, or `true` where `true` only makes the policy stricter, as `evidence_has_instructions` does.
 
+Kubernetes keeps a repeated event once, with when it first and last happened and how many times. Compare the status with when it first happened. In a crash loop the same failure comes back after every restart, so its last time is often a failure or a kill the status can't show yet: the container is still stopping, or runs again.
+
 | Check | The event | What has to show it too |
 |---|---|---|
-| `probe_kills` | `Killing`: failed liveness or startup probe | A container of that pod, of the current revision, restarted, and its last end, no earlier than the event's first and last kill, was a kill: exit code 137 or 143, not `OOMKilled` |
+| `probe_kills` | `Killing`: failed liveness or startup probe | The container it names, in that pod of the current revision, restarted, and its last end, no earlier than the event's first kill, was a kill: exit code 137 or 143, not `OOMKilled` |
 | `killed_during_startup` | `Killing`: failed startup probe | The same as `probe_kills`. Its other answer reads only the pod's status |
-| `probe_timeouts` | `Unhealthy`: a probe timed out | A pod of the current revision that a failure names has a container that is running and isn't ready, or that restarted, ending no earlier than the event's first and last failure: the kubelet probes only running containers |
+| `probe_timeouts` | `Unhealthy`: a probe timed out | A pod of the current revision that a failure names has a container that is running and isn't ready, or that the kubelet killed for a failing probe, as `probe_kills` requires, ending no earlier than the failure's first time: the kubelet probes only running containers |
 | `evicted_for_node_memory` | `Evicted`: the node was low on memory | The pod is still there and has failed |
 | `scheduler_rejected_pods` | `FailedScheduling` | The pod is pending with no container statuses: no node took it |
 | `volume_not_bound` | `FailedMount`, `FailedAttachVolume`, or `FailedScheduling` naming a volume | The pod is pending, with no container running |
