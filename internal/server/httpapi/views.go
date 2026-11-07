@@ -88,6 +88,16 @@ type evidenceView struct {
 	// Suspicious says, for each flagged text, what in the item holds it and
 	// what it is, in plain words.
 	Suspicious []suspicionView `json:",omitempty"`
+	// Number is the item's place in the list, from 1, by which facts and
+	// findings cite it, and Kind names its template, such as "Pod states".
+	Number int
+	Kind   string
+	// Later is set for an item collected well after the first.
+	Later bool `json:",omitempty"`
+	// Digest says what the item holds in one line, and View lays it out by
+	// its kind. Both are left out for people who may not see raw evidence.
+	Digest phrase    `json:",omitempty"`
+	View   *readable `json:",omitzero"`
 }
 
 // suspicionView is text flagged in an item, as people read it.
@@ -149,6 +159,13 @@ type detailView struct {
 	Transitions []store.Transition
 	Evidence    []evidenceView
 	Predicates  []check.Result
+	// Facts are what the checks found that matters most, as sentences that
+	// cite their evidence. Situation is what fails, in a few words, from
+	// the symptoms they found.
+	Facts     []factView `json:",omitempty"`
+	Situation phrase     `json:",omitempty"`
+	// Symptoms are the checks that find the incident's failure.
+	Symptoms []string `json:",omitempty"`
 	// Checks say in plain words what each check, by name, finds.
 	Checks map[string]checkWords
 	// Causes describe each root cause the investigation may name, by name,

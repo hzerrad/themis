@@ -59,6 +59,11 @@ type Result struct {
 	Reason      string
 	EvidenceIDs []string
 
+	// Fact and Headline are the answer in sentences for people, when its
+	// check writes them. Investigators never see them.
+	Fact     string `json:",omitempty"`
+	Headline string `json:",omitempty"`
+
 	// Gaps are the missing evidence behind an unknown result; Blind is set
 	// when one of them means Themis could not see, rather than that the
 	// evidence did not settle the question.

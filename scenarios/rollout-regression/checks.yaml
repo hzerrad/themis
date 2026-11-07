@@ -29,10 +29,12 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout came before the failures
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
     - when: size(early) > 0
       answer: false
       reason: ${early[0].what} at ${early[0].at} predates revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, "early[0].id"]
+      fact: The failures started at ${early[0].at}, before revision ${current.revision} rolled out at ${rollout_at}.
     # The events may hold an earlier failure: without them, Themis can only
     # say that none it saw came first, which isn't enough to act on.
     - when: ids.target_events == ""
@@ -51,6 +53,10 @@
     - answer: true
       reason: all ${size(failures)} failures follow revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, "failures.map(f, f.id)"]
+      fact: >-
+        ${size(failures) == 1 ? "The only failure" : size(failures) == 2 ? "Both failures" : "All " +
+        string(size(failures)) + " failures"} came after revision ${current.revision} rolled out at ${rollout_at}.
+      headline: ${workload} fails since revision ${current.revision} rolled out.
 
 # A container of the current revision was OOMKilled.
 - name: oom_killed_new_revision
@@ -67,11 +73,24 @@
           .filter(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled"))
           .map(c, p.name + "/" + c.name)
       ).flatten()
+    # For the fact: the pods with a container killed, and when each kill
+    # ended, in order.
+    hit: pods.filter(p, p.containers.exists(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled")))
+    ended: >-
+      pods.map(p, p.containers.map(c,
+        [c.state, c.lastTermination].filter(s, s != null && s.reason == "OOMKilled" && s.finishedAt != null).map(s, s.finishedAt)
+      ).flatten()).flatten().sort()
   answers:
     - when: size(killed) > 0
       answer: true
       reason: ${killed[0]} of revision ${current_revision} was OOMKilled
       cite: [ids.pod_states]
+      fact: >-
+        The `${killed[0].split("/")[1]}` container of revision ${current_revision} was OOMKilled in
+        ${size(pods) == 1 ? "its only pod" : size(hit) == 2 && size(pods) == 2 ? "both its pods" :
+        size(hit) == size(pods) ? "all " + string(size(pods)) + " of its pods" :
+        string(size(hit)) + " of its " + string(size(pods)) + " pods"}, last at ${ended[size(ended) - 1]}.
+      headline: ${workload} runs out of memory.
     - when: size(pods) == 0
       answer: unknown
       reason: no pods of the current revision
@@ -105,6 +124,7 @@
       answer: unknown
       reason: ConfigMap ${absent[0].name} is referenced but doesn't exist
       cite: [ids.referenced_config]
+      fact: ConfigMap `${absent[0].name}` is referenced but doesn't exist.
     - when: rollout_at == null
       answer: unknown
       reason: the rollout time is unknown
@@ -119,6 +139,9 @@
       answer: true
       reason: ConfigMap ${settling[0].name} changed at ${settling[0].changedAt}, after revision ${current.revision} and before ${first_failure.what}
       cite: [ids.referenced_config, ids.rollout_history, first_failure.id]
+      fact: >-
+        ConfigMap `${settling[0].name}` changed at ${settling[0].changedAt}, after revision ${current.revision}
+        rolled out and before the first failure, so a rollback may not undo the cause.
     - answer: false
       reason: >-
         no referenced ConfigMap changed between the rollout and the first
