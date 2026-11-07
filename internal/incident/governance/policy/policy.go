@@ -84,6 +84,11 @@ type Input struct {
 	Source        string
 	Authenticated bool
 	External      bool
+
+	// EvidenceHasInstructions is set when some of the incident's evidence
+	// holds text that looks written for Themis rather than by the workload.
+	// Rules see it as evidence.has_instructions.
+	EvidenceHasInstructions bool
 }
 
 // costLimit bounds a rule's evaluation.
@@ -114,6 +119,7 @@ func Compile(p config.Policy) (*Policy, error) {
 		cel.Variable("predicates", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("change", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("proposal", cel.MapType(cel.StringType, cel.StringType)),
+		cel.Variable("evidence", cel.MapType(cel.StringType, cel.StringType)),
 		cel.Variable("mode", cel.StringType),
 	)
 	if err != nil {
@@ -238,7 +244,11 @@ func (p *Policy) Rule(in Input) (Decision, bool) {
 			}, true
 		}
 		if matched, ok := val.Value().(bool); ok && matched {
-			return Decision{Outcome: Outcome(r.Decision), Reason: fmt.Sprintf("Policy rule %s %s.", r.Name, ruleVerbs[Outcome(r.Decision)]), PolicyID: r.Name, PolicyDigest: p.digest}, true
+			reason := r.Reason
+			if reason == "" {
+				reason = fmt.Sprintf("Policy rule %s %s.", r.Name, ruleVerbs[Outcome(r.Decision)])
+			}
+			return Decision{Outcome: Outcome(r.Decision), Reason: reason, PolicyID: r.Name, PolicyDigest: p.digest}, true
 		}
 	}
 	return Decision{}, false
@@ -281,6 +291,7 @@ func (p *Policy) vars(in Input) map[string]any {
 		"predicates": in.Predicates,
 		"change":     change,
 		"proposal":   map[string]string{"source": in.Source, "authenticated": strconv.FormatBool(in.Authenticated), "external": strconv.FormatBool(in.External)},
+		"evidence":   map[string]string{"has_instructions": strconv.FormatBool(in.EvidenceHasInstructions)},
 		"mode":       p.mode,
 	}
 }

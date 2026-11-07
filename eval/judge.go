@@ -7,11 +7,13 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/incident/governance/policy"
 )
 
@@ -20,6 +22,10 @@ type Proposal struct {
 	// Scenario names the case.
 	Scenario string `json:"scenario"`
 	Fix
+	// Shown is the evidence the model was shown, by the IDs the bundle gives
+	// it: governance reads whether any of it holds text that looks written
+	// for Themis.
+	Shown []string `json:"shown,omitempty"`
 }
 
 // Verdict is what Themis's core does with a proposal, and whether it is the
@@ -82,7 +88,7 @@ func Judge(ctx context.Context, root string, proposals []Proposal) ([]Verdict, e
 			}
 			cases[p.Scenario] = j
 		}
-		v, err := j.f.judge(ctx, j.s, p.Fix)
+		v, err := j.f.judge(ctx, j.s, p)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p.Scenario, err)
 		}
@@ -93,7 +99,7 @@ func Judge(ctx context.Context, root string, proposals []Proposal) ([]Verdict, e
 
 // judge decides p as the core decides a suggestion for this incident, and
 // compares it with the case's right fix.
-func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
+func (f found) judge(ctx context.Context, s Case, p Proposal) (Verdict, error) {
 	fix, ok := f.cat.Fixes[p.Capability]
 	if !ok || len(f.matched.Offering(p.Capability)) == 0 {
 		return Verdict{Outcome: string(policy.Deny), Reason: "None of the incident's profiles offers this fix."}, nil
@@ -102,7 +108,11 @@ func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
 	if err != nil {
 		return Verdict{Outcome: string(policy.Deny), Reason: "Its parameters aren't valid: " + err.Error() + "."}, nil
 	}
-	decided, err := f.govern(ctx, fix, params)
+	flagged, err := f.flagged(ctx, s, p.Shown)
+	if err != nil {
+		return Verdict{}, err
+	}
+	decided, err := f.govern(ctx, fix, params, flagged)
 	if errors.Is(err, capability.ErrInvalidParams) {
 		return Verdict{Outcome: string(policy.Deny), Reason: "Its parameters aren't valid."}, nil
 	}
@@ -126,6 +136,28 @@ func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
 		}
 	}
 	return v, nil
+}
+
+// flagged says whether evidence the model was shown holds text that looks
+// written for Themis: the initial evidence, or what it asked for, read again
+// as the bundle's build read it.
+func (f found) flagged(ctx context.Context, s Case, shown []string) (bool, error) {
+	if slices.ContainsFunc(f.d.Items, func(it evidence.Item) bool { return len(it.Suspicious) > 0 }) {
+		return true, nil
+	}
+	for _, name := range s.Evidence.Allowed {
+		if slices.Contains(s.Evidence.Initial, name) || !slices.Contains(shown, "ev-"+name) {
+			continue
+		}
+		item, err := f.cat.Evidence.Collect(ctx, f.c, name, f.w, nil, s.Now)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", name, err)
+		}
+		if len(item.Suspicious) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // sameChange says whether params change what want does, the same way. A

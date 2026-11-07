@@ -153,6 +153,17 @@ profile:
       - name: raise-needs-approval
         when: action.capability == "deployment.set-resources" && action.restore != "true"
         decision: require_approval
+      # Text planted in logs, events or config can steer which changes the
+      # investigator rolls back, such as keeping the change that brought the
+      # throttling. While any evidence holds text aimed at Themis, its
+      # partial rollback is refused. The full rollback stays on offer, and a
+      # person or an agent may still suggest a partial one.
+      - name: partial-rollback-not-from-flagged-evidence
+        when: >-
+          action.capability == "deployment.roll-back-changes" && action.restore != "true" &&
+          proposal.external == "false" && evidence.has_instructions == "true"
+        decision: deny
+        reason: Refused. The evidence holds text aimed at Themis, so a partial rollback from the investigator isn't taken. The full rollback is still on offer.
       - name: rollback-needs-approval
         when: action.capability in ["deployment.rollback-to-revision", "deployment.roll-back-changes"] && action.restore != "true"
         decision: require_approval

@@ -182,6 +182,22 @@ func TestPolicy_SeesWhoSuggestedTheFix(t *testing.T) {
 	}
 }
 
+// Rules see whether the incident's evidence holds text aimed at Themis. A
+// rule's own reason is what people read when it decides.
+func TestPolicy_SeesFlaggedEvidence(t *testing.T) {
+	r := rule("clean-evidence-only", `evidence.has_instructions == "true"`, config.DecisionDeny)
+	r.Reason = "Refused. The evidence holds text aimed at Themis."
+	p := compile(t, config.ModeGuarded, r)
+	flagged := input()
+	flagged.EvidenceHasInstructions = true
+	if d := p.Evaluate(flagged); d.Outcome != policy.Deny || d.PolicyID != r.Name || d.Reason != r.Reason {
+		t.Errorf("flagged evidence = %+v, want the rule to deny with its reason", d)
+	}
+	if d := p.Evaluate(input()); d.Failed || d.PolicyID != "" {
+		t.Errorf("clean evidence = %+v, want no rule to match", d)
+	}
+}
+
 // Rules see what a fix says about its change, such as a probe it makes more
 // lenient. A rule that first asks which fix it is never fails on one that
 // says nothing.
