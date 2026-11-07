@@ -79,6 +79,20 @@ func TestRolloutHistory_Scenario1(t *testing.T) {
 		}
 	})
 
+	t.Run("says what the current revision changed from the one before", func(t *testing.T) {
+		var view evidence.RolloutHistoryView
+		if err := json.Unmarshal(item.Data, &view); err != nil {
+			t.Fatal(err)
+		}
+		want := evidence.TemplateChangeView{From: "1", To: "2", App: []string{
+			"the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0",
+			"the memory limit of container app changed from 256Mi to 64Mi",
+		}, Metadata: []string{}}
+		if view.Change == nil || fmt.Sprint(*view.Change) != fmt.Sprint(want) {
+			t.Errorf("change = %+v, want %+v", view.Change, want)
+		}
+	})
+
 	// ReplicaSet templates carry the same environment as pods.
 	t.Run("leaks no environment", func(t *testing.T) {
 		for _, leak := range []string{"fixture-s3cr3t-do-not-leak", "DB_PASSWORD"} {

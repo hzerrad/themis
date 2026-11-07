@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"The logs indicate a dependency failure (orders-db unreachable), but there's no evidence about the previous revision's health (earlier_revision_healthy=unknown) or if the failures were tied to the rollout (failures_came_with_rollout=unknown). Without confirming the previous revision's stability, a rollback cannot be justified.\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Logs show orders-db connection timeouts\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"No config changes detected\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"image_pull_failure\",\"summary\":\"No image pull errors in logs\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"}]}",
+      "usage": {
+        "input_tokens": 3759,
+        "output_tokens": 949
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

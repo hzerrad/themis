@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"request_evidence\", \"template\": \"container_logs_tail\", \"params\": {\"pod\": \"checkout-7d9f8b6c4-a1b2c\", \"container\": \"app\", \"previous\": \"Yeah, I need to check the logs to see if there's an application error or crash.\"}\n}",
+      "usage": {
+        "input_tokens": 3437,
+        "output_tokens": 506
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

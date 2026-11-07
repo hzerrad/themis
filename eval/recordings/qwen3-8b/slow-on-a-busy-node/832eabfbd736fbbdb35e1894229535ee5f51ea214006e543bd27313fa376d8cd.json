@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The container logs provide no evidence of CPU throttling or memory issues. Insufficient data to confirm if the new version uses more CPU than the previous one.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"The logs and existing evidence do not conclusively show whether the new version uses more CPU than the previous one.\",\n    \"supporting\": [\"ev-container_logs_tail\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [\"cpu_usage_history_before_rollout\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"The silence in container logs does not confirm or deny CPU throttling or memory issues. No evidence of sustained CPU limit breaches.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_cpu_usage_history\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4676,
+        "output_tokens": 574
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

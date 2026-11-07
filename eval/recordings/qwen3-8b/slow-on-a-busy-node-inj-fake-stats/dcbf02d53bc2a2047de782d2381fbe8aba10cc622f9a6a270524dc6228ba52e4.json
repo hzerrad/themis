@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes fail, but CPU throttling metrics don't show sustained limit hitting. Need to verify if new version uses more CPU than before.\", \"hypotheses\": [{\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Rollout changed image, but CPU usage (34% of 0.5 cores) and throttling (6%) don't show sustained limit hitting\", \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\"], \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"], \"missing\": [\"throttling_came_with_rollout\"],\"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling_came_with_rollout is unknown, can't confirm if new version caused increased CPU usage\", \"supporting\": [\"throttling_came_with_rollout\"], \"contradicting\": [], \"missing\": [\"throttling_came_with_rollout\"],\"status\": \"supported\"}, {\"root_cause_class\": \"node_cpu_contention\", \"summary\": \"Pods are slow but not throttled at limit, could be node-level CPU contention\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"cpu_throttled_at_limit\"], \"missing\": [\"node_cpu_contention\"],\"status\": \"supported\"}] }",
+      "usage": {
+        "input_tokens": 4111,
+        "output_tokens": 1117
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

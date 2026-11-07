@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Pods cannot be scheduled due to untolerated taints on nodes.\",\"hypotheses\":[{\"root_cause_class\":\"cannot_be_scheduled\",\"summary\":\"Scheduler rejected pods due to untolerated taint {dedicated: batch} on all nodes\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"other\",\"summary\":\"No other evidence points to image pull, volume, config, or quota issues\",\"supporting\":[\"ev-pod_states\",\"ev-target_events\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 3025,
+        "output_tokens": 548
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

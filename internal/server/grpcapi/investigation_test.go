@@ -41,8 +41,8 @@ func TestLeaseInvestigation(t *testing.T) {
 	if !inv.GetLeaseDeadline().AsTime().Equal(e.now.Add(time.Minute)) || !inv.GetBudget().GetDeadline().AsTime().Equal(e.now.Add(config.DefaultInvestigationTimeout)) || inv.GetBudget().GetMaxSteps() != config.DefaultMaxSteps {
 		t.Errorf("lease deadline %v, budget %v", inv.GetLeaseDeadline().AsTime(), inv.GetBudget())
 	}
-	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 6 || inv.GetPredicates()[0].GetDescription() == "" {
-		t.Errorf("%d items and predicates %v, want 2 items and 6 described predicates", len(inv.GetInitialEvidence()), inv.GetPredicates())
+	if len(inv.GetInitialEvidence()) != 2 || len(inv.GetPredicates()) != 7 || inv.GetPredicates()[0].GetDescription() == "" {
+		t.Errorf("%d items and predicates %v, want 2 items and 7 described predicates", len(inv.GetInitialEvidence()), inv.GetPredicates())
 	}
 	if len(inv.GetAllowedTemplates()) != 4 || inv.GetAllowedTemplates()[0].GetDescription() == "" || len(inv.GetAllowedTemplates()[3].GetParams()) == 0 {
 		t.Errorf("allowed templates = %v, want 4 described, with their parameters", inv.GetAllowedTemplates())

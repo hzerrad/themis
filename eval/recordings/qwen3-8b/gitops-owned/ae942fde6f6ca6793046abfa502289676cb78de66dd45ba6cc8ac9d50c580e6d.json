@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to memory limit regression in revision 2 causing OOM kills\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"Revision 2's memory limit (64Mi) is insufficient for the application, causing OOM kills\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"bad_configuration\",\n    \"summary\": \"The new revision's memory limit configuration is incorrect\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Restore memory limits to 256Mi to prevent OOM kills\",\n  \"rationale\": \"Revision 2's memory limit (64Mi) is insufficient compared to revision 1's 256Mi, causing OOM kills as evidenced by pod states and rollout history. Rollback is justified as failures began after the rollout and config changes are absent.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"gitops_managed\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3456,
+        "output_tokens": 790
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

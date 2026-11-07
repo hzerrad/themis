@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Probe timeouts are too short for the new version's startup time, but deployment.set-probes is disabled by policy\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"The new version (5.4.1) takes longer than 1s to respond to probes\",\n    \"supporting\": [\"probe_timeouts\", \"rollout_changed_the_app\"],\n    \"contradicting\": [\"killed_during_startup\"],\n    \"missing\": [\"deployment.set-probes\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Policy blocks probe configuration changes despite evidence of timeout issues\",\n    \"supporting\": [\"container_logs_tail\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"deployment.set-probes\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 6164,
+        "output_tokens": 711
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

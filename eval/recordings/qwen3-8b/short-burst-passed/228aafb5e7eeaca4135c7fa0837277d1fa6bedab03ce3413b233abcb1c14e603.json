@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause. Throttling ratio (11%) is below 25% threshold for limit-based throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Throttling ratio (11%) is below 25% threshold for limit-based throttling.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [\"cpu_throttled_at_limit\"],\n    \"missing\": [\"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Rollout changed app image, but CPU usage isn't near limit.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-container_cpu\"],\n    \"contradicting\": [\"cpu_usage_near_limit\"],\n    \"missing\": [\"throttling_data_available\", \"cpu_throttled_at_limit\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4231,
+        "output_tokens": 792
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

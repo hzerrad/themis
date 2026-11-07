@@ -112,27 +112,65 @@
       reason: none of the ${size(measured)} container(s) with a CPU limit uses 80% or more of it
       cite: [ids.container_cpu]
 
-# The throttling came with the latest rollout: the version before it ran
-# unthrottled where the current one is throttled at its limit. Throttling
-# shows only in a metrics source's history, so this reads how each revision's
-# containers ran there: the version before ran unthrottled until after the
-# current one was first throttled, or for longer than the current one ran
-# before it was. A current version that ran unthrottled at least as long as
-# the one before it was seen to is no worse for the rollout: what changed
-# since, such as more load, brought the throttling. With no earlier revision,
-# or one throttled too, the rollout didn't bring it: Themis's own record says
-# so when the current revision is the fix Themis made for that throttling.
+# The throttling came with the latest rollout: it changed what the pods run,
+# and the new version uses more CPU than the one before it. A rollout that
+# changed only labels and annotations, such as a restart, can't have brought
+# it: the version before it runs the same. Throttling shows only in a
+# metrics source's history, so this reads how each revision's containers ran
+# there: the version before ran unthrottled until after the current one was
+# first throttled, beside it; or it compares how much of its CPU limit each
+# version used over the same time since it started. The current version
+# using clearly more than the one before did then, and than it did in its
+# last that long, brought the throttling. Using no more than either, the
+# version before would be throttled too: what changed since, such as more
+# load, brought it. Only without those figures does how long each ran
+# unthrottled decide, as a tiebreak. With no earlier revision, or one
+# throttled too, the rollout didn't bring it: Themis's own record says so
+# when the current revision is the fix Themis made for that throttling.
 - name: throttling_came_with_rollout
-  version: "1"
+  version: "2"
   description: The throttling came with the latest rollout, where the version before it ran unthrottled
   topic: Whether the rollout brought the throttling
   whenFalse: The throttling didn't come with the latest rollout
   reads: [rollout_history, revision_health]
   let:
+    change: rollout_history.change
     earlier: revision_health.revisions.filter(r, r.revision == prior.revision)
     latest: revision_health.revisions.filter(r, r.revision == current.revision)
     ran: latest[0].firstThrottledAt - rollout_at
     seen: earlier[0].seenUntil - earlier[0].seenFrom
+    # How much of its CPU limit each version used on average over the same
+    # time since it started: the container of the current revision that used
+    # the most of its limit, and that container in the one before, over its
+    # first and its last that long.
+    measured: >-
+      size(latest) > 0 ? latest[0].cpu.filter(u, u.first != null) : []
+    top: measured.filter(u, measured.all(o, o.first <= u.first))
+    then: >-
+      size(top) > 0 && size(earlier) > 0 ?
+        earlier[0].cpu.filter(u, u.container == top[0].container && (u.first != null || u.last != null)) : []
+    # Measurement noise, not a decision: two averages of the same use differ
+    # by a few hundredths of the limit, from where the samples fall. Within
+    # it, two versions use the same.
+    noise: "0.05"
+    now_use: top[0].first
+    at_start: then[0].first
+    at_end: then[0].last
+    worse: >-
+      (at_start == null || now_use > at_start + noise) &&
+      (at_end == null || now_use > at_end + noise)
+    # Each share as a percentage: now, at the start and at the end, and the
+    # noise.
+    pct: >-
+      [now_use, at_start, at_end, noise].map(v, v == null ? "" : string(int(v * 100.0 + 0.5)) + "%")
+    age: revision_health.comparedAge
+    compared: >-
+      top[0].container + " used " + pct[0] + " of its CPU limit on average in revision " + current.revision +
+      "'s first " + age + ", against " +
+      (at_start != null ? pct[1] + " in revision " + prior.revision + "'s first " + age : "") +
+      (at_start != null && at_end != null ? " and " : "") +
+      (at_end != null ? pct[2] + " in " + (at_start != null ? "its" : "revision " + prior.revision + "'s") + " last " + age : "") +
+      ", in " + earlier[0].source + "'s history"
   answers:
     - when: current == null
       answer: unknown
@@ -142,6 +180,19 @@
       reason: there is no revision before revision ${current.revision}, so no rollout brought the throttling
       cite: [ids.rollout_history]
       fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
+    - when: change == null || change.from != prior.revision
+      answer: unknown
+      reason: the rollout history doesn't say what revision ${current.revision} changed from revision ${prior.revision}
+      cite: [ids.rollout_history]
+    - when: size(change.app) == 0
+      answer: false
+      reason: >-
+        revision ${current.revision} changed nothing its pods run${size(change.metadata) > 0 ? ", only their labels and annotations (" + change.metadata[0] + ")" : ""},
+        so the version before it runs the same and the rollout didn't bring the throttling
+      cite: [ids.rollout_history]
+      fact: >-
+        Revision ${current.revision} changed nothing its pods run, so a rollback would undo nothing and the
+        rollout didn't bring the throttling.
     # Themis's own record: the current revision is its fix for the
     # throttling of the one before it.
     - when: >-
@@ -176,17 +227,47 @@
     - when: earlier[0].seenUntil >= latest[0].firstThrottledAt
       answer: true
       reason: >-
-        pods of revision ${prior.revision} ran unthrottled until ${earlier[0].seenUntil}, after
-        revision ${current.revision} was first throttled at ${latest[0].firstThrottledAt}
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and pods of revision
+        ${prior.revision} ran unthrottled until ${earlier[0].seenUntil}, after revision ${current.revision}
+        was first throttled at ${latest[0].firstThrottledAt}
       cite: [ids.rollout_history, ids.revision_health]
       fact: >-
         Revision ${prior.revision}, the version before it, ran unthrottled until ${earlier[0].seenUntil},
         after revision ${current.revision} was first throttled at ${latest[0].firstThrottledAt}.
+    # How much of its CPU limit each version used at the same age decides.
+    - when: size(then) > 0 && worse
+      answer: true
+      reason: >-
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and uses more of its CPU limit
+        than revision ${prior.revision} did, by more than measurement noise (${pct[3]} of the limit): ${compared}
+      cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        In its first ${age}, `${top[0].container}` used ${pct[0]} of its CPU limit in revision ${current.revision},
+        more than revision ${prior.revision} used then.
+    - when: size(then) > 0 && at_start != null && now_use <= at_start + noise
+      answer: false
+      reason: >-
+        revision ${current.revision} uses as much of its CPU limit as revision ${prior.revision} did at the same
+        age, within measurement noise (${pct[3]} of the limit): ${compared}, so more load since brought the throttling
+      cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} uses as much of its CPU limit as revision ${prior.revision} did at the same
+        age, so more load since brought the throttling.
+    - when: size(then) > 0
+      answer: false
+      reason: >-
+        revision ${prior.revision} had come to use as much of its CPU limit before the rollout, within measurement
+        noise (${pct[3]} of the limit): ${compared}, so load grew before the rollout
+      cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision} had come to use as much of its CPU limit before the rollout, so load grew
+        before it.
+    # Without those figures, how long each ran unthrottled breaks the tie.
     - when: ran < seen
       answer: true
       reason: >-
-        revision ${current.revision} was throttled at its CPU limit ${ran} after its rollout; revision
-        ${prior.revision} ran ${seen} unthrottled, in ${earlier[0].source}'s history
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and was throttled at its CPU
+        limit ${ran} after its rollout; revision ${prior.revision} ran ${seen} unthrottled, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
       fact: >-
         Revision ${current.revision} was throttled ${ran} after it rolled out. Revision ${prior.revision},

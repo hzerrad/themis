@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOMKilled errors. Rolling back to revision 1 resolves the issue.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit (64Mi) is insufficient for the application.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"application_bug\", \"summary\": \"The new image may have a bug causing memory exhaustion.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [\"ev-pod_states\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"},\n    {\"root_cause_class\": \"bad_configuration\", \"summary\": \"The new revision's configuration is incorrect.\", \"supporting\": [\"ev-rollout_history\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [], \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n    \"params\": {\"revision\": 1},\n    \"expected_effect\": \"Restores the previous memory limit (256Mi) and resolves OOMKilled errors.\",\n    \"rationale\": \"The new revision's memory limit (64Mi) is insufficient, as evidenced by OOMKilled pods and the earlier revision's successful operation with 256Mi. Rollback aligns with the observed failure pattern post-rollout and the absence of config changes.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"earlier_revision_healthy\", \"config_changed_before_failure\", \"gitops_managed\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3421,
+        "output_tokens": 947
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

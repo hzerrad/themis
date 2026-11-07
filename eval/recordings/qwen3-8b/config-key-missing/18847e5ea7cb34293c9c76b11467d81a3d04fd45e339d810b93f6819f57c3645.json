@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"conclude_inconclusive\", \"summary\": \"The pod fails due to missing configuration in a Secret.\", \"hypotheses\": [{\"root_cause_class\": \"startup_config_error\", \"summary\": \"The pod's app container fails to start because it can't find the 'password' key in the Secret 'shop/payments-db'.\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [], \"missing\": [\"ev-referenced_config\"],\"status\": \"supported\"}, {\"root_cause_class\": \"other\", \"summary\": \"The Secret 'shop/payments-db' might be missing the 'password' key, but the referenced_config evidence doesn't show its last change time.\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"ev-referenced_config\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 2671,
+        "output_tokens": 572
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

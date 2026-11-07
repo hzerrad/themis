@@ -38,6 +38,9 @@ type RolloutHistoryView struct {
 	Deployment     DeploymentView `json:"deployment"`
 	Revisions      []RevisionView `json:"revisions"`
 	TotalRevisions int            `json:"totalRevisions"`
+	// Change is what the current revision changed from the one before it;
+	// nil when there is none before it.
+	Change *TemplateChangeView `json:"change,omitempty"`
 }
 
 type DeploymentView struct {
@@ -115,7 +118,7 @@ func NewRolloutHistory() Template { return rolloutHistory{} }
 func (rolloutHistory) Name() string { return RolloutHistory }
 
 func (rolloutHistory) Description() string {
-	return "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+	return "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
 }
 
 func (rolloutHistory) Params() []string { return nil }
@@ -126,7 +129,7 @@ func (rolloutHistory) Collect(ctx context.Context, _ client.Reader, w *workload.
 		return Item{}, err
 	}
 
-	view := RolloutHistoryView{Deployment: viewDeployment(w.Object())}
+	view := RolloutHistoryView{Deployment: viewDeployment(w.Object()), Change: change(revisions, w.Revision)}
 	for _, r := range revisions {
 		view.Revisions = append(view.Revisions, viewRevision(r.Object, view.Deployment.Revision))
 	}
@@ -147,6 +150,26 @@ func (rolloutHistory) Collect(ctx context.Context, _ client.Reader, w *workload.
 		return Item{}, err
 	}
 	return Item{Data: data, Truncated: truncated}, nil
+}
+
+// change is what revision current changed from the newest revision before
+// it, or nil without both.
+func change(revisions []workload.Revision, current int64) *TemplateChangeView {
+	var cur, prior *workload.Revision
+	for i := range revisions {
+		r := &revisions[i]
+		switch {
+		case r.Number == current && current > 0:
+			cur = r
+		case r.Number > 0 && r.Number < current && (prior == nil || r.Number > prior.Number):
+			prior = r
+		}
+	}
+	if cur == nil || prior == nil {
+		return nil
+	}
+	app, metadata := templateChange(prior.Template, cur.Template)
+	return &TemplateChangeView{From: strconv.FormatInt(prior.Number, 10), To: strconv.FormatInt(cur.Number, 10), App: app, Metadata: metadata}
 }
 
 // revisionNumber is -1 for a missing or malformed revision, so it sorts last.

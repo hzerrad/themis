@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to application regression in new image\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"New image (2.4.0) causes crashes with same memory limit as previous (2.3.1)\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [\"ev-referenced_config\"],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Replace failing 2.4.0 image with stable 2.3.1 version\", \"rationale\": \"Failure onset matches rollout, previous revision has stable pods with same memory limits but no OOM kills.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"earlier_revision_healthy\"]}}",
+      "usage": {
+        "input_tokens": 3557,
+        "output_tokens": 1837
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

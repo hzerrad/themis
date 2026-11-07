@@ -24,6 +24,15 @@ git push origin v0.2.0
 
 The Images workflow builds and signs the images, then publishes the chart and the GitHub release. Edit the release's notes on GitHub afterwards if they need an upgrade note.
 
+### Alphas and other pre-releases
+
+A tag with a pre-release part, such as `v0.1.0-alpha1`, publishes the same way: images `:v0.1.0-alpha1`, chart version `0.1.0-alpha1`. Its GitHub release is marked as a pre-release and never becomes the latest release. Helm installs a pre-release only when asked for it by version, so the install line names it:
+
+```sh
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
+  --namespace themis --create-namespace
+```
+
 ## Installing a release
 
 ```sh

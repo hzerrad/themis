@@ -51,7 +51,7 @@ A named, read-only question about a target whose answer is evidence.
 _Avoid_: collector, query, tool
 
 **Metrics source**:
-Where Themis reads how much memory and CPU a target's containers use: the Kubernetes metrics API, which knows only the present, or a server answering Prometheus queries, which also knows peaks, throttling, and how the pods of an earlier revision ran after they are gone.
+Where Themis reads how much memory and CPU a target's containers use: the Kubernetes metrics API, which knows only the present, or a server answering Prometheus queries, which also knows peaks, throttling, and how the pods of an earlier revision ran, and how much of their limits they used, after they are gone.
 _Avoid_: datasource, backend, provider
 
 **Gap**:

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version's CPU usage exceeds its limit, requiring a higher CPU limit to prevent throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The current revision's app uses more CPU than the previous, despite a higher limit, leading to throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The current CPU limit of 0.3 is insufficient for the app's demand, causing throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"ev-themis_fix\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"cpu\": \"450m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises the CPU limit of the app container to 450m, reducing throttling and allowing the app to use more CPU without being constrained.\",\n  \"rationale\": \"The current version's app uses 0.28 CPU (93.3% of its 0.3 limit) and is throttled 57% of the time. The previous version had a lower limit (0.2) but was also throttled. Increasing the limit to 450m (1.5x current) should alleviate throttling without requiring node-level changes. The logs confirm the app is consistently behind, indicating sustained CPU pressure.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-container_logs_tail\", \"ev-themis_fix\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4282,
+        "output_tokens": 968
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision (2.4.0) has a regression causing connection refused errors. Rolling back to revision 1 resolves the issue.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"application_bug\", \"summary\": \"New image has a regression causing connection refused errors.\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [\"failure_onset_after_rollout\"], \"missing\": [],\"status\":\"supported\"},\n  {\"root_cause_class\": \"dependency_failure\", \"summary\": \"Pods cannot connect to database at 10.0.4.17:5432.\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [], \"missing\": [],\"status\":\"supported\"},\n  {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Logs suggest dependency issue, but need metrics to confirm.\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [], \"missing\": [\"revision_health\"],\"status\":\"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"params\": {\"revision\": 1},\n  \"expected_effect\": \"Resolves connection refused errors by reverting to revision 1 which had no such issues.\",\n  \"rationale\": \"Logs show new revision (2.4.0) has a regression causing connection refused errors to database. Earlier revision (1) had some pods running without issues, suggesting the problem is specific to new revision. Rollback is justified as failure started before rollout and new revision has clear issues.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\", \"ev-target_events\"],\n  \"cited_predicates\": [\"rollout_changed_the_app\", \"failure_onset_after_rollout\", \"failures_came_with_rollout\", \"oom_killed_new_revision\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4227,
+        "output_tokens": 2194
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

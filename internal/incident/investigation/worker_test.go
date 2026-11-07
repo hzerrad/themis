@@ -134,8 +134,8 @@ func TestPrepare_CollectsInitialEvidenceAndPredicates(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 3 {
 		t.Errorf("%d initial items, want 3", n)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 6 {
-		t.Errorf("%d predicates, want 6", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 7 {
+		t.Errorf("%d predicates, want 7", n)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1 AND name = 'oom_killed_new_revision' AND value = 'true'`, id); n != 1 {
 		t.Error("oom_killed_new_revision is not true on the scenario 1 cluster")
@@ -167,8 +167,8 @@ func TestPrepare_WithoutAnInvestigatorWaitsForASuggestion(t *testing.T) {
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM evidence_items WHERE incident_id = $1`, id); n != 3 {
 		t.Errorf("%d initial items, want 3", n)
 	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 6 {
-		t.Errorf("%d predicates, want 6", n)
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM predicate_results WHERE incident_id = $1`, id); n != 7 {
+		t.Errorf("%d predicates, want 7", n)
 	}
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM investigations WHERE incident_id = $1`, id); n != 0 {
 		t.Errorf("%d investigations, want none: nothing would ever pick it up", n)

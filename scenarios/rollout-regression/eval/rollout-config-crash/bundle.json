@@ -91,14 +91,14 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "A rollback is right when the latest rollout brought the failures: the\nrevision before it ran without failing where the current one fails\n(failures_came_with_rollout is true). If the failure started before the\nrollout, if there is no earlier revision or it failed too, if the current\nrevision ran without failing at least as long as the one before it did\n(failures_came_with_rollout is false), if the target is managed by\nGitOps, if its config changed before the failure, or if the evidence is\nmissing, such as no history of the revision before it\n(failures_came_with_rollout is unknown), do not propose a rollback:\nconclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nfailures_came_with_rollout are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
+  "guidance": "A rollback is right when the latest rollout brought the failures: it\nchanged what the pods run (rollout_changed_the_app is true), and the\nrevision before it does better, running without failing beside the\nfailing pods, or using clearly less of its memory limit at the same age\n(failures_came_with_rollout is true). If the rollout changed only labels\nor annotations, such as a restart, if the failure started before the\nrollout, if there is no earlier revision or it failed too, if the\ncurrent revision uses no more of its limit than the one before it did\nat the same age or by its end, so demand grew (failures_came_with_rollout\nis false), if the target is managed by GitOps, if its config changed\nbefore the failure, or if the evidence is missing, such as no history of\nthe revision before it (failures_came_with_rollout is unknown), do not\npropose a rollback: conclude inconclusive and say what is missing.\n\nWhen oom_killed_new_revision, failure_onset_after_rollout and\nfailures_came_with_rollout are all true, and gitops_managed and\nconfig_changed_before_failure are false, rolling back to the revision\nbefore it is justified, even if the logs are empty: a process killed for\nmemory often writes nothing.\n\nNaming a cause doesn't make a rollback right: these conditions do.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":1,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:00:00Z\",\"lastTransitionTime\":\"2026-10-20T08:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"checkout-7d9f8b6c4\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":1,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:00:00Z\",\"lastTransitionTime\":\"2026-10-20T08:00:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"checkout-7d9f8b6c4\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.4.0\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2,\"change\":{\"from\":\"1\",\"to\":\"2\",\"app\":[\"the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0\"],\"metadata\":[]}}",
       "classification": "internal"
     },
     {
@@ -132,7 +132,7 @@
   "templates": [
     {
       "name": "rollout_history",
-      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
     },
     {
       "name": "pod_states",
@@ -157,7 +157,7 @@
     },
     {
       "name": "revision_health",
-      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed; and how much of its memory and CPU limits each container used on average, over the same time since each revision started, and for the one before, over its last that long. A source without history says so."
     }
   ],
   "gaps": [
@@ -190,10 +190,19 @@
       ]
     },
     {
-      "name": "failures_came_with_rollout",
+      "name": "rollout_changed_the_app",
       "version": "1",
       "value": "true",
-      "reason": "3 pods of revision 1 run without failing while revision 2 fails",
+      "reason": "revision 2 changed what its pods run (the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0)",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failures_came_with_rollout",
+      "version": "2",
+      "value": "true",
+      "reason": "revision 2 changed what its pods run (the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0), and 3 pods of revision 1 run without failing while revision 2 fails",
       "evidence_ids": [
         "ev-rollout_history",
         "ev-pod_states"

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (revision 2) uses more CPU than the previous version, causing throttling. Increase the CPU limit for the 'api' container to 750m to alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Throttling_came_with_rollout is true, and revision 2's API uses 88% of its CPU limit vs 45% in revision 1 (ev-rollout_history, ev-revision_health).\",\n    \"supporting\": [\"throttling_came_with_rollout\", \"rollout_changed_the_app\", \"cpu_usage_near_limit\", \"cpu_throttled_at_limit\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_cpu_contention\", \"transient_cpu_burst\", \"cpu_limit_too_low\", \"insufficient_evidence\", \"other\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise the CPU limit of the 'api' container to 750m, which is 1.5 times its current limit of 500m, to clear the throttling observed in ev-container_cpu.\",\n  \"rationale\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), as evidenced by higher CPU usage (88% vs 45%) and increased throttling (61% vs 12%) in ev-revision_health and ev-rollout_history. The readiness probe failures (ev-target_events) align with CPU throttling causing delays. Raising the CPU limit to 750m should alleviate the throttling without affecting memory or other resources.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_came_with_rollout\", \"cpu_usage_near_limit\", \"cpu_throttled_at_limit\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5011,
+        "output_tokens": 760
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

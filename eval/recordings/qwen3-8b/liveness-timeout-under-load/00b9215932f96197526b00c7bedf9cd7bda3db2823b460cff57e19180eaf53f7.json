@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust probe timeouts to accommodate slower response times in the new version\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Readiness and liveness probes timeout before the new version can respond\",\n        \"supporting\": [\"probe_timeouts\", \"rollout_changed_the_app\"],\n        \"contradicting\": [\"killed_during_startup\", \"crashed_on_its_own\"],\n        \"missing\": [\"revision_health\", \"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"new_version_broken\",\n        \"summary\": \"The new image may have slower startup or processing times\",\n        \"supporting\": [\"rollout_changed_the_app\", \"probe_timeouts\"],\n        \"contradicting\": [\"killed_during_startup\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"Need to verify if the new version's behavior is the root cause\",\n        \"supporting\": [\"failures_came_with_rollout: unknown\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_logs_tail\", \"revision_health\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search-api\", \"uid\": \"uid-deployment-search-api\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 5\n        },\n        \"readiness\": {\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Increase probe timeouts to allow the new version sufficient time to respond before timing out\",\n    \"rationale\": \"The current timeoutSeconds of 1 second are too short for the new version's response times, leading to probe timeouts. Increasing these values to 5 seconds should allow the application to respond before the probes time out.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"probe_timeouts\", \"rollout_changed_the_app\", \"crashed_on_its_own\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5002,
+        "output_tokens": 1022
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

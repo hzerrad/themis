@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The current revision's memory limit is too low, causing OOM kills. Increase the memory limit to 640Mi.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"The app's memory usage peaked at 100% of its 512Mi limit, leading to OOM kills.\",\n        \"supporting\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_memory_peak_details\", \"comparison_to_previous_revision_memory_usage\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"configuration_change\",\n        \"summary\": \"The rollout didn't change the app code, but the memory limit is insufficient for the current load.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-revision_health\"],\n        \"contradicting\": [],\n        \"missing\": [\"previous_revision_memory_usage\", \"load_increase_evidence\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"640Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"The increased memory limit should prevent OOM kills by allowing the app to use more memory without being terminated.\",\n    \"rationale\": \"The app's memory usage peaked at 100% of its 512Mi limit, causing OOM kills. Increasing the limit to 640Mi provides a buffer for higher memory usage without triggering OOM kills.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failures_came_with_rollout\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5468,
+        "output_tokens": 1373
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

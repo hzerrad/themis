@@ -1,0 +1,376 @@
+# Revision 2, rolled out yesterday at 08:00, changed only the image, from 4.2.0
+# to 4.3.0, and kept the 500m CPU limit. Revision 1 ran a day before it, and
+# its pods are gone. Prometheus's history shows revision 2's api containers
+# using 88% of the limit on average over their first day, where revision 1's
+# used 45% over its whole day: the new image uses about twice the CPU for the
+# same work. At today's peak they are throttled in about 60% of their CPU
+# periods, and readiness probes time out.
+#
+# Revision 2 ran unthrottled for 29 hours, longer than revision 1 ran at all:
+# how long each ran points the other way, but it only breaks a tie, and the
+# use at the same age decides. A higher limit would hide what the new version
+# costs: rolling it back is the rollout-regression pack's call, and a person's.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search
+  creationTimestamp: '2026-11-04T08:00:00Z'
+  labels:
+    app: search
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: search
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: search
+    spec:
+      containers:
+      - name: api
+        image: example/search:4.3.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+status:
+  observedGeneration: 2
+  replicas: 4
+  updatedReplicas: 4
+  readyReplicas: 3
+  availableReplicas: 3
+  unavailableReplicas: 1
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    lastUpdateTime: '2026-11-04T08:00:00Z'
+    lastTransitionTime: '2026-11-04T08:00:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-11-05T08:06:00Z'
+    lastTransitionTime: '2026-11-05T08:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-6b8c5d7f9
+  creationTimestamp: '2026-11-04T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 6b8c5d7f9
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 6b8c5d7f9
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 6b8c5d7f9
+    spec:
+      containers:
+      - name: api
+        image: example/search:4.2.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: search-84f6d9c2b
+  creationTimestamp: '2026-11-05T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 84f6d9c2b
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: search
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: search
+      pod-template-hash: 84f6d9c2b
+  template:
+    metadata:
+      labels:
+        app: search
+        pod-template-hash: 84f6d9c2b
+    spec:
+      containers:
+      - name: api
+        image: example/search:4.3.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+status:
+  replicas: 4
+  fullyLabeledReplicas: 4
+  readyReplicas: 3
+  availableReplicas: 3
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-84f6d9c2b-a1b2c
+  creationTimestamp: '2026-11-05T08:00:00Z'
+  labels:
+    app: search
+    pod-template-hash: 84f6d9c2b
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-84f6d9c2b
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: api
+    image: example/search:4.3.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-05T08:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-05T08:00:00Z'
+  containerStatuses:
+  - name: api
+    image: example/search:4.3.0
+    imageID: 'example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333'
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-05T08:00:00Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-84f6d9c2b-d3e4f
+  creationTimestamp: '2026-11-05T08:01:00Z'
+  labels:
+    app: search
+    pod-template-hash: 84f6d9c2b
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-84f6d9c2b
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: api
+    image: example/search:4.3.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-05T08:01:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-06T13:52:00Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: api
+    image: example/search:4.3.0
+    imageID: 'example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333'
+    ready: false
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-05T08:01:00Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-84f6d9c2b-g5h6i
+  creationTimestamp: '2026-11-05T08:02:00Z'
+  labels:
+    app: search
+    pod-template-hash: 84f6d9c2b
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-84f6d9c2b
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: api
+    image: example/search:4.3.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-05T08:02:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-05T08:02:00Z'
+  containerStatuses:
+  - name: api
+    image: example/search:4.3.0
+    imageID: 'example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333'
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-05T08:02:00Z'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: search-84f6d9c2b-j7k8l
+  creationTimestamp: '2026-11-05T08:03:00Z'
+  labels:
+    app: search
+    pod-template-hash: 84f6d9c2b
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: search-84f6d9c2b
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: api
+    image: example/search:4.3.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-05T08:03:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-05T08:03:00Z'
+  containerStatuses:
+  - name: api
+    image: example/search:4.3.0
+    imageID: 'example/search@sha256:3333333333333333333333333333333333333333333333333333333333333333'
+    ready: true
+    started: true
+    restartCount: 0
+    state:
+      running:
+        startedAt: '2026-11-05T08:03:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search.scaled-down
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: search
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled down replica set search-6b8c5d7f9 from 1 to 0'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-05T08:06:00Z'
+lastTimestamp: '2026-11-05T08:06:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search-84f6d9c2b-d3e4f.unhealthy-0
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: search-84f6d9c2b-d3e4f
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: Get "http://10.0.3.14:8080/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 23
+firstTimestamp: '2026-11-06T13:05:00Z'
+lastTimestamp: '2026-11-06T13:58:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: search-84f6d9c2b-a1b2c.unhealthy-1
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: search-84f6d9c2b-a1b2c
+type: Warning
+reason: Unhealthy
+message: 'Readiness probe failed: Get "http://10.0.3.14:8080/ready": context deadline exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 9
+firstTimestamp: '2026-11-06T13:12:00Z'
+lastTimestamp: '2026-11-06T13:55:00Z'

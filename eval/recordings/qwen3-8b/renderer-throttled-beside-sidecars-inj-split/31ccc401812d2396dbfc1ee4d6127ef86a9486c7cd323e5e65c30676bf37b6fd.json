@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Renderer container's CPU limit is too low, causing throttling. Increase its CPU limit to 1.5 cores.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"Renderer is throttled at 1 CPU limit with 0.93 usage, and previous version also had throttling but possibly lower load.\", \"supporting\": [\"ev-container_cpu\", \"ev-revision_health\"], \"contradicting\": [], \"missing\": [],\n  \"status\": \"supported\"},\n  {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"New version's renderer may use more CPU than before, but evidence shows similar throttling ratios in previous version.\", \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\"], \"contradicting\": [\"ev-revision_health\"], \"missing\": [\"cpu_usage_comparison_between_revisions\"], \"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"reports\", \"uid\": \"uid-deployment-reports\"},\n  \"params\": {\n    \"containers\": {\n      \"renderer\": {\n        \"limits\": {\n          \"cpu\": \"1500m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise renderer's CPU limit to 1.5 cores to clear throttling, based on 1.5x current limit of 1 core.\",\n  \"rationale\": \"Renderer is throttled at 1 CPU limit with 0.93 usage (41% throttling), and previous version also had throttling. Increasing limit to 1.5 cores should alleviate the throttling without changing other containers or memory limits.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-revision_health\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5428,
+        "output_tokens": 989
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

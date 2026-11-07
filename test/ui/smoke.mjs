@@ -36,7 +36,8 @@ const SECRETS = "Values that look like secrets are hidden.";
 const SAYS = {
   2: {
     has: ["Roll checkout back to revision 1?", "Approve the rollback", "Deny the rollback", "Supports the rollback",
-      "Restarts 3 pods, one at a time.", "Then checks that the pods become ready and stay ready.", "Void if checkout changes first.", SECRETS],
+      "Restarts 3 pods, one at a time.", "Then checks that the pods become ready and stay ready.", "Void if checkout changes first.", SECRETS,
+      "Changed from revision 1:", "The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.", "The liveness probe of container app changed."],
   },
   3: { has: ["Change checkout's memory request and memory limit?", "Approve the change", "Supports the change"], not: [SECRETS] },
   12: { has: ["Lengthened checkout's liveness probe timeout from 1s to 3s.", "Change checkout's memory request and memory limit"] },
