@@ -1,12 +1,13 @@
 # Contributing to Themis
 
-Thank you for your interest in Themis. The project is in early development, so expect the structure to change.
+Themis is in alpha, and it grows with the people who contribute to it. Expect its structure and configuration to change between releases. This guide covers where to start, the rules for changes, and the checks to run before a pull request.
 
 ## Where to start
 
-- **Try an alpha** and tell us what you found with the **Alpha feedback** issue form.
+- **Try the alpha** and tell us what Themis decided, and whether it was right, with the [Alpha feedback](https://github.com/hzerrad/themis/issues/new?template=alpha-feedback.yml) form.
 - **Add an incident type.** Scenario packs are how Themis learns to handle new kinds of incident. Start with [docs/scenarios.md](docs/scenarios.md) and `make scenario NAME=my-scenario`.
-- **Pick an issue** labelled `good first issue` or `help wanted`.
+- **Pick an issue** labelled [`good first issue`](https://github.com/hzerrad/themis/labels/good%20first%20issue) or [`help wanted`](https://github.com/hzerrad/themis/labels/help%20wanted).
+- **Ask** in [Discussions](https://github.com/hzerrad/themis/discussions) before starting something large.
 
 Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
@@ -14,6 +15,8 @@ Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 - Changes that touch governance, approval, execution, or verification must include tests that demonstrate the safety property they affect.
 - Model output is untrusted input everywhere, including inside the intelligence component.
+- A new scenario pack comes with evaluation cases, as [docs/scenarios.md](docs/scenarios.md) describes.
+- Text people read, in the web UI, in the messages Themis writes and in operator docs, follows [docs/writing.md](docs/writing.md).
 - Keep pull requests small and focused on one logical change.
 
 ## Commit messages and pull requests
@@ -21,7 +24,7 @@ Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 Pull requests are squash-merged, so the pull request's title becomes the commit on `main`. Write it as one plain sentence that says what changes and why it matters, without a type prefix:
 
 ```
-Raise or roll back by whether a healthy earlier version exists
+Roll back only the changes of a rollout that broke it
 ```
 
 Keep each commit to a one-line subject and a sign-off. Explain the details in the pull request's description.
