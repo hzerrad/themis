@@ -375,6 +375,9 @@ type Gap struct {
 	Detail   string `json:"detail,omitempty"`
 }
 
+// flagged says whether the item holds text that looks written for Themis.
+func (it Item) flagged() bool { return len(it.Suspicious) > 0 }
+
 func bundleItem(item evidence.Item) Item {
 	return Item{
 		ID: item.ID, Template: item.Template, Data: string(item.Data), Truncated: item.Truncated,
@@ -441,6 +444,12 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	if b.Unproposed, err = decider.Unproposed(f.matched, f.cat.Fixes, f.d.Results, f.cat.Checks, f.target.Namespace); err != nil {
 		return Bundle{}, err
 	}
+	// The case's fix is decided as if the investigator read every piece of
+	// evidence the case offers.
+	flagged := slices.ContainsFunc(b.Initial, Item.flagged)
+	for _, it := range b.Requestable {
+		flagged = flagged || it.flagged()
+	}
 	fix, err := f.caseFix(ctx, s)
 	switch {
 	case err != nil:
@@ -448,9 +457,9 @@ func Build(ctx context.Context, dir string, s Case, packs fs.FS, profile config.
 	case fix == nil:
 		b.Policy = PolicyCheck{Outcome: string(policy.Deny), Reason: "The workload has no earlier revision to roll back to."}
 	case s.Fix == nil:
-		b.Policy, err = f.govern(ctx, f.cat.Fixes[rollback.Name], fix.Params)
+		b.Policy, err = f.govern(ctx, f.cat.Fixes[rollback.Name], fix.Params, flagged)
 	default:
-		b.Policy, err = f.decide(ctx, *s.Fix)
+		b.Policy, err = f.decide(ctx, *s.Fix, flagged)
 	}
 	if err != nil {
 		return Bundle{}, err
@@ -536,23 +545,24 @@ func (f found) caseFix(ctx context.Context, s Case) (*Fix, error) {
 
 // decide decides the case's own fix, which must be one the incident's
 // profiles offer.
-func (f found) decide(ctx context.Context, fix Fix) (PolicyCheck, error) {
+func (f found) decide(ctx context.Context, fix Fix, flagged bool) (PolicyCheck, error) {
 	c, ok := f.cat.Fixes[fix.Capability]
 	if !ok || len(f.matched.Offering(fix.Capability)) == 0 {
 		return PolicyCheck{}, fmt.Errorf("fix: %s isn't a fix the pack's profile offers", fix.Capability)
 	}
-	out, err := f.govern(ctx, c, fix.Params)
+	out, err := f.govern(ctx, c, fix.Params, flagged)
 	out.Fix = &fix
 	return out, err
 }
 
 // govern decides fix with params as governance decides the investigator's
-// suggestion. A fix that can't go ahead reaches nobody, as a denied one
-// doesn't; params it can't take are the case's mistake.
-func (f found) govern(ctx context.Context, fix capability.Capability, params map[string]any) (PolicyCheck, error) {
+// suggestion, flagged when evidence the investigator read holds text that
+// looks written for Themis. A fix that can't go ahead reaches nobody, as a
+// denied one doesn't; params it can't take are the case's mistake.
+func (f found) govern(ctx context.Context, fix capability.Capability, params map[string]any, flagged bool) (PolicyCheck, error) {
 	var decider governance.Decider
 	decided, err := decider.Decide(ctx, f.c, governance.Fix{
-		Target: f.w.Target, Profiles: f.matched, Checks: f.d.Results, Words: f.cat.Checks,
+		Target: f.w.Target, Profiles: f.matched, Checks: f.d.Results, Words: f.cat.Checks, EvidenceHasInstructions: flagged,
 		Capability: fix, Params: params,
 		By: governance.Suggester{Source: "themis-intelligence", Authenticated: true},
 	})

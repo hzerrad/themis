@@ -44,6 +44,10 @@ type Fix struct {
 	// Words say what each check finds, for the reasons people read: a
 	// refusal names what a check finds, never the check.
 	Words check.List
+	// EvidenceHasInstructions is set when some of the incident's evidence,
+	// any read for the decision included, holds text that looks written for
+	// Themis: policy reads it.
+	EvidenceHasInstructions bool
 
 	Capability capability.Capability
 	Params     map[string]any
@@ -130,7 +134,7 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 		Capability: fix.Capability.Name(), Risk: plan.Risk, Namespace: fix.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates, Change: plan.Facts,
 		Source: fix.By.Source, Authenticated: fix.By.Authenticated, External: fix.By.External,
-		Restore: fix.Restores != "",
+		Restore: fix.Restores != "", EvidenceHasInstructions: fix.EvidenceHasInstructions,
 	}
 	decision, from, err := d.decide(fix, in)
 	if err != nil {

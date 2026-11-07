@@ -733,6 +733,10 @@
                         "deny",
                         "require_approval"
                       ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "Reason is what people read when the rule decides, in place of the\nsentence naming the rule."
                     }
                   },
                   "additionalProperties": false,

@@ -53,6 +53,7 @@ Themis never changes a Deployment GitOps manages, or may manage: GitOps would pu
 | `rollback-needs-a-bad-rollout` | deny | A rollback, whole or partial, unless `throttling_came_with_rollout`, `earlier_revision_healthy` and `cpu_throttled_at_limit` are all true: the new version brought the throttling, the version before it is one to go back to, and the container is still throttled at its limit |
 | `raise-a-cpu-limit-only` | deny | Unless the change raises a CPU limit that exists, and does nothing else: no memory, no lower value, and no new limit where there was none, which would throttle a container that wasn't |
 | `raise-needs-approval` | require_approval | A person approves every raise |
+| `partial-rollback-not-from-flagged-evidence` | deny | The investigator's partial rollback while any evidence holds text aimed at Themis, which can steer which changes it rolls back. The full rollback stays on offer, and a person or an agent may still suggest a partial one |
 | `rollback-needs-approval` | require_approval | A person approves every rollback, whole or partial |
 
 There is no size cap: an operator who wants one adds a rule on `change["cpu.ratio"]`.

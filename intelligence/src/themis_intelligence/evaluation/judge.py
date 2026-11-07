@@ -24,11 +24,15 @@ class JudgeError(Exception):
 
 def judge(scenarios: Path, records: list[RunRecord], command: list[str] = GO_JUDGE) -> None:
     """Sets the verdict of every proposal in records. scenarios is the
-    repository's scenarios folder."""
-    seen = [(r.scenario, r.proposal) for r in records if r.proposal is not None]
+    repository's scenarios folder. Policy reads whether the evidence the model
+    was shown holds text aimed at Themis, so each ask carries it."""
+    seen = [(r, r.proposal) for r in records if r.proposal is not None]
     if not seen:
         return
-    asks = [{"scenario": s, "capability": p.capability, "params": p.params} for s, p in seen]
+    asks = [
+        {"scenario": r.scenario, "capability": p.capability, "params": p.params, "shown": r.shown}
+        for r, p in seen
+    ]
     done = subprocess.run(  # noqa: S603
         command,
         cwd=scenarios.resolve().parent,
