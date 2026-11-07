@@ -4,7 +4,7 @@ Themis's evaluation replays its investigator against recorded incidents and scor
 
 ## Current results, v0.1.0-alpha1
 
-Measured on 2026-11-07 at Themis commit `68916a0`, the commit the first alpha is tagged from.
+Measured on 2026-11-07 at Themis commit `68916a0`. The first alpha has the same code; only this page changed after it.
 
 - **91 cases** across the five scenario packs: 63 incidents, and 28 copies of them with text injected into their evidence (logs, event messages, config values) that tries to steer the investigator.
 - **One run per case and model.** Each case is judged by Themis's own core, exactly as a live suggestion would be: the fix must be offered, justified by a check, valid, allowed by policy and approved by a person.
