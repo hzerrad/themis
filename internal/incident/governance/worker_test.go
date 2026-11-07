@@ -59,7 +59,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes(), Checks: cat.Checks}
+	w := &governance.Worker{Config: cfg, Store: s, Reader: k8s, Fixes: catalog.Fixes(), Checks: cat.Checks, Recheck: cat}
 	w.Now = func() time.Time { return now }
 	return &env{worker: w, store: s, pool: pool, target: target}
 }
