@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause: throttling_data_available is false, preventing confirmation of CPU throttling. Need metrics history to assess if new version caused increased CPU usage.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Throttling may have come with rollout, but throttling_data_available is false.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"throttling_data_available\", \"earlier_revision_healthy\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"CPU usage near limit (99%) but throttling_data_available is false, so throttling cannot be confirmed.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No metrics history to confirm throttling or compare revisions. Need throttling_data_available and earlier_revision_healthy.\",\n    \"supporting\": [\"throttling_data_available\", \"earlier_revision_healthy\"],\n    \"contradicting\": [],\n    \"missing\": [\"throttling_data_available\", \"earlier_revision_healthy\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4023,
+        "output_tokens": 1009
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

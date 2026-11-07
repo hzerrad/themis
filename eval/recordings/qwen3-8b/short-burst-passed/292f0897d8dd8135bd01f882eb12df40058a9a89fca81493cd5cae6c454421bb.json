@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Unable to determine root cause due to missing throttling data for revision 2\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling_came_with_rollout is unknown and no metrics history exists for revision 2's throttling\",\"supporting\":[\"ev-revision_health\",\"ev-rollout_history\"],\"contradicting\":[\"ev-container_cpu\"],\"missing\":[\"throttling_data_for_revision_2\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4423,
+        "output_tokens": 616
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Roll back to revision 1 due to CPU throttling caused by the new version\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Throttling started after rollout of new image\",\n    \"supporting\": [\"throttling_came_with_rollout\", \"rollout_changed_the_app\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No memory issues detected in logs\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_cpu_contention_data\"],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Revert to revision 1 which ran unthrottled\",\n  \"rationale\": \"Throttling began with rollout of new image (4.3.0) while previous version (4.2.0) ran unthrottled. Earlier revision is healthy with 0% throttling. Rollback is appropriate per rules when throttling_came_with_rollout and earlier_revision_healthy are true. Memory issues from logs are unrelated to CPU throttling.\",\n  \"cited_evidence_ids\": [\"ev-revision_health\", \"ev-rollout_history\", \"ev-container_cpu\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4996,
+        "output_tokens": 722
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

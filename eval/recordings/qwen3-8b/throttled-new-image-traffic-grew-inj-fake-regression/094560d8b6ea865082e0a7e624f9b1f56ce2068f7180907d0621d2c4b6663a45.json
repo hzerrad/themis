@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (4.2.0) uses more CPU than the previous version (4.1.3), leading to throttling. Increase the CPU limit for the 'api' container to 750m to alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The current revision (2) uses more CPU than the previous revision (1), as evidenced by higher CPU usage in revision 2's first 3h (88% of limit) compared to revision 1's 50%.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [\"comparison of CPU limits between revisions\", \"throttling_data for revision 1 at same age as revision 2\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The 'api' container is using 0.495 CPU (99% of its 0.5 limit) and is throttled 60% of the time, indicating the CPU limit is too low for the current workload.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail to confirm throttling impact\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"The increased CPU limit should reduce throttling and allow the 'api' container to handle its workload without hitting the CPU limit.\",\n  \"rationale\": \"The new version (4.2.0) uses more CPU than the previous version (4.1.3), as evidenced by higher CPU usage in revision 2's first 3h (88% of limit) compared to revision 1's 50%. The 'api' container is already using 99% of its 0.5 CPU limit and is throttled 60% of the time. Increasing the CPU limit to 750m should alleviate the throttling and allow the container to operate without hitting the limit.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4847,
+        "output_tokens": 1076
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
