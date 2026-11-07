@@ -46,6 +46,8 @@ This is one of them:
 | `answers[].answer` | `true`, `false` or `unknown`. |
 | `answers[].reason` | Why, in plain words. `${expression}` puts in a value: times print as RFC 3339, durations to the second. |
 | `answers[].cite` | Expressions for the IDs of the evidence the answer rests on, each an ID or a list of them. |
+| `answers[].fact` | Optional. The answer as a sentence for the top of the incident's page, such as ``The `app` container of revision 2 was OOMKilled in its only pod, last at ${ended[0]}.`` The page cites what `cite` names. `${expression}` puts in a value: times print as RFC 3339, which the page shows in the reader's time zone, and durations as people say them, such as `3m10s` or `2h`. Text in backticks shows as a cluster value. It may read only what `reads` lists, and never makes the answer need more: an expression that fails leaves the fact out. Investigators never see it. |
+| `answers[].headline` | Optional, for a check a profile names as a [symptom](scenarios.md): the failure in a few words, such as `${workload} runs out of memory.`, which titles the incident while nobody has proposed a fix. Written as `fact` is. |
 
 **Event text alone never makes a check true.** Anyone who may create events in a namespace can write one that reads word for word like the kubelet's or the scheduler's. A check that decides from an event's message must also find what the event says in status that only Kubernetes' own components write in practice: a pod's container states and restart counts, its phase, or a Deployment's conditions. When the status doesn't show it, the check answers `unknown`, not `true`, and the policy treats `unknown` as not safe wherever that matters. An event may still make a check `false`, or `true` where `true` only makes the policy stricter, as `evidence_has_instructions` does.
 
@@ -65,6 +67,8 @@ This is one of them:
 
 **No thresholds that decide.** Compare two things the evidence shows, such as two versions' use of their limits, rather than one against a number of your choosing. Where measurement noise makes a tolerance unavoidable, name it in a `let`, keep it small, and say in a comment that it is noise: `failures_came_with_rollout` counts two averages within 5% of the limit as the same.
 
+**Write a fact for the answers a person needs to see.** The incident's page opens with up to four facts, most important first: the symptoms the checks found, then the checks that justify a fix, then those the policy rules read, then the profile's other checks. A check that only says whether figures are there shows none, and the same sentence from two checks shows once. Without an investigator, the first symptom found that has a `headline` titles the incident.
+
 **Missing evidence needs no answer.** When a template an answer reads has no evidence, the check stops there as `unknown`, with a reason such as "no pod states", and the gap that explains it is attached, as for every check.
 
 ## What the expressions see
@@ -81,6 +85,7 @@ This is one of them:
 | `failures` | Signs of trouble, in order: warning events about pods, then containers that died other than `Completed`. Each has `at` (`null` when unknown), `what` and `id` |
 | `first_failure` | The earliest failure, dated by the pods' status: a container's last termination, or for one that restarted more than once, a warning event about its pod that the status agrees with, one about a pod that shows a failure, dated no earlier than the pod started. Other events are left out. `null` when there is none, or one can't be dated and so could be earlier still |
 | `suspicious_evidence` | Text in any evidence that looks written for the investigator, such as instructions or forged tool output, in collection order. Each has `id` and `template`, the evidence it is in, `reason` and `at`, where in it |
+| `workload` | The name of the incident's workload, such as `checkout`, for `fact` and `headline` |
 | `themis_fix` | Themis's own fix the target runs, from its record of an earlier incident, or `null` when it runs none: `incident`, `fix`, `done`, `appliedAt`, `replaced` (the revision it replaced), `outcome` (how its verification ended), `found` (each symptom that incident's checks found, with `check` and `reason`) and `id`, to cite. `null` is an answer, not missing evidence, so an answer that reads it needs nothing |
 
 `current`, `prior` and `rollout_at` come from `rollout_history`, so an answer that uses them needs it. Besides standard CEL, the [lists](https://pkg.go.dev/github.com/google/cel-go/ext#Lists) and [strings](https://pkg.go.dev/github.com/google/cel-go/ext#Strings) extensions are there, such as `flatten()` and `sort()`. Each expression has a cost limit; one that goes over it, or fails, makes the check `unknown` with the error as its reason.

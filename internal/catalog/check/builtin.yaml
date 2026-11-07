@@ -70,36 +70,46 @@
       answer: false
       reason: ${rollout_history.deployment.name} has no earlier revision to roll back to
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
     - when: size(problems) > 0
       answer: false
       reason: ${problems[0]}
       cite: [ids.rollout_history, ids.pod_states]
+      fact: Revision ${prior.revision}, the version before it, fails too.
     - when: size(pods) > 0
       answer: true
       reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
       cite: [ids.rollout_history, ids.pod_states]
+    # A healthy version before it is a fact failures_came_with_rollout states
+    # beside how the current one fails, so this one states none.
     # Its pods are gone: from here, Themis's own record, then the metrics
     # history, tells.
     - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
       answer: false
       reason: "revision ${prior.revision} failed before Themis's fix on incident ${themis_fix.incident} replaced it: ${themis_fix.found[0].reason}"
       cite: [ids.rollout_history, themis_fix.id]
+      fact: Revision ${prior.revision}, the version before it, failed too, before Themis's fix replaced it.
     - when: size(record) == 0 || record[0].seenFrom == null
       answer: unknown
       reason: revision ${prior.revision} has no pods left, and the metrics history has none of them
       cite: [ids.revision_health]
+      fact: Nothing shows how revision ${prior.revision} ran. It has no pods left, and the metrics history has none of them.
     - when: record[0].firstOOMKillAt != null
       answer: false
       reason: >-
         containers of revision ${prior.revision} were OOMKilled while it ran, first at
         ${record[0].firstOOMKillAt}, in ${record[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: Revision ${prior.revision}, the version before it, was OOMKilled too while it ran, first at ${record[0].firstOOMKillAt}.
     - when: record[0].firstRestartAt != null
       answer: false
       reason: >-
         containers of revision ${prior.revision} restarted ${string(record[0].restarts)} times while it
         ran, first at ${record[0].firstRestartAt}, in ${record[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision}, the version before it, restarted ${string(record[0].restarts)} times too
+        while it ran, first at ${record[0].firstRestartAt}.
     - answer: true
       reason: >-
         revision ${prior.revision} ran ${record[0].seenUntil - record[0].seenFrom} with no restart or
@@ -132,6 +142,7 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout changed what its pods run
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
     - when: change == null || change.from != prior.revision
       answer: unknown
       reason: the rollout history doesn't say what revision ${current.revision} changed from revision ${prior.revision}
@@ -140,13 +151,16 @@
       answer: true
       reason: revision ${current.revision} changed what its pods run (${change.app[0]}${more})
       cite: [ids.rollout_history]
+      fact: In revision ${current.revision}, ${change.app[0]}${more}.
     - when: size(change.metadata) > 0
       answer: false
       reason: revision ${current.revision} changed only its pods' labels and annotations (${change.metadata[0]}${others}), nothing they run
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} changed only its pods' labels and annotations, nothing they run.
     - answer: false
       reason: revisions ${prior.revision} and ${current.revision} have the same pod template
       cite: [ids.rollout_history]
+      fact: Revisions ${prior.revision} and ${current.revision} have the same pod template.
 
 # The failures came with the latest rollout: it changed what the pods run,
 # and the new version does worse than the one before it. A rollout that
@@ -239,6 +253,7 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout brought the failures
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
     - when: change == null || change.from != prior.revision
       answer: unknown
       reason: the rollout history doesn't say what revision ${current.revision} changed from revision ${prior.revision}
@@ -249,20 +264,28 @@
         revision ${current.revision} changed nothing its pods run${size(change.metadata) > 0 ? ", only their labels and annotations (" + change.metadata[0] + ")" : ""},
         so the version before it runs the same and the rollout didn't bring the failures
       cite: [ids.rollout_history]
+      fact: >-
+        Revision ${current.revision} changed nothing its pods run, so a rollback would undo nothing and the
+        rollout didn't bring the failures.
     - when: "!failing"
       answer: unknown
       reason: every pod of revision ${current_revision} is ready and none restarted
       cite: [ids.pod_states]
+      fact: Every pod of revision ${current_revision} is ready, and none restarted.
     - when: size(problems) > 0
       answer: false
       reason: the version before it fails too (${problems[0]})
       cite: [ids.rollout_history, ids.pod_states]
+      fact: Revision ${prior.revision}, the version before it, fails too.
     - when: size(pods) > 0
       answer: true
       reason: >-
         revision ${current.revision} changed what its pods run (${change.app[0]}), and ${size(pods)} pods of
         revision ${prior.revision} run without failing while revision ${current.revision} fails
       cite: [ids.rollout_history, ids.pod_states]
+      fact: >-
+        ${size(pods)} pods of revision ${prior.revision}, the version before it, run without failing while
+        revision ${current.revision} fails.
     # Its pods are gone: from here, Themis's own record, then the metrics
     # history, tells.
     - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
@@ -271,16 +294,19 @@
         the version before it failed too: revision ${prior.revision} failed before Themis's fix on
         incident ${themis_fix.incident} replaced it (${themis_fix.found[0].reason})
       cite: [ids.rollout_history, themis_fix.id]
+      fact: Revision ${prior.revision}, the version before it, failed too, before Themis's fix replaced it.
     - when: size(earlier) == 0 || earlier[0].seenFrom == null
       answer: unknown
       reason: revision ${prior.revision} has no pods left, and the metrics history has none of them
       cite: [ids.revision_health]
+      fact: Nothing shows how revision ${prior.revision} ran. It has no pods left, and the metrics history has none of them.
     - when: earlier[0].firstOOMKillAt != null
       answer: false
       reason: >-
         the version before it failed too: containers of revision ${prior.revision} were OOMKilled
         while it ran, first at ${earlier[0].firstOOMKillAt}, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: Revision ${prior.revision}, the version before it, was OOMKilled too while it ran, first at ${earlier[0].firstOOMKillAt}.
     - when: earlier[0].firstRestartAt != null
       answer: false
       reason: >-
@@ -288,6 +314,9 @@
         ${string(earlier[0].restarts)} times while it ran, first at ${earlier[0].firstRestartAt},
         in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision}, the version before it, restarted ${string(earlier[0].restarts)} times too
+        while it ran, first at ${earlier[0].firstRestartAt}.
     - when: rollout_at == null
       answer: unknown
       reason: the rollout time is unknown
@@ -299,6 +328,7 @@
       answer: false
       reason: a failure at ${dated[0]} predates revision ${current.revision} at ${rollout_at}
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: The failures started at ${dated[0]}, before revision ${current.revision} rolled out at ${rollout_at}.
     - when: earlier[0].seenUntil >= dated[0]
       answer: true
       reason: >-
@@ -306,6 +336,9 @@
         ${prior.revision} ran without failing until ${earlier[0].seenUntil}, after revision ${current.revision}
         first failed at ${dated[0]}
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision}, the version before it, ran without failing until ${earlier[0].seenUntil},
+        after revision ${current.revision} first failed at ${dated[0]}.
     # OOM kills: how much of its memory limit each version used at the same
     # age decides.
     - when: oom && size(then) > 0 && worse
@@ -314,18 +347,27 @@
         revision ${current.revision} changed what its pods run (${change.app[0]}), and uses more of its memory limit
         than revision ${prior.revision} did, by more than measurement noise (${pct[3]} of the limit): ${compared}
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        In its first ${age}, `${top[0].container}` used ${pct[0]} of its memory limit in revision ${current.revision},
+        more than revision ${prior.revision} used then.
     - when: oom && size(then) > 0 && at_start != null && now_use <= at_start + noise
       answer: false
       reason: >-
         revision ${current.revision} uses as much of its memory limit as revision ${prior.revision} did at the same
         age, within measurement noise (${pct[3]} of the limit): ${compared}, so more demand since brought the kills
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} uses as much of its memory limit as revision ${prior.revision} did at the same
+        age, so more demand since brought the kills.
     - when: oom && size(then) > 0
       answer: false
       reason: >-
         revision ${prior.revision} had come to use as much of its memory limit before the rollout, within measurement
         noise (${pct[3]} of the limit): ${compared}, so demand grew before the rollout
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision} had come to use as much of its memory limit before the rollout, so demand grew
+        before it.
     # Without those figures, or for other failures, how long each ran
     # without failing breaks the tie.
     - when: ran < seen
@@ -334,12 +376,18 @@
         revision ${current.revision} changed what its pods run (${change.app[0]}), and first failed ${ran} after its
         rollout; revision ${prior.revision} ran ${seen} without failing, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} first failed ${ran} after it rolled out. Revision ${prior.revision}, the
+        version before it, ran ${seen} without failing.
     - answer: false
       reason: >-
         revision ${current.revision} ran ${ran} before its first failure, at least as long as
         revision ${prior.revision} ran without failing (${seen}, in ${earlier[0].source}'s history), so what
         changed since brought the failures
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} ran ${ran} before it first failed, at least as long as revision
+        ${prior.revision} ran without failing, so the rollout didn't bring the failures.
 
 # The target carries GitOps markers or is written by a GitOps controller.
 - name: gitops_managed
@@ -358,10 +406,12 @@
       answer: true
       reason: the target carries ${markers[0]}
       cite: [ids.rollout_history]
+      fact: ${workload} carries the GitOps marker `${markers[0]}`, so Themis only recommends a fix.
     - when: size(managers) > 0
       answer: true
       reason: the target is managed by ${managers[0]}
       cite: [ids.rollout_history]
+      fact: "`${managers[0]}` manages ${workload}, so Themis only recommends a fix."
     - answer: false
       reason: no GitOps markers or managers
       cite: [ids.rollout_history]

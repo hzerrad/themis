@@ -36,13 +36,19 @@
       answer: true
       reason: "${borne[0].object}: ${borne[0].message}${borne[0].count > 1 ? ', ' + string(borne[0].count) + ' times' : ''}"
       cite: [ids.target_events, ids.pod_states]
+      fact: >-
+        The kubelet restarted a container of `${borne[0].object}` for failing its probe${borne[0].count > 1 ?
+        ', ' + string(borne[0].count) + ' times' : ''}.
+      headline: ${workload}'s probes restart its containers.
     - when: size(kills) > 0
       answer: unknown
       reason: "an event says ${kills[0].object}: ${kills[0].message}, but no container of that pod of revision ${current_revision} was killed and restarted since"
       cite: [ids.target_events, ids.pod_states]
+      fact: An event says the kubelet restarted `${kills[0].object}` for a failing probe, but the pod's status doesn't show it.
     - answer: false
       reason: no event says a container was restarted for failing its liveness or startup probe
       cite: [ids.target_events]
+      fact: No event says a container was restarted for failing its liveness or startup probe.
 
 # Every probe failure the kubelet reported is a probe that ran out of time,
 # not an answer: the container is slow to answer, rather than saying it is
@@ -78,6 +84,7 @@
       answer: false
       reason: "a probe failed other than by running out of time: ${answered[0].object}: ${answered[0].message}"
       cite: [ids.target_events]
+      fact: A probe of `${answered[0].object}` failed with an answer, not by running out of time.
     - when: size(borne) == 0
       answer: unknown
       reason: "an event says ${failed[0].object}: ${failed[0].message}, but no pod of revision ${current_revision} that the probe failures name is running and unready, or restarted since"
@@ -85,6 +92,8 @@
     - answer: true
       reason: "every probe failure is a timeout, such as ${borne[0].object}: ${borne[0].message}"
       cite: [ids.target_events, ids.pod_states]
+      fact: Every probe failure is a timeout, such as on `${borne[0].object}`.
+      headline: ${workload}'s probes time out.
 
 # A container of the current revision was killed at the first moment it could
 # be: by its startup probe, or, without one, by its liveness probe no later
@@ -129,6 +138,8 @@
       answer: true
       reason: "${borne[0].object}: ${borne[0].message}"
       cite: [ids.target_events, ids.pod_states]
+      fact: The kubelet killed a container of `${borne[0].object}` for failing its startup probe.
+      headline: ${workload}'s containers are killed before they finish starting.
     - when: current == null
       answer: unknown
       reason: the current revision is unknown
@@ -138,6 +149,10 @@
         ${early[0][0]} ran ${early[0][1]} before it was stopped, as soon as its
         liveness probe could fail it: it never passed the probe
       cite: [ids.rollout_history, ids.pod_states]
+      fact: >-
+        `${early[0][0]}` ran ${early[0][1]} before it was stopped, as soon as its liveness probe could fail it,
+        so it never passed the probe.
+      headline: ${workload}'s containers are killed before they finish starting.
     - when: size(startup) > 0
       answer: unknown
       reason: "an event says ${startup[0].object}: ${startup[0].message}, but no container of that pod of revision ${current_revision} was killed and restarted since"
@@ -168,11 +183,21 @@
           p.name + "/" + c.name + " ended" + (s.exitCode != null ? " with exit code " + string(s.exitCode) : "") +
           (s.reason != "" ? " (" + s.reason + ")" : ""))
       ).flatten()).flatten()
+    # For the fact: each as [pod/container, how it ended].
+    ends: >-
+      pod_states.pods.map(p, p.containers.filter(c, !c.init).map(c,
+        [c.state, c.lastTermination].filter(s, s != null && s.status == "terminated" &&
+          (s.reason == "OOMKilled" || (s.exitCode != null && !(s.exitCode in [0, 137, 143])))).map(s,
+          [p.name + "/" + c.name, (s.exitCode != null ? " with exit code " + string(s.exitCode) : "") +
+          (s.reason != "" ? " (" + s.reason + ")" : "")])
+      ).flatten()).flatten()
   answers:
     - when: size(crashed) > 0
       answer: true
       reason: ${crashed[0]}
       cite: [ids.pod_states]
+      fact: "`${ends[0][0]}` ended by itself${ends[0][1]}, not stopped by the kubelet."
+      headline: ${workload}'s containers crash on their own.
     - answer: false
       reason: no container ended with an error or ran out of memory; any that ended were stopped
       cite: [ids.pod_states]

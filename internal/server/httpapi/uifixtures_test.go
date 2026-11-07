@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -134,7 +135,7 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 		Details: map[string]map[string]detailView{},
 	}
 
-	records := uiIncidents(t)
+	records := uiIncidents(t, cat)
 	for _, rec := range records {
 		v := viewIncident(rec.incident)
 		v.Summary = viewSummary(uiSummary(rec), rec.incident.Target.Name, api.RootCauses.For(rec.incident.Profiles()...), api.Fixes)
@@ -297,6 +298,12 @@ func uiEvidence(t *testing.T, instructions bool) []evidence.Item {
 				}},
 			},
 			TotalRevisions: 2,
+			// What revision 2 changed, as the rollout history words it.
+			Change: &evidence.TemplateChangeView{From: "1", To: "2", App: []string{
+				"the image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0",
+				"the memory limit of container app changed from 512Mi to 256Mi",
+				"the liveness probe of container app changed",
+			}, Metadata: []string{}},
 		}},
 		{evPods, evidence.PodStates, evidence.PodStatesView{TotalPods: 1, Pods: []evidence.PodView{{
 			Name: uiPod, Revision: "2", Phase: "Running", StartedAt: uiAt(-19),
@@ -527,7 +534,7 @@ func uiVerified(outcome, health, facts string) *store.Verification {
 }
 
 // uiIncidents are incidents in every state the page tells apart.
-func uiIncidents(t *testing.T) []incidentRecord {
+func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 	t.Helper()
 	evidenceOf := uiEvidence(t, false)
 	suspect := uiEvidence(t, true)
@@ -537,6 +544,14 @@ func uiIncidents(t *testing.T) []incidentRecord {
 			ID: uiID(n), State: state, Profile: "rollout-regression", AlsoMatched: also, Target: uiTarget,
 			OccurrenceCount: n%3 + 1, CreatedAt: uiAt(-n * 90), UpdatedAt: uiAt(30),
 		}
+	}
+	shopEvidence, shopChecks := uiShop(t, cat)
+	// shop is an incident of the shop's catalog, only the oom-limit-too-low
+	// pack matched.
+	shop := func(n int, state incident.State) store.Incident {
+		in := inc(n, state)
+		in.Profile, in.Target = "oom-limit-too-low", shopTarget
+		return in
 	}
 	rb := uiRollback
 	approved := uiStep(incident.AwaitingApproval, incident.Authorized, "Approved by alice.")
@@ -883,6 +898,38 @@ func uiIncidents(t *testing.T) []incidentRecord {
 				uiStep(incident.Investigating, incident.AwaitingSuggestion, "No fix proposed. Referred to a person."),
 				store.Transition{From: incident.AwaitingSuggestion, To: incident.ClosedNoAction, Reason: "Closed by alice. Reason: handled by the vendor.", Actor: "alice"})...),
 		},
+		// No investigator is installed: the facts, and every kind of
+		// evidence, wait for a person to suggest a fix.
+		{
+			incident: shop(30, incident.AwaitingSuggestion), evidence: shopEvidence, predicates: shopChecks,
+			transitions: []store.Transition{
+				{From: "", To: incident.Received, Reason: "Alert KubePodOOMKilled fired for shop/catalog.", Actor: "intake", At: uiAt(-30 * 90)},
+				{From: incident.Received, To: incident.AwaitingSuggestion, Reason: "Collected 10 pieces of evidence and ran the checks. No investigator is installed. Waiting for a suggested fix.", Actor: "investigation", At: uiAt(1)},
+			},
+		},
+		// The investigator's raise of that memory limit, waiting for
+		// approval.
+		{
+			incident: shop(31, incident.AwaitingApproval), evidence: shopEvidence, predicates: shopChecks, investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, shopRaiseRule))...),
+			proposals: []store.Proposal{func() store.Proposal {
+				p := investigatorFix(p1, resources.Name, shopRaise, "oom_killed_current_revision", "failures_came_with_rollout", "evicted_for_node_memory")
+				p.Target, p.CitedEvidenceIDs = shopTarget, []string{evShopPods, evShopMemory}
+				p.Rationale, p.ExpectedEffect = "app peaks at 57Mi of its 60Mi limit and is OOMKilled loading its data.", "Pods stop being OOMKilled."
+				return p
+			}()},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionAwaitingApproval)
+				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, shopRaise, []byte(shopPre), []byte(shopRaised)
+				a.Target.Name, a.Target.UID = shopTarget.Name, shopTarget.UID
+				a.BlastRadius = map[string]any{"replicas": int64(2), "atOnce": int64(1)}
+				a.DecisionReason, a.PolicyID = shopRaiseRule, "raise-needs-approval"
+				return a
+			}()}},
+		},
 		// Waited for a suggested fix, and a person raised the limit by hand:
 		// the new pods are no longer throttled.
 		{
@@ -921,6 +968,112 @@ func uiIncidents(t *testing.T) []incidentRecord {
 					"Since the change, the checks found that throttling at the CPU limit is unknown (no throttling figures: no metrics source is set up)."))...),
 		},
 	}
+}
+
+// The catalog Deployment of the shop: its first revision OOMKilled at its
+// 60Mi memory limit, as the mock of the incident page shows it.
+var shopTarget = incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "catalog", UID: "8a2d4c1e-catalog"}
+
+const (
+	evShopRollout = "0192f0c1-1100-7000-8000-000000000001"
+	evShopPods    = "0192f0c1-1100-7000-8000-000000000002"
+	evShopEvents  = "0192f0c1-1100-7000-8000-000000000003"
+	evShopLogs    = "0192f0c1-1100-7000-8000-000000000004"
+	evShopMemory  = "0192f0c1-1100-7000-8000-000000000005"
+	evShopCPU     = "0192f0c1-1100-7000-8000-000000000006"
+	evShopConfig  = "0192f0c1-1100-7000-8000-000000000007"
+	evShopHealth  = "0192f0c1-1100-7000-8000-000000000008"
+	evShopNodes   = "0192f0c1-1100-7000-8000-000000000009"
+	evShopNow     = "0192f0c1-1100-7000-8000-000000000010"
+	shopPod       = "catalog-68d6cb8cd5-l24bv"
+	shopRaiseRule = "Policy rule raise-needs-approval of the oom-limit-too-low profile requires a person's approval."
+	shopPre       = `{"spec":{"containers":[{"name":"app","image":"busybox:1.37","resources":{"limits":{"memory":"60Mi"},"requests":{"memory":"32Mi"}}}]}}`
+	shopRaised    = `{"spec":{"containers":[{"name":"app","image":"busybox:1.37","resources":{"limits":{"memory":"72Mi"},"requests":{"memory":"32Mi"}}}]}}`
+)
+
+var shopRaise = map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "72Mi"}}}}
+
+// uiShop is the catalog's evidence, of every kind the page lays out, one
+// Themis has no view for among it, and what Themis's own checks and the
+// oom-limit-too-low pack's find in it, facts and all.
+func uiShop(t *testing.T, cat catalog.Catalog) ([]evidence.Item, []check.Result) {
+	t.Helper()
+	mib := func(n int64) *int64 { n <<= 20; return &n }
+	f := func(v float64) *float64 { return &v }
+	exit := int32(137)
+	killed := func(minute int) *evidence.StateView {
+		return &evidence.StateView{Status: "terminated", Reason: "OOMKilled", ExitCode: &exit, StartedAt: uiAt(minute - 4), FinishedAt: uiAt(minute)}
+	}
+	logs := ""
+	for i, mb := range []int{0, 8, 16, 24, 32, 40, 48, 56} {
+		logs += uiAt(-7).Add(time.Duration(i*30)*time.Second).Format(time.RFC3339) + " catalog: " + fmt.Sprint(mb) + "Mi of 64Mi loaded\n"
+	}
+	logs += uiAt(-3).Format(time.RFC3339) + " catalog: token=[REDACTED] reloading the feed\n"
+	items := []struct {
+		id, template string
+		view         any
+		at           int
+	}{
+		{evShopRollout, evidence.RolloutHistory, evidence.RolloutHistoryView{
+			Deployment: evidence.DeploymentView{Name: "catalog", Revision: "1", Generation: 1, ObservedGeneration: 1, Replicas: 2, ReadyReplicas: 1, UpdatedReplicas: 2, UnavailableReplicas: 1},
+			Revisions: []evidence.RevisionView{{
+				ReplicaSet: "catalog-68d6cb8cd5", Revision: "1", Current: true, CreatedAt: uiAt(-683), Replicas: 2, ReadyReplicas: 1,
+				Containers: []evidence.TemplateContainerView{{Name: "app", Image: "busybox:1.37", Requests: map[string]string{"memory": "32Mi"}, Limits: map[string]string{"memory": "60Mi"}}},
+			}},
+			TotalRevisions: 1,
+		}, 1},
+		{evShopPods, evidence.PodStates, evidence.PodStatesView{TotalPods: 2, Pods: []evidence.PodView{
+			{Name: shopPod, Revision: "1", Phase: "Running", StartedAt: uiAt(-600), Containers: []evidence.ContainerView{{
+				Name: "app", Image: "busybox:1.37", RestartCount: 2, State: &evidence.StateView{Status: "waiting", Reason: "CrashLoopBackOff"}, LastTermination: killed(-3),
+			}}},
+			{Name: "catalog-68d6cb8cd5-ltnx7", Revision: "1", Phase: "Running", Ready: true, StartedAt: uiAt(-600), Containers: []evidence.ContainerView{{
+				Name: "app", Image: "busybox:1.37", Ready: true, RestartCount: 1, State: &evidence.StateView{Status: "running", StartedAt: uiAt(-3)}, LastTermination: killed(-4),
+			}}},
+		}}, 1},
+		{evShopEvents, evidence.TargetEvents, evidence.TargetEventsView{TotalEvents: 2, Events: []evidence.EventView{
+			{Object: "Pod/" + shopPod, Type: "Warning", Reason: "BackOff", Message: "Back-off restarting failed container app", Count: 4, FirstSeen: uiAt(-6), LastSeen: uiAt(0)},
+			{Object: "Pod/" + shopPod, Type: "Normal", Reason: "Started", Message: "Started container app", Count: 2, FirstSeen: uiAt(-7), LastSeen: uiAt(-1)},
+		}}, 1},
+		{evShopLogs, evidence.ContainerLogsTail, evidence.LogsView{Pod: shopPod, Container: "app", Previous: true, Logs: logs}, 1},
+		{evShopMemory, evidence.ContainerMemory, evidence.ContainerMemoryView{
+			Window: "1h", Usage: evidence.ReadingView{Source: "metrics-server"}, Peak: evidence.ReadingView{Source: "prometheus"},
+			Containers: []evidence.MemoryUseView{{Name: "app", RequestBytes: mib(32), LimitBytes: mib(60), UsageBytes: mib(40), PeakBytes: mib(57), UsageOfLimit: f(0.667), PeakOfLimit: f(0.95)}},
+		}, 1},
+		{evShopCPU, evidence.ContainerCPU, evidence.ContainerCPUView{
+			Window: "1h", Usage: evidence.ReadingView{Source: "metrics-server"}, Throttling: evidence.ReadingView{Source: "prometheus"},
+			Containers: []evidence.CPUUseView{{Name: "app", RequestCores: f(0.05), LimitCores: f(0.2), UsageCores: f(0.12), UsageOfLimit: f(0.6), ThrottledRatio: f(0.08)}},
+		}, 1},
+		{evShopConfig, evidence.ReferencedConfig, evidence.ReferencedConfigView{Refs: []evidence.ConfigRefView{
+			{Kind: evidence.ConfigKindConfigMap, Name: "catalog-feed", ChangedAt: uiAt(-30)},
+			{Kind: evidence.ConfigKindSecret, Name: "catalog-db"},
+		}}, 1},
+		{evShopHealth, evidence.RevisionHealth, evidence.RevisionHealthView{Revisions: []evidence.RevisionRecordView{{
+			Revision: "1", ReplicaSet: "catalog-68d6cb8cd5", Current: true, Since: uiAt(-683), Source: "prometheus",
+			SeenFrom: uiAt(-683), SeenUntil: uiAt(0), Restarts: 3, FirstRestartAt: uiAt(-7), OOMKilled: 3, FirstOOMKillAt: uiAt(-7),
+		}}}, 1},
+		// A template Themis has no view for: its fields show as they are.
+		{evShopNodes, "node_conditions", map[string]any{"node": "themis-dev-worker", "memoryPressure": false, "allocatable": map[string]any{"memory": "7Gi"}, "taints": []string{}, "kubelet": nil}, 1},
+		// Asked for later: the current run of the same container.
+		{evShopNow, evidence.ContainerLogsTail, evidence.LogsView{Pod: shopPod, Container: "app", Logs: uiAt(4).Format(time.RFC3339) + " catalog: loading 64Mi from the feed\n"}, 5},
+	}
+	var out []evidence.Item
+	for _, it := range items {
+		data, err := json.Marshal(it.view)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item := evidence.Item{ID: it.id, Template: it.template, Target: shopTarget, Data: data, CollectedAt: uiAt(it.at), Classification: evidence.ClassificationInternal, Suspicious: evidence.Suspicions(data)}
+		if it.template == evidence.ContainerLogsTail {
+			item.Classification, item.Redactions = evidence.ClassificationSensitive, 1
+		}
+		out = append(out, item)
+	}
+	profile, ok := cat.Profile("oom-limit-too-low")
+	if !ok {
+		t.Fatal("no oom-limit-too-low pack")
+	}
+	checks := cat.Checks.For(append(slices.Clone(profile.Checks), check.GitOpsManaged))
+	return out, checks.Evaluate(evidence.Bundle{Target: shopTarget, Items: out}, uiAt(1))
 }
 
 // uiChangedOutside is how reconciliation ends an incident whose workload was

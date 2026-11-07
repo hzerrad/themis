@@ -92,6 +92,10 @@ type API struct {
 	// Gate keeps the API closed but for making the first admin account while
 	// none exists. Nil means always open.
 	Gate *identity.Gate
+
+	// decider reads which checks each profile's policy reads, for the facts
+	// that open an incident's page.
+	decider governance.Decider
 }
 
 // What a route serves beyond someone signed in with the role it needs.

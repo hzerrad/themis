@@ -33,6 +33,8 @@
       answer: true
       reason: "${refused[0].object} can't be scheduled: ${refused[0].message}"
       cite: [ids.pod_states, ids.target_events]
+      fact: No node takes `${refused[0].object}`, and ${size(waiting)} of the ${size(stuck)} pods that aren't ready wait for one.
+      headline: ${workload}'s pods can't be scheduled.
     - when: size(waiting) > 0
       answer: unknown
       reason: pod ${waiting[0].name} waits for a node, and no event says why
@@ -61,6 +63,14 @@
             c.state.reason in ["ErrImagePull", "ImagePullBackOff", "InvalidImageName", "ErrImageNeverPull"])
           .map(c, p.name + "/" + c.name + " (" + c.image + ") is waiting with " + c.state.reason)
       ).flatten()
+    # For the fact: each as [container, image, reason].
+    pulls: >-
+      stuck.map(p,
+        p.containers
+          .filter(c, c.state != null && c.state.status == "waiting" &&
+            c.state.reason in ["ErrImagePull", "ImagePullBackOff", "InvalidImageName", "ErrImageNeverPull"])
+          .map(c, [c.name, c.image, c.state.reason])
+      ).flatten()
   answers:
     - when: size(stuck) == 0
       answer: false
@@ -70,6 +80,8 @@
       answer: true
       reason: ${failing[0]}
       cite: [ids.pod_states]
+      fact: The `${pulls[0][0]}` container waits for its image `${pulls[0][1]}`, with `${pulls[0][2]}`.
+      headline: ${workload}'s image can't be pulled.
     - answer: false
       reason: no container of the ${size(stuck)} pod(s) that aren't ready is waiting for its image
       cite: [ids.pod_states]
@@ -105,6 +117,8 @@
       answer: true
       reason: "${trouble[0].object}, ${trouble[0].reason}: ${trouble[0].message}"
       cite: [ids.pod_states, ids.target_events]
+      fact: A volume of `${trouble[0].object}` can't be bound or mounted (`${trouble[0].reason}`), and the pod waits to start.
+      headline: ${workload}'s pods wait for a volume.
     - when: size(claimed) > 0
       answer: unknown
       reason: "an event says ${claimed[0].object}, ${claimed[0].reason}: ${claimed[0].message}, but the pod isn't waiting to start"
@@ -148,10 +162,14 @@
       answer: true
       reason: init container ${failed[0]} failed
       cite: [ids.pod_states]
+      fact: Init container `${failed[0]}` failed, so the pod's other containers don't start.
+      headline: ${workload}'s init container fails.
     - when: size(running) > 0
       answer: true
       reason: init container ${running[0][0]} has run for ${now - running[0][1]} without finishing
       cite: [ids.pod_states]
+      fact: Init container `${running[0][0]}` has run for ${now - running[0][1]} without finishing.
+      headline: ${workload}'s init container never finishes.
     - answer: false
       reason: no init container of the ${size(stuck)} pod(s) that aren't ready failed or ran longer than ${duration("5m")}
       cite: [ids.pod_states]
@@ -184,10 +202,14 @@
       answer: true
       reason: ${blocked[0]} can't be created with its configuration (CreateContainerConfigError)
       cite: [ids.pod_states]
+      fact: "`${blocked[0]}` can't be created with its configuration (`CreateContainerConfigError`)."
+      headline: ${workload}'s containers lack their configuration.
     - when: size(absent) > 0
       answer: true
       reason: ConfigMap ${absent[0].name} is referenced but doesn't exist
       cite: [ids.referenced_config]
+      fact: ConfigMap `${absent[0].name}` is referenced but doesn't exist.
+      headline: ${workload}'s containers lack their configuration.
     - answer: false
       reason: >-
         no container waits for its configuration, and every ConfigMap the pods
@@ -214,6 +236,8 @@
       answer: true
       reason: "${refused[0].object} can't create pods: ${refused[0].message}"
       cite: [ids.target_events, ids.rollout_history]
+      fact: A namespace quota keeps `${refused[0].object}` from creating pods, and the Deployment says it fails to create them.
+      headline: A namespace quota refuses ${workload}'s pods.
     - when: size(refused) > 0
       answer: unknown
       reason: "an event says ${refused[0].object} can't create pods for a quota, but the Deployment doesn't say it fails to create them"
@@ -257,3 +281,6 @@
     - answer: true
       reason: the ${size(stuck)} pod(s) that aren't ready are all of revision ${current.revision}, and ${size(ready)} pod(s) of revision ${prior.revision} are ready
       cite: [ids.rollout_history, ids.pod_states]
+      fact: >-
+        Only pods of revision ${current.revision} are stuck. ${size(ready)} pods of revision ${prior.revision},
+        the version before it, are ready.

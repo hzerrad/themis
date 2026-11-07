@@ -66,6 +66,10 @@ _Avoid_: remedy, fix
 A fact Themis decides from evidence, true, false or unknown, such as "the crash started with the latest rollout". It is unknown when the evidence it reads is missing or doesn't settle it, never guessed.
 _Avoid_: predicate, rule, signal
 
+**Fact** (on the incident's page):
+A check's answer as its check writes it for people, such as "The memory of `app` peaked at 57Mi of its 60Mi limit over 1h.", citing the evidence it rests on. Investigators never see it.
+_Avoid_: summary, insight
+
 **Symptom**:
 A check a profile names because it finds the failure itself, such as OOM kills or throttling at the CPU limit, rather than whether a fix is right.
 _Avoid_: signal, indicator

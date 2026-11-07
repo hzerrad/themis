@@ -47,6 +47,10 @@ const (
 	// from; null when the target runs no fix of Themis's. Its absence is an
 	// answer, not missing evidence, so a check that reads it needs nothing.
 	varThemisFix = "themis_fix"
+
+	// varWorkload is the name of the workload the evidence is about, for
+	// the texts people read.
+	varWorkload = "workload"
 )
 
 // fromHistory are the variables read from rollout history.
@@ -81,7 +85,7 @@ func (in inputs) missing(template string) bool {
 }
 
 func newInputs(b evidence.Bundle, now time.Time) inputs {
-	in := inputs{vars: map[string]any{varNow: now}, ids: map[string]string{}}
+	in := inputs{vars: map[string]any{varNow: now, varWorkload: b.Target.Name}, ids: map[string]string{}}
 	decoded := map[string]any{}
 	for _, it := range b.Items {
 		if _, done := decoded[it.Template]; done {
