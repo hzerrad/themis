@@ -73,6 +73,11 @@ const SAYS = {
       "No earlier revision.", "1 value that looks like a secret is hidden.", "Memory pressure", "Raw data"],
   },
   31: { has: ["Raise catalog's memory limit from 60Mi to 72Mi?", "3 checks support the raise. None is against it.", "Restarts 2 pods, one at a time."] },
+  32: {
+    has: ["Approval expired with no decision.", "Ask for approval again",
+      "Asks for approval of the same raise again, if the checks still support it on evidence read now.", "Investigate again"],
+  },
+  33: { has: ["Investigate again"], not: ["Ask for approval again"] },
   27: {
     has: ["Recovered after a change outside Themis, by kubectl-edit.",
       "Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m"],
@@ -89,6 +94,10 @@ const SAYS = {
     not: ["still fails", "still failing"],
   },
 };
+// RENEW_REFUSED is how Themis refuses to ask again for approval of a fix
+// whose workload changed since.
+const RENEW_REFUSED = "Refused. catalog changed since the fix was planned. Investigate again.";
+
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
   "Change checkout's liveness probe?", "Roll checkout back to revision 1?",
@@ -141,6 +150,7 @@ function api(o) {
     ["POST", /^\/v1\/incidents\/([\w-]+)\/investigate$/, () => ({ state: "investigating" })],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/close$/, () => ({ state: "closed_no_action" })],
     ["POST", /^\/v1\/actions\/([\w-]+)\/(approve|deny)$/, () => ({})],
+    ["POST", /^\/v1\/actions\/([\w-]+)\/renew$/, () => (o.renew === "refused" ? [409, RENEW_REFUSED] : {})],
     ["GET", /^\/v1\/status$/, () => F.status[o.status || "mixed"]],
     ["GET", /^\/v1\/settings\/model$/, () => (o.model === null ? [404, "404 page not found"] : F.models[o.model || "unset"])],
     ["PUT", /^\/v1\/settings\/model$/, () => F.models[o.model || "unset"]],
@@ -568,6 +578,42 @@ for (const who of ["approver", "admin"]) {
     ok("approved");
   });
 }
+// The raise of the catalog's memory limit expired: an approver asks for its
+// approval again, and Themis puts it to a person again or says why not.
+await visit("approver: ask for approval again", { who: "approver", hash: "#/incidents/" + id(32) }, async (page, ok) => {
+  await act.click(page, "button", "Ask for approval again");
+  says(page, { has: ["Approval asked again."] });
+  ok("asked again");
+});
+await visit("approver: asking for approval again, refused", { who: "approver", renew: "refused", hash: "#/incidents/" + id(32) }, async (page, ok) => {
+  await act.click(page, "button", "Ask for approval again");
+  says(page, { has: [RENEW_REFUSED] });
+  expect("the button usable again", !the(page, "button", "Ask for approval again").disabled);
+  ok("refused");
+});
+await visit("approver: no asking again once another fix came after", { who: "approver", hash: "#/incidents/" + id(33) }, async (page, ok) => {
+  expect("no button to ask again", ![...page.document.querySelectorAll("button")].some((b) => b.textContent === "Ask for approval again"));
+  ok("not offered");
+});
+
+// After the raise expired, the suggest form starts from the limit and the
+// request the workload has, each in its own field, and the browser never
+// fills them: the preview judges what the person typed, nothing else.
+await visit("approver: the suggest form after a raise expired", { who: "approver", hash: "#/incidents/" + id(32) }, async (page, ok) => {
+  const form = () => the(page, "[data-key=suggest] form");
+  const preview = () => the(page, "[data-key=suggest] .preview");
+  expect("the form never filled by the browser", form().getAttribute("autocomplete") === "off");
+  expect("the current limit in the limit's field", field(page, "Memory limit", form()).value === "60Mi");
+  expect("the current request in the request's field", field(page, "Memory request", form()).value === "32Mi");
+  await act.wait(page, 450);
+  expect("nothing to judge before a change", preview().textContent.includes("Change at least one value.") && !preview().textContent.includes("above the memory limit"));
+  ok("unchanged");
+  await act.type(page, field(page, "Memory limit", form()), "72Mi");
+  await act.wait(page, 450);
+  expect("the raise accepted, the request left as it is", preview().classList.contains("ok") && !preview().textContent.includes("above the memory limit"));
+  ok("previewed the raise");
+});
+
 await visit("approver: close an incident that waits for a fix", { who: "approver", hash: "#/incidents/" + id(5) }, async (page, ok) => {
   await act.type(page, field(page, "Reason for closing (optional)"), "Handled by the vendor.");
   await act.click(page, "button", "Close");

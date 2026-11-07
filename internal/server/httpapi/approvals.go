@@ -57,6 +57,28 @@ func (a *API) deny(w http.ResponseWriter, r *http.Request) {
 	a.reply(w, r, map[string]string{"state": string(store.ActionDenied)})
 }
 
+// Renewals ask again for approval of a fix whose approval expired with no
+// decision, and say whether a person can, from what Themis keeps.
+type Renewals interface {
+	Renewable(in store.Incident, actions []store.Action) bool
+	Renew(ctx context.Context, actionID, by string) (store.Action, error)
+}
+
+// renew asks again for approval of a fix whose approval expired, and answers
+// with the fix that waits for approval now.
+func (a *API) renew(w http.ResponseWriter, r *http.Request) {
+	act, err := a.Renewals.Renew(r.Context(), r.PathValue("id"), actor(r))
+	if refused, ok := errors.AsType[*governance.Refusal](err); ok {
+		http.Error(w, refused.Reason, http.StatusConflict)
+		return
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.reply(w, r, viewAction(act, a.Fixes))
+}
+
 // Reinvestigation has an incident waiting for a suggested fix investigated
 // again.
 type Reinvestigation interface {

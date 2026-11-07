@@ -23,7 +23,7 @@ var (
 
 	approvalsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "themis_approvals_total",
-		Help: "Approval decisions: approved, denied, expired; and refused attempts: digest_mismatch for a digest other than the one shown, replayed for an action already decided.",
+		Help: "Approval decisions: approved, denied, expired, and renewed for an approval asked again after one expired; and refused attempts: digest_mismatch for a digest other than the one shown, replayed for an action already decided, renewal_refused for an approval that couldn't be asked again.",
 	}, []string{"result"})
 )
 
@@ -32,8 +32,10 @@ const (
 	resultApproved       = "approved"
 	resultDenied         = "denied"
 	resultExpired        = "expired"
+	resultRenewed        = "renewed"
 	resultDigestMismatch = "digest_mismatch"
 	resultReplayed       = "replayed"
+	resultRenewalRefused = "renewal_refused"
 )
 
 func init() {
@@ -41,7 +43,7 @@ func init() {
 	for _, d := range []string{string(policy.Allow), string(policy.RequireApproval), string(policy.Deny), decisionError} {
 		policyDecisions.WithLabelValues(d)
 	}
-	for _, r := range []string{resultApproved, resultDenied, resultExpired, resultDigestMismatch, resultReplayed} {
+	for _, r := range []string{resultApproved, resultDenied, resultExpired, resultRenewed, resultDigestMismatch, resultReplayed, resultRenewalRefused} {
 		approvalsTotal.WithLabelValues(r)
 	}
 }

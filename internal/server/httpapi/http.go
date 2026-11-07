@@ -55,6 +55,9 @@ type API struct {
 	// Again has an incident waiting for a suggested fix investigated again.
 	// Without it, nobody can.
 	Again Reinvestigation
+	// Renewals ask again for approval of a fix whose approval expired.
+	// Without it, nobody can.
+	Renewals Renewals
 	// Fixes are the fixes Themis can carry out, which show what an action
 	// changes and how a person suggests one.
 	Fixes capability.Registry
@@ -124,6 +127,9 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/incidents/{id}/close", a.authed(config.RoleApprover, a.close, incidentFields))
 	if a.Again != nil {
 		mux.Handle("POST /v1/incidents/{id}/investigate", a.authed(config.RoleApprover, a.investigate, incidentFields))
+	}
+	if a.Renewals != nil {
+		mux.Handle("POST /v1/actions/{id}/renew", a.authed(config.RoleApprover, a.renew, a.actionFields))
 	}
 	if a.Previews != nil {
 		mux.Handle("POST /v1/incidents/{id}/proposals/preview", a.authed(config.RoleApprover, a.preview, incidentFields))

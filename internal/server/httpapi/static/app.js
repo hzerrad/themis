@@ -1731,10 +1731,16 @@ function fixNoun(f) {
 
 const NO_CHANGE = "Change at least one value.";
 
+// latestHistory is the rollout history read last: evidence read later, by a
+// person or for an approval asked again, says how the workload is now.
+function latestHistory(evidence) {
+  return evidence.filter((e) => e.Template === "rollout_history" && e.Data).pop();
+}
+
 // currentContainers are the workload's containers as its current revision
 // has them, with their resources and probes, from the rollout history.
 function currentContainers(evidence) {
-  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const history = latestHistory(evidence);
   const now = history ? (history.Data.revisions || []).find((r) => r.current) : null;
   return now ? now.containers || [] : [];
 }
@@ -1748,7 +1754,7 @@ function containerPicker(containers, onchange) {
 
 // rollbackFields choose an earlier revision from the rollout history.
 function rollbackFields(f, evidence) {
-  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const history = latestHistory(evidence);
   const earlier = history ? (history.Data.revisions || []).filter((r) => !r.current)
     .sort((a, b) => Number(b.revision) - Number(a.revision)) : [];
   const revision = earlier.length
@@ -1801,11 +1807,12 @@ function usedBy(evidence, name) {
 }
 
 // resourceFields set a container's memory and CPU limits and requests,
-// starting from the values it has now. An empty field keeps its value.
+// starting from the values it has now, each in its own field: the browser
+// never fills them. An empty field keeps its value.
 function resourceFields(f, evidence) {
   const containers = currentContainers(evidence);
   const values = RESOURCES.map((r) => ({ ...r,
-    input: h("input", { type: "text", class: "mono", autocapitalize: "none", spellcheck: "false", placeholder: r.example }),
+    input: h("input", { type: "text", class: "mono", autocomplete: "off", autocapitalize: "none", spellcheck: "false", placeholder: r.example }),
     hint: h("span", { class: "hint" }) }));
   const now = () => containers.find((c) => c.name === picker.value) || {};
   const was = (c, r) => (c[r.kind] || {})[r.res] || "";
@@ -2100,7 +2107,9 @@ function suggestForm(d, reload) {
     showPreview(null, "Change a value to see what Themis would do with it.");
     later();
   }
-  const form = h("form", { class: "fields", onsubmit: submit, oninput: d.Previewed ? later : null, onchange: d.Previewed ? later : null },
+  // Every value comes from the incident: a value the browser kept or filled
+  // could land in another field.
+  const form = h("form", { class: "fields", autocomplete: "off", onsubmit: submit, oninput: d.Previewed ? later : null, onchange: d.Previewed ? later : null },
     top, fields, field("Reason", why), field("Expected effect", effect), h("div", {}, button), error);
   const grid = h("div", { class: d.Previewed ? "grid" : null }, form, d.Previewed ? preview : null);
   if (inc.state === "investigating") {
@@ -2206,29 +2215,47 @@ function waitingFor(d, last, fx, suggest) {
   return [(d.Situation || []).length ? said(d.Situation) : "Waiting for a suggested fix.", "No investigator is installed. " + suggest, true];
 }
 
-// againBlock offers to have the incident investigated again, or says why it
-// can't be. The investigator then reads the fixes people denied, and why.
+// againBlock offers to ask again for approval of the fix whose approval
+// expired, while Themis says that can work, and to have the incident
+// investigated again, or says why it can't be. The investigator then reads
+// the fixes people denied, and why.
 function againBlock(d, reload) {
   const offer = d.InvestigateAgain;
-  if (!offer || !can("approver")) return null;
-  const denied = (d.Actions || []).some((a) => a.State === "denied" && a.Decision !== "deny");
+  const actions = d.Actions || [];
+  const last = actions[actions.length - 1];
+  const expired = last && last.Renewable ? last : null;
+  if ((!offer && !expired) || !can("approver")) return null;
   const error = h("div", { class: "error", role: "alert" });
-  const button = h("button", { class: "btn", type: "button", disabled: Boolean(offer.refused),
-    onclick: async () => {
-      button.disabled = true;
-      error.textContent = "";
-      try {
-        await api("/v1/incidents/" + encodeURIComponent(d.Incident.id) + "/investigate", { method: "POST" });
-        flash = "Investigating again.";
-        reload();
-      } catch (e) {
-        error.textContent = e.message;
-        button.disabled = false;
-      }
-    } }, "Investigate again");
-  const note = offer.refused ? "Not available. " + offer.refused
-    : denied ? "The investigator reads which fixes were denied, and why." : null;
-  return h("div", { class: "act" }, button, note ? h("p", { class: "fine" }, note) : null, error);
+  // post asks for path, and says said once it is done.
+  const post = (path, said) => async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    error.textContent = "";
+    try {
+      await api(path, { method: "POST" });
+      flash = said;
+      reload();
+    } catch (err) {
+      error.textContent = err.message;
+      button.disabled = false;
+    }
+  };
+  const fine = (note) => (note ? h("p", { class: "fine" }, note) : null);
+  const renew = expired ? [
+    h("button", { class: "btn", type: "button", onclick: post("/v1/actions/" + encodeURIComponent(expired.ID) + "/renew", "Approval asked again.") },
+      "Ask for approval again"),
+    fine("Asks for approval of the same " + fixWords(expired).noun + " again, if the checks still support it on evidence read now."),
+  ] : null;
+  let again = null;
+  if (offer) {
+    const denied = actions.some((a) => a.State === "denied" && a.Decision !== "deny");
+    again = [
+      h("button", { class: "btn", type: "button", disabled: Boolean(offer.refused),
+        onclick: post("/v1/incidents/" + encodeURIComponent(d.Incident.id) + "/investigate", "Investigating again.") }, "Investigate again"),
+      fine(offer.refused ? "Not available. " + offer.refused : denied ? "The investigator reads which fixes were denied, and why." : null),
+    ];
+  }
+  return h("div", { class: "act" }, renew, again, error);
 }
 
 // closeBlock lets an approver close an incident that waits for a suggested

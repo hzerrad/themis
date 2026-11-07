@@ -198,6 +198,13 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		}
 		d.Actions = append(d.Actions, v)
 	}
+	if a.Renewals != nil && len(rec.actions) > 0 {
+		actions := make([]store.Action, 0, len(rec.actions))
+		for _, ar := range rec.actions {
+			actions = append(actions, ar.action)
+		}
+		d.Actions[len(d.Actions)-1].Renewable = a.Renewals.Renewable(in, actions)
+	}
 	return d
 }
 

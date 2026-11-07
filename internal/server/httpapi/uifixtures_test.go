@@ -128,7 +128,10 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 		Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Config: cfg, Remedy: hint.Writer{Config: cfg},
 		Intake: config.Intake{URL: "http://themis.themis.svc:8080/v1/intake/alertmanager", TokenSecret: "themis-intake"}, Namespace: "themis",
 		Collect: uiCollector{}, Previews: uiPreviews{},
-		Now: func() time.Time { return uiAt(60) },
+		// Whether a fix can be asked for again is Themis's own rule; asking
+		// is the smoke test's to answer.
+		Renewals: &governance.Worker{Config: cfg, Fixes: cat.Fixes},
+		Now:      func() time.Time { return uiAt(60) },
 	}
 
 	f := uiFixtureSet{
@@ -644,6 +647,22 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 	}
 	const p1, p2, p3 = "0192f0c1-3000-7000-8000-000000000001", "0192f0c1-3000-7000-8000-000000000002", "0192f0c1-3000-7000-8000-000000000003"
 	const a1, a2 = "0192f0c1-4000-7000-8000-000000000001", "0192f0c1-4000-7000-8000-000000000002"
+	// shopFix is the investigator's raise of the catalog's memory limit, and
+	// shopAction the change policy decided on, in state.
+	shopFix := func() store.Proposal {
+		p := investigatorFix(p1, resources.Name, shopRaise, "oom_killed_current_revision", "failures_came_with_rollout", "evicted_for_node_memory")
+		p.Target, p.CitedEvidenceIDs = shopTarget, []string{evShopPods, evShopMemory}
+		p.Rationale, p.ExpectedEffect = "app peaks at 57Mi of its 60Mi limit and is OOMKilled loading its data.", "Pods stop being OOMKilled."
+		return p
+	}
+	shopAction := func(id string, state store.ActionState) store.Action {
+		a := rb(id, p1, state)
+		a.Capability, a.Params, a.PreState, a.Desired = resources.Name, shopRaise, []byte(shopPre), []byte(shopRaised)
+		a.Target.Name, a.Target.UID = shopTarget.Name, shopTarget.UID
+		a.BlastRadius = map[string]any{"replicas": int64(2), "atOnce": int64(1)}
+		a.DecisionReason, a.PolicyID = shopRaiseRule, "raise-needs-approval"
+		return a
+	}
 
 	return []incidentRecord{
 		// Investigating: some evidence in, a person may suggest a fix already.
@@ -970,22 +989,40 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 		// approval.
 		{
 			incident: shop(31, incident.AwaitingApproval), evidence: shopEvidence, predicates: shopChecks, investigation: done,
-			transitions: append(uiOpened(), uiPath(2,
-				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
-				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
-				uiStep(incident.Proposed, incident.AwaitingApproval, shopRaiseRule))...),
-			proposals: []store.Proposal{func() store.Proposal {
-				p := investigatorFix(p1, resources.Name, shopRaise, "oom_killed_current_revision", "failures_came_with_rollout", "evicted_for_node_memory")
-				p.Target, p.CitedEvidenceIDs = shopTarget, []string{evShopPods, evShopMemory}
-				p.Rationale, p.ExpectedEffect = "app peaks at 57Mi of its 60Mi limit and is OOMKilled loading its data.", "Pods stop being OOMKilled."
+			transitions: shopRaiseAwaited(),
+			proposals:   []store.Proposal{shopFix()},
+			actions:     []actionRecord{{action: shopAction(a1, store.ActionAwaitingApproval)}},
+		},
+		// Nobody approved that raise in time: a person can ask again for
+		// approval of it. The suggest form starts from the limit and request
+		// the workload has, each in its own field.
+		{
+			incident: shop(32, incident.AwaitingSuggestion), evidence: shopEvidence, predicates: shopChecks, investigation: done,
+			again:       investigation.Offer{Offered: true},
+			transitions: append(shopRaiseAwaited(), uiPath(5, store.Transition{From: incident.AwaitingApproval, To: incident.AwaitingSuggestion, Reason: shopExpired, Actor: "approval"})...),
+			proposals:   []store.Proposal{shopFix()},
+			actions:     []actionRecord{{action: shopAction(a1, store.ActionExpired)}},
+		},
+		// After that raise expired, a person suggested a lower limit, which
+		// policy refused: the expired raise is no longer the latest fix, so
+		// it can't be asked for again.
+		{
+			incident: shop(33, incident.AwaitingSuggestion), evidence: shopEvidence, predicates: shopChecks, investigation: done,
+			again: investigation.Offer{Offered: true},
+			transitions: append(shopRaiseAwaited(), uiPath(5,
+				store.Transition{From: incident.AwaitingApproval, To: incident.AwaitingSuggestion, Reason: shopExpired, Actor: "approval"},
+				uiStep(incident.AwaitingSuggestion, incident.Diagnosed, "A fix was suggested by person:alice."),
+				uiStep(incident.Diagnosed, incident.Proposed, shopLowerRefused),
+				uiStep(incident.Proposed, incident.AwaitingSuggestion, shopLowerRefused))...),
+			proposals: []store.Proposal{shopFix(), func() store.Proposal {
+				p := person(p2, "alice", resources.Name, oneValue("app", "limits", "memory", "50Mi"), store.ProposalAccepted)
+				p.Target = shopTarget
 				return p
 			}()},
-			actions: []actionRecord{{action: func() store.Action {
-				a := rb(a1, p1, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, shopRaise, []byte(shopPre), []byte(shopRaised)
-				a.Target.Name, a.Target.UID = shopTarget.Name, shopTarget.UID
-				a.BlastRadius = map[string]any{"replicas": int64(2), "atOnce": int64(1)}
-				a.DecisionReason, a.PolicyID = shopRaiseRule, "raise-needs-approval"
+			actions: []actionRecord{{action: shopAction(a1, store.ActionExpired)}, {action: func() store.Action {
+				a := shopAction(a2, store.ActionDenied)
+				a.ProposalID, a.Params, a.Desired = p2, oneValue("app", "limits", "memory", "50Mi"), []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))
+				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", shopLowerRefused, "raise-a-memory-limit-only", nil
 				return a
 			}()}},
 		},
@@ -1050,7 +1087,24 @@ const (
 	shopRaised    = `{"spec":{"containers":[{"name":"app","image":"busybox:1.37","resources":{"limits":{"memory":"72Mi"},"requests":{"memory":"32Mi"}}}]}}`
 )
 
+// shopRaise sets the memory limit of the catalog's app container alone.
 var shopRaise = map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "72Mi"}}}}
+
+const (
+	// shopExpired is how an approval nobody gave ends.
+	shopExpired = "Approval expired with no decision. Referred to a person."
+	// shopLowerRefused is the shipped policy's refusal of a lower limit.
+	shopLowerRefused = "Policy rule raise-a-memory-limit-only of the oom-limit-too-low profile forbids this fix."
+)
+
+// shopRaiseAwaited is the investigator's raise of the catalog's memory limit,
+// through to waiting for approval.
+func shopRaiseAwaited() []store.Transition {
+	return append(uiOpened(), uiPath(2,
+		uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+		uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
+		uiStep(incident.Proposed, incident.AwaitingApproval, shopRaiseRule))...)
+}
 
 // uiShop is the catalog's evidence, of every kind the page lays out, one
 // Themis has no view for among it, and what Themis's own checks and the

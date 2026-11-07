@@ -34,16 +34,26 @@ func (cat Catalog) SignalWindow(names []string) time.Duration {
 // and never over less than SignalWindow. Evidence it can't read leaves the
 // checks that need it unknown, saying why.
 func (cat Catalog) Recheck(ctx context.Context, c client.Reader, w *workload.Workload, names []string, window time.Duration, now time.Time) []check.Result {
+	_, results := cat.Reread(ctx, c, w, names, max(window.Truncate(time.Minute), cat.SignalWindow(names)), now)
+	return results
+}
+
+// Reread reads again, now, the evidence the checks named read, and decides
+// them from it with own: evidence from Themis's own record rather than the
+// cluster, such as its fix the target runs. Evidence read over a window is
+// read over window, or, when window is zero, over the window each template
+// reads by default, as an investigation reads it. Evidence it can't read
+// leaves the checks that need it unknown, saying why. It returns what it
+// read, for the record, with the checks' answers.
+func (cat Catalog) Reread(ctx context.Context, c client.Reader, w *workload.Workload, names []string, window time.Duration, now time.Time, own ...evidence.Item) ([]evidence.Item, []check.Result) {
 	if len(names) == 0 {
-		return nil
+		return nil, nil
 	}
-	window = max(window.Truncate(time.Minute), cat.SignalWindow(names))
-	var b evidence.Bundle
-	b.Target = w.Target
+	var read []evidence.Item
 	var gaps []check.Gap
 	for _, t := range cat.reads(names) {
 		var params map[string]string
-		if tmpl, ok := cat.Evidence[t]; ok && slices.Contains(tmpl.Params(), evidence.WindowParam) {
+		if tmpl, ok := cat.Evidence[t]; ok && window > 0 && slices.Contains(tmpl.Params(), evidence.WindowParam) {
 			params = map[string]string{evidence.WindowParam: window.String()}
 		}
 		item, err := cat.Evidence.Collect(ctx, c, t, w, params, now)
@@ -51,10 +61,11 @@ func (cat Catalog) Recheck(ctx context.Context, c client.Reader, w *workload.Wor
 			gaps = append(gaps, check.Gap{Template: t, Cause: evidence.CauseOf(err)})
 			continue
 		}
-		b.Items = append(b.Items, item)
+		read = append(read, item)
 	}
 	checks := cat.Checks.For(names)
-	return checks.Attribute(checks.Evaluate(b, now), gaps)
+	b := evidence.Bundle{Target: w.Target, Items: append(slices.Clone(own), read...)}
+	return read, checks.Attribute(checks.Evaluate(b, now), gaps)
 }
 
 // reads are the templates the checks named read, each once.
