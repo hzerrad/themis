@@ -39,3 +39,6 @@ kubeconfig*
 
 # Evaluation reports
 /eval/out/
+
+# IDE settings
+.idea/
