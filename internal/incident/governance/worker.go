@@ -181,12 +181,15 @@ func (w *Worker) judge(ctx context.Context, in store.Incident, matched config.Ma
 		j.Refused = "Refused. Themis can't carry out this kind of fix."
 		return j, nil
 	}
-	var err error
-	if j.Redecided, err = w.redecide(ctx, in.ID, checks, more); err != nil {
+	items, err := w.Store.Evidence(ctx, in.ID)
+	if err != nil {
 		return Judgement{}, err
 	}
+	items = append(items, more...)
+	j.Redecided = w.redecide(checks, items)
+	flagged := slices.ContainsFunc(items, func(it evidence.Item) bool { return len(it.Suspicious) > 0 })
 	fix := Fix{
-		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks,
+		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks, EvidenceHasInstructions: flagged,
 		Capability: f, Params: p.Params,
 		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
 	}
@@ -210,25 +213,21 @@ func (w *Worker) judge(ctx context.Context, in store.Incident, matched config.Ma
 }
 
 // redecide decides check.EvidenceHasInstructions again, when the incident
-// runs it, over all its evidence and more: the investigator asks for more,
-// such as logs, after the checks first run. It updates checks in place and
-// returns what changed.
-func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check.Result, more []evidence.Item) ([]check.Result, error) {
+// runs it, over items: all its evidence, and any read for the decision. The
+// investigator asks for more, such as logs, after the checks first run. It
+// updates checks in place and returns what changed.
+func (w *Worker) redecide(checks []check.Result, items []evidence.Item) []check.Result {
 	i := slices.IndexFunc(checks, func(r check.Result) bool { return r.Name == check.EvidenceHasInstructions })
 	c, ok := w.Checks.Get(check.EvidenceHasInstructions)
 	if i < 0 || !ok {
-		return nil, nil
+		return nil
 	}
-	items, err := w.Store.Evidence(ctx, incidentID)
-	if err != nil {
-		return nil, err
-	}
-	r := check.List{c}.Evaluate(evidence.Bundle{Items: append(items, more...)}, w.now())[0]
+	r := check.List{c}.Evaluate(evidence.Bundle{Items: items}, w.now())[0]
 	if r.Value == checks[i].Value && r.Reason == checks[i].Reason {
-		return nil, nil
+		return nil
 	}
 	checks[i] = r
-	return []check.Result{r}, nil
+	return []check.Result{r}
 }
 
 // awaiting is d's action, for p, waiting for a person's approval: the

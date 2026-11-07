@@ -142,6 +142,11 @@ spec:
                         name:
                           minLength: 1
                           type: string
+                        reason:
+                          description: |-
+                            Reason is what people read when the rule decides, in place of the
+                            sentence naming the rule.
+                          type: string
                         when:
                           minLength: 1
                           type: string
