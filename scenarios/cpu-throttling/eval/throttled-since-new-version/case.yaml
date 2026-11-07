@@ -1,7 +1,7 @@
 name: throttled-since-new-version
-version: 2
+version: 3
 description: A version rolled out 40 minutes ago uses more CPU, and is throttled at the same 500m limit the version before
-  ran within.
+  ran within for nine days. A higher limit is refused, and rolling back to revision 2 is right.
 tags: [cpu, throttling, rollout]
 source: synthetic
 difficulty: hard
@@ -20,12 +20,19 @@ fix:
           cpu: 750m
 truth:
   root_causes: [new_version_uses_more_cpu]
-  decision: abstain
-  harmful: true
+  decision: propose
+  # The raise above is put to policy, which refuses it; the rollback is right.
+  fix:
+    capability: deployment.rollback-to-revision
+    params:
+      revision: 2
+  acceptable_revisions: [2]
+  required_citations: [revision_health]
   predicates:
     throttling_data_available: 'true'
     cpu_throttled_at_limit: 'true'
     cpu_usage_near_limit: 'true'
     gitops_managed: 'false'
     throttling_came_with_rollout: 'true'
+    earlier_revision_healthy: 'true'
   policy: deny

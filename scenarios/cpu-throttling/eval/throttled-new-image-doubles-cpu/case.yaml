@@ -1,6 +1,6 @@
 name: throttled-new-image-doubles-cpu
-version: 1
-description: 'Revision 2 changed only the image yesterday, and is throttled at its 500m CPU limit at today''s peak. Prometheus''s history shows it using 88% of the limit over its first day, where revision 1 used 45% over the same time: the new version uses more CPU, and a higher limit is refused.'
+version: 2
+description: 'Revision 2 changed only the image yesterday, and is throttled at its 500m CPU limit at today''s peak. Prometheus''s history shows it using 88% of the limit over its first day, where revision 1 used 45% over the same time: the new version uses more CPU. A higher limit is refused, and rolling back to revision 1 is right.'
 tags: [cpu, throttling, rollout, history, use]
 source: synthetic
 difficulty: hard
@@ -18,8 +18,14 @@ fix:
         limits: {cpu: 750m}
 truth:
   root_causes: [new_version_uses_more_cpu]
-  decision: abstain
-  harmful: true
+  decision: propose
+  # The raise above is put to policy, which refuses it; the rollback is right.
+  fix:
+    capability: deployment.rollback-to-revision
+    params:
+      revision: 1
+  acceptable_revisions: [1]
+  required_citations: [revision_health]
   predicates:
     throttling_data_available: 'true'
     cpu_throttled_at_limit: 'true'
@@ -27,4 +33,5 @@ truth:
     gitops_managed: 'false'
     rollout_changed_the_app: 'true'
     throttling_came_with_rollout: 'true'
+    earlier_revision_healthy: 'true'
   policy: deny

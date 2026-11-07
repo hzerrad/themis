@@ -240,8 +240,20 @@ func TestJudge(t *testing.T) {
 		},
 		{
 			"a fix the incident isn't offered",
-			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 1.0}}},
+			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: "deployment.set-probes", Params: map[string]any{"container": "api", "liveness": map[string]any{"timeoutSeconds": 2.0}}}},
 			eval.Verdict{Outcome: "deny", Reason: "None of the incident's profiles offers this fix."},
+		},
+		// The cpu-throttling pack offers a rollback too: refused where more
+		// load brought the throttling, right where the new version did.
+		{
+			"a rollback where more load brought the throttling",
+			eval.Proposal{Scenario: throttled, Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 1.0}}},
+			eval.Verdict{Outcome: "deny", Reason: "Refused. The cpu-throttling profile allows a rollback only when the throttling came with the latest rollout, where the version before it ran unthrottled, and the checks found otherwise (revision 2 ran 200h0m0s unthrottled after its rollout, at least as long as revision 1 was seen to (140h12m0s, in prometheus's history), so what changed since brought the throttling)."},
+		},
+		{
+			"a rollback where the new version brought the throttling",
+			eval.Proposal{Scenario: "throttled-new-image-doubles-cpu", Fix: eval.Fix{Capability: "deployment.rollback-to-revision", Params: map[string]any{"revision": 1.0}}},
+			eval.Verdict{Outcome: "require_approval", Reason: "Policy rule rollback-needs-approval of the cpu-throttling profile requires a person's approval.", SameChange: true},
 		},
 		{
 			"a rollback that can't go ahead",

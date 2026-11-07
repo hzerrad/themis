@@ -1,9 +1,10 @@
 # A Deployment's container held back by its CPU limit: Themis may suggest
-# raising the limit, with a person's approval. README.md says what it covers;
-# docs/scenarios.md says what each field means.
+# raising the limit, or rolling back a new version that uses more CPU, with a
+# person's approval. README.md says what it covers; docs/scenarios.md says
+# what each field means.
 
 name: cpu-throttling
-description: A Deployment's container is throttled at its CPU limit; Themis may suggest raising the limit, which a person approves.
+description: A Deployment's container is throttled at its CPU limit; Themis may suggest raising the limit, or rolling back the new version that brought it, which a person approves.
 
 # What the investigator may name as the root cause, most likely first, and
 # what each means.
@@ -23,7 +24,7 @@ rootCauses:
 
 # The profile Themis uses for these incidents. Throttling is only visible from
 # a metrics source with history, such as Prometheus: without one, the checks
-# are unknown and the policy refuses any raise.
+# are unknown and the policy refuses either fix.
 profile:
   priority: 75
   match:
@@ -40,18 +41,21 @@ profile:
     - cpu_usage_near_limit
     - rollout_changed_the_app
     - throttling_came_with_rollout
+    - earlier_revision_healthy
     - gitops_managed
-  capabilities: [deployment.set-resources]
-  # A raise is refused unless the container is throttled at its limit.
+  capabilities: [deployment.set-resources, deployment.rollback-to-revision]
+  # A raise is refused unless the container is throttled at its limit, and a
+  # rollback unless the latest rollout brought the throttling.
   justifiedBy:
     deployment.set-resources: [cpu_throttled_at_limit]
+    deployment.rollback-to-revision: [throttling_came_with_rollout]
   # The failure itself: while it is true, Themis never closes the incident
   # with no change on its own. It refers it to a person.
   symptoms: [cpu_throttled_at_limit]
   # What the investigator is told about these incidents: when raising the CPU
-  # limit is right and when it is wrong. It names checks, never root causes,
-  # and gives a starting size as guidance only: the checks and the policy
-  # below decide.
+  # limit is right, when rolling back is, and when neither is. It names
+  # checks, never root causes, and gives a starting size as guidance only:
+  # the checks and the policy below decide.
   guidance: |
     Raising a container's CPU limit is right when the container is throttled
     at its limit for a sustained time and it hurts: cpu_throttled_at_limit is
@@ -81,14 +85,21 @@ profile:
     - throttling_came_with_rollout is true: the rollout changed what the pods
       run, and the version before this one ran unthrottled where this one is
       throttled, or used clearly less of its limit at the same age, so this
-      one uses more CPU.
-      Whether to roll it back is another kind of incident's call, not a raise
-      here.
+      one uses more CPU. Roll it back instead, as below.
     - throttling_came_with_rollout is unknown: nothing shows how the version
       before this one ran, such as no metrics history of its pods; say what
       is missing.
     - the pods are slow but not throttled, and events point at their node:
       more limit won't give them CPU the node doesn't have.
+
+    Rolling back is right when the latest rollout brought the throttling:
+    cpu_throttled_at_limit, throttling_came_with_rollout and
+    earlier_revision_healthy are all true. Roll back to the revision before
+    the current one, citing rollout_history and revision_health. Don't roll
+    back when throttling_came_with_rollout is false or unknown. When
+    earlier_revision_healthy is false, the version before it failed too;
+    when it is unknown, nothing shows how it ran. Then propose neither fix,
+    and say so.
   policy:
     mode: guarded
     approvalTimeout: 30m
@@ -105,7 +116,21 @@ profile:
       # puts back what Themis changed.
       - name: no-raise-for-a-new-version
         when: >-
-          action.restore != "true" && predicates.throttling_came_with_rollout != "false"
+          action.capability == "deployment.set-resources" && action.restore != "true" &&
+          predicates.throttling_came_with_rollout != "false"
+        decision: deny
+      # justifiedBy asks that the latest rollout brought the throttling: it
+      # changed what the pods run, and the version before it ran unthrottled
+      # where this one is throttled, or used clearly less of its CPU limit at
+      # the same age. That version must also be one to go back to, healthy,
+      # and the container still throttled at its limit. When any of them is
+      # unknown, a person decides.
+      - name: rollback-needs-a-bad-rollout
+        when: >-
+          action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&
+          (predicates.throttling_came_with_rollout != "true" ||
+           predicates.earlier_revision_healthy != "true" ||
+           predicates.cpu_throttled_at_limit != "true")
         decision: deny
       # The fix here raises a CPU limit that exists, and nothing else: no
       # memory, no lower value, no new limit where there was none, which
@@ -118,11 +143,14 @@ profile:
            !change.exists(k, k.endsWith(".cpu.limit") && change[k] == "increase"))
         decision: deny
       - name: raise-needs-approval
-        when: action.restore != "true"
+        when: action.capability == "deployment.set-resources" && action.restore != "true"
+        decision: require_approval
+      - name: rollback-needs-approval
+        when: action.capability == "deployment.rollback-to-revision" && action.restore != "true"
         decision: require_approval
   # Throttled pods are ready, so their readiness can't tell whether a raise
-  # worked: it worked only when the container is no longer throttled at its
-  # limit, read from what the new pods did since the change, over 5 minutes
-  # at least, as a rate needs.
+  # or a rollback worked: it worked only when the container is no longer
+  # throttled at its limit, read from what the new pods did since the change,
+  # over 5 minutes at least, as a rate needs.
   verification:
     checks: [cpu_throttled_at_limit]

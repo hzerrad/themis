@@ -2,7 +2,7 @@
 # same 500m CPU limit. Since then the api container is throttled and
 # readiness probes time out; revision 2 ran for nine days without either.
 # The new version uses more CPU: raising the limit would paper over a
-# regression, and whether to roll back is the rollout-regression pack's call.
+# regression. Revision 2 ran healthy, so rolling back to it is right.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

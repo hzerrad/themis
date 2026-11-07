@@ -1,0 +1,29 @@
+name: throttled-new-image-gitops-owned
+version: 1
+description: 'Revision 2 changed only the image yesterday, uses 88% of its 500m CPU limit over its first day where revision 1 used 45%, and is throttled at today''s peak, but Argo CD owns the Deployment. Rolling back to revision 1 is right, and Themis only recommends it.'
+tags: [cpu, throttling, rollout, history, use, gitops]
+source: synthetic
+difficulty: hard
+incident_class: rollout_regression
+now: '2026-11-06T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events, revision_health]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail, revision_health]
+# No fix here: the rollback to revision 1 is put to policy. Themis refuses to
+# apply it, as Argo CD owns the workload, and recommends it.
+truth:
+  root_causes: [new_version_uses_more_cpu]
+  decision: propose
+  acceptable_revisions: [1]
+  required_citations: [revision_health]
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    gitops_managed: 'true'
+    rollout_changed_the_app: 'true'
+    throttling_came_with_rollout: 'true'
+    earlier_revision_healthy: 'true'
+  policy: deny
+known_limitations: "Naming Argo CD as the owner is right but isn't scored: the scorer reads no free text."
