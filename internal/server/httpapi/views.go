@@ -166,6 +166,10 @@ type detailView struct {
 	Situation phrase     `json:",omitempty"`
 	// Symptoms are the checks that find the incident's failure.
 	Symptoms []string `json:",omitempty"`
+	// Collectable are the templates a person may ask to read for the
+	// incident now, and Previewed says the page may preview a suggested fix.
+	Collectable []collectView `json:",omitempty"`
+	Previewed   bool          `json:",omitempty"`
 	// Checks say in plain words what each check, by name, finds.
 	Checks map[string]checkWords
 	// Causes describe each root cause the investigation may name, by name,

@@ -75,40 +75,26 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	if err != nil {
 		return err
 	}
-	checks, err := w.Store.Predicates(ctx, in.ID)
-	if err != nil {
-		return err
-	}
 	// What a person is told when the investigator's fix is refused and the
 	// checks still find the failure: they take the incident over.
 	referral := ""
 	if !waits {
+		checks, err := w.Store.Predicates(ctx, in.ID)
+		if err != nil {
+			return err
+		}
 		if referral, err = w.decider.Referral(matched, w.Fixes, checks, w.Checks, in.Target.Namespace); err != nil {
 			return err
 		}
 	}
-	f, ok := w.Fixes[p.Capability]
-	if !ok {
-		return w.refuse(ctx, p, waits, referral, "Refused. Themis can't carry out this kind of fix.")
-	}
-	redecided, err := w.redecide(ctx, in.ID, checks)
+	j, err := w.Judge(ctx, in, matched, p)
 	if err != nil {
 		return err
 	}
-	d, err := w.decider.Decide(ctx, w.Reader, Fix{
-		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks,
-		Capability: f, Params: p.Params,
-		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
-	})
-	if errors.Is(err, capability.ErrInvalidParams) {
-		return w.refuse(ctx, p, waits, referral, "Refused. The suggested fix's values are invalid.")
+	if j.Refused != "" {
+		return w.refuse(ctx, p, waits, referral, j.Refused)
 	}
-	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
-		return w.refuse(ctx, p, waits, referral, refusal.Reason)
-	}
-	if err != nil {
-		return err
-	}
+	d, redecided, f := j.Decided, j.Redecided, w.Fixes[p.Capability]
 
 	// Every fix waits for a person, unless policy forbids it.
 	a := d.Action
@@ -154,6 +140,64 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 		}
 		return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
+}
+
+// Judgement is what governing decides of a suggested fix, before anything is
+// kept: why it can't go ahead, or the change worked out against the cluster
+// and policy's decision on it.
+type Judgement struct {
+	// Refused says why the fix can't go ahead before policy decides, such as
+	// values the cluster can't take, in the words of the refusal.
+	Refused string
+	Decided Decided
+	// Checks are the incident's checks as the decision read them, and
+	// Redecided those decided again for it, which governing keeps.
+	Checks    []check.Result
+	Redecided []check.Result
+	// Against and Past are the checks that bore on the decision, as
+	// Decider.Bearing says.
+	Against, Past []string
+}
+
+// Judge decides p, a fix suggested for in under the profiles matched, as
+// governing it decides it, and keeps nothing: Govern keeps what it decides,
+// and a preview shows it.
+func (w *Worker) Judge(ctx context.Context, in store.Incident, matched config.Matched, p store.Proposal) (Judgement, error) {
+	checks, err := w.Store.Predicates(ctx, in.ID)
+	if err != nil {
+		return Judgement{}, err
+	}
+	j := Judgement{Checks: checks}
+	f, ok := w.Fixes[p.Capability]
+	if !ok {
+		j.Refused = "Refused. Themis can't carry out this kind of fix."
+		return j, nil
+	}
+	if j.Redecided, err = w.redecide(ctx, in.ID, checks); err != nil {
+		return Judgement{}, err
+	}
+	fix := Fix{
+		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks,
+		Capability: f, Params: p.Params,
+		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
+	}
+	d, err := w.decider.Decide(ctx, w.Reader, fix)
+	if errors.Is(err, capability.ErrInvalidParams) {
+		j.Refused = "Refused. The suggested fix's values are invalid."
+		return j, nil
+	}
+	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
+		j.Refused = refusal.Reason
+		return j, nil
+	}
+	if err != nil {
+		return Judgement{}, err
+	}
+	j.Decided = d
+	if j.Against, j.Past, err = w.decider.Bearing(fix, d); err != nil {
+		return Judgement{}, err
+	}
+	return j, nil
 }
 
 // redecide decides check.EvidenceHasInstructions again, when the incident
