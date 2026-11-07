@@ -43,6 +43,10 @@ type CloseUndecidedWorker struct {
 	Checks Rechecker
 	Words  check.List
 	Logger *slog.Logger
+	// PerRun bounds the incidents one run looks at, those it looked at
+	// longest ago first, so each run's cluster and metrics reads stay
+	// bounded and every incident still comes up in turn. Zero means 100.
+	PerRun int
 }
 
 // Rechecker decides checks again from what a workload did over a window,
@@ -51,7 +55,9 @@ type Rechecker interface {
 	Recheck(ctx context.Context, c client.Reader, w *workload.Workload, names []string, window time.Duration, now time.Time) []check.Result
 }
 
-const closeUndecidedBatch = 100
+// undecidedPerRun is how many incidents one run looks at, unless
+// CloseUndecidedWorker.PerRun says otherwise.
+const undecidedPerRun = 100
 
 func (w *CloseUndecidedWorker) Work(ctx context.Context, _ *river.Job[CloseUndecidedArgs]) error {
 	return w.Close(ctx)
@@ -64,7 +70,11 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 	}
 	cfg := w.Config.Current()
 	window, waiting := cfg.SuggestionWindow(), cfg.AwaitingSuggestionWindow()
-	undecided, err := w.Store.UndecidedBefore(ctx, w.Store.DB(), now.Add(-window), now.Add(-waiting), closeUndecidedBatch)
+	perRun := w.PerRun
+	if perRun <= 0 {
+		perRun = undecidedPerRun
+	}
+	undecided, err := w.Store.NextUndecided(ctx, now.Add(-window), now.Add(-waiting), perRun)
 	if err != nil {
 		return err
 	}

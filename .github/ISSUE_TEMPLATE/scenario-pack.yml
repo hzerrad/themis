@@ -1,0 +1,33 @@
+name: New incident type
+description: Propose a scenario pack, an incident type Themis should handle.
+labels: [scenario pack]
+body:
+  - type: markdown
+    attributes:
+      value: A scenario pack names the alerts it answers, the checks that recognise the incident, the fixes it allows and its test cases. See [docs/scenarios.md](https://github.com/hzerrad/themis/blob/main/docs/scenarios.md).
+  - type: textarea
+    id: incident
+    attributes:
+      label: The incident
+      description: What fails, and which alerts fire.
+      placeholder: Pods stay Pending because no node has enough memory. KubePodNotReady fires.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How you diagnose it today
+      description: The commands you run and what in their output tells you the cause.
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: The safe fix
+      description: The change that fixes it, or why a person should handle it instead.
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: How you tell the fix worked

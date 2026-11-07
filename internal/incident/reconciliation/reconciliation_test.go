@@ -10,6 +10,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/catalog"
+	"github.com/hzerrad/themis/internal/catalog/check"
+	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/investigation"
@@ -234,6 +237,155 @@ func TestReconcile_WaitsForAChangeToSettle(t *testing.T) {
 	e.reconcile(t)
 	if got := e.incident(t, id).State; got != incident.AwaitingApproval {
 		t.Errorf("state = %s, want awaiting_approval until the change settles", got)
+	}
+}
+
+// checks stands in for the catalog: each check answers as found says, false
+// when it doesn't say, and needs the pods to have run signal to be read.
+type checks struct {
+	found  map[string]check.Truth
+	signal time.Duration
+	// read are the windows the checks were read over.
+	read []time.Duration
+}
+
+func (c *checks) Recheck(_ context.Context, _ client.Reader, _ *workload.Workload, names []string, window time.Duration, _ time.Time) []check.Result {
+	c.read = append(c.read, window)
+	out := make([]check.Result, 0, len(names))
+	for _, n := range names {
+		v, ok := c.found[n]
+		if !ok {
+			v = check.False
+		}
+		out = append(out, answer(n, v))
+	}
+	return out
+}
+
+func (c *checks) SignalWindow([]string) time.Duration { return c.signal }
+
+// answer is what checks answers for name.
+func answer(name string, v check.Truth) check.Result {
+	return check.Result{Name: name, Value: v, Reason: "read " + v.String()}
+}
+
+const (
+	throttled = "cpu_throttled_at_limit"
+	onset     = "failure_onset_after_rollout"
+)
+
+// judgedBy has the worker judge changes by the throttling pack's
+// verification check and a symptom, decided again by c, in the shipped
+// checks' words, and records that the incident's checks found the symptom
+// when it opened.
+func (e *env) judgedBy(t *testing.T, c *checks, id string) check.List {
+	t.Helper()
+	cat, err := catalog.Themis(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.worker.Config = config.Config{Profiles: []config.Profile{{
+		Name: "rollout-regression", Symptoms: []string{onset},
+		Verification: config.Verification{Checks: []string{throttled}},
+	}}}
+	e.worker.Checks, e.worker.Words = c, cat.Checks
+	err = e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+		return e.store.RecordInitialEvidence(t.Context(), tx, id, nil, []check.Result{{Name: onset, Version: "3", Value: check.True, Reason: "all 4 failures follow revision 2"}})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cat.Checks
+}
+
+// writer is who last wrote the target's template.
+func (e *env) writer(t *testing.T) string {
+	t.Helper()
+	w, err := workload.Read(t.Context(), k8s, e.target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w.Writer
+}
+
+// Ready pods aren't enough: a change made outside Themis is a fix only when
+// the verification checks and symptoms, decided again from what the new pods
+// did since the change, find the failure gone. One that still fails, or that
+// can't be told, as without a metrics source, is superseded, saying why. A
+// symptom that can't be told, as when the failures started once every pod is
+// ready, doesn't hold it back.
+func TestReconcile_JudgesAChangeByItsChecks(t *testing.T) {
+	for name, tt := range map[string]struct {
+		found  map[string]check.Truth
+		want   incident.State
+		reason func(words check.List, by string) string
+	}{
+		"still throttled": {map[string]check.Truth{throttled: check.True}, incident.Canceled, func(words check.List, by string) string {
+			return "Replaced by a new incident. The workload was changed outside Themis, by " + by + ", and still fails. Since the change, the checks found that " +
+				words.Found(answer(throttled, check.True)) + "."
+		}},
+		"a symptom found again": {map[string]check.Truth{onset: check.True}, incident.Canceled, func(words check.List, by string) string {
+			return "Replaced by a new incident. The workload was changed outside Themis, by " + by + ", and still fails. Since the change, the checks found that " +
+				words.Found(answer(onset, check.True)) + "."
+		}},
+		"throttling not measured": {map[string]check.Truth{throttled: check.Unknown}, incident.Canceled, func(words check.List, by string) string {
+			return "Replaced by a new incident. The workload was changed outside Themis, by " + by + ". Unknown whether it recovered. Since the change, the checks found that " +
+				words.Found(answer(throttled, check.Unknown)) + "."
+		}},
+		"recovered": {nil, incident.SelfResolved, func(words check.List, by string) string {
+			return "Recovered after a change outside Themis, by " + by + ". Since the change, the checks found that " +
+				words.Found(answer(throttled, check.False)) + " and that " + words.Found(answer(onset, check.False)) + "."
+		}},
+		"recovered, when the failures started can't be told": {map[string]check.Truth{onset: check.Unknown}, incident.SelfResolved, func(words check.List, by string) string {
+			return "Recovered after a change outside Themis, by " + by + ". Since the change, the checks found that " + words.Found(answer(throttled, check.False)) + "."
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id := e.open(t, incident.AwaitingApproval)
+			c := &checks{found: tt.found, signal: 5 * time.Minute}
+			words := e.judgedBy(t, c, id)
+			e.edit(t)
+			e.heal(t)
+			e.worker.Now = func() time.Time { return time.Now().Add(10 * time.Minute) }
+			e.reconcile(t)
+
+			in := e.incident(t, id)
+			if in.State != tt.want || (tt.want == incident.Canceled) != (in.SupersededBy != "") {
+				t.Fatalf("state = %s, superseded by %q; want %s", in.State, in.SupersededBy, tt.want)
+			}
+			trail, _ := e.store.Transitions(t.Context(), id)
+			if got, want := trail[len(trail)-1].Reason, tt.reason(words, e.writer(t)); got != want {
+				t.Errorf("reason = %q\nwant     %q", got, want)
+			}
+			// Read over the time since the change, about 10 minutes.
+			if len(c.read) != 1 || c.read[0] < 9*time.Minute {
+				t.Errorf("read over %v, want the time since the change", c.read)
+			}
+		})
+	}
+}
+
+// The checks wait until the new pods have run as long as their evidence
+// needs, such as 5 minutes for throttling, a rate: before, the change isn't
+// judged.
+func TestReconcile_WaitsForTheChecksWindow(t *testing.T) {
+	e := newEnv(t)
+	id := e.open(t, incident.AwaitingApproval)
+	c := &checks{signal: 5 * time.Minute}
+	e.judgedBy(t, c, id)
+	e.edit(t)
+	e.heal(t)
+	changed := time.Now()
+	e.worker.Now = func() time.Time { return changed.Add(3 * time.Minute) }
+	e.reconcile(t)
+	if got := e.incident(t, id).State; got != incident.AwaitingApproval || len(c.read) != 0 {
+		t.Fatalf("3 minutes after the change: state = %s, checks read %d times; want awaiting_approval, unread", got, len(c.read))
+	}
+	e.worker.Now = func() time.Time { return changed.Add(6 * time.Minute) }
+	e.reconcile(t)
+	if got := e.incident(t, id).State; got != incident.SelfResolved {
+		t.Errorf("6 minutes after the change: state = %s, want self_resolved", got)
 	}
 }
 
