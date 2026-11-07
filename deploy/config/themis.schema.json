@@ -563,7 +563,7 @@
           "required": [
             "address"
           ],
-          "description": "Prometheus is a server answering Prometheus queries: Prometheus,\nThanos, Mimir, VictoriaMetrics or Grafana Cloud. It has history, so\nit also answers peak memory, CPU throttling and how an earlier\nrevision's pods ran."
+          "description": "Prometheus is a server answering Prometheus queries: Prometheus,\nThanos, Mimir, VictoriaMetrics or Grafana Cloud. It has history, so\nit also answers peak memory, CPU throttling, and how an earlier\nrevision's pods ran and how much of their limits they used."
         }
       },
       "additionalProperties": false,
