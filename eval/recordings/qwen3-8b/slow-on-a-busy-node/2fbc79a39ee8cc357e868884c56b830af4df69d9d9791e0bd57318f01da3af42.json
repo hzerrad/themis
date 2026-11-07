@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Readiness failures may not be CPU-related; no logs or metrics show application-specific issues. Need more data on application behavior.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"CPU metrics show no throttling at limits, but readiness probes fail. Logs are empty, so application-specific issues may be root cause.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-container_logs_tail\", \"ev-target_events\"],\n    \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"missing\": [\"application_logs\", \"latency_metrics\", \"throttling_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"Empty container logs suggest potential memory issues or application errors, but no evidence confirms this.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [\"ev-revision_health\"],\n    \"missing\": [\"container_memory_usage\", \"application_errors\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 4976,
+        "output_tokens": 852
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to OOM kills from new image\",\"hypotheses\":[{\"root_cause_class\":\"application_bug\",\"summary\":\"New image causes memory exhaustion\",\"supporting\":[\"ev-pod_states\",\"ev-container_memory\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"Unrelated config change introduced memory issues\",\"supporting\":[],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[\"ev-referenced_config\"],\"status\":\"refuted\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"catalog\",\"uid\":\"uid-deployment-catalog\"},\"params\":{\"revision\":1},\"expected_effect\":\"Restore stable memory usage from previous version\",\"rationale\":\"The new image (3.8.0) caused OOM kills despite identical memory limits. Earlier revision (1) ran without issues. Rollback is justified as per rollout-regression profile.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-revision_health\",\"ev-pod_states\",\"ev-container_memory\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"oom_killed_new_revision\"]}}",
+      "usage": {
+        "input_tokens": 6130,
+        "output_tokens": 1257
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

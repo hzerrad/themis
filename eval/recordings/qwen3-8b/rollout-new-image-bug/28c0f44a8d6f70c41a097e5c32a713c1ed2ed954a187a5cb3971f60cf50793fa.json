@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to code panic in new revision\",\"hypotheses\":[{\"root_cause_class\":\"application_bug\",\"summary\":\"Nil pointer dereference in code\",\"supporting\":[\"ev-container_logs_tail\",\"ev-rollout_history\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"Environment variable change caused failure\",\"supporting\":[\"ev-rollout_history\"],\"contradicting\":[\"ev-container_logs_tail\"],\"missing\":[],\"status\":\"refuted\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit too low\",\"supporting\":[],\"contradicting\":[\"ev-rollout_history\"],\"missing\":[\"ev-revision_health\"],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Resolve SIGSEGV panic from nil pointer dereference\",\"rationale\":\"New revision's code panicked with nil pointer error, earlier revision is healthy and stable.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 4284,
+        "output_tokens": 600
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

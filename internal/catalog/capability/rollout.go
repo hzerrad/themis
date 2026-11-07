@@ -21,9 +21,15 @@ type rolloutStart struct {
 
 // Rollout is the BlastRadius of a fix that rolls out a new pod template to
 // w: replicas, the pods it replaces, and atOnce, how many of them its
-// rollout strategy replaces at a time.
+// rollout strategy replaces at a time. deployedBy names what else deploys w,
+// such as Helm, whose next deploy writes over the change; GitOps, which
+// Themis never changes, is left out.
 func Rollout(w *workload.Workload) map[string]any {
-	return map[string]any{"replicas": int64(w.Replicas.Desired), "atOnce": int64(w.AtOnce())}
+	out := map[string]any{"replicas": int64(w.Replicas.Desired), "atOnce": int64(w.AtOnce())}
+	if w.Deployer != "" && w.ManagedBy == "" {
+		out["deployedBy"] = w.Deployer
+	}
+	return out
 }
 
 // ReadRollout is Check for a fix that rolls out a new pod template: it reads

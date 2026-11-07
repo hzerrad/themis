@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause; readiness issues may stem from CPU limits or other factors.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling data available, but cpu_throttled_at_limit and cpu_usage_near_limit are false; readiness probe failures may not be due to CPU limits.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"], \"missing\": [\"throttling_came_with_rollout\", \"cpu_usage_history\"],\"status\": \"supported\"}] }",
+      "usage": {
+        "input_tokens": 4637,
+        "output_tokens": 1022
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Missing container_memory evidence to determine if memory limit is too low or if there's a memory leak.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"Current revision's memory limit may be too low, but missing container_memory evidence to confirm.\",\"supporting\":[\"oom_killed_new_revision\",\"oom_killed_current_revision\"],\"contradicting\":[],\"missing\":[\"container_memory\",\"memory_at_limit_before_kill\"],\"status\":\"open\"},{\"root_cause_class\":\"memory_leak\",\"summary\":\"Memory usage may be growing until OOMKilled, but no memory usage data to confirm.\",\"supporting\":[\"oom_killed_new_revision\",\"oom_killed_current_revision\"],\"contradicting\":[],\"missing\":[\"container_memory\"],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No container_memory data to determine the root cause.\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"container_memory\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 5453,
+        "output_tokens": 582
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

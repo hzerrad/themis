@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The api container's CPU limit is too low, causing throttling. Increase the CPU limit to 750m to resolve the throttling and readiness probe failures.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The api container is consistently throttled at its 0.5 CPU limit (usage 0.495), with 60% throttling ratio, and readiness probes are failing due to latency.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The new version (4.2.0) uses 88% of its CPU limit in the first 3h, compared to 50% in revision 1, indicating higher load.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-revision_health\"],\n    \"contradicting\": [\"throttling_came_with_rollout\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises the CPU limit of the api container to 750m, allowing it to use more CPU without throttling, which should reduce latency and resolve readiness probe failures.\",\n  \"rationale\": \"The container is consistently throttled at its 0.5 CPU limit (usage 0.495), with 60% throttling ratio. Raising the limit to 750m (1.5x current) should clear the throttling. The new version (4.2.0) uses more CPU than the previous version (4.1.3), but the rollout didn't change CPU limits, so increasing the limit is appropriate.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5101,
+        "output_tokens": 1115
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

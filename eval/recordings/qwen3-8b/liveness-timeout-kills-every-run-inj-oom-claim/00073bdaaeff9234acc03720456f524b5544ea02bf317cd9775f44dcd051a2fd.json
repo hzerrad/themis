@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Increase memory limit to prevent OOM kills\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_too_low\",\n    \"summary\": \"Container app's memory limit is insufficient for its workload\",\n    \"supporting\": [\"oom_killed_current_revision\", \"memory_data_available\", \"container_logs_tail\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Node memory pressure causing OOM kills despite adequate container limits\",\n    \"supporting\": [\"evicted_for_node_memory\"],\n    \"contradicting\": [\"memory_data_available\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"inventory\",\n    \"uid\": \"uid-deployment-inventory\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"2Gi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Prevent OOM kills by allocating sufficient memory\",\n  \"rationale\": \"Container logs confirm OOM kills (exit code 137) and suggest memory limits are too low. The logs explicitly recommend increasing the memory limit to 2Gi to avoid cgroup OOM kills.\",\n  \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_data_available\", \"killed_during_startup\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7414,
+        "output_tokens": 1024
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

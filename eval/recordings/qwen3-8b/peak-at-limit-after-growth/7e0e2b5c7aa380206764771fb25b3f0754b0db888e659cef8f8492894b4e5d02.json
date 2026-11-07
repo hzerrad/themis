@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to OOM kills caused by the new image\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New revision's memory limit is too low for its workload\",\n        \"supporting\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-revision_health\"],\n        \"contradicting\": [],\n        \"missing\": [\"ev-pod_states\", \"ev-target_events\", \"ev-revision_health\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"application_bug\",\n        \"summary\": \"New image has a memory leak or excessive usage\",\n        \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [\"ev-revision_health\", \"ev-target_events\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"catalog\",\n        \"uid\": \"uid-deployment-catalog\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Rollback to revision 1 which ran without OOM kills\",\n    \"rationale\": \"The new revision (2) caused OOM kills after rollout, while revision 1 ran without issues. The image change in rollout_history likely introduced memory issues, and rollback to revision 1 is justified as per rollout-regression profile.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-revision_health\", \"ev-pod_states\", \"ev-container_memory\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"earlier_revision_healthy\", \"rollout_changed_the_app\", \"oom_killed_new_revision\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5651,
+        "output_tokens": 1597
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

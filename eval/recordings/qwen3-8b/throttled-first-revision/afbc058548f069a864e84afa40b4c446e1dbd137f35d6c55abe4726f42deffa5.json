@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"The container is throttled at its CPU limit of 200m, using 91.5% of it. Increase the CPU limit to 300m to clear throttling.\", \"hypotheses\": [{\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"CPU limit of 200m is too low for the container's demand of 0.183 cores (91.5% usage).\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"}, \"params\": {\"containers\": {\"app\": {\"requests\": {\"cpu\": \"50m\"}, \"limits\": {\"cpu\": \"300m\"}}}},\"expected_effect\": \"Raise CPU limit to 300m, reducing throttling and allowing the container to use more CPU without being throttled.\",\"rationale\": \"The container is consistently throttled at 90% of its 200m limit (0.183 cores), which is 91.5% of the limit. Increasing the limit to 300m would provide more headroom, reducing throttling and improving performance.\",\"cited_evidence_ids\": [\"ev-container_cpu\"],\"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]}}",
+      "usage": {
+        "input_tokens": 3503,
+        "output_tokens": 864
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

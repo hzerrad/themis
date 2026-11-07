@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new image (2.4.0) likely introduced an application bug causing readiness probe failures. Rolling back to the previous revision (1) is justified as the failure onset occurred after the rollout and no config changes were detected.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"application_bug\", \"summary\": \"Readiness probes failed with 503 after image upgrade, indicating application-level issues in the new revision.\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"],\"status\": \"open\"},\n  {\"root_cause_class\": \"bad_configuration\", \"summary\": \"The new image might have incorrect configuration, but no ConfigMap changes were detected pre-failure.\", \"supporting\": [\"ev-referenced_config\"], \"contradicting\": [], \"missing\": [],\"status\": \"open\"},\n  {\"root_cause_class\": \"image_pull_failure\", \"summary\": \"No evidence of image pull failures; pods are running but not healthy.\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [], \"missing\": [],\"status\": \"open\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Restores the previous image version (2.3.1) to resolve the readiness probe failures caused by the new revision's application issues.\",\n  \"rationale\": \"The failure onset occurred after the rollout, the new image changed, and no config changes were detected. Rolling back to the previous revision is justified as per the incident's conditions and the observed readiness probe failures.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-referenced_config\", \"ev-pod_states\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"config_changed_before_failure\", \"gitops_managed\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3712,
+        "output_tokens": 1401
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

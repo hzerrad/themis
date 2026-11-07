@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"The renderer container's CPU limit is too low, causing throttling. Increase the CPU limit to 1500m.\", \"hypotheses\": [{\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"The renderer container is hitting its CPU limit (1 core) with 0.93 usage and 41% throttling, leading to liveness probe failures.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"reports\", \"uid\": \"uid-deployment-reports\"}, \"params\": {\"containers\": {\"renderer\": {\"limits\": {\"cpu\": \"1500m\"}}}},\"expected_effect\": \"Raise the CPU limit of the renderer container to 1500m, reducing throttling and improving liveness probe success.\",\"rationale\": \"The renderer container is consistently hitting its CPU limit (1 core) with 0.93 usage and 41% throttling, leading to liveness probe failures. Increasing the CPU limit to 1500m should alleviate the throttling and allow the container to operate without hitting the limit.\",\"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"], \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]}}",
+      "usage": {
+        "input_tokens": 5750,
+        "output_tokens": 829
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

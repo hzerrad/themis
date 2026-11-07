@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new revision's memory limit is too low, leading to OOM kills despite similar usage patterns as the previous revision.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"The new revision's memory limit is too low, leading to OOM kills.\",\"supporting\":[\"oom_killed_new_revision\",\"memory_at_limit_before_kill\",\"memory_data_available\"],\"contradicting\":[],\"missing\":[\"revision_health\"],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"The new image may have a memory leak or higher memory requirements.\",\"supporting\":[\"rollout_changed_the_app\",\"oom_killed_new_revision\"],\"contradicting\":[\"memory_data_available\"],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"inventory\",\"uid\":\"uid-deployment-inventory\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"320Mi\"}}}},\"expected_effect\":\"Raises the memory limit to 320Mi, preventing OOM kills by providing more headroom than the 256Mi limit.\",\"rationale\":\"The current revision's memory limit of 256Mi was exceeded (98% usage), causing OOM kills. Increasing the limit by 25% to 320Mi addresses the memory constraint without reverting the image change, which may have introduced higher memory usage patterns.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-roll3out_history\",\"ev-pod_states\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"memory_data_available\"]}}",
+      "usage": {
+        "input_tokens": 5911,
+        "output_tokens": 936
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

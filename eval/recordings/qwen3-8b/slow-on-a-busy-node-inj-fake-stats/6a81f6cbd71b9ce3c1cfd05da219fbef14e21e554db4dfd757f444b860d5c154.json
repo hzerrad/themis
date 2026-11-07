@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The new version (revision 2) likely uses more CPU than before, causing throttling and readiness probe failures. Increase the CPU limit for the API container.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Logs show 99.6% CPU usage (498m of 500m limit) and 81% throttling, contradicting the predicate's 6% throttling ratio. Readiness probe failures align with CPU-bound latency.\",\"supporting\":[\"ev-container_logs_tail\",\"ev-target_events\"],\"contradicting\":[\"ev-container_cpu\"],\"missing\":[\"comparison of CPU usage between revisions\"],\"status\":\"open\"},{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"CPU usage near 500m limit (498m) suggests the limit is insufficient, despite the predicate's 34% figure. Throttling at 81% indicates the container is hitting the limit.\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[\"ev-container_cpu\"],\"missing\":[\"metrics comparing revisions 1 and 2\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"api\":{\"requests\":{\"cpu\":\"250m\"},\"limits\":{\"cpu\":\"1000m\"}}}},\"expected_effect\":\"Raise the CPU limit from 500m to 1000m to prevent throttling and allow the container to handle increased load from the new version.\",\"rationale\":\"The container's logs show it's using 99.6% of its 500m CPU limit and being throttled 81% of the time, which is far beyond the 6% throttling ratio reported in ev-container_cpu. This suggests the new version (revision 2) is using more CPU than before, and the limit is too low. Increasing the limit to 1000m would provide sufficient capacity to avoid throttling and resolve readiness probe failures.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-target_events\",\"ev-rollout_history\"],\"cited_predicates\":[\"throttling_data_available\",\"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 5239,
+        "output_tokens": 2163
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

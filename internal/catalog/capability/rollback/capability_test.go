@@ -1,6 +1,7 @@
 package rollback_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
@@ -62,5 +63,27 @@ func TestRevisionParam(t *testing.T) {
 		if _, ok := rollback.RevisionParam(tc.params); ok != tc.want {
 			t.Errorf("RevisionParam(%v) ok = %v, want %v", tc.params, ok, tc.want)
 		}
+	}
+}
+
+// A rollback that undoes several changes says how many, and that the image
+// is one, and shows the digest each version's pods run: nobody takes back
+// new code without seeing it.
+func TestRollback_SaysWhatItUndoes(t *testing.T) {
+	target := loadPartial(t)
+	p, err := rollback.Capability{}.Plan(t.Context(), k8s, target, map[string]any{"revision": int64(1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := (rollback.Capability{}).Words("checkout", p.Params, p.Before, p.After); w.Note != "Rolling back undoes 6 changes, including the image." {
+		t.Errorf("Note = %q", w.Note)
+	}
+	more, err := rollback.Capability{}.Describe(t.Context(), k8s, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	images, _ := more["images"].(map[string]any)
+	if app, _ := images["app"].(map[string]any); app["before"] != "sha256:"+strings.Repeat("2", 64) || app["after"] != "sha256:"+strings.Repeat("1", 64) {
+		t.Errorf("Describe = %v, want each revision's digest", more)
 	}
 }

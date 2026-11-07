@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version uses more CPU, causing the container to hit its limit and fail readiness probes. Increase the CPU limit to 750m.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"CPU usage near limit (0.99) and rollout changed image suggests new version uses more CPU.\", \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"throttling_came_with_rollout\"],\"status\": \"supported\"},\n  {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"CPU usage near limit (0.99) indicates current limit is insufficient.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling data unavailable, but CPU usage near limit suggests possible throttling.\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"throttling_came_with_rollout\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"requests\": {\n          \"cpu\": \"250m\"\n        },\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise CPU limit to 750m to clear throttling and allow the container to handle increased load from the new version.\",\n  \"rationale\": \"The new version (revision 2) changed the image, and CPU usage is near the limit (0.99), suggesting the new version uses more CPU. Increasing the limit to 1.5 times the current value (750m) should alleviate the throttling and allow the container to meet readiness requirements without hitting the limit.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"cpu_usage_near_limit\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4277,
+        "output_tokens": 1206
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

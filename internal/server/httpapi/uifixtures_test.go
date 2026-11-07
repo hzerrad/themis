@@ -254,9 +254,25 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 			Action: store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))},
 		},
 	}
+	// A partial rollback of MODE on checkout, which keeps its new image.
+	rolledBack := store.Incident{ID: uiID(4), Profile: "rollout-regression", Target: uiTarget}
+	partial := governance.Judgement{
+		Checks: uiPredicates(false), Past: []string{"failures_came_with_rollout", "config_changed_before_failure"},
+		Decided: governance.Decided{
+			Decision: policy.Decision{
+				Outcome: policy.RequireApproval, PolicyID: "rollback-needs-approval",
+				Reason: "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval.",
+			},
+			Action: store.Action{PreState: []byte(partialPre), Desired: []byte(partialDesired)},
+		},
+	}
 	return map[string]previewView{
 		"accept": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("72Mi"), Judgement: &accepted}),
 		"refuse": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("50Mi"), Judgement: &refused, Refused: refused.Decided.Decision.Reason}),
+		"partial": api.viewPreview(suggestion.Preview{
+			Incident: rolledBack, Matched: cfg.Matched(rolledBack.Profiles()), Judgement: &partial,
+			Proposal: store.Proposal{Capability: rollback.PartialName, Target: uiTarget, Params: map[string]any{"revision": int64(1), "changes": []any{partialMode}}},
+		}),
 	}
 }
 
@@ -561,6 +577,14 @@ const (
 	twoLowered = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"requests":{"cpu":"50m"}}},{"name":"proxy","image":"envoyproxy/envoy:v1.36.2"}]}}`
 	// The memory limit of the only container, raised.
 	memoryRaised = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"memory":"512Mi"}},"env":[{"name":"DB_PASSWORD","value":"s3cret-now"}]}]}}`
+	// A rollout that brought a new image and set MODE to strict; MODE rolled
+	// back, the new image kept.
+	partialPre     = `{"template":{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","env":[{"name":"MODE","value":"strict"}]}]}},"earlier":{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.4.1","env":[{"name":"MODE","value":"healthy"}]}]}}}`
+	partialDesired = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","env":[{"name":"MODE","value":"healthy"}]}]}}`
+	partialMode    = "the environment variable MODE of container app changed"
+	// The digest of the image revision 2's pods run; no pod of revision 1
+	// runs any more.
+	uiDigest = "sha256:5f2a9c0b7e1d4a3f8c6b2e9d0a1f7c3b5e8d2a4f6c9b0e1d3a5f7c2b4e6d8a0f"
 )
 
 // investigatorProposal is the investigator's rollback to revision 1.
@@ -580,7 +604,7 @@ func uiRollback(id, proposal string, state store.ActionState) store.Action {
 	return store.Action{
 		ID: id, ProposalID: proposal, Capability: rollback.Name, CapabilityVersion: "1", Target: uiIdentity,
 		Params: map[string]any{"revision": int64(1), "templateHash": "sha256:t1"}, PreState: []byte(rollbackPre), Desired: []byte(rollbackDesired),
-		BlastRadius: map[string]any{"replicas": int64(3), "atOnce": int64(1)}, Risk: "medium",
+		BlastRadius: map[string]any{"replicas": int64(3), "atOnce": int64(1), "images": map[string]any{"app": map[string]any{"before": uiDigest, "after": ""}}}, Risk: "medium",
 		Decision: "require_approval", DecisionReason: "A rollback in shop needs a person's approval.", PolicyID: "approve-in-shop", PolicyDigest: "sha256:p",
 		Digest: "sha256:9b2f", State: state, ExpiresAt: uiAtPtr(34), CreatedAt: uiAt(4),
 	}
@@ -1023,6 +1047,30 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 				a := shopAction(a2, store.ActionDenied)
 				a.ProposalID, a.Params, a.Desired = p2, oneValue("app", "limits", "memory", "50Mi"), []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))
 				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", shopLowerRefused, "raise-a-memory-limit-only", nil
+				return a
+			}()}},
+		},
+		// The investigator's partial rollback of MODE, keeping the new image,
+		// waiting for approval. Helm deploys checkout, so its next deploy
+		// would write MODE over again.
+		{
+			incident: inc(34, incident.AwaitingApproval), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval."))...),
+			proposals: []store.Proposal{func() store.Proposal {
+				p := uiInvestigatorProposal(p1, store.ProposalAccepted)
+				p.Capability, p.Params = rollback.PartialName, map[string]any{"revision": int64(1), "changes": []any{partialMode}}
+				p.Rationale, p.ExpectedEffect = "The logs reject MODE=strict, which revision 2 set; the new image starts.", "Pods start with MODE=healthy."
+				return p
+			}()},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionAwaitingApproval)
+				a.Capability, a.PreState, a.Desired = rollback.PartialName, []byte(partialPre), []byte(partialDesired)
+				a.Params = map[string]any{"revision": int64(1), "changes": []any{partialMode}, "templateHash": "sha256:t2"}
+				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(1), "deployedBy": "Helm"}
+				a.DecisionReason, a.PolicyID = "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval.", "rollback-needs-approval"
 				return a
 			}()}},
 		},

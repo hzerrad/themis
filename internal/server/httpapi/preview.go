@@ -33,7 +33,10 @@ type previewView struct {
 	// Verdict says it in one sentence: "Themis would accept this raise."
 	Verdict string `json:"verdict"`
 	// Reason is why Themis would refuse it, in the words of the refusal.
-	Reason  string           `json:"reason,omitempty"`
+	Reason string `json:"reason,omitempty"`
+	// Note is what else the fix says of its reach, once worked out against
+	// the cluster: "Keeps the rollout's new image."
+	Note    string           `json:"note,omitempty"`
 	For     []previewFinding `json:"for,omitempty"`
 	Against []previewFinding `json:"against,omitempty"`
 	// Then says what policy does with a fix Themis would accept.
@@ -91,11 +94,12 @@ func (a *API) viewPreview(pv suggestion.Preview) previewView {
 	if j := pv.Judgement; j != nil {
 		before, after = j.Decided.Action.PreState, j.Decided.Action.Desired
 	}
-	noun := a.Fixes.Words(p.Capability, pv.Incident.Target.Name, p.Params, before, after).Noun
+	words := a.Fixes.Words(p.Capability, pv.Incident.Target.Name, p.Params, before, after)
+	noun := words.Noun
 	if noun == "" {
 		noun = "fix"
 	}
-	v := previewView{Accepted: pv.Refused == ""}
+	v := previewView{Accepted: pv.Refused == "", Note: words.Note}
 	if v.Accepted {
 		v.Verdict = "Themis would accept this " + noun + "."
 	} else {

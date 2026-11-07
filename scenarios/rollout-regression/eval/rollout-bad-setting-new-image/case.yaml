@@ -1,0 +1,29 @@
+name: rollout-bad-setting-new-image
+version: 1
+description: Revision 2 brought a new image and set MODE to a value the new code rejects, so it exits at start. Revision 1 is healthy. Rolling back only MODE fixes it and keeps the new image. A full rollback stops the crash too, but takes the new image back with it, so it isn't the right fix here, though it does no harm.
+tags: [rollout, crashloop, partial-rollback]
+source: synthetic
+difficulty: hard
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
+fix:
+  capability: deployment.roll-back-changes
+  params: {revision: 1, changes: ["the environment variable MODE of container app changed"]}
+truth:
+  root_causes: [bad_configuration]
+  decision: propose
+  policy: require_approval
+  acceptable_revisions: [1]
+  required_citations: [container_logs_tail]
+  predicates:
+    failure_onset_after_rollout: "true"
+    earlier_revision_healthy: "true"
+    rollout_changed_the_app: "true"
+    oom_killed_new_revision: "false"
+    gitops_managed: "false"
+    config_changed_before_failure: "false"
+    failures_came_with_rollout: "true"

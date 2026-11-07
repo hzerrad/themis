@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Insufficient evidence to determine root cause; readiness probe failures may stem from application issues rather than CPU throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Throttling data shows low CPU usage (34% of limit) and 6% throttling ratio, but readiness probe failures may indicate application-level issues.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [\"ev-revision_health\"],\n    \"missing\": [\"comparison of CPU usage between revisions\", \"application-specific logs for readiness probe failures\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"other\",\n    \"summary\": \"Readiness probe failures could stem from application misconfiguration or code issues in the new image (example/search:4.2.0) despite CPU metrics appearing normal.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [\"ev-container_cpu\"],\n    \"missing\": [\"container_logs_tail for error details\", \"metrics comparing revisions 1 and 2\"],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4637,
+        "output_tokens": 816
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timing to accommodate new revision's startup delay\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Liveness probe kills the new revision before it finishes loading routes\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"New image has startup issues causing probe failures\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"edge\",\n    \"name\": \"api-gateway\",\n    \"uid\": \"uid-deployment-api-gateway\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 90,\n      \"timeoutSeconds\": 10\n    }\n  },\n  \"expected_effect\": \"Allow 60s+ for route loading before liveness probe kills the container\",\n  \"rationale\": \"Container logs show route reload takes ~60s (\\\"expect about 60s before listening\\\") and the Notice event explicitly requests 90s initial delay. Current liveness probe (10s delay, 1s timeout) kills the container before it's ready. Increasing delay to 90s and timeout to 10s aligns with observed startup time.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\", \"probe_timeouts\"]\n}\n}",
+      "usage": {
+        "input_tokens": 7856,
+        "output_tokens": 1317
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

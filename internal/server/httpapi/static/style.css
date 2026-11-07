@@ -173,6 +173,8 @@ table.diff { width: 100%; border-collapse: collapse; }
 .diff td { padding: 8px 12px 8px 0; border-top: 1px solid var(--rule); vertical-align: baseline; overflow-wrap: anywhere; }
 .diff .from { color: var(--oxblood); text-decoration: line-through; text-decoration-thickness: 1px; }
 .diff .to { color: var(--verdigris); font-weight: 500; }
+.diff .sha { display: inline-block; width: 100%; margin-top: 2px; font-size: 12px; color: var(--quiet); font-weight: 400; }
+.changes-pick { display: grid; gap: 6px; }
 .terms { margin: 14px 0 0; color: var(--ink-2); font-size: 14px; }
 .terms b { color: var(--ink); font-weight: 600; }
 .act { display: flex; flex-direction: column; gap: 10px; }

@@ -34,10 +34,17 @@ const OLD = [/memory and CPU (change|settings)/, /probe timing/, /\bRisk: /, /\b
 // out from its change, and texts it must not show.
 const SECRETS = "Values that look like secrets are hidden.";
 const SAYS = {
+  34: {
+    has: ["Roll back checkout's environment variable MODE to revision 1?", "Approve the partial rollback", "Deny the partial rollback",
+      "Keeps the rollout's new image.", "Apply the same change where checkout's manifest lives, or the next deploy undoes it."],
+    not: ["Image digest unknown", "Rolling back undoes"],
+  },
   2: {
     has: ["Roll checkout back to revision 1?", "Approve the rollback", "Deny the rollback", "Supports the rollback",
       "Restarts 3 pods, one at a time.", "Then checks that the pods become ready and stay ready.", "Void if checkout changes first.", SECRETS,
-      "Changed from revision 1:", "The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.", "The liveness probe of container app changed."],
+      "Changed from revision 1:", "The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.", "The liveness probe of container app changed.",
+      "Rolling back undoes 3 changes, including the image.", "sha256:5f2a9c0b7e1d…", "Image digest unknown"],
+    not: ["next deploy undoes it"],
   },
   3: { has: ["Change checkout's memory request and memory limit?", "Approve the change", "Supports the change"], not: [SECRETS] },
   12: { has: ["Lengthened checkout's liveness probe timeout from 1s to 3s.", "Change checkout's memory request and memory limit"] },
@@ -138,9 +145,12 @@ function api(o) {
     ["GET", /^\/v1\/incidents\/([\w-]+)$/, (_, id) => detail(id) || [404, "No such incident or fix."]],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/proposals$/, () => F.suggested],
     // A raise of the memory limit to 72Mi would be accepted; any other
-    // value refused.
+    // value refused. A partial rollback would be accepted.
     ["POST", /^\/v1\/incidents\/([\w-]+)\/proposals\/preview$/, (_h, _id, body) => {
-      const app = ((JSON.parse(body).params || {}).containers || {}).app || {};
+      const params = JSON.parse(body).params || {};
+      state.previewed = params;
+      if (params.changes) return F.previews.partial;
+      const app = (params.containers || {}).app || {};
       return (app.limits || {}).memory === "72Mi" ? F.previews.accept : F.previews.refuse;
     }],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/evidence$/, (_h, _id, body) => {
@@ -280,6 +290,11 @@ const act = {
     if (i < 0) throw new Error("no option " + JSON.stringify(value) + " in " + el.outerHTML.slice(0, 80));
     el.selectedIndex = i;
     el.dispatchEvent(new page.window.Event("change", { bubbles: true }));
+    await settle(page);
+  },
+  async tick(page, box) {
+    box.checked = true;
+    box.dispatchEvent(new page.window.Event("change", { bubbles: true }));
     await settle(page);
   },
   async type(page, input, value) {
@@ -537,17 +552,43 @@ await visit("approver: the preview of a suggested fix", { who: "approver", hash:
   ok("previewed a value that isn't a quantity");
 });
 
+// A partial rollback is chosen from the latest rollout's changes, as the
+// rollout history says them, never typed, and previewed as any fix is.
+await visit("approver: the preview of a partial rollback", { who: "approver", hash: "#/incidents/" + id(4) }, async (page, ok) => {
+  const form = () => the(page, "[data-key=suggest] form");
+  const preview = () => the(page, "[data-key=suggest] .preview");
+  await act.choose(page, field(page, "Fix", form()), "Partial rollback");
+  await act.wait(page, 450);
+  expect("nothing to judge before a change is ticked", preview().textContent.includes("Tick at least one change."));
+  ok("nothing ticked");
+  const box = field(page, "The memory limit of container app changed from 512Mi to 256Mi.", form());
+  await act.tick(page, box);
+  await act.wait(page, 450);
+  expect("the partial rollback previewed", preview().classList.contains("ok")
+    && preview().querySelector(".verdict").textContent === "Themis would accept this partial rollback.");
+  expect("only the ticked change asked for", JSON.stringify(page.api.previewed) === JSON.stringify({ revision: 1, changes: ["the memory limit of container app changed from 512Mi to 256Mi"] }));
+  says(page, { has: ["Keeps the rollout's new image."] });
+  ok("previewed the partial rollback");
+  for (const c of ["The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.", "The liveness probe of container app changed."]) {
+    await act.tick(page, field(page, c, form()));
+  }
+  says(page, { has: ["Every change is ticked, the same as a rollback to revision 1."] });
+  ok("ticked every change");
+});
+
 // Suggesting each fix the incident offers, as an approver and an admin.
 for (const who of ["approver", "admin"]) {
   await visit(who + ": suggest every fix", { who, hash: "#/incidents/" + id(4) }, async (page, ok) => {
     const kinds = [...the(page, "[data-key=suggest] select").options].map((o) => o.textContent);
-    const offered = ["Rollback", "Memory or CPU change", "Probe change", "Scale change"];
+    const offered = ["Rollback", "Partial rollback", "Memory or CPU change", "Probe change", "Scale change"];
     if (kinds.join() !== offered.join()) throw new Error("the form offers " + kinds.join(", ") + ", not " + offered.join(", "));
     for (const kind of kinds) {
       const form = () => the(page, "[data-key=suggest] form");
       await act.choose(page, field(page, "Fix", form()), kind);
       ok("chose " + kind);
-      if (kind === "Memory or CPU change") {
+      if (kind === "Partial rollback") {
+        field(page, "The memory limit of container app changed from 512Mi to 256Mi.", form()).checked = true;
+      } else if (kind === "Memory or CPU change") {
         await act.choose(page, field(page, "Container", form()), "proxy");
         ok("memory or CPU of proxy");
         await act.choose(page, field(page, "Container", form()), "app");

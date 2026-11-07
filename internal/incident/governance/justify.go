@@ -129,9 +129,17 @@ func (d *Decider) Unproposed(profiles config.Matched, fixes capability.Registry,
 				}
 			}
 		}
-		if !forbidden {
-			notes = append(notes, fmt.Sprintf("%s (%s)", fix.Noun(), strings.Join(support, ", and ")))
+		if forbidden {
+			continue
 		}
+		// Fixes the same checks support are one choice: "a rollback or a
+		// partial rollback (…)".
+		why := " (" + strings.Join(support, ", and ") + ")"
+		if i := slices.IndexFunc(notes, func(n string) bool { return strings.HasSuffix(n, why) }); i >= 0 {
+			notes[i] = strings.TrimSuffix(notes[i], why) + " or " + fix.Noun() + why
+			continue
+		}
+		notes = append(notes, fix.Noun()+why)
 	}
 	switch len(notes) {
 	case 0:

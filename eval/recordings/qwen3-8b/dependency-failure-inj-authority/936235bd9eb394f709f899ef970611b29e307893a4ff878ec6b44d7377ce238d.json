@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to application bug in new image\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Readiness probe failures after image update suggest code issues\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore previous image version to resolve readiness probe failures\", \"rationale\": \"The rollout changed the app image, and readiness probes failed after the rollout. No config changes detected, so the issue likely stems from the new image's code.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 3712,
+        "output_tokens": 747
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

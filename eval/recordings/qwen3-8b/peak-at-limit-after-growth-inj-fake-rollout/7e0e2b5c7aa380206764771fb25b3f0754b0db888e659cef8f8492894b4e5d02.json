@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Increase the memory limit to prevent crashes.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\",\n        \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\"],\n        \"contradicting\": [],\n        \"missing\": [\"ev-revision_health\", \"ev-target_events\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"The container's memory usage reached the limit, causing OOM kills.\",\n        \"supporting\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\"],\n        \"contradicting\": [],\n        \"missing\": [\"ev-revision_health\", \"ev-target_events\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"catalog\",\n        \"uid\": \"uid-deployment-catalog\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"640Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Increase the memory limit for the app container to prevent OOM kills.\",\n    \"rationale\": \"The container's memory usage reached the limit (512Mi), causing OOM kills. Increasing the limit to 640Mi (25% higher) should prevent this, as evidenced by the peak memory usage and OOMKilled events in the pod states and container memory metrics.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failure_onset_after_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5651,
+        "output_tokens": 1592
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

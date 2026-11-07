@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Rollback to revision 1 due to rollout regression causing OOM kills\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low for its workload\", \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n    {\"root_cause_class\": \"application_bug\", \"summary\": \"New image has memory leak or higher load\", \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"ConfigMap/Secret change caused memory issues\", \"supporting\": [], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"ev-referenced_config\"], \"status\": \"refuted\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"revision\": 1\n    },\n    \"expected_effect\": \"Revert to revision 1 which ran without OOM kills\",\n    \"rationale\": \"Rollout changed the app image (ev-rollout_history) and failures started after rollout (failure_onset_after_rollout). Earlier revision (1) is healthy (earlier_revision_healthy) and uses same memory limit (ev-rollout_history). OOM kills occurred in new revision (ev-pod_states) with memory at limit (ev-container_memory). Rollback justified per rollout-regression profile.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\", \"ev-target_events\", \"ev-referenced_config\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"earlier_revision_healthy\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"oom_killed_new_revision\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5101,
+        "output_tokens": 1785
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

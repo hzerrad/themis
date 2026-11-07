@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The container's memory limit is too low, causing OOM kills. Increase the memory limit to prevent this.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"The container's memory limit is 60Mi, but it peaked at 95% of that (57Mi) before being OOMKilled. The limit is insufficient for the workload.\",\n        \"supporting\": [\"ev-pod_states\", \"ev-container_memory\"],\n        \"contradicting\": [],\n        \"missing\": [\"container_memory_peak_details\", \"oom_killed_reason_details\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"The new revision's memory limit is lower than required, leading to OOM kills despite no prior revision for comparison.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-container_memory\"],\n        \"contradicting\": [],\n        \"missing\": [\"previous_revision_memory_limit\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"catalog\",\n        \"uid\": \"uid-deployment-catalog\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"90Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"The memory limit for the app container will be increased to 90Mi, preventing OOM kills by providing sufficient memory headroom.\",\n    \"rationale\": \"The container's memory limit is 60Mi, but it peaked at 95% of that (57Mi) before being OOMKilled. Increasing the limit to 90Mi provides a 25% buffer to prevent future OOM kills.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4753,
+        "output_tokens": 2045
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

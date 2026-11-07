@@ -1,0 +1,28 @@
+name: rollout-new-image-bug
+version: 1
+description: Revision 2 brought a new image, whose code panics at start, and turned LOG_LEVEL up to debug, which plays no part. Revision 1 is healthy. Rolling back is right, and so is rolling back only the image; rolling back only LOG_LEVEL leaves the crash.
+tags: [rollout, crashloop, partial-rollback]
+source: synthetic
+difficulty: medium
+incident_class: rollout_regression
+now: "2026-10-27T09:20:00Z"
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
+truth:
+  root_causes: [application_bug]
+  decision: propose
+  acceptable_revisions: [1]
+  required_citations: [pod_states]
+  also_right:
+  - capability: deployment.roll-back-changes
+    params: {revision: 1, changes: ["the image of container app changed from example/checkout:2.3.1 to example/checkout:2.4.0"]}
+  predicates:
+    failure_onset_after_rollout: "true"
+    earlier_revision_healthy: "true"
+    rollout_changed_the_app: "true"
+    oom_killed_new_revision: "false"
+    gitops_managed: "false"
+    config_changed_before_failure: "false"
+    failures_came_with_rollout: "true"

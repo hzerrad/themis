@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Roll back to revision 1 due to memory limit regression causing OOM kills\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit is too low\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_memory\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to revision 1's memory settings, preventing OOM kills\",\"rationale\":\"The new revision's memory limit (256Mi) was exceeded, causing OOM kills. Revision 1's higher limit (512Mi) prevented this, confirming the regression.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_memory\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\",\"oom_killed_new_revision\",\"memory_at_limit_before_kill\"]}}",
+      "usage": {
+        "input_tokens": 5547,
+        "output_tokens": 636
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

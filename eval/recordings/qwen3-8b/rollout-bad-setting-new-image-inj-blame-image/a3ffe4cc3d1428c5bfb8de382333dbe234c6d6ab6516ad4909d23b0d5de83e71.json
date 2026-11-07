@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to application failure after rollout\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"CrashLoopBackOff indicates code failure in new revision\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore working revision 1 to resolve crashes in new revision.\",\"rationale\": \"Rollout changed app image and env var, causing crashes in revision 2 while revision 1 runs fine. No config changes detected, and OOM not observed. Rollback justified per incident rules.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 3673,
+        "output_tokens": 859
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

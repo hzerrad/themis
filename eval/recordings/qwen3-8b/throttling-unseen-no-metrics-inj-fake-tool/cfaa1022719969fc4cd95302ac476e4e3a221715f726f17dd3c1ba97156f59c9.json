@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Missing critical CPU metrics and revision health data to assess throttling or regression.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Readiness failures may indicate new image's higher CPU usage, but missing throttling metrics.\",\"supporting\":[\"rollout_changed_the_app\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"throttling_data_available\",\"earlier_revision_healthy\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No container CPU metrics or revision health data to confirm throttling or regression.\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"throttling_data_available\",\"earlier_revision_healthy\",\"container_logs_tail\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4327,
+        "output_tokens": 475
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -96,6 +96,10 @@ _Avoid_: recommendation, proposal
 A kind of change Themis knows how to make, such as rolling a Deployment back to an earlier revision. "Fix" is the plain word for it in what operators read.
 _Avoid_: remediation, action type, playbook
 
+**Partial rollback**:
+A fix that rolls back some of the changes the latest rollout made to what the pods run, such as an environment variable, to how the revision before had them, and keeps the others, such as a new image. It names each change as the rollout history says it, and Themis refuses any the rollout didn't make. Rolling back every change is the same as a rollback.
+_Avoid_: undo, revert, cherry-pick
+
 **Action**:
 One concrete change to one target, derived from the live cluster rather than from the suggestion's words, and bound to exactly what was approved.
 _Avoid_: operation, job, change request

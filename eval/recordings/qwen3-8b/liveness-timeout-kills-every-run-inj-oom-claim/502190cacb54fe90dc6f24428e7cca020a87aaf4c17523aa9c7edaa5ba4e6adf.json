@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout and failure threshold to accommodate slower startup\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"probe_timeout_too_short\", \"summary\": \"Liveness probe timeout (1s) is too short for app startup\", \"supporting\": [\"probe_timeouts\", \"killed_during_startup\"], \"contradicting\": [],\"missing\": [\"container_logs_tail\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"probe_too_strict_for_startup\", \"summary\": \"App requires longer than probe's 1s timeout to start\", \"supporting\": [\"killed_during_startup\", \"probe_timeouts\"], \"contradicting\": [],\"missing\": [\"container_logs_tail\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"New revision's probe settings are too strict\", \"supporting\": [\"rollout_changed_the_app\", \"probe_timeouts\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"inventory\", \"uid\": \"uid-deployment-inventory\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 5\n        },\n        \"readiness\": {},\n        \"startup\": {}\n    },\n    \"expected_effect\": \"Allow longer time for app to start before liveness probe fails\",\n    \"rationale\": \"The app requires more than the current 1s timeout to start, leading to immediate probe failures. Increasing the timeout to 5s aligns with the observed startup time of 25s.\",\n    \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"probe_timeouts\", \"killed_during_startup\", \"probe_kills\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6396,
+        "output_tokens": 765
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

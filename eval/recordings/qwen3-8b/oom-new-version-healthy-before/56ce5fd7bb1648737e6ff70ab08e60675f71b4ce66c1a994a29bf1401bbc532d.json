@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to rollout regression causing OOM kills\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit is too low for its workload\",\"supporting\":[\"ev-pod_states\",\"ev-container_memory\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"New image has memory leak or higher load\",\"supporting\":[\"ev-pod_states\",\"ev-rollout_history\"],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[\"container_logs_tail\"],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"ConfigMap/Secret change caused memory issues\",\"supporting\":[],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[\"ev-referenced_config\"],\"status\":\"refuted\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to revision 1 which ran without OOM kills\",\"rationale\":\"Rollout changed the app image (ev-rollout_history) and failures started after rollout (failure_onset_after_roll0ut). Earlier revision (1) is healthy (earlier_revision_healthy) and uses same memory limit (ev-rollout_history). OOM kills occurred in new revision (ev-pod_states) with memory at limit (ev-container_memory). Rollback justified per rollout-regression profile.\",\"cited_evidence_ids\":[\"ev-pod_states\",\"ev-container_memory\",\"ev-rollout_history\",\"ev-target_events\",\"ev-referenced_config\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\",\"oom_killed_new_revision\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 5659,
+        "output_tokens": 1121
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

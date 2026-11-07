@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to memory issues in new image\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New image 2.4.0 exceeds 256Mi memory limit\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[\"revision_health\"],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"New image has memory leak\",\"supporting\":[\"ev-container_logs_tail\",\"ev-pod_states\"],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_capacity\",\"summary\":\"Cluster lacks memory for new revision\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[\"ev-rollout_history\"],\"missing\":[\"revision_health\"],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Prevent OOMKilled by reverting to stable revision 1\",\"rationale\":\"Logs show heap nearing 96% of 256Mi limit, matching OOMKilled in new revision. Rollback justified per rules when OOMKilled, failure_after_rollout, and no config change.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-referenced_config\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"oom_killed_new_revision\",\"rollout_changed_the_app\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 4877,
+        "output_tokens": 783
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

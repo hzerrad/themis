@@ -296,6 +296,17 @@ demo-break-stuck: ## stuck-pods: roll checkout out to an image tag that doesn't 
 demo-fix: ## Roll checkout back to its previous revision
 	$(KUBECTL) -n shop rollout undo deployment/checkout
 
+# rollout-regression, a partial rollback: one rollout of checkout changes its
+# image to another busybox tag and sets a MODE the new version rejects, so
+# rolling back only MODE fixes it and keeps the new image.
+.PHONY: demo-break-config demo-fix-config
+CHECKOUT_APP = {"spec":{"template":{"spec":{"containers":[{"name":"app","image":"$(1)","env":[{"name":"MODE","value":"$(2)"}]}]}}}}
+demo-break-config: ## rollout-regression: roll checkout out to a new image and a MODE the new version rejects, in one rollout
+	$(KUBECTL) -n shop patch deployment checkout -p '$(call CHECKOUT_APP,busybox:1.36,fast)'
+
+demo-fix-config: ## Put checkout's image and MODE back as demo-up deploys them
+	$(KUBECTL) -n shop patch deployment checkout -p '$(call CHECKOUT_APP,busybox:1.37,healthy)'
+
 # oom-limit-too-low: catalog. The pods restart to load the larger catalog;
 # deleting them, unlike a rollout restart, leaves the revision as it was.
 .PHONY: demo-break-oom demo-fix-oom

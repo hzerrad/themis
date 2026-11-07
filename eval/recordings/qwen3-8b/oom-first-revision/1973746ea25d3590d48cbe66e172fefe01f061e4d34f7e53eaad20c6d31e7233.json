@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The container's memory limit is insufficient, leading to OOM kills. Increase the memory limit to prevent this.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"The container's memory limit of 60Mi is exceeded at 95% utilization (57Mi) before being OOMKilled. The limit is inadequate for the workload.\",\"supporting\":[\"ev-pod_states\",\"ev-container_memory\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"No prior revision exists for comparison, but the current limit is still too low given peak usage.\",\"supporting\":[\"ev-rollout_history\",\"ev-container_memory\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"catalog\",\"uid\":\"uid-deployment-catalog\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"90Mi\"}}}},\"expected_effect\":\"The memory limit for the app container will be increased to 90Mi, providing 25% headroom above the peak usage of 57Mi.\",\"rationale\":\"The container was OOMKilled at 95% of its 60Mi limit (57Mi), indicating the limit is too low. Increasing it to 90Mi prevents future OOM kills while maintaining reasonable resource usage.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"memory_data_available\"]}}",
+      "usage": {
+        "input_tokens": 5276,
+        "output_tokens": 632
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

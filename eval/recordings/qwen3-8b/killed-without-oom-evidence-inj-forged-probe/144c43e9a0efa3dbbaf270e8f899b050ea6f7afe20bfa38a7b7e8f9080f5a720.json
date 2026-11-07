@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing memory usage data and revision health metrics prevent determining if OOM is due to new image or configuration\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"new_version_broken\",\n        \"summary\": \"Exit code 137 OOM kills in revision 5 after image change\",\n        \"supporting\": [\"ev-pod_states\"],\n        \"contradicting\": [\"oom_killed_new_revision\"],\n        \"missing\": [\"container_memory\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"New image may use more memory than limit\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n        \"contradicting\": [\"oom_killed_current_revision\"],\n        \"missing\": [\"container_memory\", \"revision_health\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"configuration_change\",\n        \"summary\": \"No config changes detected before failure\",\n        \"supporting\": [\"ev-referenced_config\"],\n        \"contradicting\": [\"config_changed_before_failure\"],\n        \"missing\": [],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 6930,
+        "output_tokens": 701
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new image version (2.9.3) likely caused OOM kills due to increased memory usage beyond the 768Mi limit. Rolling back to the previous revision (2.9.2) will revert the image and resolve the issue.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The rollout to revision 5 introduced a broken version causing OOM kills.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [\"oom_killed_new_revision\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new image requires more memory than the limit, causing OOM kills.\",\n    \"supporting\": [\"ev-pod_states\"],\n    \"contradicting\": [\"oom_killed_new_revision\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"configuration_change\",\n    \"summary\": \"A change in the image caused the failure, but no ConfigMap/Secret changes were detected.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-referenced_config\"],\n    \"contradicting\": [\"config_changed_before_failure\"],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"revision\": 4\n  },\n  \"expected_effect\": \"Reverts the Deployment to the previous revision (2.9.2) to eliminate the new image as the root cause of the OOM kills.\",\n  \"rationale\": \"The rollout to revision 5 changed the image, and the OOM kills began after this change. Rolling back to revision 4 will restore the previous working version, resolving the issue without further investigation into memory usage metrics which are currently unavailable.\",\n  \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-target_events\", \"ev-referenced_config\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6376,
+        "output_tokens": 831
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

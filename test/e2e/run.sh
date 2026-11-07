@@ -356,7 +356,42 @@ printf '  %s\n' "$LAST"
 # the timeline says the workload was put back.
 check "the timeline says it was put back" grep -q "^Restore" <<<"$LAST"
 
-log "10. configuration resources apply without a restart, and bad ones are refused"
+log "10. a person rolls back only the change that broke it, and keeps the new image"
+BEFORE=$(latest)
+heal
+# One rollout changes the image and sets MODE=leak: rolling back MODE alone fixes it.
+$K -n shop patch deploy checkout -p '{"spec":{"template":{"spec":{"containers":[{"name":"app","image":"busybox:1.36","env":[{"name":"MODE","value":"leak"}]}]}}}}' >/dev/null
+DEADLINE=$((SECONDS + 240)); ID=$BEFORE
+while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(latest); done
+check "the model's rollback awaits approval" [ "$(wait_state "$ID" 300 awaiting_approval closed_no_action escalated)" = awaiting_approval ]
+check "the rollback says it undoes both changes, the image among them" [ "$(action "$ID" '["Words"]["note"]')" = "Rolling back undoes 2 changes, including the image." ]
+check "the rollback shows the digests both versions' pods run" \
+  [ "$(api "/v1/incidents/$ID" | field 'all(d["Actions"][-1]["BlastRadius"]["images"]["app"][k].startswith("sha256:") for k in ("before", "after"))')" = True ]
+check "denying the rollback keeps the incident open" [ "$(post "/v1/actions/$(action "$ID" '["ID"]')/deny" '{"reason":"e2e: keep the new image"}')" = 200 ]
+check "the incident waits for a suggested fix" [ "$(wait_state "$ID" 60 awaiting_suggestion closed_no_action escalated)" = awaiting_suggestion ]
+CURRENT=$($K -n shop get deploy checkout -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
+PARTIAL=$(api "/v1/incidents/$ID" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+t = {k.lower(): v for k, v in d["Incident"]["target"].items()}
+print(json.dumps({
+    "clientProposalId": "e2e-partial", "capabilityName": "deployment.roll-back-changes",
+    "target": {"group": t.get("group") or "apps", "kind": t["kind"], "namespace": t["namespace"], "name": t["name"], "uid": t["uid"]},
+    "params": {"revision": int(sys.argv[1]) - 1, "changes": ["the environment variable MODE of container app changed"]},
+    "rationale": "e2e: MODE broke it; keep the new image",
+    "citedEvidenceIds": [e["ID"] for e in d.get("Evidence") or []],
+}))' "$CURRENT")
+check "a person's partial rollback is taken" [ "$(post "/v1/incidents/$ID/proposals" "$PARTIAL")" = 200 ]
+check "the partial rollback awaits approval" [ "$(wait_state "$ID" 120 awaiting_approval closed_no_action escalated)" = awaiting_approval ]
+check "it changes MODE alone, and keeps the new image" \
+  [ "$(api "/v1/incidents/$ID" | field '[c["field"] for c in d["Actions"][-1]["Changes"]] == ["env MODE"] and d["Actions"][-1]["Words"]["note"] == "Keeps the rollout'"'"'s new image."')" = True ]
+check "approving the partial rollback is accepted" [ "$(approve "$ID")" = 200 ]
+check "the partial rollback is verified as resolved" [ "$(wait_state "$ID" 300 resolved escalated contained_escalated)" = resolved ]
+check "checkout runs the new image with MODE back to healthy" \
+  [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].env[?(@.name=="MODE")].value}')" = "busybox:1.36 healthy" ]
+$K -n shop set image deploy/checkout app=busybox:1.37 >/dev/null
+
+log "11. configuration resources apply without a restart, and bad ones are refused"
 restarts() { $K -n themis get pods -l app.kubernetes.io/component=core -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}'; }
 # accepted_within <namespace> <profile> <seconds> <True|False>
 accepted_within() {
@@ -391,7 +426,7 @@ check "a profile whose rule doesn't compile is refused" accepted_within shop tea
 $K -n shop delete incidentprofile team-good team-bad >/dev/null
 check "the core didn't restart" [ "$(restarts)" = "$BEFORE_RESTARTS" ]
 
-log "11. only an agent named in the configuration may call in, with its own token"
+log "12. only an agent named in the configuration may call in, with its own token"
 $K -n themis port-forward svc/themis-core 19090:9090 >/dev/null 2>&1 &
 AGENT_PF=$!
 sleep 2

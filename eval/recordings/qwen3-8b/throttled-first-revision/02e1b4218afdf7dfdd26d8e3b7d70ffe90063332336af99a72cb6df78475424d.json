@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The container's logs confirm sustained CPU throttling, with work backlog increasing over time. Increasing the CPU limit to 300m will alleviate throttling.\",\"hypotheses\":[{\"root_cause_class\":\"cpu_limit_too_low\",\"summary\":\"Logs show consistent CPU backlog growth, matching the 91.5% usage near the 200m limit.\",\"supporting\":[\"ev-container_cpu\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"search\",\"uid\":\"uid-deployment-search\"},\"params\":{\"containers\":{\"app\":{\"requests\":{\"cpu\":\"50m\"},\"limits\":{\"cpu\":\"300m\"}}}},\"expected_effect\":\"Raise CPU limit to 300m, reducing throttling and allowing the container to process work without delays.\",\"rationale\":\"Logs show the container is consistently behind by increasing CPU work amounts, confirming throttling at the 200m limit. Increasing the limit provides more headroom, reducing throttling and improving performance.\",\"cited_evidence_ids\":[\"ev-container_cpu\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"throttling_data_available\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\"]}}",
+      "usage": {
+        "input_tokens": 4056,
+        "output_tokens": 470
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"The new image version 2.4.0 has a dependency issue (database connection failure), causing CrashLoopBackOff. Rolling back to revision 1 resolves the regression.\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Logs show connection refused to database, indicating dependency failure in new image.\",\"supporting\":[\"ev-container_logs_tail\",\"ev-pod_states\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Reverts to image example/checkout:2.3.1, resolving the database connection issue.\",\"rationale\":\"The logs explicitly state the new image (2.4.0) has a regression causing the failure, and rolling back to revision 1 is recommended.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-rollout_history\"],\"cited_predicates\":[\"rollout_changed_the_app\",\"failure_onset_after_rollout\"]}}",
+      "usage": {
+        "input_tokens": 4263,
+        "output_tokens": 1025
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

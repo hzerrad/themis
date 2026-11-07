@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"OOMKilled pods in revision 2, but missing memory usage data to confirm if the limit is too low or if the app has a memory leak.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"Current revision's memory limit may be too low, but missing container_memory evidence to confirm.\",\n    \"supporting\": [\"oom_killed_new_revision\", \"oom_killed_current_revision\"],\n    \"contradicting\": [\"memory_data_available\"],\n    \"missing\": [\"container_memory\", \"memory_at_limit_before_kill\", \"memory_data_available\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Pods may be evicted due to node memory pressure, but no evidence of node-level memory issues.\",\n    \"supporting\": [\"oom_killed_new_revision\"],\n    \"contradicting\": [\"evicted_for_node_memory\"],\n    \"missing\": [\"node_memory_pressure_evidence\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing container_memory data to determine if memory limit is too low or if there's a memory leak.\",\n    \"supporting\": [\"memory_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_memory\"],\n    \"status\": \"open\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 5121,
+        "output_tokens": 920
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

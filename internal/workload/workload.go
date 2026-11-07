@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -97,6 +98,10 @@ type Workload struct {
 
 	// ManagedBy names the GitOps tool that owns the workload, or is empty.
 	ManagedBy string
+	// Deployer names what else deploys the workload, such as Helm, by the
+	// marks it leaves: its next deploy writes the template again, over a
+	// change made elsewhere. Empty when nothing shows one.
+	Deployer string
 
 	Replicas Replicas
 
@@ -155,7 +160,7 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef) (*Workload
 	return &Workload{
 		Target: t, Generation: d.Generation, Revision: revisionOf(&d),
 		Template: *d.Spec.Template.DeepCopy(), TemplateHash: hash,
-		Writer: writer, WrittenAt: at, ManagedBy: managedBy(&d),
+		Writer: writer, WrittenAt: at, ManagedBy: managedBy(&d), Deployer: deployer(&d),
 		Replicas: Replicas{
 			Desired: desired, Total: s.Replicas, Updated: s.UpdatedReplicas, Ready: s.ReadyReplicas,
 			Available: s.AvailableReplicas, Observed: s.ObservedGeneration >= d.Generation,
@@ -382,6 +387,77 @@ func managedBy(d *appsv1.Deployment) string {
 		}
 	}
 	return ""
+}
+
+// deployerMarks are the labels and annotations, by key or by prefix, that
+// tools other than GitOps write on the workloads they deploy, and the tool
+// each names. app.kubernetes.io/managed-by names its tool itself.
+var deployerMarks = map[string]string{
+	"meta.helm.sh/release-name": "Helm",
+	"helm.sh/chart":             "Helm",
+	"app.gitlab.com/":           "GitLab",
+	"moniker.spinnaker.io/":     "Spinnaker",
+	"artifact.spinnaker.io/":    "Spinnaker",
+	"skaffold.dev/":             "Skaffold",
+	"kapp.k14s.io/":             "kapp",
+	"pulumi.com/":               "Pulumi",
+}
+
+// deployerManagers are the field managers of tools that deploy workloads
+// from a manifest of their own.
+var deployerManagers = map[string]string{
+	"helm":              "Helm",
+	"Terraform":         "Terraform",
+	"terraform":         "Terraform",
+	"pulumi-kubernetes": "Pulumi",
+	"kapp":              "kapp",
+	"skaffold":          "Skaffold",
+}
+
+const managedByLabel = "app.kubernetes.io/managed-by"
+
+// deployer names the tool, other than GitOps, that deploys d, or is empty.
+func deployer(d *appsv1.Deployment) string {
+	if v := d.Labels[managedByLabel]; v != "" {
+		return v
+	}
+	for _, kv := range []map[string]string{d.Labels, d.Annotations} {
+		for k := range kv {
+			for mark, tool := range deployerMarks {
+				if k == mark || strings.HasSuffix(mark, "/") && strings.HasPrefix(k, mark) {
+					return tool
+				}
+			}
+		}
+	}
+	for _, mf := range d.ManagedFields {
+		if tool, ok := deployerManagers[mf.Manager]; ok {
+			return tool
+		}
+	}
+	return ""
+}
+
+// Digest is the image digest the workload's pods run for container when its
+// image is image, such as sha256:4b5c…, read from a pod that runs it. Empty
+// when no pod does, as when the revision's pods are gone, or none pulled it.
+func (w *Workload) Digest(ctx context.Context, container, image string) (string, error) {
+	pods, err := w.Pods(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range pods {
+		specs := slices.Concat(p.Spec.InitContainers, p.Spec.Containers)
+		if !slices.ContainsFunc(specs, func(c corev1.Container) bool { return c.Name == container && c.Image == image }) {
+			continue
+		}
+		for _, cs := range slices.Concat(p.Status.InitContainerStatuses, p.Status.ContainerStatuses) {
+			if i := strings.Index(cs.ImageID, "sha256:"); cs.Name == container && i >= 0 {
+				return cs.ImageID[i:], nil
+			}
+		}
+	}
+	return "", nil
 }
 
 // State is how the workload's current revision is doing: what Kubernetes

@@ -1,0 +1,192 @@
+# A rollout that changed several things at once: revision 2 brought a new
+# image, set MODE to a value the new code rejects, turned DB_URL from a
+# Secret reference into a literal, added LOG_LEVEL, and added a cache volume
+# with its mount. One pod of each revision runs, each with the digest of its
+# image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  labels:
+    app: checkout
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.4.0
+          env:
+            - name: MODE
+              value: strict
+            - name: DB_URL
+              value: postgres://shop:fixture-s3cr3t-do-not-leak@db/shop
+            - name: LOG_LEVEL
+              value: debug
+          resources:
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: cache
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-1
+  labels:
+    app: checkout
+    pod-template-hash: "1"
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: checkout
+      controller: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: "1"
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: "1"
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.3.1
+          env:
+            - name: MODE
+              value: healthy
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db
+                  key: url
+          resources:
+            limits:
+              memory: 256Mi
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-2
+  labels:
+    app: checkout
+    pod-template-hash: "2"
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: checkout
+      controller: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: "2"
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: "2"
+    spec:
+      containers:
+        - name: app
+          image: example/checkout:2.4.0
+          env:
+            - name: MODE
+              value: strict
+            - name: DB_URL
+              value: postgres://shop:fixture-s3cr3t-do-not-leak@db/shop
+            - name: LOG_LEVEL
+              value: debug
+          resources:
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-1-a
+  labels:
+    app: checkout
+    pod-template-hash: "1"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-1
+      controller: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.3.1
+status:
+  phase: Running
+  containerStatuses:
+    - name: app
+      image: docker.io/example/checkout:2.3.1
+      imageID: docker.io/example/checkout@sha256:1111111111111111111111111111111111111111111111111111111111111111
+      ready: true
+      restartCount: 0
+      state:
+        running:
+          startedAt: "2026-11-07T09:00:00Z"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-2-a
+  labels:
+    app: checkout
+    pod-template-hash: "2"
+  ownerReferences:
+    - apiVersion: apps/v1
+      kind: ReplicaSet
+      name: checkout-2
+      controller: true
+spec:
+  containers:
+    - name: app
+      image: example/checkout:2.4.0
+status:
+  phase: Running
+  containerStatuses:
+    - name: app
+      image: docker.io/example/checkout:2.4.0
+      imageID: docker.io/example/checkout@sha256:2222222222222222222222222222222222222222222222222222222222222222
+      ready: false
+      restartCount: 4
+      lastState:
+        terminated:
+          exitCode: 1
+          reason: Error
+          startedAt: "2026-11-07T09:10:00Z"
+          finishedAt: "2026-11-07T09:10:01Z"
+      state:
+        waiting:
+          reason: CrashLoopBackOff

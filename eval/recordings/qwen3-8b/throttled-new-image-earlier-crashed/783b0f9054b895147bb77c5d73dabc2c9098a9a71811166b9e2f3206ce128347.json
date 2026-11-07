@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), causing sustained throttling. Increase the CPU limit for the 'api' container to 750m.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Throttling came with the rollout (throttling_came_with_rollout=true), and revision 2 uses 88% of its CPU limit on average, compared to 45% in revision 1 (ev-revision_health).\",\n    \"supporting\": [\"throttling_came_with_rollout\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The container is using 0.495 CPU (99% of its 0.5 limit) and is throttled 61% of the time (ev-container_cpu).\",\n    \"supporting\": [\"cpu_thrott0led_at_limit\", \"cpu_usage_near_limit\", \"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises the CPU limit of the 'api' container to 750m, which should clear the throttling (ev-container_cpu).\",\n  \"rationale\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), causing sustained throttling. Increasing the CPU limit to 750m (1.5× the current 500m) should prevent throttling without affecting memory or other resources. This aligns with the rules for raising CPU limits when throttling is sustained and caused by the container's demand exceeding its limit (ev-container_cpu).\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-revision_health\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_came_with_rollout\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5562,
+        "output_tokens": 1493
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

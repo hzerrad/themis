@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The 'api' container in the search Deployment is throttled at its CPU limit due to increased usage in the latest rollout. Raising its CPU limit will alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), causing throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The container's CPU limit is too low, causing it to be throttled even though it's using near its limit.\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"The evidence is insufficient to determine the root cause.\",\n    \"supporting\": [],\n    \"contradicting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"requests\": {\n          \"cpu\": \"250m\"\n        },\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"The 'api' container's CPU limit will be increased from 500m to 750m, reducing throttling and improving readiness probe success rates.\",\n  \"rationale\": \"The container is using 0.495 CPU (99% of its 0.5 limit) and is throttled 64% of the time. The new version (revision 2) uses more CPU than the previous version (revision 1), which ran unthrottled for 200h compared to 140h. Raising the limit to 750m will provide enough CPU to avoid throttling without requiring node-level changes.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n  \"cited_predicates\": [\n    \"throttling_data_available\",\n    \"cpu_throttled_at_limit\",\n    \"cpu_usage_near_limit\",\n    \"rollout_changed_the_app\",\n    \"throttling_came_with_rollout\",\n    \"earlier_revision_healthy\"\n  ]\n}\n}",
+      "usage": {
+        "input_tokens": 5560,
+        "output_tokens": 936
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

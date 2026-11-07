@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills despite similar usage patterns as the previous revision.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\",\n    \"supporting\": [\"oom_killed_new_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [\"revision_health\", \"container_memory_peak_details\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"application_bug\",\n    \"summary\": \"The new image may have a memory leak or higher memory requirements.\",\n    \"supporting\": [\"rollout_changed_the_app\", \"oom_killed_new_revision\"],\n    \"contradicting\": [\"memory_data_available\", \"memory_at_limit_before_kill\"],\n    \"missing\": [\"container_logs_tail\", \"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"inventory\",\n    \"uid\": \"uid-deployment-inventory\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"320Mi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises the memory limit to 320Mi, preventing OOM kills by providing more headroom than the 256Mi limit.\",\n  \"rationale\": \"The current revision's memory limit of 256Mi was exceeded (98% usage), causing OOM kills. Increasing the limit by 25% to 320Mi addresses the memory constraint without reverting the image change, which may have introduced higher memory usage patterns.\",\n  \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"memory_data_available\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5390,
+        "output_tokens": 1229
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

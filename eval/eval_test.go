@@ -196,7 +196,7 @@ profile:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"deployment.rollback-to-revision", "deployment.set-resources"}; !slices.Equal(b.Capabilities, want) {
+	if want := []string{"deployment.rollback-to-revision", "deployment.roll-back-changes", "deployment.set-resources"}; !slices.Equal(b.Capabilities, want) {
 		t.Errorf("fixes = %v, want %v", b.Capabilities, want)
 	}
 	if !strings.Contains(b.Guidance, "From the memory profile, which offers deployment.set-resources:\nRaise the memory limit") {

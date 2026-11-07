@@ -31,8 +31,9 @@ type Verdict struct {
 	Reason  string `json:"reason"`
 	// SameChange is set when the proposal changes what the case's right fix
 	// changes, the same way: the same fields of the same containers, each
-	// raised or lowered as the right fix does. Values are the investigator's
-	// to choose. The right fix is truth.fix, or else the case's fix.
+	// raised or lowered as the right fix does, or the same changes of a
+	// rollout rolled back. Values are the investigator's to choose. The right
+	// fix is truth.fix, or else the case's fix, and any of truth.also_right.
 	SameChange bool `json:"same_change"`
 }
 
@@ -115,8 +116,14 @@ func (f found) judge(ctx context.Context, s Case, p Fix) (Verdict, error) {
 			return Verdict{}, err
 		}
 	}
-	if want != nil && want.Capability == p.Capability {
-		v.SameChange = f.sameChange(ctx, fix, want.Params, params)
+	rights := s.Truth.AlsoRight
+	if want != nil {
+		rights = append([]Fix{*want}, rights...)
+	}
+	for _, right := range rights {
+		if right.Capability == p.Capability && !v.SameChange {
+			v.SameChange = f.sameChange(ctx, fix, right.Params, params)
+		}
 	}
 	return v, nil
 }

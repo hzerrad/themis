@@ -82,6 +82,14 @@ type Feasibility interface {
 	Feasible(ctx context.Context, r client.Reader, p Plan) error
 }
 
+// Describing is a fix that tells the approver more of its change than the
+// target holds, from what only the core may read, such as the image digests
+// the pods run. Governance asks after Plan and adds what it returns to the
+// plan's BlastRadius. The executor doesn't, and the approval binds none of it.
+type Describing interface {
+	Describe(ctx context.Context, r client.Reader, p Plan) (map[string]any, error)
+}
+
 // Health is how the target is doing next to when checking began, for the
 // symptom the fix is meant to cure.
 type Health string
@@ -126,7 +134,9 @@ type Plan struct {
 	ManagedBy string
 	// Risk is what policy sees of the change's danger. BlastRadius is what
 	// the approver sees of its reach: for a fix that rolls out new pods,
-	// Rollout's replicas and atOnce.
+	// Rollout's replicas, atOnce and deployedBy; for one that changes an
+	// image, images, each changed container's image digests before and
+	// after, as Describing adds them.
 	Risk        string
 	BlastRadius map[string]any
 	// Facts are what policy sees of the change beyond its name and risk,

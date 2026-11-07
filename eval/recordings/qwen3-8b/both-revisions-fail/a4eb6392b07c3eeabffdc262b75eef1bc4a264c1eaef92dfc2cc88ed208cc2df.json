@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The logs indicate a storage_full issue due to disk space exhaustion in /var/cache/checkout, but no allowed fix addresses this. Rollback isn't justified as the problem isn't caused by the new revision's app or config.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"storage_full\",\n    \"summary\": \"The FATAL error 'no space left on device' in /var/cache/checkout confirms disk space exhaustion.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No allowed fix exists for storage_full, and rollback isn't justified as the issue isn't tied to the new revision's app or config.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4495,
+        "output_tokens": 1257
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
