@@ -40,6 +40,17 @@ CI checks that every commit of a pull request carries a `Signed-off-by` matching
 
 ## Local checks
 
+You need Docker, plus Go, [uv](https://docs.astral.sh/uv/), Node, Helm and kubectl at the versions pinned in `mise.toml`: with [mise](https://mise.jdx.dev/), `mise install` installs them. The other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`.
+
+```bash
+make help            # list targets
+make lint            # lint Go, Python, protobuf
+make test            # unit and integration tests (PostgreSQL runs in Docker), and the web UI's
+make e2e             # end-to-end scenarios on a fresh kind cluster, with a fake model
+make scenario-check  # every scenario pack's cases, replayed against recorded model replies
+make vuln            # known vulnerabilities in the Go and Python dependencies
+```
+
 Run `make lint test` before opening a pull request. CI runs the same targets, and `make e2e`, which runs the bad-rollout scenarios on a fresh kind cluster with a fake model, so it needs only Docker.
 
 `make test` includes `make test-ui`, which runs the web UI: it loads the page in jsdom against what the API serves, built by the Go views from incidents in every state, visits every page as an admin, an approver and a viewer, and works the forms. It fails on an uncaught exception or rejection, a `console.error`, a "Not loaded:" box, and text a missing value leaves, such as `null` or `NaN`. A new page or state belongs in its fixtures (`internal/server/httpapi/uifixtures_test.go`) and its visits (`test/ui/smoke.mjs`).

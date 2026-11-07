@@ -10,130 +10,158 @@
 
 Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 
-When an alert fires on a Deployment, a fix can come from Themis's own LLM investigator, an AI SRE agent, or an engineer. Themis decides whether it runs. It reads the cluster itself, and a fix runs only when Themis's checks justify it, your policy allows it and a person approves the exact change. Afterwards, Themis measures whether the symptom went away.
+Themis turns Alertmanager alerts about Kubernetes Deployments into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
 > [!WARNING]
-> `v0.1.0-alpha1` is the first release. Configuration and APIs will change. Try it on a test cluster, and don't run it in production yet.
+> Themis is in alpha (`v0.1.0-alpha1`). Configuration and APIs may change between releases. It is not ready for production use.
 
-## An example
+Investigation and governance are separate:
 
-A rollout of `checkout` ships a new image and changes the environment variable `MODE`. The new pods start crashing.
-
-Themis reads the rollout history, pod states, events and logs. Its checks find that the crashes began with the rollout and that revision 1 ran without them. The investigator proposes putting `MODE` back and keeping the new image. Themis accepts the proposal, since the checks justify a rollback, and the incident page asks:
-
-> **Waiting for your approval**
-> Roll back checkout's environment variable MODE to revision 1?
-> Keeps the rollout's new image.
-
-The approver sees the exact change, the image digest that stays, and a warning when Helm or CI will undo the change on the next deploy. Once approved, a separate executor checks that nothing moved since, dry-runs the patch and applies it. Themis then watches the pods. If they stop crashing, the incident closes as fixed. If they keep crashing, it goes to a person, and if the change made things worse, Themis first puts `MODE` back as it was.
-
-## What it handles
-
-Five kinds of incident, each shipped as a [scenario pack](docs/scenarios.md): a directory of checks, fixes, policy and evaluation cases. A new kind of incident is a new pack.
-
-| Incident | Alerts | What Themis can do |
+| | AI investigation | Deterministic governance |
 |---|---|---|
-| Bad rollout | `KubePodCrashLooping`, `KubePodOOMKilled`, `KubeDeploymentReplicasMismatch` | Roll back to the earlier revision, or undo only some of the rollout's changes |
-| Memory limit too low | `KubePodOOMKilled`, `KubePodCrashLooping` | Raise memory limits and requests |
-| CPU throttling | `CPUThrottlingHigh` | Raise CPU limits and requests, or roll back when the throttling came with a rollout |
-| Probe restart storm | `KubePodCrashLooping`, `KubePodNotReady` | Change probe timings: delay, period, timeout and thresholds |
-| Stuck pods | `KubePodNotReady`, `KubeContainerWaiting`, `KubeDeploymentRolloutStuck` | Name the cause, such as an image that can't be pulled or pods no node can take, and refer the incident to a person |
+| Component | `themis-intelligence`, or an external AI SRE agent | `themis-core` and `themis-executor` |
+| Works from | The evidence Themis collected, and an LLM | Cluster state, CEL checks and CEL policy. No model |
+| Produces | A ranked diagnosis and one proposed fix, citing evidence | A decision on the proposal, then execution and verification |
+| Trust | Untrusted. Every proposal is validated | Holds the only write access, through the executor |
 
-Themis chooses between a rollback and a raise from evidence. A rollback needs a rollout that changed what the pods run and a new version that behaves worse than the one before, by its own pods or by Prometheus history. When that can't be established, a person decides.
+## Example
 
-## How a fix is decided
+A Deployment `checkout` in namespace `shop` is rolled out with a new image and a changed environment variable `MODE`. The new pods crash.
 
-1. **Evidence.** Themis collects it from the cluster: rollout history and what each revision changed, pod states, events, recent logs, and memory and CPU use from the metrics API or Prometheus. Values that look secret are redacted before anything is stored or shown to a model.
-2. **Checks.** CEL expressions answer yes, no or unknown from that evidence alone. A fix needs a check that justifies it to answer yes. Text in a log or event never justifies a fix on its own. The pods' status has to agree.
-3. **The proposal.** Treated as untrusted. A fix for another workload, a fix the pack doesn't offer, or a citation of evidence that doesn't exist is refused and recorded. Evidence holding text aimed at Themis is flagged to the approver.
-4. **Feasibility and policy.** Themis derives the change from the live object, refuses one the cluster can't run (no node fits it, a ResourceQuota or LimitRange forbids it), and evaluates your CEL policy. Workloads managed by Argo CD or Flux get a recommendation only.
-5. **Approval.** A person approves the change they were shown, bound to a digest. If the workload changes first, the approval is void.
-6. **Execution.** The executor holds the only write access and is installed only when you enable it. It rechecks the digest and the live object, dry-runs the change, then applies it.
-7. **Verification.** An accepted API write proves nothing. Themis watches for the symptom the fix was meant to cure. A fix that made things worse is undone. A change someone else makes in the meantime makes the result inconclusive.
+| Step | Performed by | Result |
+|---|---|---|
+| Alert | Alertmanager | `KubePodCrashLooping` for `shop/checkout` |
+| Evidence | Themis | Revision 2 changed the image and `MODE`. Its pods restart. Revision 1 ran without restarts |
+| Checks | Themis | The failures started after the rollout: true. The rollout brought them: true |
+| Proposal | Investigator (LLM) | Roll back `MODE` to revision 1 and keep the new image |
+| Decision | Themis | The checks justify a rollback. Policy rule `rollback-needs-approval` requires a person's approval |
+| Approval | Approver | Approves the exact change shown, bound to a digest |
+| Execution | Executor | Rechecks the digest and the live Deployment, dry-runs the patch, applies it |
+| Verification | Themis | The new pods stay ready without restarts. The incident closes as fixed |
 
-Without an investigator (`model.enabled=false`), steps 1 and 2 still run. The incident page shows the facts with their evidence, and an engineer or an AI SRE agent suggests the fix, which goes through the same steps.
+## Capabilities
 
-## Measured
+**Incident types.** Each is a [scenario pack](docs/scenarios.md) of checks, fixes, policy and evaluation cases. Alerts that no pack matches are recorded and ignored.
 
-The investigator is scored on 91 recorded incidents across the five packs. Of those, 28 carry text planted in logs, events or config to steer it.
+| Incident | Alerts | Fixes offered |
+|---|---|---|
+| Bad rollout | `KubePodCrashLooping`, `KubePodOOMKilled`, `KubeDeploymentReplicasMismatch` | Rollback, partial rollback |
+| Memory limit too low | `KubePodOOMKilled`, `KubePodCrashLooping` | Resource change |
+| CPU throttling | `CPUThrottlingHigh` | Resource change. Rollback or partial rollback when the throttling came with a rollout |
+| Probe restart storm | `KubePodCrashLooping`, `KubePodNotReady` | Probe change |
+| Stuck pods | `KubePodNotReady`, `KubeContainerWaiting`, `KubeDeploymentRolloutStuck` | None. The cause is named and the incident is referred to a person |
+
+**Fixes.**
+
+| Fix | Changes |
+|---|---|
+| `deployment.rollback-to-revision` | The pod template, back to an earlier revision's |
+| `deployment.roll-back-changes` | Selected changes of the latest rollout, such as one environment variable, back to their earlier values. The other changes stay |
+| `deployment.set-resources` | CPU and memory requests and limits of named containers |
+| `deployment.set-probes` | Timing fields of existing liveness, readiness and startup probes |
+
+**Also included.**
+
+- Evidence from pod states, events, container logs, rollout history and memory and CPU use, from the Kubernetes metrics API or a Prometheus-compatible server. Evidence is redacted and size-bounded before it is stored.
+- An incident page that states the facts with their evidence, shows each piece of evidence, collects more on request, and previews whether a suggested fix would be accepted.
+- Operation without a model (`model.enabled=false`). Evidence and checks still run, and fixes come from engineers or agents.
+- A gRPC API for external AI SRE agents to submit proposals.
+- Escalation notices to a webhook.
+- Sign-in with local accounts or OIDC, with the roles viewer, responder, approver and admin.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  AM[Alertmanager] -->|alerts| Core[themis-core]
+  Core <-->|evidence, proposals| Intel[themis-intelligence]
+  Agent[AI SRE agent] -->|proposals| Core
+  Core -->|approved actions| Exec[themis-executor]
+  Core -->|read| K8s[(Kubernetes API)]
+  Exec -->|patch| K8s
+  Core --- PG[(PostgreSQL)]
+```
+
+| Component | Language | Role |
+|---|---|---|
+| `themis-core` | Go | Alert intake, evidence, checks, governance, approvals, verification, audit trail, HTTP API and web UI |
+| `themis-intelligence` | Python | The investigator: a bounded loop over the evidence and the model. Holds no cluster or database credentials |
+| `themis-executor` | Go | Applies approved actions after checking them again. Optional; the only component with write access |
+| PostgreSQL | | State, audit trail and job queue |
+
+Permissions and the threat model are in [docs/architecture.md](docs/architecture.md).
+
+## Governance
+
+Every proposal, whatever its source, passes the same controls in `themis-core`:
+
+1. **Validation.** The proposal must name the incident's exact target, UID included, use a fix the incident's profiles offer, and cite evidence Themis collected. Anything else is rejected. A wrong target is recorded as a safety event.
+2. **Justification.** A fix is accepted only when one of its justifying checks is true. Checks are CEL expressions over the collected evidence. Text in logs or events alone never justifies a fix.
+3. **Feasibility.** The change is derived from the live object. It is refused when no node can fit it, or when a ResourceQuota or LimitRange forbids it.
+4. **Ownership.** Workloads managed by Argo CD or Flux receive a recommendation, never a change.
+5. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
+6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
+7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role allows `get` and `patch` on Deployments, and reading ReplicaSets, in enrolled namespaces.
+8. **Verification.** Themis decides the fix's symptom checks again from the new pods. A fix that made things worse is undone. An incident whose symptoms persist is referred to a person.
+
+Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
+
+**Evaluation.** The investigator is scored on 91 recorded incidents, 28 of which carry text planted in the evidence to steer it. CI replays the qwen3 8B recordings on every change and fails if a harmful fix would reach a person.
 
 | Investigator | Right decision | Right cause first | Harmful fixes attempted | Harmful fixes reaching a person |
 |---|---|---|---|---|
 | Claude Haiku 5.5 | 84 / 91 | 86 / 91 | 0 | 0 |
-| qwen3 8B, on a local GPU | 63 / 91 | 60 / 91 | 14 | 0 |
+| qwen3 8B, local | 63 / 91 | 60 / 91 | 14 | 0 |
 
-The small model attempted 14 harmful fixes and Themis refused all of them. CI replays its recorded replies on every change and fails if a harmful fix would reach a person. Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
+Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 
-## Install
+## Deployment
 
-The [quickstart](docs/quickstart.md) takes about 10 minutes on kind or on your own cluster.
+| Requirement | Supported |
+|---|---|
+| Kubernetes | 1.35, 1.36, 1.37 |
+| Alertmanager | API v2, 0.16 or later |
+| Model (optional) | Claude through Anthropic's API, or an OpenAI-compatible endpoint with JSON-schema structured output, such as OpenAI, Ollama or vLLM |
+| Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
 ```sh
 helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
   --namespace themis --create-namespace
 ```
 
-- **Model.** Claude through Anthropic's API, any OpenAI-compatible endpoint (OpenAI, Ollama, vLLM), or none.
-- **Alerts.** Themis reads active alerts from Alertmanager's API, at an address the chart finds at install. Alertmanager can push to a webhook instead.
-- **Access.** Nothing works until the first admin account exists. People sign in with local accounts or through OIDC, as viewer, responder, approver or admin.
-- **Images.** Signed, for amd64 and arm64.
+- The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
+- Themis is read-only until the executor is enabled (`executor.enabled=true`).
+- Until the first admin account is created, Themis serves only the page that creates it.
+- Images are signed and published for linux/amd64 and linux/arm64.
+- The [chart README](deploy/helm/themis/README.md) lists every value, including GitOps installs and an external database.
 
-The [chart README](deploy/helm/themis/README.md) covers every value, and GitOps installs with Argo CD or Flux.
+## Limitations
 
-## Architecture
-
-| Component | Language | Role |
-|---|---|---|
-| `themis-core` | Go | Alert intake, evidence, checks, governance, approvals, verification, audit trail, HTTP API and web UI |
-| `themis-intelligence` | Python | The investigator: a bounded loop over the evidence and the model. Holds no cluster or database credentials |
-| `themis-executor` | Go | Applies approved changes after checking them again. The only component that writes to workloads |
-| PostgreSQL | | State, audit trail and job queue |
-
-See [docs/architecture.md](docs/architecture.md) for the threat model and the permissions each component holds.
-
-## Supported versions
-
-| Dependency | Supported |
-|---|---|
-| Kubernetes | 1.35, 1.36, 1.37, the three minor versions the Kubernetes project maintains |
-| Alertmanager | API v2, 0.16 or later. Webhook payload version `4` in push mode |
-| Model | OpenAI-compatible chat completions with JSON-schema structured output, or Claude through Anthropic's API |
-
-CI tests every Kubernetes version in that window, and weekly the next, unreleased one. The chart refuses to install on an older Kubernetes.
+- Deployments only. StatefulSets, DaemonSets and other workloads are not supported.
+- Five incident types. Alertmanager is the only alert source.
+- Every change needs a person's approval. There is no autonomous mode.
+- Without a Prometheus-compatible server, Themis can't measure CPU throttling, peak memory or an earlier revision's history. Checks that need them answer unknown, and an unknown check never justifies a fix.
+- A partial rollback restores earlier values only. Setting new values is not supported.
+- Investigator accuracy depends on the model. See the evaluation under [Governance](#governance).
+- The bundled PostgreSQL is a single instance for evaluation.
 
 ## Documentation
 
 | Guide | Covers |
 |---|---|
-| [Quickstart](docs/quickstart.md) | Install, enroll a namespace, approve a first fix |
-| [Demo](docs/demo.md) | Every pack on a local kind cluster with Prometheus and Alertmanager |
-| [Configuration](docs/configuration.md) | Profiles, policy, people and roles, every setting |
-| [Checks](docs/checks.md) | The built-in checks and how to write one |
-| [Scenario packs](docs/scenarios.md) | How a pack is built and tested |
+| [Quickstart](docs/quickstart.md) | Installing Themis and handling a first incident |
+| [Demo](docs/demo.md) | Every scenario pack on a local kind cluster |
+| [Configuration](docs/configuration.md) | Profiles, policy, fixes, people and roles, all settings |
+| [Checks](docs/checks.md) | Built-in checks and writing new ones |
+| [Scenario packs](docs/scenarios.md) | Building and testing a pack |
 | [Architecture](docs/architecture.md) | Components, permissions, threat model |
-| [Observability](docs/observability.md) | Logs, metrics, traces, and following one incident across components |
-| [Evaluation](docs/evaluation.md) | How the investigator is measured, and the results |
-| [Glossary](GLOSSARY.md) | The terms Themis uses |
-
-## Development
-
-You need Docker, Go, [uv](https://docs.astral.sh/uv/), Node, Helm and kubectl, at the versions pinned in `mise.toml`. `mise install` installs them. The other tools run through `go tool`, pinned in `tools/go.mod`.
-
-```sh
-make lint            # Go, Python, protobuf
-make test            # unit and integration tests; PostgreSQL runs in Docker
-make test-ui         # every page of the web UI, as each role, in jsdom
-make e2e             # end-to-end scenarios on a fresh kind cluster
-make scenario-check  # every pack's cases, replayed against recorded model replies
-```
-
-`make help` lists the rest. To run the components on your machine against kind, see [Running locally](docs/demo.md#running-locally).
+| [Observability](docs/observability.md) | Logs, metrics and traces |
+| [Evaluation](docs/evaluation.md) | How the investigator is measured |
+| [Glossary](GLOSSARY.md) | Terms used throughout Themis |
 
 ## Contributing
 
-Issues, scenario packs and fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. If you tried the alpha, the **Alpha feedback** issue form asks what Themis decided and whether it was right.
-
-Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes. This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and conventions. Alpha testers can report results with the **Alpha feedback** issue form. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 ## License
 
