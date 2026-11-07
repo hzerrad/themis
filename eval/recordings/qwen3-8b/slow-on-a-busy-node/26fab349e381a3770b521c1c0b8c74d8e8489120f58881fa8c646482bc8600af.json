@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"No evidence of sustained CPU throttling or high usage near limits; readiness failures may stem from other factors.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Throttling ratio (6%) below 25% threshold and CPU usage (34% of limit) isn't near limit (80%+).\",\"supporting\":[\"ev-container_cpu\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"throttling_came_with_rollout\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4201,
+        "output_tokens": 799
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
