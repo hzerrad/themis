@@ -42,6 +42,13 @@ A Deployment `checkout` in namespace `shop` is rolled out with a new image and a
 | Execution | Executor | Rechecks the digest and the live Deployment, dry-runs the patch, applies it |
 | Verification | Themis | The new pods stay ready without restarts. The incident closes as fixed |
 
+The incident page at the approval step:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/incident-page-dark.png">
+  <img src="docs/assets/incident-page-light.png" alt="Themis incident page asking whether to roll back checkout's environment variable MODE to revision 1, with the facts and their evidence, the exact change, and the approve and deny buttons">
+</picture>
+
 ## Capabilities
 
 This section lists what `v0.1.0-alpha1` supports. More alert sources and workload kinds are planned.
