@@ -1054,7 +1054,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 		// waiting for approval. Helm deploys checkout, so its next deploy
 		// would write MODE over again.
 		{
-			incident: inc(32, incident.AwaitingApproval), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			incident: inc(34, incident.AwaitingApproval), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
 			transitions: append(uiOpened(), uiPath(2,
 				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
 				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),

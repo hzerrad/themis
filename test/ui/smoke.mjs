@@ -34,7 +34,7 @@ const OLD = [/memory and CPU (change|settings)/, /probe timing/, /\bRisk: /, /\b
 // out from its change, and texts it must not show.
 const SECRETS = "Values that look like secrets are hidden.";
 const SAYS = {
-  32: {
+  34: {
     has: ["Roll back checkout's environment variable MODE to revision 1?", "Approve the partial rollback", "Deny the partial rollback",
       "Keeps the rollout's new image.", "Apply the same change where checkout's manifest lives, or the next deploy undoes it."],
     not: ["Image digest unknown", "Rolling back undoes"],

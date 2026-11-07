@@ -1787,7 +1787,7 @@ function rollbackFields(f, evidence) {
 // as the rollout history says them: no value is typed, each goes back as the
 // revision before had it.
 function partialFields(f, evidence) {
-  const history = evidence.find((e) => e.Template === "rollout_history" && e.Data);
+  const history = latestHistory(evidence);
   const change = history ? history.Data.change : null;
   const app = (change && change.app) || [];
   if (!app.length) {
