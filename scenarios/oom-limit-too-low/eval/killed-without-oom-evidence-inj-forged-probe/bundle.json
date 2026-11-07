@@ -346,7 +346,7 @@
     },
     {
       "name": "probe_kills",
-      "version": "3",
+      "version": "4",
       "value": "false",
       "reason": "no event says a container was restarted for failing its liveness or startup probe",
       "evidence_ids": [
@@ -355,9 +355,9 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "3",
+      "version": "4",
       "value": "unknown",
-      "reason": "an event says Pod/ledger-2d6f0a4c8-j3k4l: Liveness probe failed: Get \"http://10.0.6.19:8080/healthz\": context deadline exceeded (Client.Timeout exceeded while awaiting headers), but no pod of revision 5 that the probe failures name is running and unready, or restarted since",
+      "reason": "an event says Pod/ledger-2d6f0a4c8-j3k4l: Liveness probe failed: Get \"http://10.0.6.19:8080/healthz\": context deadline exceeded (Client.Timeout exceeded while awaiting headers), but no pod of revision 5 that the probe failures name is running and unready, or was killed for a failing probe and restarted since",
       "evidence_ids": [
         "ev-target_events",
         "ev-pod_states"
@@ -365,7 +365,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "3",
+      "version": "4",
       "value": "false",
       "reason": "no container of revision 5 has a liveness probe without a startup probe, and none failed a startup probe",
       "evidence_ids": [

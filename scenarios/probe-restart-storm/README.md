@@ -22,8 +22,8 @@ Both are answered by another pack as well: `KubePodCrashLooping` by rollout-regr
 
 | Check | True when |
 |---|---|
-| `probe_kills` | An event says the kubelet restarted a container for failing its liveness or startup probe, and a container of that pod of the current revision was killed (exit code 137 or 143) and restarted since. An event alone makes it `unknown` |
-| `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection, and a pod of the current revision the failures name has a container that isn't ready or restarted since. Events alone make it `unknown` |
+| `probe_kills` | An event says the kubelet restarted a container for failing its liveness or startup probe, and that container, of the current revision, was killed (exit code 137 or 143) and restarted after the event first happened. An event alone makes it `unknown` |
+| `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection, and a pod of the current revision the failures name has a container that is running and isn't ready, or that the kubelet killed for a failing probe, as `probe_kills` requires, after the failures began. Events alone make it `unknown` |
 | `killed_during_startup` | A container failed its startup probe and was killed and restarted, as `probe_kills` requires, or one of the current revision, without a startup probe, was stopped no later than its liveness probe could first fail it: its initial delay, its failures allowed and one more period, plus the default 30 seconds to stop. It never passed the probe |
 | `crashed_on_its_own` | A container exited with a code other than 0, 137 or 143, the codes of a container the kubelet stops, or ran out of memory |
 | `rollout_changed_the_app` | Themis's own: the latest rollout changed what the pods run, such as the image or a probe. False when it changed only labels and annotations |
@@ -53,6 +53,7 @@ While one of the pack's symptoms, `probe_kills`, `probe_timeouts`, `killed_durin
 |---|---|
 | `slow-start-killed-by-liveness` | After a node drain, the ledger takes about 40 seconds to load its index before it listens, and its liveness probe kills it at 30, every time; a longer initial delay is right |
 | `liveness-timeout-under-load` | Under the afternoon peak, search-api answers everything, its probes included, in 1.2 to 1.6 seconds, and its 1-second probe timeouts restart it and keep it out of service; longer timeouts are right, the readiness one called out to the approver |
+| `liveness-timeout-kills-every-run` | inventory's health check answers in 2 seconds and its only probe, a liveness probe, allows 1, so the kubelet kills each run 20 seconds in. Read while the 7th kill is under way, so the kubelet's repeated events last happened after the restart the pods' status shows; a longer liveness timeout is right |
 
 ## Look-alikes
 

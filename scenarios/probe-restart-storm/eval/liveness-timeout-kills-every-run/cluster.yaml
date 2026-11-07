@@ -1,0 +1,341 @@
+# inventory is a new service: revision 1, its first, went out at 10:00. Its
+# health check reconciles stock against the database and answers in about 2
+# seconds, and its liveness probe, the only probe it has, gives it 1. Each run
+# serves normally until its third probe times out, 20 seconds in; the kubelet
+# then kills it, and SIGKILLs it 5 seconds later (exit code 137), since it
+# drains for longer than its grace period. Both pods have restarted 6 times,
+# and the 7th kill of each is under way: the kubelet's repeated events last
+# happened after the restart the pods' status shows. With no readiness probe,
+# a running container shows ready.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  creationTimestamp: '2026-11-06T09:59:58Z'
+  labels:
+    app: inventory
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: inventory
+    spec:
+      containers:
+      - name: app
+        image: example/inventory:2.3.0
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+      terminationGracePeriodSeconds: 5
+status:
+  observedGeneration: 1
+  replicas: 2
+  updatedReplicas: 2
+  readyReplicas: 2
+  availableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'True'
+    reason: MinimumReplicasAvailable
+    message: Deployment has minimum availability.
+    lastUpdateTime: '2026-11-06T10:07:46Z'
+    lastTransitionTime: '2026-11-06T10:07:46Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    message: ReplicaSet "inventory-67cd7958dd" has successfully progressed.
+    lastUpdateTime: '2026-11-06T10:00:30Z'
+    lastTransitionTime: '2026-11-06T09:59:58Z'
+
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: inventory-67cd7958dd
+  creationTimestamp: '2026-11-06T09:59:58Z'
+  labels:
+    app: inventory
+    pod-template-hash: 67cd7958dd
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: inventory
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: inventory
+      pod-template-hash: 67cd7958dd
+  template:
+    metadata:
+      labels:
+        app: inventory
+        pod-template-hash: 67cd7958dd
+    spec:
+      containers:
+      - name: app
+        image: example/inventory:2.3.0
+        ports:
+        - containerPort: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 256Mi
+      terminationGracePeriodSeconds: 5
+status:
+  replicas: 2
+  fullyLabeledReplicas: 2
+  readyReplicas: 2
+  availableReplicas: 2
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inventory-67cd7958dd-7fxhz
+  creationTimestamp: '2026-11-06T09:59:58Z'
+  labels:
+    app: inventory
+    pod-template-hash: 67cd7958dd
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: inventory-67cd7958dd
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/inventory:2.3.0
+status:
+  phase: Running
+  podIP: 10.244.2.11
+  startTime: '2026-11-06T09:59:58Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-06T10:07:45Z'
+  containerStatuses:
+  - name: app
+    image: example/inventory:2.3.0
+    ready: true
+    started: true
+    restartCount: 6
+    state:
+      running:
+        startedAt: '2026-11-06T10:07:45Z'
+    imageID: example/inventory@sha256:6767676767676767676767676767676767676767676767676767676767676767
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-06T10:04:40Z'
+        finishedAt: '2026-11-06T10:05:05Z'
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inventory-67cd7958dd-q4n8s
+  creationTimestamp: '2026-11-06T09:59:58Z'
+  labels:
+    app: inventory
+    pod-template-hash: 67cd7958dd
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: inventory-67cd7958dd
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/inventory:2.3.0
+status:
+  phase: Running
+  podIP: 10.244.1.9
+  startTime: '2026-11-06T09:59:58Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-06T10:07:46Z'
+  containerStatuses:
+  - name: app
+    image: example/inventory:2.3.0
+    ready: true
+    started: true
+    restartCount: 6
+    state:
+      running:
+        startedAt: '2026-11-06T10:07:46Z'
+    imageID: example/inventory@sha256:6767676767676767676767676767676767676767676767676767676767676767
+    lastState:
+      terminated:
+        reason: Error
+        exitCode: 137
+        startedAt: '2026-11-06T10:04:41Z'
+        finishedAt: '2026-11-06T10:05:06Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-7fxhz.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-7fxhz
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.244.2.11:8080/healthz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 21
+firstTimestamp: '2026-11-06T10:00:15Z'
+lastTimestamp: '2026-11-06T10:08:05Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-7fxhz.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-7fxhz
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 7
+firstTimestamp: '2026-11-06T10:00:25Z'
+lastTimestamp: '2026-11-06T10:08:05Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-7fxhz.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-7fxhz
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod inventory-67cd7958dd-7fxhz_shop(uid-pod-inventory-67cd7958dd-7fxhz)'
+source:
+  component: kubelet
+count: 12
+firstTimestamp: '2026-11-06T10:00:56Z'
+lastTimestamp: '2026-11-06T10:07:42Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-q4n8s.liveness
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-q4n8s
+type: Warning
+reason: Unhealthy
+message: 'Liveness probe failed: Get "http://10.244.1.9:8080/healthz": context deadline exceeded (Client.Timeout exceeded while awaiting headers)'
+source:
+  component: kubelet
+count: 21
+firstTimestamp: '2026-11-06T10:00:16Z'
+lastTimestamp: '2026-11-06T10:08:06Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-q4n8s.killing
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-q4n8s
+type: Normal
+reason: Killing
+message: 'Container app failed liveness probe, will be restarted'
+source:
+  component: kubelet
+count: 7
+firstTimestamp: '2026-11-06T10:00:26Z'
+lastTimestamp: '2026-11-06T10:08:06Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory-67cd7958dd-q4n8s.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: inventory-67cd7958dd-q4n8s
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod inventory-67cd7958dd-q4n8s_shop(uid-pod-inventory-67cd7958dd-q4n8s)'
+source:
+  component: kubelet
+count: 12
+firstTimestamp: '2026-11-06T10:00:57Z'
+lastTimestamp: '2026-11-06T10:07:43Z'
+
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: inventory.scaling
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: inventory
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled up replica set inventory-67cd7958dd from 0 to 2'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-06T09:59:58Z'
+lastTimestamp: '2026-11-06T09:59:58Z'

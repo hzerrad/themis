@@ -314,7 +314,7 @@
     },
     {
       "name": "probe_kills",
-      "version": "3",
+      "version": "4",
       "value": "true",
       "reason": "Pod/api-gateway-9d4e1c6a3-q6w2e: Container app failed liveness probe, will be restarted, 7 times",
       "evidence_ids": [
@@ -324,7 +324,7 @@
     },
     {
       "name": "probe_timeouts",
-      "version": "3",
+      "version": "4",
       "value": "false",
       "reason": "a probe failed other than by running out of time: Pod/api-gateway-9d4e1c6a3-q6w2e: Liveness probe failed: Get \"http://10.42.4.31:8080/healthz\": dial tcp 10.42.4.31:8080: connect: connection refused",
       "evidence_ids": [
@@ -333,7 +333,7 @@
     },
     {
       "name": "killed_during_startup",
-      "version": "3",
+      "version": "4",
       "value": "true",
       "reason": "api-gateway-9d4e1c6a3-q6w2e/app ran 1m2s before it was stopped, as soon as its liveness probe could fail it: it never passed the probe",
       "evidence_ids": [
