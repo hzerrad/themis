@@ -304,6 +304,33 @@ table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
 .gauge .below { bottom: 0; transform: translateX(-50%); }
 .gauge .below.end { right: 0; left: auto; transform: none; }
 
+/* Collect more: in place, at the end of the evidence. */
+.more-ev { margin-top: 12px; }
+.collect { margin-top: 12px; display: flex; gap: 10px; align-items: end; flex-wrap: wrap; padding: 14px 18px; border: 1px dashed var(--rule); border-radius: 3px; }
+.collect > label.field { min-width: 240px; }
+.collect .args { display: flex; gap: 10px; flex-wrap: wrap; }
+.collect .args label.field { min-width: 160px; }
+.collect .status { font-size: 13px; color: var(--quiet); align-self: center; }
+
+/* Suggest a fix, with what Themis would do with it beside the form. */
+.suggest .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+.fields { display: grid; gap: 12px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row2:empty { display: none; }
+.fields input.mono { font-family: var(--mono); font-size: 14px; }
+.preview { border-left: 3px solid var(--rule); padding: 2px 0 2px 16px; }
+.preview.ok { border-left-color: var(--verdigris); }
+.preview.no { border-left-color: var(--oxblood); }
+.preview .verdict { font-weight: 600; margin-bottom: 8px; }
+.preview.ok .verdict { color: var(--verdigris); }
+.preview.no .verdict { color: var(--oxblood); }
+.preview p { margin: 0 0 8px; }
+.preview .then { margin-top: 10px; }
+ul.checklist { list-style: none; margin: 0; padding: 0; }
+ul.checklist li { display: grid; grid-template-columns: 18px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--rule); font-size: 13px; }
+ul.checklist li:first-child { border-top: 0; }
+ul.checklist .k { font-size: 13px; }
+
 .revs { display: grid; gap: 12px; }
 .rev { display: grid; grid-template-columns: 110px 1fr; gap: 14px; font-size: 14px; }
 .rev b { font-weight: 600; }
@@ -423,6 +450,8 @@ details.minor[open] > summary { margin-bottom: 10px; }
   .gauge { grid-template-columns: 1fr; gap: 0; }
   .evidence > h2 { flex-wrap: wrap; }
   table.data { display: block; overflow-x: auto; }
+  .suggest .grid, .row2 { grid-template-columns: 1fr; }
+  .collect > label.field, .collect .args label.field { min-width: 0; flex: 1 1 100%; }
   dl.tech { grid-template-columns: 1fr; gap: 0; }
   dl.tech dd { margin-bottom: 8px; }
   .timeline li { grid-template-columns: 1fr; gap: 0; }

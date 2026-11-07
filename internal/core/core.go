@@ -267,7 +267,7 @@ func Run(ctx context.Context, o Options) error {
 	beat := func(component string) *statuspage.Heartbeat {
 		return &statuspage.Heartbeat{Store: s, Component: component, Logger: log}
 	}
-	suggestions := &suggestion.Inbox{Store: s, Config: current, Fixes: cat.Fixes, Checks: cat.Checks, Logger: log}
+	suggestions := &suggestion.Inbox{Store: s, Config: current, Fixes: cat.Fixes, Checks: cat.Checks, Governor: govern, Logger: log}
 	leases := &investigation.Leases{Store: s, Config: current, Evidence: cat.Evidence, Checks: cat.Checks, Reader: mgr.GetAPIReader(), Suggestions: suggestions, Logger: log}
 	investigators := &grpcapi.Server{
 		Store: s, Config: current, Investigations: leases, Evidence: cat.Evidence, Checks: cat.Checks, Fixes: cat.Fixes, RootCauses: cat.RootCauses, Logger: log, Reviewer: grpcapi.KubeTokenReviewer{Clientset: clientset},
@@ -283,6 +283,8 @@ func Run(ctx context.Context, o Options) error {
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: setup}
 	api.Sessions, api.Accounts, api.Gate = s, s, gate
 	api.Again = &investigation.Again{Store: s, Config: current}
+	api.Previews = suggestions
+	api.Collect = &investigation.Asked{Store: s, Config: current, Catalog: cat, Reader: mgr.GetAPIReader(), Remedy: hint.Writer{Config: current}}
 	checker := &statuspage.Checker{
 		Config: current, Store: s, Access: statuspage.KubeAccess{Clientset: clientset}, OIDC: cfg.API.OIDC != nil, InitialAdmin: cfg.API.InitialAdmin != nil,
 		NoInvestigator: cfg.Investigators.Disabled, Metrics: usage,

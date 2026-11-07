@@ -47,6 +47,11 @@ type API struct {
 	Remedy hint.Writer
 	// Suggestions takes fixes people suggest. Without it, they can't.
 	Suggestions Suggestions
+	// Previews say what Themis would do with a fix a person suggests,
+	// keeping nothing. Without it, the page shows no preview.
+	Previews Previews
+	// Collect collects evidence a person asks for. Without it, nobody can.
+	Collect Collector
 	// Again has an incident waiting for a suggested fix investigated again.
 	// Without it, nobody can.
 	Again Reinvestigation
@@ -119,6 +124,12 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/incidents/{id}/close", a.authed(config.RoleApprover, a.close, incidentFields))
 	if a.Again != nil {
 		mux.Handle("POST /v1/incidents/{id}/investigate", a.authed(config.RoleApprover, a.investigate, incidentFields))
+	}
+	if a.Previews != nil {
+		mux.Handle("POST /v1/incidents/{id}/proposals/preview", a.authed(config.RoleApprover, a.preview, incidentFields))
+	}
+	if a.Collect != nil {
+		mux.Handle("POST /v1/incidents/{id}/evidence", a.authed(config.RoleApprover, a.collect, incidentFields))
 	}
 	if a.Accounts != nil {
 		a.registerAccounts(mux)

@@ -179,6 +179,7 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		return out
 	})
 	d.Situation, d.Symptoms = a.situation(in, rec.predicates), a.symptoms(in)
+	d.Collectable, d.Previewed = a.collectable(in, rec.evidence), a.Previews != nil
 	if inv := rec.investigation; inv != nil {
 		d.Investigation = inv
 		// Once someone's suggestion moves it on, what's next matters more,

@@ -144,8 +144,11 @@ type Inbox struct {
 	Fixes capability.Registry
 	// Checks say in plain words what each check finds.
 	Checks check.List
-	Logger *slog.Logger
-	Now    func() time.Time
+	// Governor decides a suggestion for a preview as governing would. Nil
+	// means no preview.
+	Governor Governor
+	Logger   *slog.Logger
+	Now      func() time.Time
 
 	limiters sync.Map
 	// decider says which fixes no policy forbids.
@@ -204,35 +207,18 @@ func (b *Inbox) submitOutside(ctx context.Context, from Suggester, s Suggestion)
 	if s.Lease != "" {
 		return store.Proposal{}, refuse(Forbidden, "a lease belongs to the investigator")
 	}
-	if s.Incident == "" {
-		return store.Proposal{}, refuse(Invalid, "incident_id is required")
-	}
-	if len(s.Rationale) > maxExternalText || len(s.ExpectedEffect) > maxExternalText || len(s.ClientID) > 256 ||
-		len(s.Evidence) > maxExternalCitations || len(s.Checks) > maxExternalCitations {
-		return store.Proposal{}, refuse(Invalid, "the suggestion is too long")
-	}
-	if s.malformed != "" {
-		return store.Proposal{}, refuse(Invalid, "%s", s.malformed)
+	if err := wellFormed(s); err != nil {
+		return store.Proposal{}, err
 	}
 	if !b.allow(from) {
 		CountLimited("suggestions")
 		return store.Proposal{}, refuse(TooMany, "too many suggestions: wait a minute and try again")
 	}
-	in, err := b.Store.Incident(ctx, s.Incident)
-	if err == nil && !from.InScope(in.Target.Namespace) {
-		b.logger().WarnContext(ctx, "a caller named an incident outside its scope", "source", from.Source, telemetry.FieldIncidentID, in.ID)
-		return store.Proposal{}, refuse(NotFound, "no such incident")
-	}
-	if errors.Is(err, store.ErrNotFound) {
-		return store.Proposal{}, refuse(NotFound, "no such incident")
-	}
+	in, err := b.inScope(ctx, from, s.Incident)
 	if err != nil {
 		return store.Proposal{}, err
 	}
-
-	s.Provenance = provenance(s.Provenance)
-	s.Provenance["claimedSource"] = s.Provenance["source"]
-	s.Provenance["source"] = from.Source
+	s.Provenance = attributed(from, s.Provenance)
 
 	var stored store.Proposal
 	err = b.Store.InTx(ctx, func(tx pgx.Tx) error {
@@ -266,6 +252,46 @@ func (b *Inbox) submitOutside(ctx context.Context, from Suggester, s Suggestion)
 		return b.handOver(ctx, tx, in.ID, stored.ID, "A fix was suggested by "+from.Source+".", state)
 	})
 	return stored, err
+}
+
+// wellFormed says what keeps a suggestion from outside Themis from being
+// judged at all: an incident it doesn't name, text too long, or a request
+// that isn't well formed.
+func wellFormed(s Suggestion) error {
+	if s.Incident == "" {
+		return refuse(Invalid, "incident_id is required")
+	}
+	if len(s.Rationale) > maxExternalText || len(s.ExpectedEffect) > maxExternalText || len(s.ClientID) > 256 ||
+		len(s.Evidence) > maxExternalCitations || len(s.Checks) > maxExternalCitations {
+		return refuse(Invalid, "the suggestion is too long")
+	}
+	if s.malformed != "" {
+		return refuse(Invalid, "%s", s.malformed)
+	}
+	return nil
+}
+
+// inScope is the incident id, when the suggester may see it. One outside its
+// scope looks missing, so it learns nothing.
+func (b *Inbox) inScope(ctx context.Context, from Suggester, id string) (store.Incident, error) {
+	in, err := b.Store.Incident(ctx, id)
+	if err == nil && !from.InScope(in.Target.Namespace) {
+		b.logger().WarnContext(ctx, "a caller named an incident outside its scope", "source", from.Source, telemetry.FieldIncidentID, in.ID)
+		return store.Incident{}, refuse(NotFound, "no such incident")
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Incident{}, refuse(NotFound, "no such incident")
+	}
+	return in, err
+}
+
+// attributed is a suggestion's provenance, with the source Themis proved in
+// place of the one it claims.
+func attributed(from Suggester, claimed map[string]string) map[string]string {
+	p := provenance(claimed)
+	p["claimedSource"] = p["source"]
+	p["source"] = from.Source
+	return p
 }
 
 // proposal is s as stored for an incident, accepted until judged otherwise,

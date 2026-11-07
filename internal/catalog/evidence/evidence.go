@@ -59,6 +59,10 @@ type Item struct {
 
 	CollectedAt    time.Time
 	Classification Classification
+
+	// RequestedBy names the person who asked for the item, when one did
+	// rather than Themis or its investigator.
+	RequestedBy string `json:",omitempty"`
 }
 
 // Template is a named, read-only question about a workload. Collect fills in
