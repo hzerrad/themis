@@ -176,7 +176,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "pod checkout-5c6a1e2f3-a1b2c of revision 1: app Error",
       "evidence_ids": [

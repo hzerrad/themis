@@ -222,7 +222,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "true",
       "reason": "revision 1 ran 116h10m0s with no restart or OOM kill, from 2026-10-20T14:00:00Z to 2026-10-25T10:10:00Z, in prometheus's history",
       "evidence_ids": [

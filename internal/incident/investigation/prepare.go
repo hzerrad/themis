@@ -74,7 +74,11 @@ func (w *PrepareWorker) Prepare(ctx context.Context, incidentID string) error {
 		return err
 	}
 	now := w.now()
-	d := w.Catalog.Diagnose(ctx, w.Reader, target, matched, catalog.Moment{Now: now, AlertStarted: started, EventRetention: w.EventRetention})
+	own, err := w.themisFix(ctx, target, now)
+	if err != nil {
+		return err
+	}
+	d := w.Catalog.Diagnose(ctx, w.Reader, target, matched, catalog.Moment{Now: now, AlertStarted: started, EventRetention: w.EventRetention}, own...)
 	gaps := make([]store.EvidenceGap, 0, len(d.Gaps))
 	for _, g := range d.Gaps {
 		// Missing evidence makes checks unknown; it does not stop the

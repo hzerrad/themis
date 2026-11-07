@@ -23,11 +23,15 @@ import (
 // Prometheus queries.
 const Prometheus = "prometheus"
 
+// RateWindow is what "now" means for a rate, such as CPU use: the rate over
+// the last 5 minutes, as kube-prometheus-stack's rules read CPU use and
+// throttling. A rate over less says little, so a share of CPU periods
+// throttled is never read over less either.
+const RateWindow = 5 * time.Minute
+
 const (
 	// queryTimeout bounds each query.
 	queryTimeout = 10 * time.Second
-	// rateWindow is what "now" means for CPU use, a rate over time.
-	rateWindow = "5m"
 	// maxResponseBytes bounds a query's answer: one series per container.
 	maxResponseBytes = 4 << 20
 	// maxErrorBytes bounds the server's words in an error.
@@ -79,6 +83,9 @@ func selector(pods Pods) string {
 // seconds writes a window as PromQL reads it.
 func seconds(d time.Duration) string { return strconv.FormatInt(int64(d.Seconds()), 10) + "s" }
 
+// promDuration writes a whole number of minutes as PromQL reads it: 5m.
+func promDuration(d time.Duration) string { return strconv.FormatInt(int64(d.Minutes()), 10) + "m" }
+
 const notScraped = ": check that it scrapes the kubelet's cAdvisor metrics"
 
 func (p promQL) Memory(ctx context.Context, pods Pods) (Reading, error) {
@@ -92,7 +99,7 @@ func (p promQL) PeakMemory(ctx context.Context, pods Pods, window time.Duration)
 }
 
 func (p promQL) CPU(ctx context.Context, pods Pods) (Reading, error) {
-	q := fmt.Sprintf("max by (container) (rate(container_cpu_usage_seconds_total{%s}[%s]))", selector(pods), rateWindow)
+	q := fmt.Sprintf("max by (container) (rate(container_cpu_usage_seconds_total{%s}[%s]))", selector(pods), promDuration(RateWindow))
 	return p.read(ctx, q, "Prometheus has no CPU figures for these pods"+notScraped)
 }
 

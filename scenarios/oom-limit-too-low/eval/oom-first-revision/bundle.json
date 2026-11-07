@@ -208,7 +208,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "catalog has no earlier revision to roll back to",
       "evidence_ids": [

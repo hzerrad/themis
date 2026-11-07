@@ -162,7 +162,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "unknown",
       "reason": "revision 1 has no pods left, and the metrics history has none of them",
       "evidence_ids": [

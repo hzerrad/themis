@@ -3,15 +3,21 @@ package investigation
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 // CloseUndecidedArgs sweep incidents nobody suggested a fix for in time.
@@ -21,13 +27,28 @@ type CloseUndecidedArgs struct{}
 func (CloseUndecidedArgs) Kind() string { return "close_undecided_incidents" }
 
 // CloseUndecidedWorker closes incidents Themis couldn't decide once their
-// time for a suggestion has passed.
+// time for a suggestion has passed, unless they still fail: an incident
+// waiting for a suggested fix whose symptoms are still true keeps waiting,
+// and one whose symptoms cleared closes as recovered.
 type CloseUndecidedWorker struct {
 	river.WorkerDefaults[CloseUndecidedArgs]
 
 	Config config.Provider
 	Store  *store.Store
 	Now    func() time.Time
+	// Reader reads the targets, and Checks decides their symptoms again.
+	// Without Checks, nothing is decided again: the stored checks keep an
+	// incident whose failure they found waiting.
+	Reader client.Reader
+	Checks Rechecker
+	Words  check.List
+	Logger *slog.Logger
+}
+
+// Rechecker decides checks again from what a workload did over a window,
+// as catalog.Catalog does.
+type Rechecker interface {
+	Recheck(ctx context.Context, c client.Reader, w *workload.Workload, names []string, window time.Duration, now time.Time) []check.Result
 }
 
 const closeUndecidedBatch = 100
@@ -47,18 +68,29 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	reasons := map[incident.State]string{
+	timedOut := map[incident.State]string{
 		incident.Inconclusive:       "No fix was suggested, and no time to suggest one is configured.",
 		incident.AwaitingSuggestion: "No fix was suggested within " + shortDuration(waiting) + ".",
 	}
 	if window > 0 {
-		reasons[incident.Inconclusive] = "No fix was suggested within " + shortDuration(window) + "."
+		timedOut[incident.Inconclusive] = "No fix was suggested within " + shortDuration(window) + "."
 	}
 	for _, u := range undecided {
+		to, reason := incident.ClosedNoAction, timedOut[u.State]
+		if u.State == incident.AwaitingSuggestion {
+			var wait bool
+			to, reason, wait, err = w.recovered(ctx, cfg, u.ID, reason, now)
+			if err != nil {
+				w.logger().WarnContext(ctx, "cannot decide whether a waiting incident still fails", telemetry.FieldIncidentID, u.ID, telemetry.FieldError, err)
+				continue
+			}
+			if wait {
+				continue
+			}
+		}
 		err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
 			return w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: u.ID, From: u.State, To: incident.ClosedNoAction,
-				Reason: reasons[u.State], Actor: actor,
+				ID: u.ID, From: u.State, To: to, Reason: reason, Actor: actor,
 			})
 		})
 		if err != nil && !errors.Is(err, store.ErrStateConflict) {
@@ -66,6 +98,75 @@ func (w *CloseUndecidedWorker) Close(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// recovered decides how an incident left waiting for a suggested fix past
+// its time ends, from its symptoms decided again now: it keeps waiting while
+// one is true, or while one its checks found when it opened can't be told
+// now; it closes as recovered once those are all false; and, when its checks
+// never found its failure, it closes with no change, as timedOut says.
+func (w *CloseUndecidedWorker) recovered(ctx context.Context, cfg config.Config, incidentID, timedOut string, now time.Time) (incident.State, string, bool, error) {
+	in, err := w.Store.Incident(ctx, incidentID)
+	if err != nil {
+		return "", "", false, err
+	}
+	symptoms := cfg.Matched(in.Profiles()).Symptoms()
+	stored, err := w.Store.Predicates(ctx, in.ID)
+	if err != nil {
+		return "", "", false, err
+	}
+	var failed []string
+	for _, r := range stored {
+		if r.Value == check.True && slices.Contains(symptoms, r.Name) {
+			failed = append(failed, r.Name)
+		}
+	}
+	if w.Checks == nil {
+		return incident.ClosedNoAction, timedOut, len(failed) > 0, nil
+	}
+	if len(symptoms) == 0 {
+		return incident.ClosedNoAction, timedOut, false, nil
+	}
+	target, err := workload.Read(ctx, w.Reader, in.Target)
+	if workload.Lost(err) {
+		// Watching the cluster ends an incident whose workload is gone.
+		return "", "", true, nil
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+	results := w.Checks.Recheck(ctx, w.Reader, target, symptoms, 0, now)
+	var cleared []check.Result
+	for _, r := range results {
+		switch {
+		case r.Value == check.True:
+			return "", "", true, nil
+		case slices.Contains(failed, r.Name) && r.Value == check.Unknown:
+			return "", "", true, nil
+		case slices.Contains(failed, r.Name):
+			cleared = append(cleared, r)
+		}
+	}
+	if len(failed) == 0 {
+		return incident.ClosedNoAction, timedOut, false, nil
+	}
+	return incident.SelfResolved, "Recovered before a fix. The checks now find " + that(cleared, w.Words) + ".", false, nil
+}
+
+// that lists what results found, each as words.Found puts it.
+func that(results []check.Result, words check.List) string {
+	parts := make([]string, 0, len(results))
+	for _, r := range results {
+		parts = append(parts, "that "+words.Found(r))
+	}
+	return strings.Join(parts, " and ")
+}
+
+func (w *CloseUndecidedWorker) logger() *slog.Logger {
+	if w.Logger != nil {
+		return w.Logger
+	}
+	return slog.Default()
 }
 
 // shortDuration writes d as people read it: 30m, 1h, 1h30m.

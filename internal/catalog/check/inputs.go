@@ -41,6 +41,12 @@ const (
 	// investigator, in collection order. Each has id and template, the item
 	// it is in, reason and at.
 	varSuspicious = "suspicious_evidence"
+
+	// varThemisFix is Themis's own fix that left the target as it is, from
+	// its record (evidence.ThemisFixView), with id, the item it was read
+	// from; null when the target runs no fix of Themis's. Its absence is an
+	// answer, not missing evidence, so a check that reads it needs nothing.
+	varThemisFix = "themis_fix"
 )
 
 // fromHistory are the variables read from rollout history.
@@ -58,6 +64,7 @@ var views = map[string]func() any{
 	evidence.ContainerMemory:   func() any { return new(evidence.ContainerMemoryView) },
 	evidence.ContainerCPU:      func() any { return new(evidence.ContainerCPUView) },
 	evidence.RevisionHealth:    func() any { return new(evidence.RevisionHealthView) },
+	evidence.ThemisFix:         func() any { return new(evidence.ThemisFixView) },
 }
 
 // inputs are the variables every check of one evaluation sees.
@@ -85,6 +92,14 @@ func newInputs(b evidence.Bundle, now time.Time) inputs {
 		}
 	}
 	in.vars[varIDs] = in.ids
+
+	// The template's variable is the item's view, as for any template, with
+	// its ID beside it.
+	if fix, ok := in.vars[evidence.ThemisFix].(map[string]any); ok {
+		fix["id"] = in.ids[evidence.ThemisFix]
+	} else {
+		in.vars[varThemisFix] = nil
+	}
 
 	revision := ""
 	if h, ok := decoded[evidence.RolloutHistory].(*evidence.RolloutHistoryView); ok {

@@ -162,7 +162,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "unknown",
       "reason": "no metrics history",
       "gaps": [

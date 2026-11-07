@@ -223,6 +223,11 @@ func (p Profile) validate(add func(path, format string, args ...any)) {
 			add(fmt.Sprintf("symptoms[%d]", j), "duplicate check %q", name)
 		}
 	}
+	for j, name := range p.Verification.Checks {
+		if slices.Contains(p.Verification.Checks[:j], name) {
+			add(fmt.Sprintf("verification.checks[%d]", j), "duplicate check %q", name)
+		}
+	}
 	if n := utf8.RuneCountInString(p.Guidance); n > MaxGuidance {
 		add("guidance", "must be at most %d characters, got %d", MaxGuidance, n)
 	}

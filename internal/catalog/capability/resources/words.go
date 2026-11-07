@@ -68,6 +68,12 @@ func (Capability) Words(target string, params map[string]any, before, after json
 	default:
 		verifies += ", with no OOM kill"
 	}
+	// Ready pods can be throttled: a CPU raise is checked by how often the
+	// new pods are throttled at their limit, as the profiles that offer one
+	// name in their verification checks.
+	if way(ds, corev1.ResourceCPU) == "increase" {
+		verifies += ", and are no longer throttled at their CPU limit"
+	}
 	return capability.Say(noun, verb, what, verifies)
 }
 

@@ -16,7 +16,9 @@ type ExternalProposals struct {
 	Sources []ProposalSource `json:"sources,omitempty"`
 
 	// Window is how long an incident Themis couldn't decide stays open for a
-	// suggestion. Defaults to 15m with sources, and to none without.
+	// suggestion, and how long one waiting for a person's fix waits before
+	// Themis looks again: it keeps waiting while its checks find the failure.
+	// Defaults to 15m with sources, and to none without.
 	Window Duration `json:"window,omitzero"`
 }
 
@@ -74,9 +76,10 @@ func (c Config) SuggestionWindow() time.Duration {
 }
 
 // AwaitingSuggestionWindow returns how long an incident waits for a person
-// to suggest a fix: without an investigator, from when it opens, and after a
-// person denied its fix, from the denial. People need time to answer, so it's
-// never none.
+// to suggest a fix before Themis looks at it again: without an investigator,
+// from when it opens, and after a person denied its fix, from the denial.
+// One whose checks still find its failure then keeps waiting. People need
+// time to answer, so it's never none.
 func (c Config) AwaitingSuggestionWindow() time.Duration {
 	if w := c.ExternalProposals.EffectiveWindow(); w > 0 {
 		return w

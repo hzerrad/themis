@@ -151,7 +151,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "no throttling figures: the Kubernetes metrics API keeps no history, so it has no peaks or throttling: set a Prometheus address to see them",
       "evidence_ids": [

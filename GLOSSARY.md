@@ -117,7 +117,7 @@ A person's no to one action, with their reason as they wrote it. The incident th
 _Avoid_: rejection, veto
 
 **Verification**:
-Watching a target for a while after an action to tell whether the incident is resolved, contained, unchanged or worse.
+Watching a target for a while after an action to tell whether the incident is resolved, contained, unchanged or worse: whether its pods become ready and stay ready, and whether the failure the fix is meant to cure, such as throttling at the CPU limit, is gone from what the workload did since the change. A fix Themis can't measure is never called fixed.
 _Avoid_: health check, validation
 
 **Restore**:

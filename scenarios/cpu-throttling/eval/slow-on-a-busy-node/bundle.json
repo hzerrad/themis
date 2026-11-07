@@ -151,9 +151,9 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "false",
-      "reason": "none of the 1 container(s) with a CPU limit was throttled in 25% or more of its CPU periods over 1h",
+      "reason": "api was throttled in 6% of its CPU periods over 1h, at its limit of 0.5 CPU, below 25%",
       "evidence_ids": [
         "ev-container_cpu"
       ]
@@ -200,6 +200,6 @@
       }
     },
     "outcome": "deny",
-    "reason": "Refused. The cpu-throttling profile allows a memory or CPU change only when a container is throttled at its CPU limit, and the checks found otherwise (none of the 1 container(s) with a CPU limit was throttled in 25% or more of its CPU periods over 1h)."
+    "reason": "Refused. The cpu-throttling profile allows a memory or CPU change only when a container is throttled at its CPU limit, and the checks found otherwise (api was throttled in 6% of its CPU periods over 1h, at its limit of 0.5 CPU, below 25%)."
   }
 }

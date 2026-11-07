@@ -382,7 +382,7 @@ func TestMatched(t *testing.T) {
 			if got := tt.m.ApprovalTimeout(); got != want.EffectivePolicy().ApprovalTimeout.Duration {
 				t.Errorf("approval timeout = %s, want the shortest", got)
 			}
-			if got := tt.m.Verification(); got != want.EffectiveVerification() {
+			if got := tt.m.Verification(); !reflect.DeepEqual(got, want.EffectiveVerification()) {
 				t.Errorf("verification = %+v, want the longest", got)
 			}
 		})

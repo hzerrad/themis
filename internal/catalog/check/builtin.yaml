@@ -6,11 +6,12 @@
 # docs/checks.md says what each field means and what the expressions see.
 
 # The current revision replaced an earlier one within the last 6 hours. A
-# Deployment's first revision replaced none: creating it isn't a rollout. It
+# Deployment's first revision replaced none: creating it isn't a rollout. A
+# rollout that was Themis's own fix says so: it brought no new version. It
 # is for an operator's own profiles to show: no pack runs it, and no fix
 # Themis offers depends on how long ago a rollout was.
 - name: rollout_recent
-  version: "2"
+  version: "3"
   description: A rollout happened recently
   topic: Recent rollout
   whenFalse: No recent rollout
@@ -23,6 +24,10 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout replaced one
       cite: [ids.rollout_history]
+    - when: themis_fix != null && now - rollout_at <= duration("6h")
+      answer: true
+      reason: revision ${current.revision} rolled out ${now - rollout_at} ago, as Themis's fix on incident ${themis_fix.incident}
+      cite: [ids.rollout_history, themis_fix.id]
     - when: now - rollout_at <= duration("6h")
       answer: true
       reason: revision ${current.revision} rolled out ${now - rollout_at} ago
@@ -33,12 +38,14 @@
 
 # The revision before the current one ran without failing: a version to go
 # back to. Its pods, while there are any, say so: ready, and none of their
-# containers died. Once they are gone, the metrics history says how they ran
-# while it was the current revision: without a restart or OOM kill. Without an
+# containers died. Once they are gone, two sources tell: Themis's own record,
+# when the current revision is its fix and the incident it fixed found the
+# revision before failing; and the metrics history of how its pods ran while
+# it was the current revision, without a restart or OOM kill. Without an
 # earlier revision there is none, one that failed is no better, and with
-# neither its pods nor a history of them, nothing tells.
+# neither its pods nor a record of them, nothing tells.
 - name: earlier_revision_healthy
-  version: "2"
+  version: "3"
   description: The version before it is healthy, to go back to
   topic: Health of the version before it
   whenFalse: No healthy earlier version to go back to
@@ -71,7 +78,12 @@
       answer: true
       reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
       cite: [ids.rollout_history, ids.pod_states]
-    # Its pods are gone: from here, the metrics history tells.
+    # Its pods are gone: from here, Themis's own record, then the metrics
+    # history, tells.
+    - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
+      answer: false
+      reason: "revision ${prior.revision} failed before Themis's fix on incident ${themis_fix.incident} replaced it: ${themis_fix.found[0].reason}"
+      cite: [ids.rollout_history, themis_fix.id]
     - when: size(record) == 0 || record[0].seenFrom == null
       answer: unknown
       reason: revision ${prior.revision} has no pods left, and the metrics history has none of them
@@ -96,8 +108,9 @@
 
 # The failures came with the latest rollout: the version before it ran
 # without failing where the current one fails. Its pods show that while they
-# run healthy beside the failing ones. Once they are gone, the metrics
-# history compares the two: the version before ran without failing until
+# run healthy beside the failing ones. Once they are gone, Themis's own
+# record shows the version before failed when the current one is the fix
+# Themis made for it, and the metrics history compares the two: the version before ran without failing until
 # after the current one first failed, or for longer than the current one ran
 # before its first failure. A current version that ran without failing at
 # least as long as the one before it was seen to is no worse for the rollout:
@@ -150,7 +163,14 @@
       answer: true
       reason: ${size(pods)} pods of revision ${prior.revision} run without failing while revision ${current.revision} fails
       cite: [ids.rollout_history, ids.pod_states]
-    # Its pods are gone: from here, the metrics history tells.
+    # Its pods are gone: from here, Themis's own record, then the metrics
+    # history, tells.
+    - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
+      answer: false
+      reason: >-
+        the version before it failed too: revision ${prior.revision} failed before Themis's fix on
+        incident ${themis_fix.incident} replaced it (${themis_fix.found[0].reason})
+      cite: [ids.rollout_history, themis_fix.id]
     - when: size(earlier) == 0 || earlier[0].seenFrom == null
       answer: unknown
       reason: revision ${prior.revision} has no pods left, and the metrics history has none of them

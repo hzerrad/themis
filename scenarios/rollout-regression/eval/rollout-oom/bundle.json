@@ -181,7 +181,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "true",
       "reason": "3 pods of revision 1 are ready and never failed",
       "evidence_ids": [

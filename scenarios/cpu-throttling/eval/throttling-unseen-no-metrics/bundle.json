@@ -154,7 +154,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "unknown",
       "reason": "no container cpu",
       "gaps": [

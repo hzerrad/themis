@@ -173,6 +173,16 @@ spec:
                 description: Verification measures an action's outcome; zero fields
                   take defaults.
                 properties:
+                  checks:
+                    description: |-
+                      Checks are the checks that find the failure the profile's fixes are
+                      meant to cure, such as throttling at the CPU limit: a fix counts as
+                      fixed only when each is false, decided again from what the workload
+                      did since the change. None means its pods' readiness, restarts and OOM
+                      kills alone. Each must be a check the profile runs.
+                    items:
+                      type: string
+                    type: array
                   stability:
                     description: Stability is how long the target must stay healthy
                       within the window.

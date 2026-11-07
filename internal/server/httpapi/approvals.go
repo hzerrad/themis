@@ -64,6 +64,29 @@ type Reinvestigation interface {
 	Start(ctx context.Context, incidentID, by string) error
 }
 
+type closeRequest struct {
+	Reason string `json:"reason"`
+}
+
+// close closes an incident waiting for a suggested fix, with no change.
+func (a *API) close(w http.ResponseWriter, r *http.Request) {
+	var req closeRequest
+	if !a.decode(w, r, &req) {
+		return
+	}
+	err := investigation.Close(r.Context(), a.Store, r.PathValue("id"), actor(r), req.Reason)
+	var refused *investigation.Refusal
+	if errors.As(err, &refused) {
+		http.Error(w, "Refused. "+refused.Reason, http.StatusConflict)
+		return
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.reply(w, r, map[string]string{"state": "closed_no_action"})
+}
+
 // investigate has the incident investigated again.
 func (a *API) investigate(w http.ResponseWriter, r *http.Request) {
 	err := a.Again.Start(r.Context(), r.PathValue("id"), actor(r))

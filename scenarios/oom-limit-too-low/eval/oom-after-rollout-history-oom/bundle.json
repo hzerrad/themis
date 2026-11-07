@@ -208,7 +208,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "containers of revision 1 were OOMKilled while it ran, first at 2026-10-28T14:10:00Z, in prometheus's history",
       "evidence_ids": [

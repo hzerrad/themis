@@ -1,0 +1,216 @@
+{
+  "scenario": "still-throttled-after-raise",
+  "version": 1,
+  "difficulty": "medium",
+  "incident_class": "cpu_throttling",
+  "truth": {
+    "root_causes": [
+      "cpu_limit_too_low"
+    ],
+    "decision": "propose",
+    "required_citations": [
+      "container_cpu"
+    ],
+    "predicates": {
+      "cpu_throttled_at_limit": "true",
+      "cpu_usage_near_limit": "true",
+      "gitops_managed": "false",
+      "throttling_came_with_rollout": "false",
+      "throttling_data_available": "true"
+    },
+    "policy": "require_approval"
+  },
+  "target": {
+    "Group": "apps",
+    "Kind": "Deployment",
+    "Namespace": "shop",
+    "Name": "search",
+    "UID": "uid-deployment-search"
+  },
+  "capabilities": [
+    "deployment.set-resources"
+  ],
+  "fixes": [
+    {
+      "name": "deployment.set-resources",
+      "description": "Set the memory and CPU requests and limits of containers in the Deployment's pod template, which rolls out new pods. containers maps each container's name to the requests and limits to set, as Kubernetes quantities such as 512Mi or 250m; values not named stay as they are. Choose the values from the evidence: Themis checks that they are valid and that the cluster can run them, never how big they are. A limit can't be removed, and a request can't end above its limit.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"containers\"],\"properties\":{\"containers\":{\"type\":\"object\",\"minProperties\":1,\"description\":\"The values to set, by container name.\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"requests\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 512Mi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 250m.\"}}},\"limits\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 1Gi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 500m.\"}}}}}}}}"
+    }
+  ],
+  "root_causes": [
+    {
+      "name": "cpu_limit_too_low",
+      "description": "its steady CPU demand is above its CPU limit, which holds it back"
+    },
+    {
+      "name": "new_version_uses_more_cpu",
+      "description": "a recent rollout made it use more CPU than before"
+    },
+    {
+      "name": "transient_cpu_burst",
+      "description": "a short burst of CPU use that has passed or rarely hits the limit"
+    },
+    {
+      "name": "node_cpu_contention",
+      "description": "its node is short of CPU, slowing it below its limit"
+    },
+    {
+      "name": "insufficient_evidence",
+      "description": "the evidence can't tell"
+    },
+    {
+      "name": "other",
+      "description": "none of these: say what in the summary"
+    }
+  ],
+  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out, and the latest rollout didn't bring\nit: throttling_came_with_rollout is false, as with no earlier version,\none throttled too, or this one having run unthrottled at least as long\nas the one before it did, so more load since brought it. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- throttling_came_with_rollout is true: the version before this one ran\n  unthrottled where this one is throttled, so this one may use more CPU.\n  Whether to roll it back is another kind of incident's call, not a raise\n  here.\n- throttling_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods; say what\n  is missing.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
+  "max_steps": 8,
+  "max_evidence_requests": 6,
+  "initial": [
+    {
+      "id": "ev-themis_fix",
+      "template": "themis_fix",
+      "data": "{\"incident\":\"019a5b3c-7d10-7e21-9a4b-2c8d6e0f1a35\",\"fix\":\"deployment.set-resources\",\"done\":\"Raised search's CPU limit from 200m to 300m.\",\"appliedAt\":\"2026-11-06T21:48:13Z\",\"replaced\":\"1\",\"outcome\":\"unchanged\",\"found\":[{\"check\":\"cpu_throttled_at_limit\",\"reason\":\"app was throttled in 63% of its CPU periods over 1h, at its limit of 0.2 CPU\"}]}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-container_cpu",
+      "template": "container_cpu",
+      "data": "{\"window\":\"1h\",\"usage\":{\"source\":\"prometheus\"},\"throttling\":{\"source\":\"prometheus\"},\"containers\":[{\"name\":\"app\",\"requestCores\":0.05,\"limitCores\":0.3,\"usageCores\":0.28,\"usageOfLimit\":0.933,\"throttledRatio\":0.57}]}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-pod_states",
+      "template": "pod_states",
+      "data": "{\"pods\":[{\"name\":\"search-5d9c7f6b8-q2w4e\",\"revision\":\"2\",\"phase\":\"Running\",\"ready\":true,\"startedAt\":\"2026-11-06T21:48:13Z\",\"containers\":[{\"name\":\"app\",\"image\":\"example/search:1.0.0\",\"ready\":true,\"restartCount\":0,\"state\":{\"status\":\"running\",\"startedAt\":\"2026-11-06T21:48:16Z\"}}]}],\"totalPods\":1}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-rollout_history",
+      "template": "rollout_history",
+      "data": "{\"deployment\":{\"name\":\"search\",\"currentRevision\":\"2\",\"generation\":2,\"observedGeneration\":2,\"replicas\":1,\"updatedReplicas\":1,\"readyReplicas\":1,\"unavailableReplicas\":0,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-11-06T20:30:10Z\",\"lastTransitionTime\":\"2026-11-06T20:30:10Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-11-06T21:48:25Z\",\"lastTransitionTime\":\"2026-11-06T20:30:00Z\"}]},\"revisions\":[{\"replicaSet\":\"search-5d9c7f6b8\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-11-06T21:48:13Z\",\"replicas\":1,\"readyReplicas\":1,\"containers\":[{\"name\":\"app\",\"image\":\"example/search:1.0.0\",\"requests\":{\"cpu\":\"50m\",\"memory\":\"8Mi\"},\"limits\":{\"cpu\":\"300m\",\"memory\":\"32Mi\"}}]},{\"replicaSet\":\"search-7c4e8b2a6\",\"revision\":\"1\",\"createdAt\":\"2026-11-06T20:30:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search:1.0.0\",\"requests\":{\"cpu\":\"50m\",\"memory\":\"8Mi\"},\"limits\":{\"cpu\":\"200m\",\"memory\":\"32Mi\"}}]}],\"totalRevisions\":2}",
+      "classification": "internal"
+    },
+    {
+      "id": "ev-target_events",
+      "template": "target_events",
+      "data": "{\"events\":[{\"object\":\"Deployment/search\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled down replica set search-7c4e8b2a6 from 1 to 0\",\"count\":1,\"firstSeen\":\"2026-11-06T21:48:25Z\",\"lastSeen\":\"2026-11-06T21:48:25Z\"},{\"object\":\"Deployment/search\",\"type\":\"Normal\",\"reason\":\"ScalingReplicaSet\",\"message\":\"Scaled up replica set search-5d9c7f6b8 from 0 to 1\",\"count\":1,\"firstSeen\":\"2026-11-06T21:48:13Z\",\"lastSeen\":\"2026-11-06T21:48:13Z\"}],\"totalEvents\":2}",
+      "classification": "internal"
+    }
+  ],
+  "requestable": {
+    "container_logs_tail": {
+      "id": "ev-container_logs_tail",
+      "template": "container_logs_tail",
+      "data": "{\"pod\":\"search-5d9c7f6b8-q2w4e\",\"container\":\"app\",\"previousRun\":false,\"logs\":\"search: the feed sends 300m of CPU work\\nsearch: 2s of CPU work behind the feed\\nsearch: 4s of CPU work behind the feed\\nsearch: 7s of CPU work behind the feed\\nsearch: 9s of CPU work behind the feed\\nsearch: 12s of CPU work behind the feed\\nsearch: 14s of CPU work behind the feed\\n\"}",
+      "original_bytes": 276,
+      "classification": "sensitive"
+    }
+  },
+  "templates": [
+    {
+      "name": "container_cpu",
+      "description": "CPU each container of the current revision uses now, in cores, and how often it was throttled over a window (default 1h), against its request and limit, and which metrics source said so. A figure the source can't give is null, with why.",
+      "params": [
+        "window"
+      ]
+    },
+    {
+      "name": "pod_states",
+      "description": "Each pod of the Deployment: its revision, readiness, and each container's state and last termination (where OOMKilled shows)."
+    },
+    {
+      "name": "rollout_history",
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+    },
+    {
+      "name": "target_events",
+      "description": "Recent events of the Deployment, its ReplicaSets and its pods, newest first."
+    },
+    {
+      "name": "container_logs_tail",
+      "description": "The end of one container's logs. Defaults to the pod needing attention most, from the run that last ended.",
+      "params": [
+        "pod",
+        "container",
+        "previous"
+      ]
+    },
+    {
+      "name": "revision_health",
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+    }
+  ],
+  "gaps": [
+    {
+      "template": "revision_health",
+      "cause": "unavailable",
+      "detail": "collect revision_health: no figures: Prometheus has no pods of ReplicaSet search-5d9c7f6b8 in its history: it keeps none that old, or doesn't scrape kube-state-metrics"
+    }
+  ],
+  "predicates": [
+    {
+      "name": "throttling_data_available",
+      "version": "1",
+      "value": "true",
+      "reason": "prometheus says how often each container was throttled over 1h",
+      "evidence_ids": [
+        "ev-container_cpu"
+      ]
+    },
+    {
+      "name": "cpu_throttled_at_limit",
+      "version": "2",
+      "value": "true",
+      "reason": "app was throttled in 57% of its CPU periods over 1h, at its limit of 0.3 CPU",
+      "evidence_ids": [
+        "ev-container_cpu"
+      ]
+    },
+    {
+      "name": "cpu_usage_near_limit",
+      "version": "1",
+      "value": "true",
+      "reason": "app uses 0.28 CPU of its limit of 0.3",
+      "evidence_ids": [
+        "ev-container_cpu"
+      ]
+    },
+    {
+      "name": "throttling_came_with_rollout",
+      "version": "1",
+      "value": "false",
+      "reason": "the version before it was throttled too: revision 1 was throttled before Themis's fix on incident 019a5b3c-7d10-7e21-9a4b-2c8d6e0f1a35 replaced it (app was throttled in 63% of its CPU periods over 1h, at its limit of 0.2 CPU)",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-themis_fix"
+      ]
+    },
+    {
+      "name": "gitops_managed",
+      "version": "1",
+      "value": "false",
+      "reason": "no GitOps markers or managers",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    }
+  ],
+  "policy": {
+    "fix": {
+      "capability": "deployment.set-resources",
+      "params": {
+        "containers": {
+          "app": {
+            "limits": {
+              "cpu": "450m"
+            }
+          }
+        }
+      }
+    },
+    "outcome": "require_approval",
+    "reason": "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."
+  },
+  "unproposed": "The checks support a memory or CPU change (a container is throttled at its CPU limit)."
+}

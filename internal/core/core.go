@@ -209,14 +209,14 @@ func Run(ctx context.Context, o Options) error {
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &governance.ExpireWorker{Store: s})
-	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s})
+	telemetry.AddUnscopedWorker(workers, &investigation.CloseUndecidedWorker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Checks: cat, Words: cat.Checks, Logger: log})
 	executor, closeExecutor, err := dialExecutor(cfg.Executor)
 	if err != nil {
 		return err
 	}
 	defer closeExecutor()
 	telemetry.AddIncidentWorker(workers, &governance.ExecuteWorker{Store: s, Executor: executor})
-	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes})
+	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes, Checks: cat, Words: cat.Checks})
 	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
 	telemetry.AddIncidentWorker(workers, &notification.Worker{Store: s, Config: cfg.Notifications, Remedy: hint.Writer{Config: current}})
 	if executor == nil {

@@ -325,10 +325,15 @@ demo-fix-oom: ## Shrink catalog's data back under its memory limit
 	$(KUBECTL) -n shop delete pods -l app=catalog
 
 # cpu-throttling: search.
-.PHONY: demo-break-cpu demo-fix-cpu
+.PHONY: demo-break-cpu demo-break-cpu-more demo-fix-cpu
 demo-break-cpu: demo-namespace ## cpu-throttling: send search more CPU work than its limit allows, with no rollout
 	$(KUBECTL) apply -f $(DEMO)/search.yaml
 	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=250
+	$(KUBECTL) -n shop rollout status deployment/search-feed --timeout=120s
+
+demo-break-cpu-more: demo-namespace ## cpu-throttling: send search more CPU work than one raise of its limit covers
+	$(KUBECTL) apply -f $(DEMO)/search.yaml
+	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=350
 	$(KUBECTL) -n shop rollout status deployment/search-feed --timeout=120s
 
 demo-fix-cpu: ## Stop search's CPU work

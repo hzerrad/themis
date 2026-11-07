@@ -209,7 +209,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "pod inventory-4b8d2f6a1-b7c9d of revision 1: app OOMKilled",
       "evidence_ids": [

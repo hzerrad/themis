@@ -169,7 +169,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "api was throttled in 64% of its CPU periods over 1h, at its limit of 0.5 CPU",
       "evidence_ids": [

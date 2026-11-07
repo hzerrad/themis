@@ -72,6 +72,11 @@ type Case struct {
 	// one.
 	Fix *Fix `json:"fix,omitempty"`
 
+	// ThemisFix is Themis's own fix the target runs, as an earlier incident
+	// recorded it, when the case follows one: Themis gives it to the checks
+	// and the investigator as evidence.
+	ThemisFix *evidence.ThemisFixView `json:"themis_fix,omitempty"`
+
 	KnownLimitations string `json:"known_limitations,omitempty"`
 }
 
@@ -479,7 +484,15 @@ func find(ctx context.Context, dir string, s Case, packs fs.FS, profile config.P
 	for i := range scope {
 		scope[i].Evidence = config.Evidence{Initial: s.Evidence.Initial, Allowed: s.Evidence.Allowed}
 	}
-	d := cat.Diagnose(ctx, c, w, scope, catalog.Moment{Now: s.Now})
+	var own []evidence.Item
+	if s.ThemisFix != nil {
+		item, err := evidence.NewThemisFix(*s.ThemisFix, target, s.Now)
+		if err != nil {
+			return found{}, err
+		}
+		own = append(own, item)
+	}
+	d := cat.Diagnose(ctx, c, w, scope, catalog.Moment{Now: s.Now}, own...)
 	return found{c: c, target: target, w: w, cat: cat, matched: matched, d: d}, nil
 }
 
