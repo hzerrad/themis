@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
@@ -41,6 +42,32 @@ func TestSources_AskInTurn(t *testing.T) {
 			}
 			if err != nil || r.Source != tc.source || r.Unavailable != tc.unavailable {
 				t.Errorf("reading = %+v, %v, want from %q, unavailable %q", r, err, tc.source, tc.unavailable)
+			}
+		})
+	}
+}
+
+// History asks each source in turn too; without an answer, the first
+// source's reason is the one given, and the metrics API says it keeps none.
+func TestSources_History(t *testing.T) {
+	rs := metrics.ReplicaSet{Namespace: "shop", Name: "checkout-5c6a1e2f3"}
+	none := stub{name: "prometheus", h: metrics.Record{Unavailable: metrics.NotInHistory(rs.Name)}}
+	api := metrics.NewKubernetes(metricsfake.NewSimpleClientset())
+	seen := stub{name: "prometheus", h: metrics.Record{Restarts: 2}}
+	for name, tc := range map[string]struct {
+		sources     metrics.Sources
+		source      string
+		unavailable string
+	}{
+		"the history answers":  {sources: metrics.Sources{seen, api}, source: "prometheus"},
+		"the history has none": {sources: metrics.Sources{none, api}, source: "prometheus", unavailable: metrics.NotInHistory(rs.Name)},
+		"only the metrics API": {sources: metrics.Sources{api}, source: "kubernetes", unavailable: metrics.NoRevisionHistory},
+		"no source":            {unavailable: metrics.NoSource},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, err := tc.sources.History(t.Context(), rs, time.Now())
+			if err != nil || r.Source != tc.source || r.Unavailable != tc.unavailable {
+				t.Errorf("record = %+v, %v, want from %q, unavailable %q", r, err, tc.source, tc.unavailable)
 			}
 		})
 	}

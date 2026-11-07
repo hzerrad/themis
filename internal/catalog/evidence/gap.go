@@ -49,7 +49,7 @@ func (c GapCause) Blind() bool { return c != GapAbsent }
 // CauseOf says why a collection failed.
 func CauseOf(err error) GapCause {
 	switch {
-	case errors.Is(err, ErrNoPods):
+	case errors.Is(err, ErrNoPods), errors.Is(err, ErrNoRevision):
 		return GapAbsent
 	case workload.Lost(err), errors.Is(err, ErrPodReplaced), apierrors.IsNotFound(err):
 		return GapNotFound

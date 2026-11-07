@@ -14,9 +14,8 @@
     "predicates": {
       "cpu_throttled_at_limit": "true",
       "cpu_usage_near_limit": "true",
-      "earlier_revision_healthy": "false",
       "gitops_managed": "false",
-      "rollout_recent": "false",
+      "throttling_came_with_rollout": "false",
       "throttling_data_available": "true"
     },
     "policy": "require_approval"
@@ -64,7 +63,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out. With no earlier version to go back to,\nor one that failed too (earlier_revision_healthy is false), the limit is\nwhat to change, however recently the version rolled out. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- earlier_revision_healthy is true: the version before this one runs\n  healthy, so this one may use more CPU. The same holds while\n  earlier_revision_healthy is unknown and rollout_recent is true. Whether\n  to roll it back is another kind of incident's call, not a raise here.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
+  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out, and the latest rollout didn't bring\nit: throttling_came_with_rollout is false, as with no earlier version,\none throttled too, or this one having run unthrottled at least as long\nas the one before it did, so more load since brought it. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- throttling_came_with_rollout is true: the version before this one ran\n  unthrottled where this one is throttled, so this one may use more CPU.\n  Whether to roll it back is another kind of incident's call, not a raise\n  here.\n- throttling_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods; say what\n  is missing.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -130,6 +129,17 @@
         "container",
         "previous"
       ]
+    },
+    {
+      "name": "revision_health",
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+    }
+  ],
+  "gaps": [
+    {
+      "template": "revision_health",
+      "cause": "unavailable",
+      "detail": "collect revision_health: no figures: Prometheus has no pods of ReplicaSet search-7c4e8b2a6 in its history: it keeps none that old, or doesn't scrape kube-state-metrics"
     }
   ],
   "predicates": [
@@ -161,19 +171,10 @@
       ]
     },
     {
-      "name": "rollout_recent",
-      "version": "3",
+      "name": "throttling_came_with_rollout",
+      "version": "1",
       "value": "false",
-      "reason": "there is no revision before revision 1, so no rollout replaced one",
-      "evidence_ids": [
-        "ev-rollout_history"
-      ]
-    },
-    {
-      "name": "earlier_revision_healthy",
-      "version": "2",
-      "value": "false",
-      "reason": "search has no earlier revision to roll back to",
+      "reason": "there is no revision before revision 1, so no rollout brought the throttling",
       "evidence_ids": [
         "ev-rollout_history"
       ]

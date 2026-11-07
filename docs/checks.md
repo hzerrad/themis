@@ -1,6 +1,6 @@
 # Writing a check
 
-A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `rollout_recent`; `earlier_revision_healthy`, whether a healthy version before the current one is there to go back to; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; and `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence). Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
+A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `earlier_revision_healthy`, whether a healthy version before the current one is there to go back to; `failures_came_with_rollout`, whether the latest rollout brought the failures, judged by how the version before it ran, from its pods or the metrics history; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence); and `rollout_recent`, for an operator's own profiles to show, which no pack runs. Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
 
 This is one of them:
 
@@ -60,6 +60,8 @@ This is one of them:
 | `quota_refused_pods` | `FailedCreate`: exceeded quota | The Deployment's `ReplicaFailure` condition is true, for `FailedCreate`, and names the quota |
 | `failure_onset_after_rollout` | Any warning event, through `failures` | A pod of the current revision isn't ready, or a container of one restarted |
 | `config_changed_before_failure` | Any warning event, through `first_failure` | The pod it names shows a failure in its status, and started no later than the event |
+
+**Compare what the evidence shows, not a clock.** Whether a rollout brought the failures is never decided by how long ago it was: `failures_came_with_rollout` compares how long each version ran without failing, and is `unknown` when the evidence isn't there, so the policy leaves the fix to a person. A check of your own should do the same.
 
 **Missing evidence needs no answer.** When a template an answer reads has no evidence, the check stops there as `unknown`, with a reason such as "no pod states", and the gap that explains it is attached, as for every check.
 

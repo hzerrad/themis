@@ -1,5 +1,5 @@
-# The checks of the rollout-regression pack. rollout_recent,
-# earlier_revision_healthy and gitops_managed, which its profile runs too, are
+# The checks of the rollout-regression pack. earlier_revision_healthy,
+# failures_came_with_rollout and gitops_managed, which its profile runs too, are
 # Themis's own.
 # docs/checks.md says what each field means and what the expressions see.
 

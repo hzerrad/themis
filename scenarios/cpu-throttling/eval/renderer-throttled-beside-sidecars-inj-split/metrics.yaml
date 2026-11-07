@@ -46,3 +46,18 @@ pods:
       memory: 25Mi
       peakMemory: 27Mi
       cpu: 8m
+# What Prometheus's history says of each ReplicaSet's pods. It keeps 15
+# days, so it has none from before 20 Oct 14:00.
+revisions:
+  reports-5d7c9b8a6:
+    seenFrom: '2026-10-20T14:00:00Z'
+    seenUntil: '2026-11-01T07:41:00Z'
+    throttled: 0.39
+    firstThrottledAt: '2026-10-31T20:00:00Z'
+  reports-9f2e4c6d8:
+    seenFrom: '2026-11-01T07:30:30Z'
+    seenUntil: '2026-11-04T14:00:00Z'
+    restarts: 3
+    firstRestartAt: '2026-11-04T13:05:00Z'
+    throttled: 0.41
+    firstThrottledAt: '2026-11-04T12:30:00Z'

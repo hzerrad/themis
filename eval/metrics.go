@@ -31,6 +31,22 @@ type caseMetrics struct {
 	// Pods holds each container's figures, by pod and container name. A
 	// figure left out is one the source has none of.
 	Pods map[string]map[string]containerFigures `json:"pods"`
+	// Revisions is what Prometheus's history says of each ReplicaSet's
+	// pods, by its name. A ReplicaSet left out is one it has none of.
+	Revisions map[string]revisionHistory `json:"revisions,omitempty"`
+}
+
+// revisionHistory is how one ReplicaSet's pods ran, as Prometheus's history
+// shows it: metrics.Record, written by hand.
+type revisionHistory struct {
+	SeenFrom         time.Time `json:"seenFrom"`
+	SeenUntil        time.Time `json:"seenUntil"`
+	Restarts         int       `json:"restarts,omitempty"`
+	FirstRestartAt   time.Time `json:"firstRestartAt,omitzero"`
+	OOMKilled        int       `json:"oomKilled,omitempty"`
+	FirstOOMKillAt   time.Time `json:"firstOOMKillAt,omitzero"`
+	Throttled        *float64  `json:"throttled,omitempty"`
+	FirstThrottledAt time.Time `json:"firstThrottledAt,omitzero"`
 }
 
 type containerFigures struct {
@@ -62,10 +78,18 @@ func loadMetrics(path string) (metrics.Source, error) {
 	}
 	// As an install asks its sources, so the evidence names the one that
 	// answered.
+	for name, h := range m.Revisions {
+		if h.SeenFrom.IsZero() || h.SeenUntil.Before(h.SeenFrom) {
+			return nil, fmt.Errorf("metrics.yaml: revisions: %s: seenFrom is required, and seenUntil comes after it", name)
+		}
+	}
 	switch m.Source {
 	case metrics.Prometheus:
 		return metrics.Sources{promFigures(m)}, nil
 	case metrics.Kubernetes:
+		if len(m.Revisions) > 0 {
+			return nil, errors.New("metrics.yaml: the metrics API keeps no history, so it has no revisions")
+		}
 		src, err := metricsAPI(m)
 		if err != nil {
 			return nil, err
@@ -135,6 +159,21 @@ func (p promFigures) Throttling(_ context.Context, pods metrics.Pods, _ time.Dur
 		}
 		return *f.Throttled, true, nil
 	})
+}
+
+// History answers from the case's revisions, as Prometheus would from its
+// own: a ReplicaSet it has none of is one it can't say anything about.
+func (p promFigures) History(_ context.Context, rs metrics.ReplicaSet, _ time.Time) (metrics.Record, error) {
+	h, ok := p.Revisions[rs.Name]
+	if !ok {
+		return metrics.Record{Unavailable: metrics.NotInHistory(rs.Name)}, nil
+	}
+	return metrics.Record{
+		SeenFrom: h.SeenFrom, SeenUntil: h.SeenUntil,
+		Restarts: h.Restarts, FirstRestart: h.FirstRestartAt,
+		OOMKilled: h.OOMKilled, FirstOOMKill: h.FirstOOMKillAt,
+		Throttled: h.Throttled, FirstThrottled: h.FirstThrottledAt,
+	}, nil
 }
 
 func (p promFigures) read(pods metrics.Pods, value func(containerFigures) (float64, bool, error)) (metrics.Reading, error) {

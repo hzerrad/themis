@@ -1,8 +1,9 @@
 // Package metrics reads how much memory and CPU a workload's containers use,
-// from whichever metrics source the install has: the Kubernetes metrics API,
-// or a server that answers Prometheus queries. Evidence templates ask it in
-// the same words whatever the source, and a source that can't answer says so
-// rather than guess.
+// and how the pods of its earlier revisions ran, from whichever metrics
+// source the install has: the Kubernetes metrics API, or a server that
+// answers Prometheus queries. Evidence templates ask it in the same words
+// whatever the source, and a source that can't answer says so rather than
+// guess.
 package metrics
 
 import (
@@ -39,6 +40,50 @@ type Reading struct {
 // Answered reports whether the reading holds an answer.
 func (r Reading) Answered() bool { return r.Unavailable == "" }
 
+// ReplicaSet names the pods of one revision of a workload by the ReplicaSet
+// that owns them, which outlives them: a source with history reads how they
+// ran after they are gone.
+type ReplicaSet struct {
+	Namespace string
+	Name      string
+}
+
+// Record is how the pods of one ReplicaSet ran, from a source's history, up to
+// now. A zero time is one the history doesn't show: for SeenFrom, that it has
+// none of its pods; for the others, that it never happened while they ran.
+type Record struct {
+	// Source names the source that answered, or that was asked last.
+	Source string
+	// Unavailable says why the source couldn't answer, such as one that
+	// keeps no history. Empty when it answered.
+	Unavailable string
+
+	// SeenFrom and SeenUntil are the first and last time the history has
+	// any of its pods.
+	SeenFrom, SeenUntil time.Time
+	// Restarts counts its containers' restarts, and FirstRestart is when the
+	// history first shows one.
+	Restarts     int
+	FirstRestart time.Time
+	// OOMKilled counts its containers whose last end was an OOM kill at some
+	// time, and FirstOOMKill is when the history first shows one.
+	OOMKilled    int
+	FirstOOMKill time.Time
+	// Throttled is the largest share of CPU periods a container of it was
+	// throttled in, over an hour, from 0 to 1; nil when none has a CPU limit.
+	// FirstThrottled is when that share first reached a quarter, the share at
+	// which kube-prometheus-stack's CPUThrottlingHigh fires.
+	Throttled      *float64
+	FirstThrottled time.Time
+}
+
+// Answered reports whether the record holds an answer.
+func (r Record) Answered() bool { return r.Unavailable == "" }
+
+// ThrottledShare is the share of an hour's CPU periods throttled at which a
+// container counts as throttled at its limit in a record.
+const ThrottledShare = 0.25
+
 // Source reads what the containers of a workload's revision use. Each method
 // answers for the pods given, and an answer it can't give is a Reading with
 // Unavailable set, not an error: errors are for a source that failed.
@@ -54,6 +99,8 @@ type Source interface {
 	// Throttling is the share of each container's CPU periods throttled
 	// over the window.
 	Throttling(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
+	// History is how the pods rs owns ran from since until now.
+	History(ctx context.Context, rs ReplicaSet, since time.Time) (Record, error)
 }
 
 // NoSource is why nothing answers when no source is set up.
@@ -105,6 +152,34 @@ func (s Sources) Throttling(ctx context.Context, pods Pods, window time.Duration
 	return s.ask(func(src Source) (Reading, error) { return src.Throttling(ctx, pods, window) })
 }
 
+// History asks each source in turn, as for the other questions. Without an
+// answer, the first source's reason is the one given: a source with history
+// is asked first, and says more than one that keeps none.
+func (s Sources) History(ctx context.Context, rs ReplicaSet, since time.Time) (Record, error) {
+	if len(s) == 0 {
+		return Record{Unavailable: NoSource}, nil
+	}
+	var errs []error
+	var first *Record
+	for _, src := range s {
+		r, err := src.History(ctx, rs, since)
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("%s: %w", src.Name(), err))
+		case r.Answered():
+			r.Source = src.Name()
+			return r, nil
+		case first == nil:
+			r.Source = src.Name()
+			first = &r
+		}
+	}
+	if len(errs) > 0 {
+		return Record{}, errors.Join(errs...)
+	}
+	return *first, nil
+}
+
 // ask returns the first answer. Without one, a source that failed wins over
 // one that couldn't answer: something is broken, and the error says what.
 func (s Sources) ask(read func(Source) (Reading, error)) (Reading, error) {
@@ -136,8 +211,8 @@ func (s Sources) ask(read func(Source) (Reading, error)) (Reading, error) {
 // Health is whether one source answers, for the status page.
 type Health struct {
 	Source string
-	// History says whether the source answers peaks and throttling, which
-	// need history.
+	// History says whether the source answers peaks, throttling and how a
+	// revision's pods ran, which need history.
 	History bool
 	// Err is why the source can't answer anything; nil when it can.
 	Err error

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Unable to confirm memory limit issues without peak memory data; missing evidence on memory usage patterns\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit (512Mi) is too low for its workload\", \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"], \"contradicting\": [\"ev-container_memory\"], \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\"],\"status\":\"open\"},{\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"Containers need more memory than their 512Mi limit, causing OOM kills\", \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"], \"contradicting\": [], \"missing\": [\"memory_data_available\", \"memory_at_limit_before_kill\"],\"status\":\"open\"}]}",
+      "usage": {
+        "input_tokens": 5455,
+        "output_tokens": 614
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -32,14 +32,13 @@ profile:
   # container_cpu is read first: a missing metrics source is a gap the
   # investigator sees, never evidence to ask for.
   evidence:
-    initial: [container_cpu, pod_states, rollout_history, target_events]
-    allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail]
+    initial: [container_cpu, pod_states, rollout_history, target_events, revision_health]
+    allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail, revision_health]
   checks:
     - throttling_data_available
     - cpu_throttled_at_limit
     - cpu_usage_near_limit
-    - rollout_recent
-    - earlier_revision_healthy
+    - throttling_came_with_rollout
     - gitops_managed
   capabilities: [deployment.set-resources]
   # A raise is refused unless the container is throttled at its limit.
@@ -56,9 +55,10 @@ profile:
     Raising a container's CPU limit is right when the container is throttled
     at its limit for a sustained time and it hurts: cpu_throttled_at_limit is
     true, cpu_usage_near_limit is true, and the pods are slow, fall behind,
-    fail readiness probes or time out. With no earlier version to go back to,
-    or one that failed too (earlier_revision_healthy is false), the limit is
-    what to change, however recently the version rolled out. Raise the CPU
+    fail readiness probes or time out, and the latest rollout didn't bring
+    it: throttling_came_with_rollout is false, as with no earlier version,
+    one throttled too, or this one having run unthrottled at least as long
+    as the one before it did, so more load since brought it. Raise the CPU
     limit of the throttled container only, by enough to clear the
     throttling; 1.5 times the current limit is a reasonable start. Cite
     container_cpu, and the pod states, events or logs that show the harm.
@@ -73,10 +73,13 @@ profile:
     - cpu_usage_near_limit is false while throttling is high: the container
       sits well below its limit and only bursts hit it; say so and leave the
       call to a person.
-    - earlier_revision_healthy is true: the version before this one runs
-      healthy, so this one may use more CPU. The same holds while
-      earlier_revision_healthy is unknown and rollout_recent is true. Whether
-      to roll it back is another kind of incident's call, not a raise here.
+    - throttling_came_with_rollout is true: the version before this one ran
+      unthrottled where this one is throttled, so this one may use more CPU.
+      Whether to roll it back is another kind of incident's call, not a raise
+      here.
+    - throttling_came_with_rollout is unknown: nothing shows how the version
+      before this one ran, such as no metrics history of its pods; say what
+      is missing.
     - the pods are slow but not throttled, and events point at their node:
       more limit won't give them CPU the node doesn't have.
   policy:
@@ -86,16 +89,15 @@ profile:
     # these rules say: it only recommends the fix.
     rules:
       # Throttling is the only reason this pack changes CPU, and justifiedBy
-      # asks for it. A new version that may have brought it is refused a
-      # raise: while the version before it is healthy, and, when its health
-      # can't be seen, within 6 hours of the rollout. With no earlier version,
-      # or one that failed too, there is nothing to go back to. A restore puts
-      # back what Themis changed.
+      # asks for it. The latest rollout must not have brought it: a raise is
+      # refused unless there is no earlier version, the one before it was
+      # throttled too, or this one ran unthrottled at least as long as the
+      # one before it did. When nothing shows which, as without a metrics
+      # history of the earlier revision's pods, it is refused too, and a
+      # person decides. A restore puts back what Themis changed.
       - name: no-raise-for-a-new-version
         when: >-
-          action.restore != "true" &&
-          (predicates.earlier_revision_healthy == "true" ||
-           (predicates.earlier_revision_healthy != "false" && predicates.rollout_recent != "false"))
+          action.restore != "true" && predicates.throttling_came_with_rollout != "false"
         decision: deny
       # The fix here raises a CPU limit that exists, and nothing else: no
       # memory, no lower value, no new limit where there was none, which

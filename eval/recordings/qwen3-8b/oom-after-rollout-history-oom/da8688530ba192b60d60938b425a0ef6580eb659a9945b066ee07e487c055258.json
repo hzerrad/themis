@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Adjust memory limit to address OOM kills\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit insufficient for current load\",\"supporting\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"failure_onset_after_rollout\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"640Mi\"}}}},\"expected_effect\":\"Raise memory limit to 640Mi to prevent OOM kills under current load.\",\"rationale\":\"Current revision's app container peaked at 100% of its 513Mi memory limit, leading to OOM kills after rollout. Increasing the limit by 25% to 640Mi addresses the regression without changing config.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-rollout_history\",\"ev-pod_states\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"failure_onset_after_rollout\"]}}",
+      "usage": {
+        "input_tokens": 5605,
+        "output_tokens": 658
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 # The checks of the oom-limit-too-low pack, in the order Themis reports them.
 # They read the pod states, the events, and container_memory, what the
 # install's metrics source says of the current revision's containers. Whether
-# a new version brought the kills is for Themis's own earlier_revision_healthy
-# and rollout_recent, which the profile runs too. docs/checks.md says what each
-# field means and what the expressions see.
+# the latest rollout brought the kills is for Themis's own
+# failures_came_with_rollout, which the profile runs too. docs/checks.md says
+# what each field means and what the expressions see.
 
 # A container of the current revision was killed for running out of memory.
 - name: oom_killed_current_revision

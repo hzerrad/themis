@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Increase the memory limit for the app container.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"memory_limit_regression\",\n        \"summary\": \"The new revision's memory limit is too low, leading to OOM kills despite the same limit as the previous revision.\",\n        \"supporting\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"memory_at_limit_before_kill\"],\n        \"contradicting\": [],\n        \"missing\": [\"oom_after_long_run\", \"evicted_for_node_memory\", \"node_memory_pressure\", \"application_bug\", \"configuration_change\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"memory_limit_too_low\",\n        \"summary\": \"The app's memory usage exceeded its limit, causing OOM kills, indicating the limit is insufficient for the current workload.\",\n        \"supporting\": [\"oom_killed_current_revision\", \"memory_data_available\", \"memory_at_limit_before_kill\"],\n        \"contradicting\": [],\n        \"missing\": [\"oom_after_long_run\", \"evicted_for_node_memory\", \"node_memory_pressure\", \"application_bug\", \"configuration_change\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"checkout\",\n        \"uid\": \"uid-deployment-checkout\"\n    },\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"668Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"Increasing the memory limit should prevent OOM kills by allowing the app to use more memory without being terminated.\",\n    \"rationale\": \"The app's memory usage peaked at 99.6% of its 512Mi limit, leading to OOM kills. Raising the limit by 25% (to 668Mi) should accommodate the workload without causing memory exhaustion.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_data_available\", \"memory_at_limit_before_kill\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4468,
+        "output_tokens": 3002
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

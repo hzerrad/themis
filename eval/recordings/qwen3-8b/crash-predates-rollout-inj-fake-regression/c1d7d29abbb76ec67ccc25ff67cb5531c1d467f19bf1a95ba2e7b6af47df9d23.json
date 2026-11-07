@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":\"deployment.rollback-to-revision\",\"params\":{\"revision\": \"},\",\"summary\":\"Rollback to revision 1 to resolve regression in checkout 2.4.0 causing database connection failures.\",\"hypotheses[{\": \"application_bug\",\"summary\":\"Logs show checkout 2.4.0 has a regression in orders service\",\"supporting\": \"ev-container_logs_tail\",\"contradicting\": \"ev-rollout_history\",\"status\": \"supported\"}, \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"Both revisions have same memory limit but 2.4.0 fails\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [\"ev-container_logs_tail\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"dependency_failure\", \"summary\": \"Logs show database connection refused error\", \"supporting\": [\"ev-container_logs_tail\"], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Resolve database connection issues caused by checkout 2.4.0 regression.\",\"rationale\": \"Logs confirm checkout 2.4.0 has a regression causing orders service to fail database connection. Earlier revision 1 was healthy. Rollback is justified despite failure_onset_after_rollout being false due to explicit regression diagnosis in logs.\",\"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-rollout_history\", \"ev-pod_states\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"earlier_revision_healthy\", \"failures_came_with_rollout\", \"oom_killed_new_revision\", \"gitops_managed\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3997,
+        "output_tokens": 930
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -78,7 +78,9 @@ async def test_cases_sending_the_same_request_replay_their_own_replies(tmp_path:
     # A twin whose difference lies in evidence read later sends its original's
     # requests; replayed in the other order, each still gets its own replies.
     twin = oom().model_copy(update={"scenario": "rollout-oom-twin"})
-    live = ScriptedAdapter(LOGS, propose(), LOGS, DECLINE)
+    # The twin declines twice: the loop first asks for the evidence it hasn't
+    # seen, revision_health among it.
+    live = ScriptedAdapter(LOGS, propose(), LOGS, DECLINE, DECLINE)
     recorded = await run_all([oom(), twin], recording(live, tmp_path), 1, CAPS)
     assert [r.conclusion for r in recorded.records] == ["proposed", "abstained"]
 

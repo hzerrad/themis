@@ -20,9 +20,19 @@ pods:
       peakMemory: 240Mi   # the most over the window; Prometheus only
       cpu: 480m           # now
       throttled: 0.62     # share of CPU periods throttled over the window; Prometheus only
+revisions:                # what Prometheus's history says of each ReplicaSet's pods; Prometheus only
+  checkout-5c6a1e2f3:
+    seenFrom: '2026-10-20T14:00:00Z'      # the first and last time it has any of them
+    seenUntil: '2026-11-04T13:06:00Z'
+    restarts: 2                           # its containers' restarts, and when the first showed
+    firstRestartAt: '2026-10-28T14:10:00Z'
+    oomKilled: 1                          # its containers OOMKilled, and when the first showed
+    firstOOMKillAt: '2026-10-28T14:10:00Z'
+    throttled: 0.4                        # the largest share of CPU periods throttled over an hour
+    firstThrottledAt: '2026-10-31T20:00:00Z'   # when that share first reached a quarter
 ```
 
-A figure left out is one the source has none of. Each container's figure in the evidence is the highest among the current revision's pods, as with a real source. For `kubernetes`, the real metrics API source reads the figures, and needs both `memory` and `cpu`.
+A figure left out is one the source has none of, and a ReplicaSet left out of `revisions` one whose pods Prometheus keeps none of, as when they were gone before its retention began. Each container's figure in the evidence is the highest among the current revision's pods, as with a real source. For `kubernetes`, the real metrics API source reads the figures, and needs both `memory` and `cpu`.
 
 Run `make eval-bundles` after changing a case, or code that changes what evidence looks like, and review the diff. `make scenario-check` and `go test ./eval` fail if a bundle is stale, or if a check disagrees with `truth.predicates`.
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -108,6 +109,151 @@ func (p promQL) Throttling(ctx context.Context, pods Pods, window time.Duration)
 	return p.read(ctx, q, "Prometheus has no CPU throttling figures for these pods: only containers with a CPU limit have them")
 }
 
+// How far back, and how finely, History reads. Each bounds a query's cost,
+// and neither decides anything: the lookback is the revision's own lifetime,
+// and a revision older than maxHistory is read from maxHistory ago, as if the
+// history began there.
+const (
+	maxHistory = 30 * 24 * time.Hour
+	// historySteps is how many times a query looks at the history: each time
+	// it reports is within one step, a thousandth of the lookback, of when it
+	// happened.
+	historySteps = 1000
+	// minStep is the finest step, about two scrapes of kube-state-metrics.
+	minStep = time.Minute
+	// throttlingWindow is what a throttled share is over, unless a step is
+	// longer: the windows then cover the whole lookback, step by step.
+	throttlingWindow = time.Hour
+)
+
+// History reads how the pods rs owns ran, from kube-state-metrics' series
+// for its pods, their restarts and OOM kills, and cAdvisor's for their CPU
+// throttling. It finds the pods by kube_pod_owner, then reads the rest by
+// their names, from since until now.
+func (p promQL) History(ctx context.Context, rs ReplicaSet, since time.Time) (Record, error) {
+	span := max(time.Since(since), minStep)
+	if span > maxHistory {
+		span = maxHistory
+	}
+	step := max((span / historySteps).Round(time.Second), minStep)
+	r, pods, err := p.seen(ctx, rs, span, step)
+	if err != nil || !r.Answered() {
+		return r, err
+	}
+	names := make([]string, 0, len(pods))
+	for _, n := range pods {
+		names = append(names, regexp.QuoteMeta(n))
+	}
+	sel := fmt.Sprintf("namespace=%s, pod=~`%s`", strconv.Quote(rs.Namespace), strings.Join(names, "|"))
+	restarts := fmt.Sprintf("kube_pod_container_status_restarts_total{%s}", sel)
+	oom := fmt.Sprintf(`kube_pod_container_status_last_terminated_reason{%s, reason="OOMKilled"}`, sel)
+	window := seconds(max(step, throttlingWindow))
+	throttled := fmt.Sprintf("(sum by (pod, container) (rate(container_cpu_cfs_throttled_periods_total{%[1]s, container!=\"\"}[%[2]s]))"+
+		" / sum by (pod, container) (rate(container_cpu_cfs_periods_total{%[1]s, container!=\"\"}[%[2]s])))", sel, window)
+	sub := "[" + seconds(span) + ":" + seconds(step) + "]"
+	parts := []struct{ name, query string }{
+		{"restarts", fmt.Sprintf("sum(max_over_time(%s[%s]))", restarts, seconds(span))},
+		{"first_restart", fmt.Sprintf("min(min_over_time(timestamp(last_over_time(%s[%s]) > 0)%s))", restarts, seconds(step), sub)},
+		{"oom_killed", fmt.Sprintf("count(max_over_time(%s[%s]) == 1)", oom, seconds(span))},
+		{"first_oom_kill", fmt.Sprintf("min(min_over_time(timestamp(last_over_time(%s[%s]) == 1)%s))", oom, seconds(step), sub)},
+		{"throttled", fmt.Sprintf("max(max_over_time(%s%s))", throttled, sub)},
+		{"first_throttled", fmt.Sprintf("min(min_over_time(timestamp(%s >= %g)%s))", throttled, ThrottledShare, sub)},
+	}
+	queries := make([]string, 0, len(parts))
+	for _, part := range parts {
+		queries = append(queries, fmt.Sprintf(`label_replace(%s, "part", %q, "", "")`, part.query, part.name))
+	}
+	series, err := p.run(ctx, strings.Join(queries, " or "))
+	if err != nil {
+		return Record{}, err
+	}
+	for _, s := range series {
+		v, ok := number(s)
+		if !ok {
+			continue
+		}
+		switch s.Metric["part"] {
+		case "restarts":
+			r.Restarts = int(v)
+		case "first_restart":
+			r.FirstRestart = unix(v)
+		case "oom_killed":
+			r.OOMKilled = int(v)
+		case "first_oom_kill":
+			r.FirstOOMKill = unix(v)
+		case "throttled":
+			r.Throttled = &v
+		case "first_throttled":
+			r.FirstThrottled = unix(v)
+		}
+	}
+	return r, nil
+}
+
+// seen finds the pods rs owns in the history, and the first and last time it
+// has any of them. A record that couldn't answer says why.
+func (p promQL) seen(ctx context.Context, rs ReplicaSet, span, step time.Duration) (Record, []string, error) {
+	owned := fmt.Sprintf(`kube_pod_owner{namespace=%s, owner_kind="ReplicaSet", owner_name=%s}`, strconv.Quote(rs.Namespace), strconv.Quote(rs.Name))
+	// Each step looks back a whole step, so no pod falls between two.
+	at := fmt.Sprintf("timestamp(last_over_time(%s[%s]))[%s:%s]", owned, seconds(step), seconds(span), seconds(step))
+	series, err := p.run(ctx, fmt.Sprintf(`label_replace(min by (pod) (min_over_time(%[1]s)), "edge", "first", "", "")`+
+		` or label_replace(max by (pod) (max_over_time(%[1]s)), "edge", "last", "", "")`, at))
+	if err != nil {
+		return Record{}, nil, err
+	}
+	var r Record
+	var pods []string
+	for _, s := range series {
+		v, ok := number(s)
+		pod := s.Metric["pod"]
+		if !ok || pod == "" {
+			continue
+		}
+		if !slices.Contains(pods, pod) {
+			pods = append(pods, pod)
+		}
+		switch t := unix(v); s.Metric["edge"] {
+		case "first":
+			if r.SeenFrom.IsZero() || t.Before(r.SeenFrom) {
+				r.SeenFrom = t
+			}
+		case "last":
+			if t.After(r.SeenUntil) {
+				r.SeenUntil = t
+			}
+		}
+	}
+	if len(pods) == 0 || r.SeenFrom.IsZero() {
+		r.Unavailable = NotInHistory(rs.Name)
+		return r, nil, nil
+	}
+	slices.Sort(pods)
+	return r, pods, nil
+}
+
+// NotInHistory is why Prometheus can't say how the pods of a ReplicaSet ran.
+func NotInHistory(replicaSet string) string {
+	return "Prometheus has no pods of ReplicaSet " + replicaSet + " in its history: it keeps none that old, or doesn't scrape kube-state-metrics"
+}
+
+// number is a series' value, if it is a number.
+func number(s series) (float64, bool) {
+	if len(s.Value) != 2 {
+		return 0, false
+	}
+	text, _ := s.Value[1].(string)
+	v, err := strconv.ParseFloat(text, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false
+	}
+	return v, true
+}
+
+// unix is a Prometheus timestamp, in seconds, as a time.
+func unix(v float64) time.Time {
+	return time.Unix(0, int64(v*float64(time.Second))).UTC().Truncate(time.Second)
+}
+
 // read runs an instant query whose series each carry a container label. No
 // series at all is the empty reason.
 func (p promQL) read(ctx context.Context, query, empty string) (Reading, error) {
@@ -117,13 +263,9 @@ func (p promQL) read(ctx context.Context, query, empty string) (Reading, error) 
 	}
 	r := Reading{Containers: map[string]float64{}}
 	for _, s := range series {
-		if len(s.Value) != 2 {
-			continue
-		}
-		text, _ := s.Value[1].(string)
-		v, err := strconv.ParseFloat(text, 64)
 		// 0/0 is NaN: a container that ran no CPU periods.
-		if err != nil || math.IsNaN(v) || s.Metric["container"] == "" {
+		v, ok := number(s)
+		if !ok || s.Metric["container"] == "" {
 			continue
 		}
 		r.Containers[s.Metric["container"]] = v

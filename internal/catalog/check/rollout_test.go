@@ -93,9 +93,9 @@ func replace(t *testing.T, b evidence.Bundle, template string, view any) evidenc
 	return out
 }
 
-// rollout is the checks the rollout-regression pack's profile runs, as the
-// catalog compiles them.
-var rollout = func() check.List {
+// themis is every check Themis ships, and rollout those the rollout-regression
+// pack's profile runs, as the catalog compiles them.
+var themis, rollout = func() (check.List, check.List) {
 	c, err := catalog.Themis(nil)
 	if err != nil {
 		panic(err)
@@ -104,14 +104,14 @@ var rollout = func() check.List {
 	if !ok {
 		panic("no rollout-regression pack")
 	}
-	return c.Checks.For(p.Checks)
+	return c.Checks, c.Checks.For(p.Checks)
 }()
 
 // run evaluates the check named name on b, as of now.
 func run(name string, b evidence.Bundle) check.Result { return runAt(name, b, now) }
 
 func runAt(name string, b evidence.Bundle, at time.Time) check.Result {
-	c, ok := rollout.Get(name)
+	c, ok := themis.Get(name)
 	if !ok {
 		panic("no check " + name)
 	}
@@ -181,7 +181,7 @@ func TestFirstRevision(t *testing.T) {
 	h := history()
 	h.Revisions = h.Revisions[:1]
 	b := replace(t, scenario1(t), evidence.RolloutHistory, h)
-	for _, name := range []string{"failure_onset_after_rollout", "rollout_recent", "earlier_revision_healthy"} {
+	for _, name := range []string{"failure_onset_after_rollout", "rollout_recent", "earlier_revision_healthy", "failures_came_with_rollout"} {
 		assertTruth(t, run(name, b), check.False)
 	}
 	if r := run("earlier_revision_healthy", b); r.Reason != "checkout has no earlier revision to roll back to" {
@@ -227,12 +227,118 @@ func TestEarlierRevisionHealthy(t *testing.T) {
 	assertTruth(t, run("earlier_revision_healthy", without(b, evidence.RolloutHistory)), check.Unknown)
 }
 
-// The prior revision was scaled down, so only its ReplicaSet is left to judge.
+// The prior revision was scaled down, so only its ReplicaSet is left: without
+// a history of its pods, nothing tells how it ran.
 func TestEarlierRevisionHealthy_ScaledDown(t *testing.T) {
 	h := history()
 	h.Revisions[1].Replicas, h.Revisions[1].ReadyReplicas = 0, 0
 	b := replace(t, replace(t, scenario1(t), evidence.RolloutHistory, h), evidence.PodStates, pods(oomPod()))
-	assertTruth(t, run("earlier_revision_healthy", b), check.Unknown)
+	for _, name := range []string{"earlier_revision_healthy", "failures_came_with_rollout"} {
+		r := run(name, b)
+		assertTruth(t, r, check.Unknown)
+		if r.Reason != "no metrics history" {
+			t.Errorf("%s reason = %q, want it to say there is no metrics history", name, r.Reason)
+		}
+	}
+	none := health(evidence.RevisionRecordView{Revision: "2", Current: true, SeenFrom: rolloutAt})
+	assertTruth(t, run("earlier_revision_healthy", with(t, b, none)), check.Unknown)
+}
+
+// health is what the metrics history says of revision 1 and 2's pods.
+func health(records ...evidence.RevisionRecordView) evidence.RevisionHealthView {
+	for i := range records {
+		records[i].Source = "prometheus"
+	}
+	return evidence.RevisionHealthView{Revisions: records}
+}
+
+func with(t *testing.T, b evidence.Bundle, h evidence.RevisionHealthView) evidence.Bundle {
+	t.Helper()
+	return replace(t, b, evidence.RevisionHealth, h)
+}
+
+// scaledDown is scenario 1 once revision 1's pods are gone, with what the
+// metrics history says of both revisions: revision 2's first OOM kill came
+// 14 minutes after its rollout, at its pod's last end.
+func scaledDown(t *testing.T, earlier evidence.RevisionRecordView) evidence.Bundle {
+	t.Helper()
+	b := replace(t, scenario1(t), evidence.PodStates, pods(oomPod()))
+	current := evidence.RevisionRecordView{
+		Revision: "2", Current: true, SeenFrom: rolloutAt.Add(30 * time.Second), SeenUntil: now,
+		Restarts: 7, FirstRestartAt: rolloutAt.Add(14 * time.Minute), OOMKilled: 1, FirstOOMKillAt: rolloutAt.Add(14 * time.Minute),
+	}
+	earlier.Revision = "1"
+	return with(t, b, health(current, earlier))
+}
+
+// Once its pods are gone, the history says how the earlier revision ran.
+func TestEarlierRevisionHealthy_FromHistory(t *testing.T) {
+	week := rolloutAt.Add(-7 * 24 * time.Hour)
+	healthy := evidence.RevisionRecordView{SeenFrom: week, SeenUntil: rolloutAt.Add(5 * time.Minute)}
+	r := run("earlier_revision_healthy", scaledDown(t, healthy))
+	assertTruth(t, r, check.True)
+	if !strings.Contains(r.Reason, "revision 1 ran 168h5m0s with no restart or OOM kill") {
+		t.Errorf("reason = %q, want how long revision 1 ran", r.Reason)
+	}
+
+	oom := healthy
+	oom.Restarts, oom.FirstRestartAt, oom.OOMKilled, oom.FirstOOMKillAt = 2, week.Add(time.Hour), 1, week.Add(time.Hour)
+	assertTruth(t, run("earlier_revision_healthy", scaledDown(t, oom)), check.False)
+
+	crashed := healthy
+	crashed.Restarts, crashed.FirstRestartAt = 1, week.Add(time.Hour)
+	assertTruth(t, run("earlier_revision_healthy", scaledDown(t, crashed)), check.False)
+
+	// Pods still there decide, whatever the history says.
+	b := with(t, scenario1(t), health(oom))
+	assertTruth(t, run("earlier_revision_healthy", b), check.True)
+}
+
+func TestFailuresCameWithRollout(t *testing.T) {
+	week := rolloutAt.Add(-7 * 24 * time.Hour)
+	seen := func(from, until time.Time) evidence.RevisionRecordView {
+		return evidence.RevisionRecordView{SeenFrom: from, SeenUntil: until}
+	}
+	// Revision 1's pods run healthy beside revision 2's failing one.
+	assertTruth(t, run("failures_came_with_rollout", scenario1(t)), check.True)
+	// Revision 1's pods fail too.
+	old := oomPod()
+	old.Name, old.Revision = "checkout-5c6a1e2f3-a1b2c", "1"
+	assertTruth(t, run("failures_came_with_rollout", replace(t, scenario1(t), evidence.PodStates, pods(oomPod(), old))), check.False)
+
+	tests := []struct {
+		name    string
+		earlier evidence.RevisionRecordView
+		want    check.Truth
+	}{
+		// Revision 2 failed 14 minutes in; revision 1 ran a week.
+		{"the earlier ran longer", seen(week, rolloutAt.Add(5*time.Minute)), check.True},
+		// Revision 1's pods ran on past revision 2's first failure.
+		{"the earlier ran while it failed", seen(rolloutAt.Add(-10*time.Minute), rolloutAt.Add(20*time.Minute)), check.True},
+		// The history has a minute of revision 1, less than the 90 seconds
+		// revision 2 ran before its pod's first BackOff: no reason to think
+		// revision 1 better.
+		{"the current ran as long", seen(rolloutAt.Add(-30*time.Second), rolloutAt.Add(30*time.Second)), check.False},
+		{"the earlier failed too", evidence.RevisionRecordView{SeenFrom: week, SeenUntil: rolloutAt, Restarts: 3, FirstRestartAt: week.Add(time.Hour)}, check.False},
+		{"no history of the earlier", evidence.RevisionRecordView{Unavailable: "Prometheus has no pods of it"}, check.Unknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertTruth(t, run("failures_came_with_rollout", scaledDown(t, tt.earlier)), tt.want)
+		})
+	}
+
+	// A failure dated before the rollout wasn't brought by it.
+	early := oomPod()
+	early.Containers[0].RestartCount = 1
+	early.Containers[0].LastTermination.FinishedAt = rolloutAt.Add(-time.Minute)
+	b := replace(t, scaledDown(t, seen(week, rolloutAt)), evidence.PodStates, pods(early))
+	b = with(t, b, health(evidence.RevisionRecordView{Revision: "2", Current: true, SeenFrom: rolloutAt}, evidence.RevisionRecordView{Revision: "1", SeenFrom: week, SeenUntil: rolloutAt}))
+	assertTruth(t, run("failures_came_with_rollout", b), check.False)
+
+	// Nothing failing: nothing to say the rollout brought.
+	healthy := replace(t, scaledDown(t, seen(week, rolloutAt)), evidence.PodStates, pods(healthyPod("checkout-7d9f8b6c4-x2kqp", "2")))
+	assertTruth(t, run("failures_came_with_rollout", healthy), check.Unknown)
 }
 
 func TestGitOpsManaged(t *testing.T) {

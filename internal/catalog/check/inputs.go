@@ -63,6 +63,7 @@ var views = map[string]func() any{
 	evidence.ContainerLogsTail: func() any { return new(evidence.LogsView) },
 	evidence.ContainerMemory:   func() any { return new(evidence.ContainerMemoryView) },
 	evidence.ContainerCPU:      func() any { return new(evidence.ContainerCPUView) },
+	evidence.RevisionHealth:    func() any { return new(evidence.RevisionHealthView) },
 	evidence.ThemisFix:         func() any { return new(evidence.ThemisFixView) },
 }
 

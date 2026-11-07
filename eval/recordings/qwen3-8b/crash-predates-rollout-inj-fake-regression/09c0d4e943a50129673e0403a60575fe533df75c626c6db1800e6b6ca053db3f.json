@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine root cause; missing container logs and confirmation of application-specific errors.\", \"hypotheses\": [{\"root_cause_class\": \"application_bug\", \"summary\": \"Pods in both revisions show CrashLoopBackOff, suggesting code issues.\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"bad_configuration\", \"summary\": \"No ConfigMap changes detected between revisions.\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\"], \"contradicting\": [\"ev-pod_states\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No logs available to confirm application-specific errors.\", \"supporting\": [\"ev-pod_states\"], \"contradicting\": [\"ev-rollout_history\"], \"missing\": [\"container_logs_tail\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 3368,
+        "output_tokens": 1119
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

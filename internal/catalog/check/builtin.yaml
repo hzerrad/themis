@@ -7,7 +7,9 @@
 
 # The current revision replaced an earlier one within the last 6 hours. A
 # Deployment's first revision replaced none: creating it isn't a rollout. A
-# rollout that was Themis's own fix says so: it brought no new version.
+# rollout that was Themis's own fix says so: it brought no new version. It
+# is for an operator's own profiles to show: no pack runs it, and no fix
+# Themis offers depends on how long ago a rollout was.
 - name: rollout_recent
   version: "3"
   description: A rollout happened recently
@@ -34,17 +36,20 @@
       reason: revision ${current.revision} rolled out ${now - rollout_at} ago, beyond ${duration("6h")}
       cite: [ids.rollout_history]
 
-# The revision before the current one runs ready pods that never failed: a
-# version to go back to. Without an earlier revision there is none, and one
-# whose pods failed is no better. Once its pods are gone, Themis's own record
-# tells when the current revision is its fix: the incident it fixed found
-# the revision before failing.
+# The revision before the current one ran without failing: a version to go
+# back to. Its pods, while there are any, say so: ready, and none of their
+# containers died. Once they are gone, two sources tell: Themis's own record,
+# when the current revision is its fix and the incident it fixed found the
+# revision before failing; and the metrics history of how its pods ran while
+# it was the current revision, without a restart or OOM kill. Without an
+# earlier revision there is none, one that failed is no better, and with
+# neither its pods nor a record of them, nothing tells.
 - name: earlier_revision_healthy
-  version: "2"
+  version: "3"
   description: The version before it is healthy, to go back to
   topic: Health of the version before it
   whenFalse: No healthy earlier version to go back to
-  reads: [rollout_history, pod_states]
+  reads: [rollout_history, pod_states, revision_health]
   let:
     pods: pod_states.pods.filter(p, p.revision == prior.revision)
     # What is wrong with each pod, in order: its containers that died, then
@@ -56,6 +61,7 @@
           .map(c, "pod " + p.name + " of revision " + prior.revision + ": " + c.name + " " + c.lastTermination.reason)
         + (p.ready ? [] : ["pod " + p.name + " of revision " + prior.revision + " is not ready"])
       ).flatten()
+    record: revision_health.revisions.filter(r, r.revision == prior.revision)
   answers:
     - when: current == null
       answer: unknown
@@ -68,18 +74,149 @@
       answer: false
       reason: ${problems[0]}
       cite: [ids.rollout_history, ids.pod_states]
-    - when: >-
-        size(pods) == 0 && themis_fix != null && themis_fix.replaced == prior.revision &&
-        size(themis_fix.found) > 0
+    - when: size(pods) > 0
+      answer: true
+      reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
+      cite: [ids.rollout_history, ids.pod_states]
+    # Its pods are gone: from here, Themis's own record, then the metrics
+    # history, tells.
+    - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
       answer: false
       reason: "revision ${prior.revision} failed before Themis's fix on incident ${themis_fix.incident} replaced it: ${themis_fix.found[0].reason}"
       cite: [ids.rollout_history, themis_fix.id]
-    - when: size(pods) == 0
+    - when: size(record) == 0 || record[0].seenFrom == null
       answer: unknown
-      reason: revision ${prior.revision} has no pods left to judge
+      reason: revision ${prior.revision} has no pods left, and the metrics history has none of them
+      cite: [ids.revision_health]
+    - when: record[0].firstOOMKillAt != null
+      answer: false
+      reason: >-
+        containers of revision ${prior.revision} were OOMKilled while it ran, first at
+        ${record[0].firstOOMKillAt}, in ${record[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+    - when: record[0].firstRestartAt != null
+      answer: false
+      reason: >-
+        containers of revision ${prior.revision} restarted ${string(record[0].restarts)} times while it
+        ran, first at ${record[0].firstRestartAt}, in ${record[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
     - answer: true
-      reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
+      reason: >-
+        revision ${prior.revision} ran ${record[0].seenUntil - record[0].seenFrom} with no restart or
+        OOM kill, from ${record[0].seenFrom} to ${record[0].seenUntil}, in ${record[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+
+# The failures came with the latest rollout: the version before it ran
+# without failing where the current one fails. Its pods show that while they
+# run healthy beside the failing ones. Once they are gone, Themis's own
+# record shows the version before failed when the current one is the fix
+# Themis made for it, and the metrics history compares the two: the version before ran without failing until
+# after the current one first failed, or for longer than the current one ran
+# before its first failure. A current version that ran without failing at
+# least as long as the one before it was seen to is no worse for the rollout:
+# what changed since, such as more data or load, brought the failures. With
+# no earlier revision, or one that failed too, the rollout didn't bring them.
+- name: failures_came_with_rollout
+  version: "1"
+  description: The failures came with the latest rollout, where the version before it ran without failing
+  topic: Whether the rollout brought the failures
+  whenFalse: The failures didn't come with the latest rollout
+  reads: [rollout_history, pod_states, revision_health]
+  let:
+    pods: pod_states.pods.filter(p, p.revision == prior.revision)
+    problems: >-
+      pods.map(p,
+        p.containers
+          .filter(c, c.lastTermination != null && c.lastTermination.reason != "Completed")
+          .map(c, "pod " + p.name + " of revision " + prior.revision + ": " + c.name + " " + c.lastTermination.reason)
+        + (p.ready ? [] : ["pod " + p.name + " of revision " + prior.revision + " is not ready"])
+      ).flatten()
+    failing: >-
+      pod_states.pods.exists(p, p.revision == current_revision &&
+        (!p.ready || p.containers.exists(c, c.restartCount > 0)))
+    earlier: revision_health.revisions.filter(r, r.revision == prior.revision)
+    latest: revision_health.revisions.filter(r, r.revision == current.revision)
+    # The current revision's first failure: the earliest the metrics history
+    # or the pods' status dates.
+    dated: >-
+      ((size(latest) > 0 ? [latest[0].firstRestartAt, latest[0].firstOOMKillAt] : [])
+        + (first_failure != null ? [first_failure.at] : [])).filter(t, t != null).sort()
+    ran: dated[0] - rollout_at
+    seen: earlier[0].seenUntil - earlier[0].seenFrom
+  answers:
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: prior == null
+      answer: false
+      reason: there is no revision before revision ${current.revision}, so no rollout brought the failures
+      cite: [ids.rollout_history]
+    - when: "!failing"
+      answer: unknown
+      reason: every pod of revision ${current_revision} is ready and none restarted
+      cite: [ids.pod_states]
+    - when: size(problems) > 0
+      answer: false
+      reason: the version before it fails too (${problems[0]})
       cite: [ids.rollout_history, ids.pod_states]
+    - when: size(pods) > 0
+      answer: true
+      reason: ${size(pods)} pods of revision ${prior.revision} run without failing while revision ${current.revision} fails
+      cite: [ids.rollout_history, ids.pod_states]
+    # Its pods are gone: from here, Themis's own record, then the metrics
+    # history, tells.
+    - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
+      answer: false
+      reason: >-
+        the version before it failed too: revision ${prior.revision} failed before Themis's fix on
+        incident ${themis_fix.incident} replaced it (${themis_fix.found[0].reason})
+      cite: [ids.rollout_history, themis_fix.id]
+    - when: size(earlier) == 0 || earlier[0].seenFrom == null
+      answer: unknown
+      reason: revision ${prior.revision} has no pods left, and the metrics history has none of them
+      cite: [ids.revision_health]
+    - when: earlier[0].firstOOMKillAt != null
+      answer: false
+      reason: >-
+        the version before it failed too: containers of revision ${prior.revision} were OOMKilled
+        while it ran, first at ${earlier[0].firstOOMKillAt}, in ${earlier[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+    - when: earlier[0].firstRestartAt != null
+      answer: false
+      reason: >-
+        the version before it failed too: containers of revision ${prior.revision} restarted
+        ${string(earlier[0].restarts)} times while it ran, first at ${earlier[0].firstRestartAt},
+        in ${earlier[0].source}'s history
+      cite: [ids.rollout_history, ids.revision_health]
+    - when: rollout_at == null
+      answer: unknown
+      reason: the rollout time is unknown
+    - when: size(dated) == 0
+      answer: unknown
+      reason: no failure of revision ${current.revision} has a time
+      cite: [ids.pod_states, ids.revision_health]
+    - when: dated[0] < rollout_at
+      answer: false
+      reason: a failure at ${dated[0]} predates revision ${current.revision} at ${rollout_at}
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+    - when: earlier[0].seenUntil >= dated[0]
+      answer: true
+      reason: >-
+        pods of revision ${prior.revision} ran without failing until ${earlier[0].seenUntil}, after
+        revision ${current.revision} first failed at ${dated[0]}
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+    - when: ran < seen
+      answer: true
+      reason: >-
+        revision ${current.revision} first failed ${ran} after its rollout; revision ${prior.revision}
+        ran ${seen} without failing, in ${earlier[0].source}'s history
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+    - answer: false
+      reason: >-
+        revision ${current.revision} ran ${ran} before its first failure, at least as long as
+        revision ${prior.revision} ran without failing (${seen}, in ${earlier[0].source}'s history), so what
+        changed since brought the failures
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
 
 # The target carries GitOps markers or is written by a GitOps controller.
 - name: gitops_managed

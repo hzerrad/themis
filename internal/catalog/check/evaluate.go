@@ -82,6 +82,7 @@ func (c *Check) failed(err error) Result {
 // missingReasons say what is missing, for templates whose name doesn't.
 var missingReasons = map[string]string{
 	evidence.ReferencedConfig: "no list of referenced configuration",
+	evidence.RevisionHealth:   "no metrics history",
 }
 
 func missingReason(template string) string {

@@ -97,6 +97,7 @@ func Build(logs evidence.LogReader, usage metrics.Source, packs fs.FS, disabled 
 		evidence.NewContainerLogsTail(logs),
 		evidence.NewContainerMemory(usage),
 		evidence.NewContainerCPU(usage),
+		evidence.NewRevisionHealth(usage),
 	)
 	found, err := readPacks(packs)
 	if err != nil {

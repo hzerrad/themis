@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"request_evidence\",\n\"template\": \"container_memory\",\n\"params\": {\"window\": \"1h\"}\n}",
+      "usage": {
+        "input_tokens": 6458,
+        "output_tokens": 383
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

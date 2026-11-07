@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Increase memory limit to 1250Mi to prevent OOM kills\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"App's steady-state memory usage reaches 1.1GB, exceeding 1Gi limit\",\"supporting\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-revision_health\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"sessions\",\"uid\":\"uid-deployment-sessions\"},\"params\":{\"containers\":{\"app\":{\"requests\":{\"memory\":\"768Mi\",\"cpu\":\"250m\"},\"limits\":{\"memory\":\"1250Mi\",\"cpu\":\"250m\"}}}},\"expected_effect\":\"Raise memory limit to 1250Mi to accommodate steady-state usage of 1.1GB\",\"rationale\":\"Logs show steady-state heap usage of 1.1GB after data import, exceeding the 1Gi limit. Increasing the limit to 1250Mi (1.25Gi) provides buffer without lowering existing values.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-revision_health\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"memory_data_available\"]}}",
+      "usage": {
+        "input_tokens": 4911,
+        "output_tokens": 801
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

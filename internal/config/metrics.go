@@ -19,7 +19,8 @@ type Metrics struct {
 
 	// Prometheus is a server answering Prometheus queries: Prometheus,
 	// Thanos, Mimir, VictoriaMetrics or Grafana Cloud. It has history, so
-	// it also answers peak memory and CPU throttling.
+	// it also answers peak memory, CPU throttling and how an earlier
+	// revision's pods ran.
 	Prometheus *Prometheus `json:"prometheus,omitempty"`
 }
 

@@ -1,0 +1,40 @@
+# What the metrics source says of each pod's containers.
+source: prometheus
+pods:
+  search-84f6d9c2b-a1b2c:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 296m
+      throttled: 0.55
+  search-84f6d9c2b-d3e4f:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 296m
+      throttled: 0.55
+  search-84f6d9c2b-g5h6i:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 289m
+      throttled: 0.55
+  search-84f6d9c2b-j7k8l:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 289m
+      throttled: 0.55
+# What Prometheus's history says of each ReplicaSet's pods. It keeps 15
+# days, so it has none from before 20 Oct 14:00.
+revisions:
+  search-6b8c5d7f9:
+    seenFrom: '2026-10-20T14:00:00Z'
+    seenUntil: '2026-11-04T13:58:00Z'
+    throttled: 0.71
+    firstThrottledAt: '2026-11-04T08:00:00Z'
+  search-84f6d9c2b:
+    seenFrom: '2026-11-04T13:54:30Z'
+    seenUntil: '2026-11-04T14:00:00Z'
+    throttled: 0.55
+    firstThrottledAt: '2026-11-04T13:56:00Z'

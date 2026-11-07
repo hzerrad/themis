@@ -1,0 +1,34 @@
+name: oom-after-rollout-no-history
+version: 1
+description: Revision 2 rolled out an hour ago with the same 512Mi limit, and 40 minutes later its containers began to be
+  OOMKilled at it. Revision 1's pods are gone, and the only metrics source is the Kubernetes metrics API, which keeps no
+  history. Nothing shows whether revision 1 was healthy, so neither fix is justified, and a person decides.
+tags: [memory, oom, rollout, combined, history, no-metrics]
+source: synthetic
+difficulty: hard
+incident_class: rollout_regression
+alert: KubePodOOMKilled
+now: '2026-11-04T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: checkout}
+evidence:
+  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config, revision_health]
+  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail, revision_health]
+fix:
+  capability: deployment.set-resources
+  params:
+    containers:
+      app:
+        limits:
+          memory: 768Mi
+truth:
+  root_causes: [memory_limit_regression, memory_limit_too_low, insufficient_evidence]
+  decision: abstain
+  predicates:
+    oom_killed_current_revision: 'true'
+    earlier_revision_healthy: unknown
+    failures_came_with_rollout: unknown
+    failure_onset_after_rollout: 'true'
+    memory_data_available: 'false'
+    memory_at_limit_before_kill: unknown
+    evicted_for_node_memory: 'false'
+  policy: deny

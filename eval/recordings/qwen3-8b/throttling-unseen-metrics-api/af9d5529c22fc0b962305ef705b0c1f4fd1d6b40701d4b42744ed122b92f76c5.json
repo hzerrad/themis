@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"The container's CPU limit is too low, causing throttling and readiness probe failures. Increasing the CPU limit to 750m should resolve the issue.\", \"hypotheses\": [{\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"CPU usage is near the limit (0.99) but throttling data is unavailable. Readiness probes fail, indicating CPU contention.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"throttling_data_available\"],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"}, \"params\": {\"containers\": {\"api\": {\"limits\": {\"cpu\": \"750m\"}}}},\"expected_effect\": \"Raise CPU limit to 750m to prevent throttling and improve readiness probe success.\",\"rationale\": \"CPU usage is near the limit (0.99) and readiness probes fail, indicating the limit is too low. Increasing it to 750m (1.5x current) should clear throttling.\",\"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-target_events\"],\"cited_predicates\": [\"cpu_usage_near_limit\", \"throttling_data_available\"]}}",
+      "usage": {
+        "input_tokens": 3590,
+        "output_tokens": 1017
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

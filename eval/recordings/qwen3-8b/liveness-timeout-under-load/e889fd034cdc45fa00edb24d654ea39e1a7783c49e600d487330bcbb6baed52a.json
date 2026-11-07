@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Increase probe timeouts to match application startup duration\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"Probes timeout before application completes startup\",\n        \"supporting\": [\"probe_kills\", \"probe_timeouts\", \"ev-container_logs_tail\"],\n        \"contradicting\": [\"killed_during_startup\", \"crashed_on_its_own\"],\n        \"missing\": [\"revision_health\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"search-api\",\n        \"uid\": \"uid-deployment-search-api\"\n    },\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 5\n        },\n        \"readiness\": {\n            \"timeoutSeconds\": 5\n        }\n    },\n    \"expected_effect\": \"Allow probes to wait for application startup completion\",\n    \"rationale\": \"Logs show application responds to /ready and /healthz within 5 seconds, but current 1s timeout causes failures. Increasing to 5s aligns with observed startup duration.\",\n    \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-rollout_history\", \"ev-target_events\"],\n    \"cited_predicates\": [\"probe_kills\", \"probe_timeouts\", \"killed_during_startup\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5775,
+        "output_tokens": 750
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

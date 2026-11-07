@@ -15,6 +15,7 @@ Both are answered by another pack as well: `KubePodCrashLooping` by rollout-regr
 | `rollout_history` | Which revision runs and since when, and each revision's probe timings: delay, period, timeout and failures allowed |
 | `pod_states` | How often containers restart, how long each last ran, and how it ended: stopped, or exited by itself |
 | `target_events` | What the kubelet said: which probe failed and how (timed out, refused, or an error answer), and which containers it restarted for it |
+| `revision_health` | How the revision before it ran once its pods are gone, from Prometheus's history, for whether the latest rollout brought the failures |
 | `container_logs_tail` | Asked for to tell an application that is starting or serving from one that is failing |
 
 ## Checks
@@ -25,7 +26,7 @@ Both are answered by another pack as well: `KubePodCrashLooping` by rollout-regr
 | `probe_timeouts` | Every probe failure an event reports ran out of time, rather than getting an error answer or a refused connection, and a pod of the current revision the failures name has a container that isn't ready or restarted since. Events alone make it `unknown` |
 | `killed_during_startup` | A container failed its startup probe and was killed and restarted, as `probe_kills` requires, or one of the current revision, without a startup probe, was stopped no later than its liveness probe could first fail it: its initial delay, its failures allowed and one more period, plus the default 30 seconds to stop. It never passed the probe |
 | `crashed_on_its_own` | A container exited with a code other than 0, 137 or 143, the codes of a container the kubelet stops, or ran out of memory |
-| `rollout_recent` | Themis's own: the current revision replaced an earlier one within 6 hours. False for a Deployment's first revision |
+| `failures_came_with_rollout` | Themis's own: the latest rollout brought the failures, where the revision before it ran without failing, by its pods or the metrics history. False for a Deployment's first revision |
 
 Whether the logs show errors, whether a probe's error answer means the application is unhealthy or only not ready yet, and whether a dependency is down are left to the investigator: they can't be read reliably from the evidence by a check. A container that traps SIGTERM and exits with 1 looks crashed to `crashed_on_its_own`.
 

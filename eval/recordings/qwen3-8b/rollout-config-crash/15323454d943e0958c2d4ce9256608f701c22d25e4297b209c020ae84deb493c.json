@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to regression in new revision causing crashes\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit same as old, but crashes suggest resource issues\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}, {\"root_cause_class\": \"application_bug\", \"summary\": \"New revision's code may have bugs causing crashes\", \"supporting\": [\"ev-pod_states\", \"failures_came_with_rollout\"], \"contradicting\": [], \"missing\": [\"container_logs_tail\"],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore working revision 1 to resolve crashes\", \"rationale\": \"Failures began after rollout to revision 2, while revision 1 was stable. Rolling back to revision 1 is justified as it resolves the issue.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"earlier_revision_healthy\", \"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 3120,
+        "output_tokens": 732
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

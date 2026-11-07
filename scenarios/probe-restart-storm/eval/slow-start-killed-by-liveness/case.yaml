@@ -8,8 +8,8 @@ incident_class: probe_restart_storm
 now: "2026-11-04T10:30:00Z"
 target: {kind: Deployment, namespace: finance, name: ledger}
 evidence:
-  initial: [rollout_history, pod_states, target_events]
-  allowed: [rollout_history, pod_states, target_events, container_logs_tail]
+  initial: [rollout_history, pod_states, target_events, revision_health]
+  allowed: [rollout_history, pod_states, target_events, container_logs_tail, revision_health]
 fix:
   capability: deployment.set-probes
   params: {container: app, liveness: {initialDelaySeconds: 90}}
@@ -22,4 +22,4 @@ truth:
     probe_timeouts: "false"
     killed_during_startup: "true"
     crashed_on_its_own: "false"
-    rollout_recent: "false"
+    failures_came_with_rollout: unknown

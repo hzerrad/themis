@@ -20,7 +20,10 @@ import (
 // fakeSource answers with fixed readings, and records what it was asked.
 type fakeSource struct {
 	memory, peak, cpu, throttling metrics.Reading
+	records                       map[string]metrics.Record
+	noHistory                     string
 	err                           error
+	since                         map[string]time.Time
 
 	asked   metrics.Pods
 	windows []time.Duration
@@ -50,6 +53,20 @@ func (f *fakeSource) CPU(_ context.Context, p metrics.Pods) (metrics.Reading, er
 
 func (f *fakeSource) Throttling(_ context.Context, p metrics.Pods, w time.Duration) (metrics.Reading, error) {
 	return f.answer(p, w, f.throttling)
+}
+
+// History answers each ReplicaSet's record, or that it has none of it, and
+// records where each was read from.
+func (f *fakeSource) History(_ context.Context, rs metrics.ReplicaSet, since time.Time) (metrics.Record, error) {
+	if f.since == nil {
+		f.since = map[string]time.Time{}
+	}
+	f.since[rs.Name] = since
+	r, ok := f.records[rs.Name]
+	if !ok {
+		r = metrics.Record{Unavailable: f.noHistory}
+	}
+	return r, f.err
 }
 
 const mib = 1 << 20

@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,10 @@ func (*throttling) Memory(context.Context, metrics.Pods) (metrics.Reading, error
 
 func (*throttling) PeakMemory(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return metrics.Reading{Unavailable: "none"}, nil
+}
+
+func (*throttling) History(context.Context, metrics.ReplicaSet, time.Time) (metrics.Record, error) {
+	return metrics.Record{Unavailable: "none"}, nil
 }
 
 func (*throttling) CPU(context.Context, metrics.Pods) (metrics.Reading, error) {
@@ -149,6 +154,8 @@ func TestDiagnose_ThemisFixIsEvidence(t *testing.T) {
 	cat := withSource(t, &throttling{ratio: 0.57})
 	c, w := raised(t)
 	p, _ := cat.Profile("cpu-throttling")
+	// Themis's own checks that read the record too, which the pack doesn't run.
+	p.Checks = append(slices.Clone(p.Checks), "earlier_revision_healthy", "rollout_recent")
 	at := catalog.Moment{Now: raisedAt.Add(4 * time.Minute)}
 	results := func(d catalog.Diagnosis) map[string]check.Result {
 		out := map[string]check.Result{}
@@ -159,8 +166,10 @@ func TestDiagnose_ThemisFixIsEvidence(t *testing.T) {
 	}
 
 	without := results(cat.Diagnose(t.Context(), c, w, config.Matched{p}, at))
-	if r := without["earlier_revision_healthy"]; r.Value != check.Unknown {
-		t.Errorf("without Themis's record, earlier_revision_healthy = %+v, want unknown", r)
+	for _, name := range []string{"earlier_revision_healthy", "throttling_came_with_rollout"} {
+		if r := without[name]; r.Value != check.Unknown {
+			t.Errorf("without Themis's record or a history, %s = %+v, want unknown", name, r)
+		}
 	}
 
 	fix, err := evidence.NewThemisFix(evidence.ThemisFixView{
@@ -179,7 +188,13 @@ func TestDiagnose_ThemisFixIsEvidence(t *testing.T) {
 	if recent.Value != check.True || !strings.HasSuffix(recent.Reason, "ago, as Themis's fix on incident inc-1") {
 		t.Errorf("rollout_recent = %+v", recent)
 	}
-	for _, r := range []check.Result{healthy, recent} {
+	// The version the fix replaced was throttled: the rollout didn't bring
+	// it, so a raise isn't refused for it.
+	came := with["throttling_came_with_rollout"]
+	if came.Value != check.False || !strings.Contains(came.Reason, "revision 1 was throttled before Themis's fix on incident inc-1 replaced it") {
+		t.Errorf("throttling_came_with_rollout = %+v", came)
+	}
+	for _, r := range []check.Result{healthy, recent, came} {
 		if !strings.Contains(strings.Join(r.EvidenceIDs, " "), fix.ID) {
 			t.Errorf("%s cites %v, not Themis's record %s", r.Name, r.EvidenceIDs, fix.ID)
 		}

@@ -5,3 +5,13 @@ pods:
     app:
       memory: 360Mi
       peakMemory: 430Mi
+# What Prometheus's history says of each ReplicaSet's pods. It keeps 15
+# days, so it has none from before 20 Oct 14:00.
+revisions:
+  search-3b7e1c9d5:
+    seenFrom: '2026-10-20T14:00:00Z'
+    seenUntil: '2026-11-04T14:00:00Z'
+    restarts: 1
+    firstRestartAt: '2026-11-04T13:41:00Z'
+    oomKilled: 1
+    firstOOMKillAt: '2026-11-04T13:41:00Z'

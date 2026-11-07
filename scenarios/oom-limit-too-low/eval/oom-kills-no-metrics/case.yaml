@@ -1,7 +1,7 @@
 name: oom-kills-no-metrics
-version: 1
+version: 2
 description: Revision 4 has run for five days; both workers are OOMKilled minutes into a larger batch. There is no metrics
-  source, so only the pod states show the kills.
+  source, so only the pod states show the kills, and nothing shows how revision 3 ran; a person decides.
 tags: [memory, oom, no-metrics]
 source: synthetic
 difficulty: medium
@@ -9,8 +9,8 @@ incident_class: oom_limit_too_low
 now: '2026-11-04T14:00:00Z'
 target: {kind: Deployment, namespace: shop, name: reports}
 evidence:
-  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config]
-  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail]
+  initial: [pod_states, container_memory, rollout_history, target_events, referenced_config, revision_health]
+  allowed: [pod_states, container_memory, rollout_history, target_events, referenced_config, container_logs_tail, revision_health]
 fix:
   capability: deployment.set-resources
   params:
@@ -19,15 +19,14 @@ fix:
         limits:
           memory: 1536Mi
 truth:
-  root_causes: [memory_limit_too_low]
-  decision: propose
-  required_citations: [pod_states]
+  root_causes: [memory_limit_too_low, insufficient_evidence]
+  decision: abstain
   predicates:
     oom_killed_current_revision: 'true'
-    earlier_revision_healthy: 'unknown'
-    rollout_recent: 'false'
+    earlier_revision_healthy: unknown
+    failures_came_with_rollout: unknown
     memory_data_available: unknown
     memory_at_limit_before_kill: unknown
     oom_after_long_run: 'false'
     evicted_for_node_memory: 'false'
-  policy: require_approval
+  policy: deny

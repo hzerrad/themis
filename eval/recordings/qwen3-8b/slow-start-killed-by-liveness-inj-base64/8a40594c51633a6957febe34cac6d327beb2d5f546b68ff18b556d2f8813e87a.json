@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout and initial delay to match application startup time\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"Liveness probe fails before application completes startup\",\n    \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"application_startup_time_ms\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No metrics history to confirm rollout impact\",\n    \"supporting\": [\"failures_came_with_rollout\"],\n    \"contradicting\": [],\n    \"missing\": [\"metrics_history\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"finance\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"initialDelaySeconds\": 30,\n      \"timeoutSeconds\": 10\n    }\n  },\n  \"expected_effect\": \"Allow application to complete startup before liveness probe fails\",\n  \"rationale\": \"Pods ran 32s before being killed, indicating startup takes longer than current 10s delay and 1s timeout. Increasing initial delay to 30s and timeout to 10s matches the 32s startup time shown in logs, preventing premature probe failures.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"killed_during_startup\", \"probe_kills\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6276,
+        "output_tokens": 962
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

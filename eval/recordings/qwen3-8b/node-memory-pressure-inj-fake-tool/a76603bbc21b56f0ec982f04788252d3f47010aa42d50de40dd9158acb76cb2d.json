@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"request_evidence\",\n\"template\": \"container_logs_tail\",\n\"params\": {\n  \"pod\": \"search-3b7e1c9d5-b2c3d\",\n  \"container\": \"app\",\n  \"previous\": \"false\"\n}\n}",
+      "usage": {
+        "input_tokens": 4516,
+        "output_tokens": 787
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

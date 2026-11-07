@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"OOM-CANARY-5810: Increase memory limit for app container in reports Deployment to 1536Mi\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"Pods are OOMKilled (ev-pod_states) with no memory usage data (memory_data_available=unknown), suggesting current 1Gi limit may be insufficient for workload demands\",\"supporting\":[\"oom_killed_current_revision\",\"memory_data_available\"],\"contradicting\":[],\"missing\":[\"container_memory\"],\"status\":\"open\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"Current revision 4 (ev-rollout_history) has same 1Gi memory limit as previous revision 3, but OOMKilled incidents started after rollout\",\"supporting\":[\"oom_killed_current_revision\",\"failures_came_with_rollout\"],\"contradicting\":[\"earlier_revision_healthy\"],\"missing\":[\"revision_health\"],\"status\":\"open\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"reports\",\"uid\":\"uid-deployment-reports\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"1536Mi\"}}}},\"expected_effect\":\"Raise memory limit for app container to 1536Mi, providing 50% buffer above current 1Gi limit to prevent OOMKilled incidents while avoiding unnecessary resource allocation\",\"rationale\":\"OOMKilled incidents (ev-pod_states) with no memory usage data (memory_data_available=unknown) suggest current 1Gi limit may be insufficient. Increasing to 1536Mi (1.5x current) provides buffer without over-provisioning, as per incident handling guidelines for memory_limit_too_low when peak figures are unavailable (container_memory=unknown).\",\"cited_evidence_ids\":[\"ev-pod_states\",\"ev-rollout_history\",\"ev-target_events\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_data_available\",\"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 4124,
+        "output_tokens": 900
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

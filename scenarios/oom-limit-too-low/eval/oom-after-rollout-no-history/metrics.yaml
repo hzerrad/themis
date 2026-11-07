@@ -1,0 +1,15 @@
+# What the metrics source says of each pod's containers.
+source: kubernetes
+pods:
+  checkout-8e2a6c9d1-a1b2c:
+    app:
+      memory: 140Mi
+      cpu: 120m
+  checkout-8e2a6c9d1-d3e4f:
+    app:
+      memory: 120Mi
+      cpu: 110m
+  checkout-8e2a6c9d1-g5h6i:
+    app:
+      memory: 410Mi
+      cpu: 260m

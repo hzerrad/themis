@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Raise CPU limit for container 'api' in Deployment 'search' to 750m to alleviate throttling causing readiness probe failures.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Container 'api' is throttled 81% of the time at 500m limit, causing CPU-bound latency and readiness probe timeouts.\",\n    \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\"],\n    \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\n    \"missing\": [\"container_logs_tail.throttled_usec.details\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Recent revision 2 may use more CPU than previous version 1, despite similar limits, causing throttling.\",\n    \"supporting\": [\"ev-revision_health\", \"ev-rollout_history\"],\n    \"contradicting\": [\"throttling_came_with_rollout\"],\n    \"missing\": [\"revision_health.throttledRatio.history\"],\n    \"status\": \"open\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"},\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises CPU limit to 750m, reducing throttling and allowing application to meet readiness probe deadlines.\",\n  \"rationale\": \"Logs show 81% throttling at 500m limit, matching readiness failures. Increasing limit to 1.5x current value (750m) should clear throttling without risking node CPU contention, as node-level contention isn't indicated in evidence.\",\n  \"cited_evidence_ids\": [\"ev-container_logs_tail\", \"ev-target_events\", \"ev-container_cpu\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4479,
+        "output_tokens": 957
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

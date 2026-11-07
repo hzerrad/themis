@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (revision 3) is using more CPU than before, causing throttling. Increase the CPU limit for the 'api' container to 750m.\",\n\"hypotheses\": [\n  {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Throttling began with revision 3 (ev-rollout_history), which uses 0.498 CPU (99.6% of 0.5 limit) vs revision 2's 0.09 throttling ratio (ev-container_cpu).\", \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"cpu_limit_too_low\", \"summary\": \"Container is throttled at 58% of CPU periods (ev-container_cpu) with usage near limit (0.498/0.5).\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [], \"missing\": [],\"status\": \"supported\"},\n  {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No evidence of node CPU contention or transient bursts.\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"ev-container_cpu\"], \"missing\": [],\"status\": \"refuted\"}\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"},\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise CPU limit to 750m, clearing throttling (ev-container_cpu) and allowing the container to meet its CPU demand without being throttled.\",\n  \"rationale\": \"Throttling began with revision 3 (ev-rollout_history), which uses 0.498 CPU (99.6% of 0.5 limit) vs revision 2's 0.09 throttling ratio (ev-container_cpu). Readiness probes are failing due to throttling (ev-target_events). Increasing the CPU limit to 750m should clear the throttling and allow the container to meet its CPU demand without being throttled.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\", \"ev-target_events\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4280,
+        "output_tokens": 1122
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

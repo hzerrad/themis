@@ -183,7 +183,7 @@ func TestChecks_Problems(t *testing.T) {
 		"no metrics source": {func(c *statuspage.Checker, _ *fakeStore) { c.Metrics = nil }, "Metrics", statuspage.Warn, "No metrics source."},
 		"metrics without history": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes}}
-		}, "Metrics", statuspage.OK, "No history. Peak memory and CPU throttling are unknown."},
+		}, "Metrics", statuspage.OK, "No history. Peak memory, CPU throttling and how earlier versions ran are unknown."},
 		"no metrics-server": {func(c *statuspage.Checker, _ *fakeStore) {
 			c.Metrics = fakeMetrics{{Source: metrics.Kubernetes, Err: metrics.ErrNotServed}}
 		}, "Metrics", statuspage.Warn, "No metrics source."},

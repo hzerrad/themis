@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to raise CPU limit; throttling ratio is below 25% threshold and CPU usage isn't near limit.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Throttling ratio (6%) below 25% threshold and CPU usage (34% of limit) isn't near limit (80%+).\", \"supporting\": [\"ev-container_cpu\"], \"contradicting\": [\"ev-target_events\"], \"missing\": [\"throttling_came_with_rollout\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3869,
+        "output_tokens": 1102
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

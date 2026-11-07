@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback due to configuration change in new revision causing failures\", \"hypotheses\": [{\"root_cause_class\": \"bad_configuration\", \"summary\": \"ConfigMap checkout-config changed after rollout, causing new revision to fail\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Revert to working revision 1, resolving configuration issues causing failures in revision 2.\",\"rationale\": \"ConfigMap checkout-config changed after rollout to revision 2, leading to failures. Earlier revision 1 was healthy, so rollback is justified.\",\"cited_evidence_ids\": [\"ev-referenced_config\", \"ev-rollout_history\", \"ev-target_events\"],\"cited_predicates\": [\"failure_onset_after_rollout\", \"earlier_revision_healthy\", \"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3201,
+        "output_tokens": 855
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
