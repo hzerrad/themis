@@ -325,7 +325,7 @@ demo-fix-oom: ## Shrink catalog's data back under its memory limit
 	$(KUBECTL) -n shop delete pods -l app=catalog
 
 # cpu-throttling: search.
-.PHONY: demo-break-cpu demo-break-cpu-more demo-fix-cpu
+.PHONY: demo-break-cpu demo-break-cpu-more demo-fix-cpu demo-break-cpu-rollout demo-fix-cpu-rollout
 demo-break-cpu: demo-namespace ## cpu-throttling: send search more CPU work than its limit allows, with no rollout
 	$(KUBECTL) apply -f $(DEMO)/search.yaml
 	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=250
@@ -337,6 +337,22 @@ demo-break-cpu-more: demo-namespace ## cpu-throttling: send search more CPU work
 	$(KUBECTL) -n shop rollout status deployment/search-feed --timeout=120s
 
 demo-fix-cpu: ## Stop search's CPU work
+	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=0
+
+# search first runs 150m of work, within its limit, for 5 minutes, so
+# Prometheus's history shows how much of its limit the version before the
+# rollout used for that work.
+demo-break-cpu-rollout: demo-namespace ## cpu-throttling: roll out a version of search that does twice the CPU work for the same feed
+	$(KUBECTL) apply -f $(DEMO)/search.yaml
+	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=150
+	$(KUBECTL) -n shop rollout status deployment/search-feed --timeout=120s
+	@echo "search does 150m of CPU work, within its 200m limit. In 5 minutes, a version that does it twice rolls out."
+	sleep 300
+	$(KUBECTL) -n shop set env deployment/search WORK_FACTOR=2
+	$(KUBECTL) -n shop rollout status deployment/search --timeout=120s
+
+demo-fix-cpu-rollout: ## Roll search out without WORK_FACTOR, unless Themis rolled it back, and stop its CPU work
+	$(KUBECTL) -n shop set env deployment/search WORK_FACTOR-
 	$(KUBECTL) -n shop set env deployment/search-feed WORK_MILLICORES=0
 
 # probe-restart-storm: inventory.
