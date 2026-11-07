@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions
+    url: https://github.com/hzerrad/themis/discussions/categories/q-a
+    about: Ask how to install, configure or use Themis.
+  - name: Report a vulnerability
+    url: https://github.com/hzerrad/themis/security/advisories/new
+    about: Report security problems privately, never in an issue.
+  - name: Quickstart
+    url: https://github.com/hzerrad/themis/blob/main/docs/quickstart.md
+    about: Install Themis and see it handle an incident in about 10 minutes.

@@ -1,5 +1,11 @@
 # Themis
 
+[![CI](https://github.com/hzerrad/themis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hzerrad/themis/actions/workflows/ci.yml)
+[![End-to-end](https://github.com/hzerrad/themis/actions/workflows/e2e.yml/badge.svg?branch=main)](https://github.com/hzerrad/themis/actions/workflows/e2e.yml)
+[![Release](https://img.shields.io/github/v/release/hzerrad/themis?include_prereleases&sort=semver)](https://github.com/hzerrad/themis/releases)
+[![License](https://img.shields.io/github/license/hzerrad/themis)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/hzerrad/themis)](go.mod)
+
 Themis is a governance engine for AI-proposed fixes to Kubernetes incidents and workloads. Fixes come from Themis's own LLM investigator or from any AI SRE agent. Themis applies a fix only if the evidence backs it, policy allows it and a person approves it, then checks that it worked.
 
 Models propose; deterministic controls decide. A Kubernetes write is never considered a success because the API accepted it: Themis watches the result and reports whether the incident was resolved, contained, unchanged, worsened, or impossible to judge.

@@ -1,0 +1,56 @@
+name: Bug report
+description: Themis did something wrong, or something broke.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For a security problem, use **Report a vulnerability** on the Security tab instead of an issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The chart version or image tag, such as 0.1.0 or sha-a333652.
+    validations:
+      required: true
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part
+      options:
+        - Core (incidents, checks, policy, approvals)
+        - Executor (applying fixes)
+        - Investigator
+        - Web UI
+        - Helm chart and install
+        - A scenario pack
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      placeholder: For example, make demo-break-oom on kind, then approve the raise.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or the incident's timeline
+      description: Remove secrets and anything private before pasting.
+      render: text
+  - type: input
+    id: cluster
+    attributes:
+      label: Kubernetes version and distribution
+      placeholder: 1.36 on EKS, kind 1.37, …
