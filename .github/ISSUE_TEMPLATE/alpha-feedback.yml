@@ -1,0 +1,80 @@
+name: Alpha feedback
+description: Report what you found trying a Themis alpha.
+labels: [alpha feedback]
+body:
+  - type: markdown
+    attributes:
+      value: Alphas are not ready for production. Try them on a test cluster. For a security problem, use **Report a vulnerability** on the Security tab instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: v0.1.0-alpha1
+    validations:
+      required: true
+  - type: dropdown
+    id: tried
+    attributes:
+      label: What you tried
+      multiple: true
+      options:
+        - Installing with Helm
+        - The first sign-in
+        - Connecting Alertmanager
+        - Setting the model
+        - A bad rollout
+        - A memory limit too low
+        - CPU throttling
+        - A probe restart storm
+        - Stuck pods
+        - Suggesting a fix
+        - Approving or denying a fix
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: investigator
+    attributes:
+      label: Investigator
+      options:
+        - Themis's investigator with Claude
+        - Themis's investigator with a hosted OpenAI-compatible model
+        - Themis's investigator with a local model (Ollama, vLLM)
+        - An AI SRE agent
+        - None
+  - type: input
+    id: cluster
+    attributes:
+      label: Kubernetes version and distribution
+      placeholder: kind 1.37, 1.36 on GKE, …
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Was Themis's decision right?
+      description: If Themis proposed, refused or referred a fix, did you agree? What would a senior SRE have done?
+  - type: dropdown
+    id: impact
+    attributes:
+      label: How much it got in your way
+      options:
+        - It blocked me
+        - It slowed me down
+        - Minor
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or the incident's timeline
+      description: Remove secrets and anything private before pasting.
+      render: text
