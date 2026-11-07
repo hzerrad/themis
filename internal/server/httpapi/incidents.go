@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"time"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/check"
@@ -145,14 +146,17 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 	for _, c := range a.RootCauses.For(in.Profiles()...) {
 		d.Causes[c.Name] = c.Description
 	}
-	for _, it := range rec.evidence {
+	numbers := map[string]citeView{}
+	for i, it := range rec.evidence {
 		var fix evidence.ThemisFixView
 		if it.Template == evidence.ThemisFix && d.Follows == nil && json.Unmarshal(it.Data, &fix) == nil {
 			d.Follows = &followsView{Incident: fix.Incident, Done: fix.Done, AppliedAt: fix.AppliedAt, Before: int64(in.CreatedAt.Sub(fix.AppliedAt).Seconds())}
 		}
-		v := evidenceView{Item: it}
+		v := evidenceView{Item: it, Number: i + 1, Kind: kindOf(it.Template), Later: it.CollectedAt.Sub(rec.evidence[0].CollectedAt) > laterBy}
+		numbers[it.ID] = citeView{N: v.Number, Kind: v.Kind}
 		if raw {
 			v.Data = it.Data
+			v.Digest, v.View = shown(it, rec.evidence)
 		}
 		for _, s := range it.Suspicious {
 			sv := suspicionView{Reason: s.Reason, At: s.At, Origin: it.Origin(s), What: s.What()}
@@ -164,6 +168,17 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		d.Evidence = append(d.Evidence, v)
 	}
 	d.EvidenceWarning = evidence.Warning(rec.evidence, raw)
+	d.Facts = a.facts(in, rec.predicates, func(ids []string) []citeView {
+		var out []citeView
+		for _, id := range ids {
+			if c, ok := numbers[id]; ok && !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+		slices.SortFunc(out, func(a, b citeView) int { return a.N - b.N })
+		return out
+	})
+	d.Situation, d.Symptoms = a.situation(in, rec.predicates), a.symptoms(in)
 	if inv := rec.investigation; inv != nil {
 		d.Investigation = inv
 		// Once someone's suggestion moves it on, what's next matters more,
@@ -184,6 +199,10 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 	}
 	return d
 }
+
+// laterBy is how long after the first evidence an item counts as collected
+// later, so the page says when.
+const laterBy = time.Minute
 
 // basis says, by name, what each check that only says whether figures are
 // there, and found them, rests on: the history its evidence holds, such as

@@ -149,11 +149,11 @@ kubectl -n shop set env deployment/checkout MODE=leak
 | about 1 minute on kind | A checkout pod crash-loops, Themis reads the alert from Alertmanager, and an incident appears, **investigating** |
 | 1 to 5 minutes more | Themis and the model read the evidence and suggest a rollback. The incident **needs your approval**. |
 
-Open the incident. It shows what Themis found, what the model suggested, and the exact change Themis would make, read from the live cluster: the workload, the pods it affects, the policy rule that decided, and every field the rollback changes.
+Open the incident. It asks for the fix, then states the facts Themis's checks found, each citing its evidence by number. Below them: the exact change Themis would make, read from the live cluster, with every field the rollback changes and the pods it restarts; the checks for and against it, in one line that opens; and every piece of evidence, numbered, each opening to a view of its kind with its raw data. Without an investigator, the title says what fails, such as "checkout runs out of memory.", and you suggest the fix below the facts.
 
 ## 5. Approve the rollback
 
-Click **Approve this change**. You approve exactly what you were shown: if the workload changes first, the approval no longer applies.
+Click **Approve the rollback**. You approve exactly what you were shown: if the workload changes first, the approval no longer applies.
 
 | After | You see |
 |---|---|

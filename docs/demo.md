@@ -74,15 +74,16 @@ What happens next, and roughly when:
 
 Open the incident. From the top:
 
-- **The summary** says what Themis found and what it expects from you.
-- **What the model suggested** (left): the fix, why, and the evidence it cites. Themis doesn't trust it.
-- **The change Themis would make** (right), read from the live cluster: the exact workload, how many pods it restarts and how many at a time, what Themis checks once it is applied, which policy rule decided, and a change ID. *What changes* lists every field the rollback changes, here `env MODE: leak → healthy`. Values that look like secrets are hidden.
-- **Suggestions Themis refused**, if any, such as one naming the wrong workload or citing evidence that doesn't exist.
-- **Investigation**, **What Themis checked**, **Timeline** and **Evidence** are the work behind it: the possible causes the model weighed, the facts Themis checked itself, every step and who took it, and the evidence with secrets hidden.
+- **The question**: the fix that waits for you, such as "Roll checkout back to revision 1?", and the investigator's leading cause.
+- **The facts**, under a dark rule: what Themis's checks found that matters most, in a few sentences, such as "The `app` container of revision 2 was OOMKilled in its only pod, last at 13:52." Each cites its evidence by number. Click the number to open that evidence.
+- **The exact change**, read from the live cluster: every field the rollback changes, here `env MODE: leak → healthy`, how many pods it restarts and how many at a time, what Themis checks once it is applied, and the approve and deny buttons. Values that look like secrets are hidden.
+- **The checks**, in one line, such as "✓ 4 checks support the rollback. None is against it." Open it for each check for and against, with its figures and the evidence it read.
+- **Evidence**: every piece Themis read, numbered, one line each, such as "2 pods, none ready, 6 restarts. Last ended OOMKilled, exit 137, at 13:52." Open a piece for a view of its kind: the pods as a table, the events with warnings marked, the logs line by line with how the run ended, memory and CPU against their requests and limits, each revision with what changed from the one before it. **Raw data** under each holds the JSON as collected. Container logs are for responders and above: viewers read only what each piece is.
+- **The investigator's note**, **Timeline** and **Technical details** are the work behind it: the causes the model weighed, every step and who took it, and the IDs.
 
 ## 6. Approve
 
-Click **Approve this change**. You approve exactly the change you were shown: if the workload changes first, the approval no longer applies.
+Click **Approve the rollback**. You approve exactly the change you were shown: if the workload changes first, the approval no longer applies.
 
 | After | You see |
 |---|---|

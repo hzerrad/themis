@@ -199,7 +199,8 @@ const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", fou
 // fix ("*"), or against the fix named. Any other check weighs for a fix
 // when true. No healthy earlier revision rules out a rollback. Failures the
 // latest rollout brought rule out raising a limit, since the new version is
-// what fails; failures it didn't bring rule out the rollback.
+// what fails; failures it didn't bring rule out the rollback. A node short of
+// memory rules out raising a memory limit, which gives it none.
 const AGAINST = {
   gitops_managed: { "*": "true" },
   config_changed_before_failure: { "*": "true" },
@@ -208,6 +209,7 @@ const AGAINST = {
   failure_onset_after_rollout: { [ROLLBACK]: "false" },
   failures_came_with_rollout: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
   throttling_came_with_rollout: { "deployment.set-resources": "true" },
+  evicted_for_node_memory: { "deployment.set-resources": "true" },
 };
 
 // against says whether p's answer is a fact against one of fixes.
@@ -223,12 +225,6 @@ function supports(p, fix) {
   const no = a["*"] || a[fix];
   return no ? p.Value !== no && p.Value !== "unknown" : p.Value === "true";
 }
-const EVIDENCE_LABEL = {
-  rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs",
-  referenced_config: "Referenced config", container_memory: "Container memory", container_cpu: "Container CPU",
-  revision_health: "Revision health",
-  themis_fix: "Themis's earlier fix",
-};
 const ACTOR_LABEL = {
   intake: "Alert intake", investigation: "Themis", investigator: "The investigator", governance: "Policy",
   approval: "Approval timer", execution: "Themis", executor: "Executor", verify: "Verification", reconcile: "Cluster watch",
@@ -990,9 +986,70 @@ function leadCause(inv) {
 
 const evidenceName = (d, id) => {
   const e = (d.Evidence || []).find((x) => x.ID === id);
-  return e ? label(EVIDENCE_LABEL, e.Template) : "evidence " + String(id).slice(-8);
+  return e ? e.Kind : "evidence " + String(id).slice(-8);
 };
 const sources = (d, ids) => [...new Set((ids || []).map((id) => evidenceName(d, id)))].join(", ");
+
+// clock is a moment as a page of one incident says it: the time today, the
+// time yesterday, or the day and time.
+function clock(t) {
+  const d = new Date(t);
+  const day = new Date();
+  if (sameDay(d, day)) return CLOCK.format(d);
+  day.setDate(day.getDate() - 1);
+  if (sameDay(d, day)) return CLOCK.format(d) + " yesterday";
+  return when(t);
+}
+
+// said is a line the API wrote in pieces: words, literal cluster values in
+// monospace, and moments in the reader's time zone.
+function said(p) {
+  return (p || []).map((x) => (x.value ? h("span", { class: "val" }, x.value)
+    : x.time ? h("time", { datetime: x.time, title: when(x.time) }, clock(x.time)) : x.text));
+}
+
+// openEvidence opens the piece of evidence numbered n, brings it into view
+// and marks it for a moment.
+function openEvidence(n) {
+  const ev = document.getElementById("ev-" + n);
+  if (!ev) return;
+  ev.open = true;
+  const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (ev.scrollIntoView) ev.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  ev.classList.remove("lit");
+  void ev.offsetWidth;
+  ev.classList.add("lit");
+  const s = ev.querySelector("summary");
+  if (s) s.focus({ preventScroll: true });
+}
+
+// evidenceLink points at a piece of evidence by its number, as text says it.
+function evidenceLink(n, text, aria) {
+  return h("a", { href: "#ev-" + n, "aria-label": aria, onclick: (e) => { e.preventDefault(); openEvidence(n); } }, text);
+}
+
+// refs cite evidence by number, as superscripts after a fact.
+function refs(cites) {
+  return (cites || []).map((c, i) => [i ? h("span", { class: "ref-sep", "aria-hidden": "true" }, ",") : null,
+    h("a", { class: "ref", href: "#ev-" + c.n, "aria-label": "Evidence " + c.n + ", " + c.kind,
+      onclick: (e) => { e.preventDefault(); openEvidence(c.n); } }, String(c.n))]);
+}
+
+// citing links the evidence of ids, as a finding cites it: "evidence 1, 4".
+function citing(d, ids) {
+  const items = [...new Set(ids || [])].map((id) => (d.Evidence || []).find((x) => x.ID === id)).filter(Boolean)
+    .sort((a, b) => a.Number - b.Number);
+  if (!items.length) return null;
+  return ["evidence ", items.map((e, i) => [i ? ", " : "", evidenceLink(e.Number, String(e.Number), "Evidence " + e.Number + ", " + e.Kind)])];
+}
+
+// factsBlock is what the checks found that matters most, each fact citing
+// its evidence.
+function factsBlock(d) {
+  const facts = d.Facts || [];
+  if (!facts.length) return null;
+  return h("section", { class: "facts", "aria-label": "The facts" }, facts.map((f) => h("p", {}, said(f.words), refs(f.cites))));
+}
 
 // withheld says why some of a change's values aren't shown, when some aren't:
 // they look like secrets, or they show only that they change.
@@ -1083,7 +1140,8 @@ function suspect(d, x, action, noun) {
     h("div", {},
       h("b", {}, "Suspicious text in " + kind.where),
       x.excerpt ? h("pre", { class: "quote" }, x.excerpt) : h("p", { class: "quiet small" }, "Responders can read the text."),
-      h("div", { class: "src" }, x.s.origin ? cap(x.s.origin) : [label(EVIDENCE_LABEL, t), " at ", h("code", {}, x.s.at || "/")]),
+      h("div", { class: "src" }, x.s.origin ? cap(x.s.origin) : [x.e.Kind, " at ", h("code", {}, x.s.at || "/")],
+        " · ", evidenceLink(x.e.Number, "evidence " + x.e.Number, "Evidence " + x.e.Number + ", " + x.e.Kind)),
       h("p", {}, what + " " + effect + " " + todo)));
 }
 
@@ -1193,7 +1251,7 @@ function decision(a, d, ctx, latest, reload) {
     h("div", {},
       h("h3", {}, latest ? (gitOps ? "The recommended change" : "The exact change") : cap(fx.short)),
       changesTable(a.Changes),
-      facts.some(Boolean) ? h("p", { class: "facts" }, facts) : null,
+      facts.some(Boolean) ? h("p", { class: "terms" }, facts) : null,
       latest ? suspicion(d, a, fx.noun) : null),
     side);
 }
@@ -1243,7 +1301,8 @@ function finding(g, d, side) {
     h("span", { class: "k " + (side || "none"), "aria-hidden": "true" }, side ? MARK[side] : "·"),
     h("span", {}, side ? h("span", { class: "vh" }, MARK_WORD[side] + ": ") : null,
       statement(d, p) + (unknown && p.Reason ? " — " + p.Reason : ""),
-      h("span", { class: "src" }, [unknown ? null : p.Reason, sources(d, p.EvidenceIDs)].filter(Boolean).join(" · "))));
+      h("span", { class: "src" }, unknown ? null : p.Reason, !unknown && p.Reason && citing(d, p.EvidenceIDs) ? " · " : null,
+        citing(d, p.EvidenceIDs))));
 }
 
 // basis says once what the checks rest on, from the checks that say only
@@ -1284,20 +1343,24 @@ function findings(d, cited, noun, fix) {
     h("h3", {}, title), items.length ? h("ul", {}, items) : h("p", { class: "empty" }, empty));
   const blind = d.Missing && d.Missing.length ? h("div", { class: "blind" },
     h("b", {}, "Missing evidence"), h("ul", {}, d.Missing.map((m) => h("li", {}, m)))) : null;
-  const weigh = [plural(forFix.length, "check supports", "checks support") + " the " + noun + ".",
-    againstFix.length ? plural(againstFix.length, "is", "are") + " against it." : "None is against it.",
-    unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""].filter(Boolean).join(" ");
-  return h("section", { class: "findings", "aria-label": "Findings" },
-    h("div", { class: "pans" },
-      cited ? pan("for", "Supports the " + noun, forFix, "No check supports it.") : pan("for", "Found", forFix, "No check came out true."),
-      cited ? pan("against", "Against, or unknown", [...againstFix, ...unknown], "No check is against it.")
-        : pan("against", "Unknown, or against", [...againstFix, ...unknown], "Every check has an answer.")),
-    cited ? h("p", { class: "weigh" }, weigh) : null,
-    based ? h("p", { class: "quiet small" }, based) : null,
-    blind,
-    other.length ? h("details", { class: "fold sub", "data-key": "other-checks" },
-      h("summary", {}, "Other checks", h("span", { class: "n" }, other.length)),
-      h("div", { class: "pan against" }, h("ul", {}, other))) : null);
+  const rest = [againstFix.length ? plural(againstFix.length, "is", "are") + " against " + (cited ? "it." : "a fix.") : cited ? "None is against it." : "",
+    unknown.length ? plural(unknown.length, "is", "are") + " unknown." : ""];
+  // Without a fix weighed, the line counts the checks that found the failure.
+  const failing = all.filter((p) => p.Value === "true" && (d.Symptoms || []).includes(p.Name)).length;
+  const weigh = [cited ? plural(forFix.length, "check supports", "checks support") + " the " + noun + "."
+    : failing ? plural(failing, "check found", "checks found") + " the failure." : "No check found the failure.", ...rest].filter(Boolean).join(" ");
+  const mark = againstFix.length ? "against" : (cited ? forFix.length : failing) ? "for" : "unknown";
+  return [h("details", { class: "checks", "data-key": "checks" },
+    h("summary", {}, h("span", { class: "k " + mark, "aria-hidden": "true" }, MARK[mark]), " ", weigh),
+    h("section", { class: "findings", "aria-label": "Findings" },
+      h("div", { class: "pans" },
+        cited ? pan("for", "Supports the " + noun, forFix, "No check supports it.") : pan("for", "Found", forFix, "No check came out true."),
+        cited ? pan("against", "Against, or unknown", [...againstFix, ...unknown], "No check is against it.")
+          : pan("against", "Unknown, or against", [...againstFix, ...unknown], "Every check has an answer.")),
+      based ? h("p", { class: "quiet small" }, based) : null,
+      other.length ? h("details", { class: "fold sub", "data-key": "other-checks" },
+        h("summary", {}, "Other checks", h("span", { class: "n" }, other.length)),
+        h("div", { class: "pan against" }, h("ul", {}, other))) : null)), blind];
 }
 
 // sourceRows say where a suggested fix came from, as fully as Themis knows:
@@ -1382,23 +1445,150 @@ function otherSuggestion(p, d) {
     suggestionText(p, d));
 }
 
-function evidenceFold(d) {
+// The evidence. Each piece is a row: its number, its kind and what it holds
+// in one line; opening it lays it out by its kind, with the raw data folded
+// under it. The API works out both; the page only draws them.
+
+// table is a table of rows, its columns each a heading and how to show a
+// row's cell, with the classes of a column's cells.
+function table(rows, columns) {
+  return h("table", { class: "data" },
+    h("thead", {}, h("tr", {}, columns.map(([title, , cls]) => h("th", { class: cls || null }, title)))),
+    h("tbody", {}, rows.map((r) => h("tr", {}, columns.map(([, cell, cls]) => {
+      const v = cell(r);
+      return h("td", { class: [cls, v && v.cls].filter(Boolean).join(" ") || null }, v && v.cls !== undefined ? v.node : v);
+    })))));
+}
+
+// placed sets where an element sits along a gauge's track, in percent. The
+// page's policy allows no inline style in its markup.
+function placed(el, side, at) {
+  el.style[side] = at + "%";
+  return el;
+}
+
+// gaugeFigure is a figure against its scale that labels itself: the figure
+// above the fill's end, a request under its tick, the scale's end under the
+// track's end.
+function gaugeFigure(g) {
+  const fill = placed(h("span", { class: "fill" }), "width", g.fill);
+  const track = h("span", { class: "track" }, fill, g.tick ? placed(h("span", { class: "tick" }), "left", g.tick.at) : null);
+  const label = (text) => {
+    const i = text.lastIndexOf(" ");
+    return i > 0 ? [text.slice(0, i) + " ", h("b", {}, text.slice(i + 1))] : h("b", {}, text);
+  };
+  const above = h("span", { class: "above" + (g.fill > 50 ? " left" : "") }, label(g.fillText));
+  placed(above, g.fill > 50 ? "right" : "left", g.fill > 50 ? 100 - g.fill : g.fill);
+  return h("figure", { class: "gauge", "aria-label": g.aria },
+    h("figcaption", {}, g.label),
+    h("div", { class: "g", "aria-hidden": "true" }, above, track,
+      g.tick ? placed(h("span", { class: "below" }, label(g.tick.text)), "left", g.tick.at) : null,
+      h("span", { class: "below end" }, label(g.end))));
+}
+
+// runShown remembers which run of logs a reader switched to, by item, so a
+// refresh keeps it.
+const runShown = new Map();
+
+// logView is a container's logs, each line with its time when it has one,
+// how the run ended marked, and buttons to switch between its runs.
+function logView(e, v) {
+  const runs = v.runs || [];
+  const marked = (text) => {
+    const parts = String(text).split("[REDACTED]");
+    return parts.map((p, i) => [i ? h("span", { class: "redacted" }, "[REDACTED]") : null, p]);
+  };
+  const shownRun = runShown.has(e.ID) ? runShown.get(e.ID) : 0;
+  const stamp = (t) => h("time", { datetime: t, title: when(t) }, CLOCK.format(new Date(t)) + ":" + String(new Date(t).getSeconds()).padStart(2, "0"));
+  const blocks = runs.map((r, i) => h("div", { class: "log", hidden: i !== shownRun, tabindex: "0", "aria-label": cap(r.previous ? "previous run" : "current run") },
+    r.lines.length ? r.lines.map((l) => h("div", { class: l.flagged ? "flag" : null },
+      l.at ? stamp(l.at) : h("span"), h("span", {}, marked(l.text)))) : h("div", {}, h("span"), h("span", { class: "quiet" }, r.note || "No lines.")),
+    r.ended ? h("div", { class: "last" }, r.endedAt ? stamp(r.endedAt) : h("span"), h("span", { class: "quiet" }, "Ended " + r.ended + ".")) : null));
+  const buttons = runs.map((r, i) => h("button", { type: "button", "aria-pressed": String(i === shownRun),
+    onclick: (ev) => {
+      runShown.set(e.ID, i);
+      for (const [j, b] of buttons.entries()) b.setAttribute("aria-pressed", String(j === i));
+      for (const [j, el] of blocks.entries()) el.hidden = j !== i;
+      ev.currentTarget.focus();
+    } }, r.previous ? "Previous run" : "Current run"));
+  return [
+    runs.length > 1 ? h("div", { class: "tabs", role: "group", "aria-label": "Run" }, buttons)
+      : h("p", { class: "quiet small runname" }, runs[0] && runs[0].previous ? "Previous run" : "Current run"),
+    blocks,
+  ];
+}
+
+// evidenceView lays a piece of evidence out by its kind.
+function evidenceView(d, e) {
+  const v = e.View || {};
+  const yes = (b) => (b ? "Yes" : "No");
+  const out = [];
+  if (v.pods) {
+    out.push(table(v.pods.rows, [
+      ["Pod", (r) => r.name, "mono"], ["Revision", (r) => r.revision || "—"],
+      ["Ready", (r) => yes(r.ready) + (r.waiting ? ", " + r.waiting : "")], ["Restarts", (r) => String(r.restarts), "num"],
+      ["Last ended", (r) => (r.ended ? { cls: r.failed ? "warn" : "", node: [r.ended, r.endedAt ? ", " + clock(r.endedAt) : ""] } : "—")],
+    ]));
+  }
+  if (v.events) {
+    out.push(table(v.events.rows, [
+      ["Last seen", (r) => (r.lastSeen ? clock(r.lastSeen) : "—")], ["Type", (r) => ({ cls: r.warning ? "warn" : "", node: r.type })],
+      ["Reason", (r) => r.reason, "mono"], ["Object", (r) => r.object, "mono"], ["Message", (r) => r.message || "—"],
+      ["Count", (r) => String(r.count), "num"],
+    ]));
+  }
+  if (v.logs) out.push(logView(e, v.logs));
+  if (v.gauges) out.push(v.gauges.map(gaugeFigure));
+  if (v.revisions) {
+    out.push(h("div", { class: "revs" }, v.revisions.map((r) => h("div", { class: "rev" },
+      h("div", {}, h("b", {}, "Revision " + r.revision), r.current ? h("div", { class: "quiet" }, "current") : null),
+      h("div", {}, r.createdAt ? ["Created ", clock(r.createdAt), ". "] : null, r.runs.map((x) => [said(x), " "]),
+        (r.changed || []).length ? h("ul", { class: "changed" }, r.changed.map((c) => h("li", {}, said(c))))
+          : h("div", { class: "quiet small" }, r.first ? "No earlier revision." : "No change Themis can see in images, resources or probes."))))));
+  }
+  if (v.config) {
+    out.push(v.config.length ? table(v.config, [
+      ["Kind", (r) => r.kind], ["Name", (r) => r.name, "mono"],
+      ["Changed", (r) => (r.missing ? { cls: "warn", node: "Missing" } : r.changedAt ? clock(r.changedAt) : r.kind === "Secret" ? "Not read" : "—")],
+      ["Optional", (r) => yes(r.optional)],
+    ]) : null);
+  }
+  if (v.fix) {
+    out.push(h("p", {}, v.fix.done || "A fix.", " Applied at ", clock(v.fix.appliedAt), " for ",
+      h("a", { href: "#/incidents/" + v.fix.incident }, "an earlier incident"),
+      v.fix.outcome ? ". " + label(OUTCOME_LABEL, v.fix.outcome) + "." : "."),
+    (v.fix.found || []).length ? [h("h3", {}, "What that incident's checks found"), h("ul", {}, v.fix.found.map((f) => h("li", {}, sentence(f))))] : null);
+  }
+  if (v.health) out.push(h("ul", { class: "lines" }, v.health.map((l) => h("li", {}, said(l)))));
+  if (v.fields) out.push(h("dl", { class: "tech" }, v.fields.map((f) => [h("dt", {}, f.name), h("dd", {}, f.value)])));
+  for (const n of v.notes || []) out.push(h("p", { class: "logmeta" }, said(n)));
+  return out;
+}
+
+// evidenceRow is one piece of evidence: what it holds in one line, then, open,
+// laid out by its kind with its raw data. Viewers learn only what it is.
+function evidenceRow(d, e) {
+  const flagged = (e.Suspicious || []).map((s) => h("li", {}, "Suspicious text at ", h("code", {}, s.at || "/"),
+    s.origin ? " (" + s.origin + ")" : "", ". The text " + (s.what || "looks written for Themis") + "."));
+  return h("details", { class: "ev", id: "ev-" + e.Number, "data-key": "evidence-" + e.ID },
+    h("summary", {}, h("span", { class: "no" }, String(e.Number)), h("span", { class: "kind" }, e.Kind),
+      h("span", { class: "gist" }, e.Digest ? said(e.Digest) : null),
+      e.Later ? h("span", { class: "when" }, clock(e.CollectedAt)) : null),
+    h("div", { class: "body" },
+      e.Data === undefined ? h("p", { class: "quiet" }, "Readable by responders only.") : evidenceView(d, e),
+      flagged.length ? h("ul", { class: "flagged" }, flagged) : null,
+      e.Data === undefined ? null : h("details", { class: "raw", "data-key": "raw-" + e.ID },
+        h("summary", {}, "Raw data"), h("pre", {}, JSON.stringify(e.Data, null, 2)))));
+}
+
+// evidenceSection lists the evidence, numbered as facts and findings cite it.
+function evidenceSection(d) {
   const items = d.Evidence || [];
   if (!items.length) return null;
-  return h("details", { class: "fold", "data-key": "evidence" },
-    h("summary", {}, "Evidence", h("span", { class: "n" }, items.length)),
-    items.map((e) => h("details", { class: "item", "data-key": "evidence-" + e.ID },
-      h("summary", {}, h("b", {}, label(EVIDENCE_LABEL, e.Template)), " ",
-        h("span", { class: "quiet small" }, [when(e.CollectedAt),
-          e.Classification === "sensitive" ? "may hold sensitive data" : "",
-          e.Truncated ? "shortened" : "", e.Redactions ? plural(e.Redactions, "secret", "secrets") + " hidden" : "",
-          e.Suspicious ? "suspicious text" : ""].filter(Boolean).join(" · "))),
-      e.Suspicious ? h("ul", {}, e.Suspicious.map((s) => h("li", {},
-        "Suspicious text at ", h("code", {}, s.at || "/"), s.origin ? " (" + s.origin + ")" : "",
-        ". The text " + (s.what || "looks written for Themis") + "."))) : null,
-      e.Data === undefined
-        ? h("p", { class: "quiet" }, "Readable by responders only.")
-        : h("pre", {}, JSON.stringify(e.Data, null, 2)))));
+  return h("section", { class: "evidence", "aria-label": "Evidence" },
+    h("h2", {}, "Evidence ", h("span", { class: "n" }, String(items.length)),
+      h("span", { class: "quiet small coll" }, "Collected at ", clock(items[0].CollectedAt))),
+    h("div", { class: "evs" }, items.map((e) => evidenceRow(d, e))));
 }
 
 // timelineFold lists every change of state, each reason as recorded. A step
@@ -1836,12 +2026,12 @@ function headline(d, ctx) {
     return [sentence(fx.short + " in Git"), action ? action.DecisionReason : reason];
   }
   if (s === "received" || s === "investigating") {
-    const got = [...new Set((d.Evidence || []).map((e) => label(EVIDENCE_LABEL, e.Template).toLowerCase()))];
+    const got = [...new Set((d.Evidence || []).map((e) => (String(e.Kind).startsWith("Themis") ? e.Kind : String(e.Kind).toLowerCase())))];
     return ["Collecting and weighing evidence.", got.length ? "Collected so far: " + got.join(", ") + "." : "Nothing collected yet."];
   }
   if (s === "diagnosed" || s === "proposed") return ["Checking the suggested fix against the cluster and the policy.", fx ? "Suggested: " + lowerFirst(fx.short) + "." : reason];
   const suggest = !(d.Fixes || []).length ? "Themis has no fix for this kind of incident."
-    : can("approver") ? "Suggest a fix below, or send one from a tool such as HolmesGPT." : "An approver, or a tool such as HolmesGPT, can suggest a fix.";
+    : can("approver") ? "Suggest a fix below, or send one from an AI SRE agent." : "An approver, or an AI SRE agent, can suggest a fix.";
   if (s === "awaiting_suggestion") return waitingFor(d, last, fx, suggest);
   if (s === "inconclusive") return [d.Headline || "No fix proposed.", suggest];
   if ((s === "authorized" || s === "executing") && fx) {
@@ -1898,7 +2088,8 @@ function waitingFor(d, last, fx, suggest) {
     return [title + next, [rest, suggest].filter(Boolean).join(" ")];
   }
   if (from === "investigating") return [reason + next, suggest];
-  return ["Waiting for a suggested fix.", "No investigator is installed. " + suggest];
+  // No investigator: the title is what fails, as the symptoms found it.
+  return [(d.Situation || []).length ? said(d.Situation) : "Waiting for a suggested fix.", "No investigator is installed. " + suggest, true];
 }
 
 // againBlock offers to have the incident investigated again, or says why it
@@ -1983,7 +2174,7 @@ async function detail(id) {
     recommended: actions.some((a) => a.PolicyID === GITOPS),
   };
   const [word, tone] = stateOf(inc.state, ctx);
-  const [title, because] = headline(d, ctx);
+  const [title, because, plain] = headline(d, ctx);
   // The fix the findings weigh: the one the latest change came from.
   const source = action ? proposals.find((p) => p.ID === action.ProposalID) : accepted;
   const mine = new Set([...actions.map((a) => a.ProposalID), accepted && accepted.ID].filter(Boolean));
@@ -1992,7 +2183,7 @@ async function detail(id) {
   const suggesting = SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(d, reload) : null;
   const again = againBlock(d, reload);
   const closing = closeBlock(d, reload);
-  const said = flash;
+  const told = flash;
   flash = null;
 
   render(
@@ -2001,16 +2192,18 @@ async function detail(id) {
       h("span", { class: "wl2" }, h("b", {}, t.name), " in " + t.namespace + " · " + t.kind),
       h("span", { class: "tag state " + tone }, word)),
     h("h1", { class: "question" }, title),
-    because ? h("p", { class: "because" }, because) : null,
-    said ? h("p", { class: "flash", role: "status" }, said) : null,
+    because ? h("p", { class: plain ? "because plain" : "because" }, because) : null,
+    told ? h("p", { class: "flash", role: "status" }, told) : null,
     inc.supersededBy ? h("p", { class: "note" }, "The workload changed outside Themis and still fails. A newer incident covers it as it is now: ",
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
     followsNote(d.Follows),
+    factsBlock(d),
 
     action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
     again || suggesting || closing ? h("div", { class: "more" }, again, suggesting, closing) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix", fixed ? fixed.Capability : ""),
+    evidenceSection(d),
 
     h("div", { class: "more" },
       actions.length > 1 ? h("details", { class: "fold", "data-key": "earlier" },
@@ -2023,7 +2216,6 @@ async function detail(id) {
       others.length ? h("details", { class: "fold", "data-key": "others" },
         h("summary", {}, "Other suggestions", h("span", { class: "n" }, others.length)),
         others.map((p) => otherSuggestion(p, d))) : null,
-      evidenceFold(d),
       timelineFold(d),
       technical(d, action)));
 

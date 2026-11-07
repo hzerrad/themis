@@ -58,6 +58,16 @@ type AnswerDefinition struct {
 	// Cite are CEL expressions for the IDs of the evidence the answer rests
 	// on: each a string or a list of strings.
 	Cite []string `json:"cite,omitempty"`
+	// Fact is the answer as a sentence for people, at the top of the
+	// incident's page, citing what Cite names: ${expression} puts in a
+	// value, and text in backticks is a literal cluster value. Investigators
+	// never see it, and an expression that fails leaves it out rather than
+	// changing the answer.
+	Fact string `json:"fact,omitempty"`
+	// Headline is, for a check that finds an incident's failure, the
+	// failure in a few words: the incident's title while nobody has
+	// proposed a fix. It is written as Fact is.
+	Headline string `json:"headline,omitempty"`
 }
 
 // answerText is true, false or unknown, written bare or quoted.
@@ -116,6 +126,9 @@ type answer struct {
 	value  Truth
 	reason []part
 	cite   []*expr
+	// fact and headline are for people: what they read never makes the
+	// answer need more evidence.
+	fact, headline []part
 	// needs are the templates the answer reads, in Reads' order.
 	needs []string
 }
@@ -175,6 +188,7 @@ func newEnv(templates []string) (*cel.Env, error) {
 		cel.Variable(varFirstFailure, cel.DynType),
 		cel.Variable(varSuspicious, cel.ListType(cel.DynType)),
 		cel.Variable(varThemisFix, cel.DynType),
+		cel.Variable(varWorkload, cel.StringType),
 		ext.Lists(),
 		ext.Strings(),
 	}
@@ -259,7 +273,7 @@ func compile(env *cel.Env, d Definition, templates []string) (*Check, error) {
 
 func isVariable(name string, templates []string) bool {
 	return slices.Contains(templates, name) || slices.Contains([]string{
-		varNow, varIDs, varCurrent, varPrior, varRolloutAt, varCurrentRevision, varFailures, varFirstFailure, varSuspicious, varThemisFix,
+		varNow, varIDs, varCurrent, varPrior, varRolloutAt, varCurrentRevision, varFailures, varFirstFailure, varSuspicious, varThemisFix, varWorkload,
 	}, name)
 }
 
@@ -326,7 +340,43 @@ func (c *Check) compileAnswer(env *cel.Env, a AnswerDefinition, last bool, templ
 		}
 	}
 	ans.needs = slices.DeleteFunc(slices.Clone(c.Reads), func(t string) bool { return !slices.Contains(needs, t) })
+	if ans.fact, err = c.compileWords(env, "fact", a.Fact, templates); err != nil {
+		return ans, err
+	}
+	if ans.headline, err = c.compileWords(env, "headline", a.Headline, templates); err != nil {
+		return ans, err
+	}
 	return ans, nil
+}
+
+// compileWords compiles a text people read, such as a fact, which may read
+// only what the check reads. It adds nothing to what the answer needs.
+func (c *Check) compileWords(env *cel.Env, field, text string, templates []string) ([]part, error) {
+	if text == "" {
+		return nil, nil
+	}
+	raw, err := parseReason(text)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", field, err)
+	}
+	var out []part
+	for _, p := range raw {
+		if p.src == "" {
+			out = append(out, part{text: p.text})
+			continue
+		}
+		e, err := compileExpr(env, p.src, nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s: ${%s}: %w", field, p.src, err)
+		}
+		for _, t := range c.needs(e, templates) {
+			if !slices.Contains(c.Reads, t) {
+				return nil, fmt.Errorf("%s reads evidence template %s, which reads doesn't list", field, t)
+			}
+		}
+		out = append(out, part{expr: e})
+	}
+	return out, nil
 }
 
 // needs are the templates e reads, through the variables and lets it names.

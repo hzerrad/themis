@@ -24,7 +24,7 @@ const F = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const MISSING = /(?<![A-Za-z])(?:null|undefined)(?![a-z])|NaN|\[object Object\]/;
 // Evidence is shown as collected: its JSON holds null for a figure no source
 // gave.
-const AS_COLLECTED = "details.item > pre, pre.quote";
+const AS_COLLECTED = "details.raw > pre, pre.quote";
 
 // OLD are words no page says any more: names of changes that didn't say
 // what changes, an unexplained risk label, and the void condition at length.
@@ -64,6 +64,14 @@ const SAYS = {
   25: { has: ["Recovered before a fix."], not: ["Recovered before Themis acted."] },
   26: { has: ["Closed by alice.", "Reason: handled by the vendor."], not: ["The evidence doesn't point to one cause.", "Some evidence was missing."] },
   5: { has: ["Reason for closing (optional)", "Themis doesn't close it on its own while its checks find the failure."] },
+  27: {
+    has: ["catalog runs out of memory.", "No investigator is installed. Suggest a fix below, or send one from an AI SRE agent.",
+      "The memory of app peaked at 57Mi of its 60Mi limit over 1h.", "No pod was evicted for its node's memory.",
+      "1 check found the failure.", "Evidence 10", "2 pods, 1 ready, 3 restarts. Last ended OOMKilled, exit 137",
+      "6 events. BackOff ×4, Started ×2.", "Peak 57Mi of 60Mi (95%) over 1h, from Prometheus.", "1 revision. Created",
+      "No earlier revision.", "1 value that looks like a secret is hidden.", "Memory pressure", "Raw data"],
+  },
+  28: { has: ["Raise catalog's memory limit from 60Mi to 72Mi?", "3 checks support the raise. None is against it.", "Restarts 2 pods, one at a time."] },
 };
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
@@ -369,6 +377,66 @@ for (const who of ["admin", "approver", "viewer"]) {
 }
 await visit("viewer: setup", { who: "viewer", hash: "#/setup" });
 await visit("viewer: accounts", { who: "viewer", hash: "#/accounts" });
+
+// expect fails the step unless what holds.
+function expect(what, holds) {
+  if (!holds) problems.push("expected " + what);
+}
+
+// The facts cite the evidence, which opens where it is and lights up for a
+// moment; each kind of evidence opens to a view of its own, labelled where
+// its figures are.
+await visit("admin: the facts and every kind of evidence", { hash: "#/incidents/" + id(27) }, async (page, ok) => {
+  const doc = page.document;
+  const ev = (n) => doc.getElementById("ev-" + n);
+  expect("the title to say what fails", doc.querySelector("h1").textContent === "catalog runs out of memory.");
+  for (const d of doc.querySelectorAll("details")) d.open = false;
+  const ref = the(page, ".facts a.ref", "5");
+  expect("the citation to name the evidence", ref.getAttribute("aria-label") === "Evidence 5, Container memory");
+  await act.click(page, ".facts a.ref", "5");
+  expect("evidence 5 open and lit", ev(5).open && ev(5).classList.contains("lit"));
+  expect("the focus on evidence 5", doc.activeElement === ev(5).querySelector("summary"));
+  ok("opened the evidence a fact cites");
+
+  expect("a table of pods", ev(2).querySelectorAll("table.data tbody tr").length === 2);
+  expect("the warning event marked", the(page, "#ev-3 td.warn").textContent === "Warning");
+  const gauge = (sel) => the(page, "#ev-5 figure.gauge " + sel).textContent;
+  expect("the gauge labelled", gauge(".above") === "peak 57Mi" && gauge(".below:not(.end)") === "request 32Mi" && gauge(".below.end") === "limit 60Mi");
+  expect("a throttling figure of its own", ev(6).querySelectorAll("figure.gauge").length === 2);
+  expect("the revision", the(page, "#ev-1 .rev").textContent.includes("No earlier revision."));
+  expect("the referenced config", ev(7).querySelectorAll("table.data tbody tr").length === 2);
+  expect("the revision's health", ev(8).querySelectorAll("ul.lines li").length === 1);
+  expect("the fields of an unknown kind", ev(9).querySelectorAll("dl.tech dt").length === 5);
+  expect("the later item's time", ev(10).querySelector(".when") !== null && ev(4).querySelector(".when") === null);
+
+  const logs = () => [...ev(4).querySelectorAll(".log")];
+  expect("the previous run shown", !logs()[0].hidden && logs()[1].hidden && logs()[0].querySelector(".last") !== null);
+  await act.click(page, "#ev-4 .tabs button", "Current run");
+  expect("the current run shown", logs()[0].hidden && !logs()[1].hidden
+    && the(page, "#ev-4 .tabs button", "Current run").getAttribute("aria-pressed") === "true");
+  ok("switched to the current run");
+  await act.refresh(page);
+  expect("the current run still shown after a refresh", logs()[0].hidden && !logs()[1].hidden);
+  ok("refreshed");
+
+  ev(2).open = false;
+  doc.querySelector("details.checks").open = true;
+  await act.click(page, ".pans .src a", "2");
+  expect("a finding to open its evidence", ev(2).open && ev(2).classList.contains("lit"));
+  ok("opened the evidence a finding cites");
+});
+await visit("admin: Themis's earlier fix", { hash: "#/incidents/" + id(23) }, async (page, ok) => {
+  expect("a link to the earlier incident", the(page, "#ev-1 a", "an earlier incident").getAttribute("href") === "#/incidents/" + id(24));
+  ok("the fix it follows");
+});
+await visit("viewer: the facts, and no raw evidence", { who: "viewer", hash: "#/incidents/" + id(27) }, async (page, ok) => {
+  const doc = page.document;
+  expect("the facts", doc.querySelectorAll(".facts p").length === 4);
+  expect("no line of what each holds", [...doc.querySelectorAll(".ev .gist")].every((s) => !s.textContent.trim()));
+  expect("every piece readable by responders only", [...doc.querySelectorAll(".ev .body")].every((b) => b.textContent.includes("Readable by responders only.")));
+  expect("no raw data", !doc.querySelector("details.raw"));
+  ok("what a viewer reads");
+});
 
 // Suggesting each fix the incident offers, as an approver and an admin.
 for (const who of ["approver", "admin"]) {

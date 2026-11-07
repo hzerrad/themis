@@ -88,9 +88,9 @@ func (s *Store) RecordInitialEvidence(ctx context.Context, tx pgx.Tx, incidentID
 			return err
 		}
 		_, err = tx.Exec(ctx, `
-	INSERT INTO predicate_results (incident_id, name, version, value, reason, evidence_ids, gaps, blind)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids, g, r.Blind)
+	INSERT INTO predicate_results (incident_id, name, version, value, reason, evidence_ids, gaps, blind, fact, headline)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids, g, r.Blind, r.Fact, r.Headline)
 		if err != nil {
 			return fmt.Errorf("record predicate %s: %w", r.Name, err)
 		}
@@ -377,9 +377,9 @@ func (s *Store) UpdatePredicate(ctx context.Context, tx pgx.Tx, incidentID strin
 		ids = []string{}
 	}
 	_, err := tx.Exec(ctx, `
-	UPDATE predicate_results SET version = $3, value = $4, reason = $5, evidence_ids = $6
+	UPDATE predicate_results SET version = $3, value = $4, reason = $5, evidence_ids = $6, fact = $7, headline = $8
 	WHERE incident_id = $1 AND name = $2
-`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids)
+`, incidentID, r.Name, r.Version, r.Value.String(), r.Reason, ids, r.Fact, r.Headline)
 	if err != nil {
 		return fmt.Errorf("update predicate %s: %w", r.Name, err)
 	}
@@ -389,7 +389,7 @@ func (s *Store) UpdatePredicate(ctx context.Context, tx pgx.Tx, incidentID strin
 // Predicates returns an incident's predicate results.
 func (s *Store) Predicates(ctx context.Context, incidentID string) ([]check.Result, error) {
 	rows, err := s.pool.Query(ctx, `
-	SELECT name, version, value::text, reason, evidence_ids::text[], gaps, blind
+	SELECT name, version, value::text, reason, evidence_ids::text[], gaps, blind, fact, headline
 	FROM predicate_results WHERE incident_id = $1 ORDER BY id
 `, incidentID)
 	if err != nil {
@@ -401,7 +401,7 @@ func (s *Store) Predicates(ctx context.Context, incidentID string) ([]check.Resu
 			value string
 			gaps  []byte
 		)
-		if err := row.Scan(&r.Name, &r.Version, &value, &r.Reason, &r.EvidenceIDs, &gaps, &r.Blind); err != nil {
+		if err := row.Scan(&r.Name, &r.Version, &value, &r.Reason, &r.EvidenceIDs, &gaps, &r.Blind, &r.Fact, &r.Headline); err != nil {
 			return check.Result{}, err
 		}
 		r.Value = check.ParseTruth(value)

@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sync"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -210,6 +211,21 @@ func gitOps(in policy.Input) (string, bool) {
 	case check.Unknown:
 	}
 	return "Themis couldn't tell whether Argo CD or Flux manages this workload." + recommend, true
+}
+
+// Reads are the checks p's policy rules read, in rule order, each once.
+func (d *Decider) Reads(p config.Profile) ([]string, error) {
+	pol, err := d.policy(p)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, r := range pol.Reads() {
+		if !slices.Contains(out, r.Check) {
+			out = append(out, r.Check)
+		}
+	}
+	return out, nil
 }
 
 // policy returns p's compiled policy.

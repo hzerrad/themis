@@ -32,7 +32,10 @@ func investigating(t *testing.T, s *store.Store) string {
 	t.Helper()
 	id, _ := createOrJoin(t, s, newIncident("fp-"+t.Name()))
 	items := []evidence.Item{evidenceItem("0192f0c1-0000-7000-8000-00000000000a", evidence.PodStates)}
-	results := []check.Result{{Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x", EvidenceIDs: []string{items[0].ID}}}
+	results := []check.Result{{
+		Name: "oom_killed_new_revision", Version: "1", Value: check.True, Reason: "x", EvidenceIDs: []string{items[0].ID},
+		Fact: "The `app` container was OOMKilled.", Headline: "checkout runs out of memory.",
+	}}
 	err := s.InTx(t.Context(), func(tx pgx.Tx) error {
 		if err := s.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: incident.Received, To: incident.Investigating, Reason: "test", Actor: "test"}); err != nil {
 			return err
@@ -315,8 +318,19 @@ func TestPredicates_Stored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Predicates: %v", err)
 	}
-	if len(results) != 1 || results[0].Value != check.True || len(results[0].EvidenceIDs) != 1 {
+	if len(results) != 1 || results[0].Value != check.True || len(results[0].EvidenceIDs) != 1 ||
+		results[0].Fact != "The `app` container was OOMKilled." || results[0].Headline != "checkout runs out of memory." {
 		t.Errorf("Predicates = %+v", results)
+	}
+
+	// Deciding a check again replaces its fact and headline with its answer.
+	r := results[0]
+	r.Value, r.Fact, r.Headline = check.False, "No container was OOMKilled.", ""
+	if err := s.InTx(t.Context(), func(tx pgx.Tx) error { return s.UpdatePredicate(t.Context(), tx, id, r) }); err != nil {
+		t.Fatal(err)
+	}
+	if results, err = s.Predicates(t.Context(), id); err != nil || results[0].Fact != "No container was OOMKilled." || results[0].Headline != "" {
+		t.Errorf("Predicates after an update = %+v, %v", results, err)
 	}
 }
 

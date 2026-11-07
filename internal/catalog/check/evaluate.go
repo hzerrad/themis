@@ -65,9 +65,56 @@ func (c *Check) evaluate(in inputs) Result {
 				}
 			}
 		}
-		return c.result(a.value, reason.String(), ids)
+		r := c.result(a.value, reason.String(), ids)
+		r.Fact, r.Headline = act.words(a.fact), act.words(a.headline)
+		return r
 	}
 	panic("check " + c.Name + " has no otherwise") // Compile requires one
+}
+
+// words writes a text people read, with values as people write them: times
+// in RFC 3339, for the page to show in the reader's time zone, and
+// durations in whole units. It is empty when an expression fails, which
+// never changes the answer.
+func (a *activation) words(parts []part) string {
+	var out strings.Builder
+	for _, p := range parts {
+		if p.expr == nil {
+			out.WriteString(p.text)
+			continue
+		}
+		v, err := a.eval(p.expr)
+		if err != nil {
+			return ""
+		}
+		if d, ok := v.(types.Duration); ok {
+			out.WriteString(roughly(d.Duration))
+			continue
+		}
+		out.WriteString(format(v))
+	}
+	return out.String()
+}
+
+// roughly writes a duration as people say it: 45s, 3m10s, 12m, 2h, 2h5m,
+// 3d.
+func roughly(d time.Duration) string {
+	d = d.Round(time.Second)
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(d.Seconds())) + "s"
+	case d < 10*time.Minute && d%time.Minute != 0:
+		return strconv.Itoa(int(d.Minutes())) + "m" + strconv.Itoa(int((d % time.Minute).Seconds())) + "s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Round(time.Minute).Minutes())) + "m"
+	case d < 48*time.Hour:
+		d = d.Round(time.Minute)
+		if m := d % time.Hour; m != 0 {
+			return strconv.Itoa(int(d.Hours())) + "h" + strconv.Itoa(int(m.Minutes())) + "m"
+		}
+		return strconv.Itoa(int(d.Hours())) + "h"
+	}
+	return strconv.Itoa(int(d.Round(24*time.Hour).Hours()/24)) + "d"
 }
 
 func (c *Check) result(v Truth, reason string, ids []string) Result {

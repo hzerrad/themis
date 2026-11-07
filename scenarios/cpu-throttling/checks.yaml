@@ -42,11 +42,15 @@
       measured.filter(c, measured.all(o, o.throttledRatio <= c.throttledRatio)).map(c,
         c.name + " was throttled in " + string(int(c.throttledRatio * 100.0 + 0.5)) + "% of its CPU periods over " +
         container_cpu.window + ", at its limit of " + string(c.limitCores) + " CPU")
+    # For the facts: the containers throttled, and the most throttled.
+    hot: measured.filter(c, c.throttledRatio >= 0.25)
+    peak: measured.filter(c, measured.all(o, o.throttledRatio <= c.throttledRatio))
   answers:
     - when: size(limited) == 0
       answer: false
       reason: no container has a CPU limit, so none is throttled at one
       cite: [ids.container_cpu]
+      fact: No container has a CPU limit, so none is throttled at one.
     - when: container_cpu.throttling.unavailable != ""
       answer: unknown
       reason: "no throttling figures: ${container_cpu.throttling.unavailable}"
@@ -55,6 +59,10 @@
       answer: true
       reason: ${throttled[0]}
       cite: [ids.container_cpu]
+      fact: >-
+        The `${hot[0].name}` container was throttled in ${string(int(hot[0].throttledRatio * 100.0 + 0.5))}% of
+        its CPU periods over ${container_cpu.window}, at its limit of `${string(int(hot[0].limitCores * 1000.0 + 0.5))}m`.
+      headline: ${workload} is throttled at its CPU limit.
     - when: size(measured) == 0
       answer: unknown
       reason: no throttling figure for the ${size(limited)} container(s) with a CPU limit
@@ -64,6 +72,9 @@
         ${most[0]}${size(measured) == 1 ? "" : ", the most of the " + string(size(measured)) + " containers with a CPU limit"},
         below 25%
       cite: [ids.container_cpu]
+      fact: >-
+        No container was throttled in a quarter of its CPU periods over ${container_cpu.window}. The most
+        throttled, `${peak[0].name}`, was throttled in ${string(int(peak[0].throttledRatio * 100.0 + 0.5))}%.
 
 # A container with a CPU limit uses most of it now. Throttling while far below
 # the limit means bursts, not steady demand, hit it.
@@ -79,6 +90,8 @@
     near: >-
       measured.filter(c, c.usageOfLimit >= 0.8).map(c,
         c.name + " uses " + string(c.usageCores) + " CPU of its limit of " + string(c.limitCores))
+    # For the fact: the containers near their limit.
+    busy: measured.filter(c, c.usageOfLimit >= 0.8)
   answers:
     - when: size(limited) == 0
       answer: false
@@ -88,6 +101,9 @@
       answer: true
       reason: ${near[0]}
       cite: [ids.container_cpu]
+      fact: >-
+        The `${busy[0].name}` container uses `${string(int(busy[0].usageCores * 1000.0 + 0.5))}m` of its
+        `${string(int(busy[0].limitCores * 1000.0 + 0.5))}m` CPU limit.
     - when: size(measured) == 0
       answer: unknown
       reason: "no CPU use figures for the ${size(limited)} container(s) with a CPU limit${container_cpu.usage.unavailable != '' ? ': ' + container_cpu.usage.unavailable : ''}"
@@ -125,6 +141,7 @@
       answer: false
       reason: there is no revision before revision ${current.revision}, so no rollout brought the throttling
       cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
     # Themis's own record: the current revision is its fix for the
     # throttling of the one before it.
     - when: >-
@@ -136,16 +153,19 @@
         Themis's fix on incident ${themis_fix.incident} replaced it
         (${themis_fix.found.filter(f, f.check == "cpu_throttled_at_limit")[0].reason})
       cite: [ids.rollout_history, themis_fix.id]
+      fact: Revision ${prior.revision}, the version before it, was throttled too, before Themis's fix replaced it.
     - when: size(earlier) == 0 || earlier[0].seenFrom == null
       answer: unknown
       reason: the metrics history has none of the pods of revision ${prior.revision}
       cite: [ids.revision_health]
+      fact: Nothing shows how revision ${prior.revision} ran. The metrics history has none of its pods.
     - when: earlier[0].firstThrottledAt != null
       answer: false
       reason: >-
         the version before it was throttled too: a container of revision ${prior.revision} was throttled
         at its CPU limit from ${earlier[0].firstThrottledAt}, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: Revision ${prior.revision}, the version before it, was throttled at its CPU limit too, from ${earlier[0].firstThrottledAt}.
     - when: rollout_at == null
       answer: unknown
       reason: the rollout time is unknown
@@ -159,15 +179,24 @@
         pods of revision ${prior.revision} ran unthrottled until ${earlier[0].seenUntil}, after
         revision ${current.revision} was first throttled at ${latest[0].firstThrottledAt}
       cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision}, the version before it, ran unthrottled until ${earlier[0].seenUntil},
+        after revision ${current.revision} was first throttled at ${latest[0].firstThrottledAt}.
     - when: ran < seen
       answer: true
       reason: >-
         revision ${current.revision} was throttled at its CPU limit ${ran} after its rollout; revision
         ${prior.revision} ran ${seen} unthrottled, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} was throttled ${ran} after it rolled out. Revision ${prior.revision},
+        the version before it, ran ${seen} unthrottled.
     - answer: false
       reason: >-
         revision ${current.revision} ran ${ran} unthrottled after its rollout, at least as long as
         revision ${prior.revision} was seen to (${seen}, in ${earlier[0].source}'s history), so what
         changed since brought the throttling
       cite: [ids.rollout_history, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} ran ${ran} unthrottled after it rolled out, at least as long as
+        revision ${prior.revision} did, so the rollout didn't bring the throttling.

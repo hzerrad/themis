@@ -20,17 +20,31 @@
           .filter(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled"))
           .map(c, p.name + "/" + c.name)
       ).flatten()
+    # For the fact: the pods with a container killed, and when each kill
+    # ended, in order.
+    hit: pods.filter(p, p.containers.exists(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled")))
+    ended: >-
+      pods.map(p, p.containers.map(c,
+        [c.state, c.lastTermination].filter(s, s != null && s.reason == "OOMKilled" && s.finishedAt != null).map(s, s.finishedAt)
+      ).flatten()).flatten().sort()
   answers:
     - when: size(killed) > 0
       answer: true
       reason: ${killed[0]} of revision ${current_revision} was OOMKilled
       cite: [ids.pod_states]
+      fact: >-
+        The `${killed[0].split("/")[1]}` container of revision ${current_revision} was OOMKilled in
+        ${size(pods) == 1 ? "its only pod" : size(hit) == 2 && size(pods) == 2 ? "both its pods" :
+        size(hit) == size(pods) ? "all " + string(size(pods)) + " of its pods" :
+        string(size(hit)) + " of its " + string(size(pods)) + " pods"}, last at ${ended[size(ended) - 1]}.
+      headline: ${workload} runs out of memory.
     - when: size(pods) == 0
       answer: unknown
       reason: no pods of the current revision
     - answer: false
       reason: none of the ${size(pods)} pods of revision ${current_revision} was OOMKilled
       cite: [ids.pod_states]
+      fact: No container of revision ${current_revision} was OOMKilled.
 
 # A metrics source says how much memory the containers used at their peak.
 # Only a source with history, such as Prometheus, can; the Kubernetes metrics
@@ -67,11 +81,14 @@
       measured.filter(c, c.peakOfLimit >= 0.9).map(c,
         c.name + " peaked at " + string(int(c.peakOfLimit * 100.0 + 0.5)) + "% of its memory limit of " +
         string(c.limitBytes / 1048576) + "Mi over " + container_memory.window)
+    # For the fact: the container nearest its limit, in whole Mi.
+    top: measured.filter(c, c.peakOfLimit >= 0.9)
   answers:
     - when: size(limited) == 0
       answer: false
       reason: no container has a memory limit
       cite: [ids.container_memory]
+      fact: No container has a memory limit.
     - when: container_memory.peak.unavailable != ""
       answer: unknown
       reason: "no peak memory figures: ${container_memory.peak.unavailable}"
@@ -80,6 +97,9 @@
       answer: true
       reason: ${near[0]}
       cite: [ids.container_memory]
+      fact: >-
+        The memory of `${top[0].name}` peaked at `${string((top[0].peakBytes + 524288) / 1048576)}Mi` of its
+        `${string(top[0].limitBytes / 1048576)}Mi` limit over ${container_memory.window}.
     - when: size(measured) == 0
       answer: unknown
       reason: no peak memory figure for the ${size(limited)} container(s) with a memory limit
@@ -87,6 +107,7 @@
     - answer: false
       reason: none of the ${size(measured)} container(s) with a memory limit peaked at 90% or more of it over ${container_memory.window}
       cite: [ids.container_memory]
+      fact: No container's memory reached 90% of its limit over ${container_memory.window}.
 
 # Every OOM kill of the current revision that says when the container started
 # came after it had run an hour or more. Kills soon after start mean the
@@ -119,9 +140,11 @@
       answer: false
       reason: a container of revision ${current_revision} was OOMKilled after running ${runs[0]}
       cite: [ids.pod_states]
+      fact: The shortest run before an OOM kill lasted ${runs[0]}.
     - answer: true
       reason: the shortest run before an OOM kill of revision ${current_revision} lasted ${runs[0]}
       cite: [ids.pod_states]
+      fact: Each container ran ${runs[0]} or more before its OOM kill.
 
 # A pod of the target was evicted because its node was short of memory: the
 # node, not the container's limit, ran out. An event says so; the pod's status
@@ -144,10 +167,14 @@
       answer: true
       reason: "${borne[0].object} was evicted: ${borne[0].message}"
       cite: [ids.target_events, ids.pod_states]
+      fact: "`${borne[0].object}` was evicted because its node was short of memory."
+      headline: ${workload}'s pods are evicted for their node's memory.
     - when: size(evicted) > 0
       answer: unknown
       reason: "an event says ${evicted[0].object} was evicted for its node's memory, but no such pod has failed"
       cite: [ids.target_events, ids.pod_states]
+      fact: An event says `${evicted[0].object}` was evicted for its node's memory, but no such pod has failed.
     - answer: false
       reason: no pod was evicted for its node's memory
       cite: [ids.target_events]
+      fact: No pod was evicted for its node's memory.
