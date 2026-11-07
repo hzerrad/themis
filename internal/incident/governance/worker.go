@@ -36,6 +36,10 @@ type Worker struct {
 	// Checks are the checks Themis runs: it decides some again before
 	// deciding a fix.
 	Checks check.List
+	// Recheck reads an incident's evidence again and decides its checks
+	// from it, for a fix whose approval a person asks for again. Without
+	// it, nobody can.
+	Recheck Rechecker
 
 	decider Decider
 }
@@ -100,10 +104,7 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	a := d.Action
 	a.ProposalID, a.State = p.ID, store.ActionDenied
 	if d.Decision.Outcome != policy.Deny {
-		// The strictest of the profiles governing the fix sets how long a
-		// person has to approve it.
-		expires := w.now().Add(matched.Offering(f.Name()).ApprovalTimeout())
-		a.State, a.Decision, a.ExpiresAt = store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
+		a = w.awaiting(d, p, matched.Offering(f.Name()))
 	}
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		for _, r := range redecided {
@@ -167,13 +168,21 @@ func (w *Worker) Judge(ctx context.Context, in store.Incident, matched config.Ma
 	if err != nil {
 		return Judgement{}, err
 	}
+	return w.judge(ctx, in, matched, p, checks, nil)
+}
+
+// judge decides p on checks, the incident's checks as they stand, with
+// more: evidence read for the decision beyond what the incident keeps. It
+// keeps nothing.
+func (w *Worker) judge(ctx context.Context, in store.Incident, matched config.Matched, p store.Proposal, checks []check.Result, more []evidence.Item) (Judgement, error) {
 	j := Judgement{Checks: checks}
 	f, ok := w.Fixes[p.Capability]
 	if !ok {
 		j.Refused = "Refused. Themis can't carry out this kind of fix."
 		return j, nil
 	}
-	if j.Redecided, err = w.redecide(ctx, in.ID, checks); err != nil {
+	var err error
+	if j.Redecided, err = w.redecide(ctx, in.ID, checks, more); err != nil {
 		return Judgement{}, err
 	}
 	fix := Fix{
@@ -201,10 +210,10 @@ func (w *Worker) Judge(ctx context.Context, in store.Incident, matched config.Ma
 }
 
 // redecide decides check.EvidenceHasInstructions again, when the incident
-// runs it, over all its evidence: the investigator asks for more, such as
-// logs, after the checks first run. It updates checks in place and returns
-// what changed.
-func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check.Result) ([]check.Result, error) {
+// runs it, over all its evidence and more: the investigator asks for more,
+// such as logs, after the checks first run. It updates checks in place and
+// returns what changed.
+func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check.Result, more []evidence.Item) ([]check.Result, error) {
 	i := slices.IndexFunc(checks, func(r check.Result) bool { return r.Name == check.EvidenceHasInstructions })
 	c, ok := w.Checks.Get(check.EvidenceHasInstructions)
 	if i < 0 || !ok {
@@ -214,12 +223,21 @@ func (w *Worker) redecide(ctx context.Context, incidentID string, checks []check
 	if err != nil {
 		return nil, err
 	}
-	r := check.List{c}.Evaluate(evidence.Bundle{Items: items}, w.now())[0]
+	r := check.List{c}.Evaluate(evidence.Bundle{Items: append(items, more...)}, w.now())[0]
 	if r.Value == checks[i].Value && r.Reason == checks[i].Reason {
 		return nil, nil
 	}
 	checks[i] = r
 	return []check.Result{r}, nil
+}
+
+// awaiting is d's action, for p, waiting for a person's approval: the
+// strictest of the profiles governing the fix sets how long they have.
+func (w *Worker) awaiting(d Decided, p store.Proposal, governing config.Matched) store.Action {
+	a := d.Action
+	expires := w.now().Add(governing.ApprovalTimeout())
+	a.ProposalID, a.State, a.Decision, a.ExpiresAt = p.ID, store.ActionAwaitingApproval, string(policy.RequireApproval), &expires
+	return a
 }
 
 // waits reports whether a refusal of p leaves its incident waiting for

@@ -72,7 +72,7 @@ A counter counts what was committed: a change the database rolled back is never 
 | `themis_safety_events_total` | `kind` | Proposals naming another target (`wrong_target`), a capability the profile does not allow (`unknown_capability`), or evidence that was never collected (`unknown_evidence`) |
 | `themis_policy_decisions_total` | `decision` | `allow`, `require_approval`, `deny`, or `error` when a rule failed to evaluate, which denies |
 | `themis_gitops_refusals_total` | | Actions denied on a target a GitOps controller manages |
-| `themis_approvals_total` | `result` | `approved`, `denied`, `expired`, and refused attempts: `digest_mismatch` for a digest other than the one shown, `replayed` for an action already decided |
+| `themis_approvals_total` | `result` | `approved`, `denied`, `expired`, `renewed` for an approval asked again after one expired, and refused attempts: `digest_mismatch` for a digest other than the one shown, `replayed` for an action already decided, `renewal_refused` for an approval that couldn't be asked again |
 | `themis_actions_total` (executor) | `capability`, `result` | Actions executed: `succeeded`, `stale`, `dry_run_failed`, `failed`, `ambiguous` |
 | `themis_verification_outcomes_total` | `outcome` | `resolved`, `contained`, `unchanged`, `worsened`, `inconclusive` (which includes a target that could not be observed, and a verification check that couldn't be decided, such as throttling without a metrics source) |
 | `themis_notifications_total` | `result` | Webhook posts `delivered`, or `failed` and retried |

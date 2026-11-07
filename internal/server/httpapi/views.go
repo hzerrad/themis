@@ -138,6 +138,9 @@ type actionView struct {
 	Verification      *verificationView   `json:",omitempty"`
 	// Words name the change, as its fix words it.
 	Words capability.Words
+	// Renewable is set on the incident's latest fix while a person can ask
+	// again for its approval, which expired with no decision.
+	Renewable bool `json:",omitzero"`
 }
 
 // proposalView is a suggested fix, with the change it asks for named.

@@ -122,10 +122,11 @@ func TestCollect(t *testing.T) {
 	}
 }
 
-// Without a collector or a preview, the routes aren't served.
-func TestCollectAndPreview_Unserved(t *testing.T) {
+// Without a collector, a preview or a way to ask for an approval again, the
+// routes aren't served.
+func TestOptionalRoutes_Unserved(t *testing.T) {
 	_, do := asPeople(t, &httpapi.API{})
-	for _, path := range []string{"/v1/incidents/x/evidence", "/v1/incidents/x/proposals/preview"} {
+	for _, path := range []string{"/v1/incidents/x/evidence", "/v1/incidents/x/proposals/preview", "/v1/actions/x/renew"} {
 		if rec := do(http.MethodPost, path, "approver", "{}"); rec.Code != http.StatusNotFound && rec.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s = %d", path, rec.Code)
 		}

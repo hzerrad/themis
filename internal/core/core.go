@@ -205,7 +205,7 @@ func Run(ctx context.Context, o Options) error {
 		Catalog: cat,
 		Logger:  log,
 	})
-	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes, Checks: cat.Checks}
+	govern := &governance.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes, Checks: cat.Checks, Recheck: cat}
 	telemetry.AddIncidentWorker(workers, govern)
 	telemetry.AddIncidentWorker(workers, &governance.RestoreWorker{Governor: govern})
 	telemetry.AddUnscopedWorker(workers, &governance.ExpireWorker{Store: s})
@@ -283,6 +283,7 @@ func Run(ctx context.Context, o Options) error {
 	api := &httpapi.API{Store: s, TokenFile: cfg.API.BearerTokenFile, Access: cfg.API.Access, Logger: log, Remedy: hint.Writer{Config: current}, Suggestions: suggestions, Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Setup: setup}
 	api.Sessions, api.Accounts, api.Gate = s, s, gate
 	api.Again = &investigation.Again{Store: s, Config: current}
+	api.Renewals = govern
 	api.Previews = suggestions
 	api.Collect = &investigation.Asked{Store: s, Config: current, Catalog: cat, Reader: mgr.GetAPIReader(), Remedy: hint.Writer{Config: current}}
 	checker := &statuspage.Checker{

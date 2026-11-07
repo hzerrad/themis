@@ -204,3 +204,37 @@ func TestDiagnose_ThemisFixIsEvidence(t *testing.T) {
 		}
 	}
 }
+
+// Reading again for a fix put to a person again reads what the checks read
+// over the windows an investigation reads, with Themis's own record beside
+// it, and returns what it read from the cluster, for the incident's record.
+func TestReread_AsAnInvestigationReads(t *testing.T) {
+	source := &throttling{ratio: 0.57}
+	cat := withSource(t, source)
+	c, w := raised(t)
+	now := raisedAt.Add(4 * time.Minute)
+	fix, err := evidence.NewThemisFix(evidence.ThemisFixView{
+		Incident: "inc-1", Fix: "deployment.set-resources", Done: "Raised search's CPU limit from 200m to 300m.", AppliedAt: raisedAt,
+		Replaced: "1", Found: []evidence.FoundView{{Check: "cpu_throttled_at_limit", Reason: "app was throttled in 63% of its CPU periods over 1h, at its limit of 0.2 CPU"}},
+	}, w.Target, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read, results := cat.Reread(t.Context(), c, w, []string{"cpu_throttled_at_limit", "throttling_came_with_rollout"}, 0, now, fix)
+	if len(source.windows) != 1 || source.windows[0] != time.Hour {
+		t.Errorf("throttling read over %v, want the hour an investigation reads", source.windows)
+	}
+	var templates []string
+	for _, it := range read {
+		templates = append(templates, it.Template)
+	}
+	// The source keeps no history, so the revisions' health can't be read.
+	if want := []string{evidence.ContainerCPU, evidence.RolloutHistory}; !slices.Equal(templates, want) {
+		t.Errorf("read %v, want %v: what the checks read from the cluster", templates, want)
+	}
+	for _, r := range results {
+		if r.Name == "throttling_came_with_rollout" && (r.Value != check.False || !slices.Contains(r.EvidenceIDs, fix.ID)) {
+			t.Errorf("%s = %+v, want false from Themis's record", r.Name, r)
+		}
+	}
+}
