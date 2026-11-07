@@ -118,7 +118,7 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 5. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
 6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
 7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in enrolled namespaces: today `get` and `patch` on Deployments, and reading ReplicaSets.
-8. **Verification.** Themis decides the fix's symptom checks again from the new pods. A fix that made things worse is undone. An incident whose symptoms persist is referred to a person.
+8. **Verification.** Themis decides the fix's symptom checks again from the new pods. If the fix made things worse, Themis tries to restore the previous state, and escalates with its change in place when it can't. An incident whose symptoms persist is referred to a person.
 
 Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
 
