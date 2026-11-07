@@ -340,9 +340,9 @@ func TestSupersede(t *testing.T) {
 		t.Fatal(err)
 	}
 	advance(t, s, old, incident.Received, incident.Investigating)
-	list, err := s.ReconcilableIncidents(t.Context(), 10)
+	list, err := s.NextReconcilable(t.Context(), 10)
 	if err != nil || len(list) != 1 || list[0].ObservedSpecHash != "sha256:spec" {
-		t.Fatalf("ReconcilableIncidents = %+v, %v", list, err)
+		t.Fatalf("NextReconcilable = %+v, %v", list, err)
 	}
 
 	advance(t, s, old, incident.Investigating, incident.Canceled)
@@ -355,6 +355,54 @@ func TestSupersede(t *testing.T) {
 	}
 	if n := count(t, pool, `SELECT count(*) FROM incident_alerts WHERE incident_id = $1 AND status = 'firing'`, succ); n != 1 {
 		t.Errorf("%d firing alerts carried over, want 1", n)
+	}
+}
+
+// With more incidents than a run looks at, the sweeps take turns: those never
+// looked at first, then those looked at longest ago, so an incident that
+// stays open doesn't keep a later one from its turn.
+func TestSweeps_TakeTurns(t *testing.T) {
+	s, _ := newStore(t)
+	var ids []string
+	for _, fp := range []string{"fp-1", "fp-2", "fp-3"} {
+		id, _ := createOrJoin(t, s, newIncident(fp))
+		if err := s.InTx(t.Context(), func(tx pgx.Tx) error { return s.SetObservedSpec(t.Context(), tx, id, "sha256:spec") }); err != nil {
+			t.Fatal(err)
+		}
+		advance(t, s, id, incident.Received, incident.AwaitingSuggestion)
+		ids = append(ids, id)
+	}
+	// Both sweeps break ties in the order the incidents were created.
+	slices.Sort(ids)
+	later := time.Now().Add(time.Hour)
+	sweeps := map[string]func() ([]string, error){
+		"reconciliation": func() ([]string, error) {
+			list, err := s.NextReconcilable(t.Context(), 2)
+			var out []string
+			for _, in := range list {
+				out = append(out, in.ID)
+			}
+			return out, err
+		},
+		"waiting for a suggested fix": func() ([]string, error) {
+			list, err := s.NextUndecided(t.Context(), later, later, 2)
+			var out []string
+			for _, u := range list {
+				out = append(out, u.ID)
+			}
+			return out, err
+		},
+	}
+	for name, next := range sweeps {
+		t.Run(name, func(t *testing.T) {
+			for run, want := range [][]string{{ids[0], ids[1]}, {ids[0], ids[2]}, {ids[0], ids[1]}} {
+				got, err := next()
+				slices.Sort(got)
+				if err != nil || !slices.Equal(got, want) {
+					t.Fatalf("run %d took %v, %v; want %v", run+1, got, err, want)
+				}
+			}
+		})
 	}
 }
 

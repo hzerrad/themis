@@ -337,15 +337,23 @@ func (s *Store) SetObservedSpec(ctx context.Context, tx pgx.Tx, id, hash string)
 	return nil
 }
 
-// ReconcilableIncidents are open incidents not yet executing whose template
-// is known, oldest first, those waiting for a person's suggested fix
-// included: a person may fix the workload by hand instead.
-func (s *Store) ReconcilableIncidents(ctx context.Context, limit int) ([]Incident, error) {
+// NextReconcilable returns up to limit open incidents not yet executing
+// whose template is known, those waiting for a person's suggested fix
+// included: a person may fix the workload by hand instead. Those reconciled
+// longest ago come first, never reconciled first, then the oldest, and each
+// is recorded as reconciled now: however many there are, every one comes up
+// in turn. An incident another transaction holds waits for the next run.
+func (s *Store) NextReconcilable(ctx context.Context, limit int) ([]Incident, error) {
 	rows, err := s.pool.Query(ctx, `
-	SELECT `+incidentColumns+` FROM incidents
-	WHERE state IN ('investigating', 'awaiting_suggestion', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
-	ORDER BY created_at LIMIT $1
-`, limit)
+	UPDATE incidents SET reconciled_at = now()
+	FROM (
+		SELECT id AS picked FROM incidents
+		WHERE state IN ('investigating', 'awaiting_suggestion', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
+		ORDER BY reconciled_at NULLS FIRST, created_at, id LIMIT $1
+		FOR UPDATE SKIP LOCKED
+	) next
+	WHERE id = next.picked
+	RETURNING `+incidentColumns, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list incidents to reconcile: %w", err)
 	}
@@ -400,16 +408,27 @@ type Undecided struct {
 	State incident.State
 }
 
-// UndecidedBefore returns the incidents left undecided: those the
+// NextUndecided returns up to limit incidents left undecided: those the
 // investigation couldn't decide since before inconclusive, and those waiting
 // for a suggestion since before waiting, without an investigator or after a
 // person denied their fix. The last transition says since when; updated_at
-// also moves when an alert joins.
-func (s *Store) UndecidedBefore(ctx context.Context, q Querier, inconclusive, waiting time.Time, limit int) ([]Undecided, error) {
-	rows, err := q.Query(ctx, `SELECT i.id::text, i.state FROM incidents i
-	CROSS JOIN LATERAL (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) last
-	WHERE (i.state = 'inconclusive' AND last.at <= $1) OR (i.state = 'awaiting_suggestion' AND last.at <= $2)
-	ORDER BY i.id LIMIT $3`, inconclusive, waiting, limit)
+// also moves when an alert joins. Those rechecked longest ago come first,
+// never rechecked first, and each is recorded as rechecked now: one that
+// keeps waiting, because its checks still find its failure, doesn't keep the
+// others from their turn. An incident another transaction holds waits for
+// the next run.
+func (s *Store) NextUndecided(ctx context.Context, inconclusive, waiting time.Time, limit int) ([]Undecided, error) {
+	rows, err := s.pool.Query(ctx, `
+	UPDATE incidents SET rechecked_at = now()
+	FROM (
+		SELECT i.id AS picked FROM incidents i
+		CROSS JOIN LATERAL (SELECT tr.at FROM transitions tr WHERE tr.incident_id = i.id ORDER BY tr.id DESC LIMIT 1) last
+		WHERE (i.state = 'inconclusive' AND last.at <= $1) OR (i.state = 'awaiting_suggestion' AND last.at <= $2)
+		ORDER BY i.rechecked_at NULLS FIRST, i.id LIMIT $3
+		FOR UPDATE OF i SKIP LOCKED
+	) next
+	WHERE id = next.picked
+	RETURNING id::text, state`, inconclusive, waiting, limit)
 	if err != nil {
 		return nil, fmt.Errorf("undecided incidents: %w", err)
 	}

@@ -90,8 +90,9 @@ type Verification struct {
 	// Checks are the checks that find the failure the profile's fixes are
 	// meant to cure, such as throttling at the CPU limit: a fix counts as
 	// fixed only when each is false, decided again from what the workload
-	// did since the change. None means its pods' readiness, restarts and OOM
-	// kills alone. Each must be a check the profile runs.
+	// did since the change, and so does a change made outside Themis. None
+	// means its pods' readiness, restarts and OOM kills alone. Each must be
+	// a check the profile runs.
 	Checks []string `json:"checks,omitempty" jsonschema:"uniqueItems=true"`
 }
 

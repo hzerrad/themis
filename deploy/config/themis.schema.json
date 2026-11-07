@@ -773,7 +773,7 @@
                 },
                 "type": "array",
                 "uniqueItems": true,
-                "description": "Checks are the checks that find the failure the profile's fixes are\nmeant to cure, such as throttling at the CPU limit: a fix counts as\nfixed only when each is false, decided again from what the workload\ndid since the change. None means its pods' readiness, restarts and OOM\nkills alone. Each must be a check the profile runs."
+                "description": "Checks are the checks that find the failure the profile's fixes are\nmeant to cure, such as throttling at the CPU limit: a fix counts as\nfixed only when each is false, decided again from what the workload\ndid since the change, and so does a change made outside Themis. None\nmeans its pods' readiness, restarts and OOM kills alone. Each must be\na check the profile runs."
               }
             },
             "additionalProperties": false,

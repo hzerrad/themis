@@ -64,10 +64,26 @@ const SAYS = {
   25: { has: ["Recovered before a fix."], not: ["Recovered before Themis acted."] },
   26: { has: ["Closed by alice.", "Reason: handled by the vendor."], not: ["The evidence doesn't point to one cause.", "Some evidence was missing."] },
   5: { has: ["Reason for closing (optional)", "Themis doesn't close it on its own while its checks find the failure."] },
+  27: {
+    has: ["Recovered after a change outside Themis, by kubectl-edit.",
+      "Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m"],
+    not: ["Recovered before Themis acted."],
+  },
+  28: {
+    has: ["The workload was changed outside Themis, by kubectl-edit, and still fails.",
+      "Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m",
+      "A newer incident covers the workload as it is now"],
+  },
+  29: {
+    has: ["Unknown whether it recovered.", "throttling at the CPU limit is unknown (no throttling figures: no metrics source is set up)",
+      "A newer incident covers the workload as it is now"],
+    not: ["still fails", "still failing"],
+  },
 };
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
-  "Change checkout's liveness probe?", "Roll checkout back to revision 1?"];
+  "Change checkout's liveness probe?", "Roll checkout back to revision 1?",
+  "Changed outside Themis and still failing.", "Changed outside Themis. Unknown whether it recovered."];
 
 // Problems are what went wrong since the last check, wherever the page was:
 // unhandled rejections reach the process, not the window.

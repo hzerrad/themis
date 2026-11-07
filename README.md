@@ -16,7 +16,7 @@ Models propose; deterministic controls decide. A Kubernetes write is never consi
 6. **Execution.** A separate executor, the only component with write access, rechecks the digest and the live target, dry-runs the change, then writes it. If anything changed since approval, it refuses.
 7. **Verification.** Themis watches the workload for a window and decides the outcome. A change made by someone else during the window makes the result `inconclusive`, never a false success.
 
-While an incident waits, Themis also watches for changes made outside it. A fix made by hand or through GitOps closes the incident as resolved; a change that does not help closes it and opens a new one for the target's new state. Every escalation can be posted to a webhook.
+While an incident waits, Themis also watches for changes made outside it. A fix made by hand or through GitOps closes the incident as recovered once the checks, read from the new pods, find the failure gone; a change that does not help, or that Themis can't measure, closes it and opens a new one for the target's new state. Every escalation can be posted to a webhook.
 
 ## Try it
 
