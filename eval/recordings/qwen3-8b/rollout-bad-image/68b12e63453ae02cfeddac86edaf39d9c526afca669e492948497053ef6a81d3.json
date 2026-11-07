@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"The pod is stuck due to image pull failure for the new revision.\", \"hypotheses\": [{\"root_cause_class\": \"image_pull_failure\", \"summary\": \"The pod's container image 'example/cart:3.2.0-rc1' is not found, causing ImagePullBackOff.\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}, {\"root_cause_class\": \"other\", \"summary\": \"The issue might be a missing registry credential or incorrect image name.\", \"supporting\": [\"ev-target_events\"], \"contradicting\": [\"ev-pod_states\"], \"missing\": [\"ev-referenced_config\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 2979,
+        "output_tokens": 513
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

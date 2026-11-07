@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"conclude_inconclusive\", \"summary\": \"Quota exceeded in namespace shop-compute\", \"hypotheses\": [{\"root_cause_class\": \"quota_exceeded\", \"summary\": \"ReplicaSet search-5f7d8c9b6 cannot create pods due to CPU quota exceeded (requests.cpu=2, used=6, limit=6).\", \"supporting\": [\"ev-target_events\", \"ev-rollout_history\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 2783,
+        "output_tokens": 632
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

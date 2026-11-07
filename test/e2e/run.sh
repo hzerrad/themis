@@ -230,6 +230,9 @@ ID=$(incident_after_break)
 check "Alertmanager's alert opened an incident" [ -n "$ID" ]
 check "the investigation proposes a fix that awaits approval" [ "$(wait_state "$ID" 300 awaiting_approval closed_no_action escalated)" = awaiting_approval ]
 check "the action shows that MODE changes" [ "$(action "$ID" '["Changes"][0]["field"]')" = "env MODE" ]
+CHANGED=$(api "/v1/incidents/$ID" | field '[p["Value"] + ": " + p["Reason"] for p in d["Predicates"] if p["Name"] == "rollout_changed_the_app"][0]')
+printf '  %s\n' "$CHANGED"
+check "the checks found that the rollout changed MODE, read from the live ReplicaSets" grep -q "^true: .*the environment variable MODE of container app changed" <<<"$CHANGED"
 check "approving the shown digest is accepted" [ "$(approve "$ID")" = 200 ]
 check "the rollback is verified as resolved" [ "$(wait_state "$ID" 300 resolved escalated contained_escalated)" = resolved ]
 check "checkout runs the healthy revision again" [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].env[0].value}')" = healthy ]

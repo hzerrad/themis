@@ -87,7 +87,7 @@
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"cart\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"cart-9b3d7e5a2\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"cart-9b3d7e5a2\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.2.0-rc1\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"cart-2f6c8d4b1\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "data": "{\"deployment\":{\"name\":\"cart\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":4,\"updatedReplicas\":1,\"readyReplicas\":3,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-20T08:01:00Z\",\"lastTransitionTime\":\"2026-10-20T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"False\",\"reason\":\"ProgressDeadlineExceeded\",\"message\":\"ReplicaSet \\\"cart-9b3d7e5a2\\\" has timed out progressing.\",\"lastUpdateTime\":\"2026-10-27T09:10:00Z\",\"lastTransitionTime\":\"2026-10-27T09:10:00Z\"}]},\"revisions\":[{\"replicaSet\":\"cart-9b3d7e5a2\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-27T09:00:00Z\",\"replicas\":1,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.2.0-rc1\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"cart-2f6c8d4b1\",\"revision\":\"1\",\"createdAt\":\"2026-10-20T08:00:00Z\",\"replicas\":3,\"readyReplicas\":3,\"containers\":[{\"name\":\"app\",\"image\":\"example/cart:3.1.4\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2,\"change\":{\"from\":\"1\",\"to\":\"2\",\"app\":[\"the image of container app changed from example/cart:3.1.4 to example/cart:3.2.0-rc1\"],\"metadata\":[]}}",
       "classification": "internal"
     },
     {
@@ -116,7 +116,7 @@
     },
     {
       "name": "rollout_history",
-      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
     },
     {
       "name": "referenced_config",

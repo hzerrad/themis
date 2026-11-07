@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Readiness probe timeout is too short for the new image version, causing 503 errors. Increase timeout and initial delay to allow application startup.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Readiness probe timeout (2s) is too short for the new image version (example/orders:7.2.1), causing 503 errors.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-target_events\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"container_logs_tail\", \"revision_health\", \"probe_kills\", \"stuck_pods_new_revision_only\", \"failures_came_with_rollout\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"The new image version (example/orders:7.2.1) may have startup issues causing readiness probe failures.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing container logs and metrics to confirm if the issue is due to application startup or probe configuration.\",\n    \"supporting\": [\"container_logs_tail\", \"revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\", \"revision_health\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"orders\",\n    \"uid\": \"uid-deployment-orders\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"readiness\": {\n      \"timeoutSeconds\": 5\n    },\n    \"startup\": {\n      \"initialDelaySeconds\": 5\n    }\n  },\n  \"expected_effect\": \"Allow the new image version (example/orders:7.2.1) to complete startup before readiness probes time out, reducing 503 errors.\",\n  \"rationale\": \"The readiness probe timeout (2s) is too short for the new image version, which may be taking longer to start. Increasing the timeout and initial delay gives the application time to initialize before probes start checking, preventing premature failures.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-pod_states\"],\n  \"cited_predicates\": [\"rollout_changed_the_app\", \"probe_timeouts\", \"killed_during_startup\", \"crashed_on_its_own\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4532,
+        "output_tokens": 1095
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

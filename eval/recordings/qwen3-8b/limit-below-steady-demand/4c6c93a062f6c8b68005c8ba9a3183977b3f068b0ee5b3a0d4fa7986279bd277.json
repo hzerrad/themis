@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version (revision 2) uses more CPU than the previous version, causing throttling. Increase the CPU limit to 750m to clear the throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"ev-container_cpu shows api uses 0.495/0.5 CPU, throttled 64% of time; ev-revision_health shows revision 2 has 0.66 throttledRatio vs 0.08 for revision 1\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-revision_health\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"api's 0.5 CPU limit is nearly maxed at 0.495 usage, with 64% throttling\",\n    \"supporting\": [\"ev-container_cpu\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"no evidence of node CPU contention or other causes\",\n    \"supporting\": [],\n    \"contradicting\": [\"ev-container_cpu\", \"ev-revision_health\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"750m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raise api's CPU limit from 500m to 750m, clearing the 0.5 CPU limit bottleneck causing 64% throttling\",\n  \"rationale\": \"ev-container_cpu shows api is throttled at 0.5 CPU limit with 0.495 usage, and ev-revision_health shows higher throttling in revision 2 than revision 1. Increasing the limit to 750m would provide 1.5x the current limit to clear the throttling without touching memory or removing limits.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-revision_health\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4815,
+        "output_tokens": 902
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

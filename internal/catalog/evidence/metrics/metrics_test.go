@@ -47,13 +47,13 @@ func TestSources_AskInTurn(t *testing.T) {
 	}
 }
 
-// History asks each source in turn too; without an answer, the first
+// History and Use ask each source in turn too; without an answer, the first
 // source's reason is the one given, and the metrics API says it keeps none.
 func TestSources_History(t *testing.T) {
 	rs := metrics.ReplicaSet{Namespace: "shop", Name: "checkout-5c6a1e2f3"}
-	none := stub{name: "prometheus", h: metrics.Record{Unavailable: metrics.NotInHistory(rs.Name)}}
+	none := stub{name: "prometheus", h: metrics.Record{Unavailable: metrics.NotInHistory(rs.Name)}, u: metrics.Use{Unavailable: metrics.NotInHistory(rs.Name)}}
 	api := metrics.NewKubernetes(metricsfake.NewSimpleClientset())
-	seen := stub{name: "prometheus", h: metrics.Record{Restarts: 2}}
+	seen := stub{name: "prometheus", h: metrics.Record{Restarts: 2}, u: metrics.Use{Memory: map[string]float64{"app": 0.5}}}
 	for name, tc := range map[string]struct {
 		sources     metrics.Sources
 		source      string
@@ -68,6 +68,10 @@ func TestSources_History(t *testing.T) {
 			r, err := tc.sources.History(t.Context(), rs, time.Now())
 			if err != nil || r.Source != tc.source || r.Unavailable != tc.unavailable {
 				t.Errorf("record = %+v, %v, want from %q, unavailable %q", r, err, tc.source, tc.unavailable)
+			}
+			u, err := tc.sources.Use(t.Context(), rs, time.Now().Add(-time.Hour), time.Now())
+			if err != nil || u.Source != tc.source || u.Unavailable != tc.unavailable {
+				t.Errorf("use = %+v, %v, want from %q, unavailable %q", u, err, tc.source, tc.unavailable)
 			}
 		})
 	}

@@ -2,7 +2,7 @@
 
 A container of a Deployment is held back by its CPU limit: the kernel throttles it whenever it uses up its share, and it gets slow, fails its probes or times out. Themis checks that the throttling is real, sustained and not brought by a new version, and may suggest raising that container's CPU limit, which a person approves.
 
-Whether the latest rollout brought it is read from Prometheus's history of the version before it. When that version ran unthrottled where this one is throttled, the new one may use more CPU, and the call is a person's. When there is no earlier version, as for a Deployment created minutes ago, or the one before it was throttled too, or this one ran unthrottled at least as long as the one before it did, so more load since brought the throttling, a higher limit is the fix. When the history has none of the earlier version's pods, nothing shows which, and a person decides. How long ago the rollout was decides nothing.
+Whether the latest rollout brought it is decided by what it changed, then by Prometheus's history of the version before it. A rollout that changed only labels and annotations, as a restart does, didn't bring it. When the rollout changed what the pods run and the version before it ran unthrottled beside this one, or used clearly less of its CPU limit at the same age and by its end, the new one uses more CPU, and the call is a person's. When there is no earlier version, as for a Deployment created minutes ago, or the one before it was throttled too, or this one uses as much of its limit as the one before it did at the same age, or no more than that one had come to use by its end, more load brought the throttling, and a higher limit is the fix. Use is compared as an average share of the limit, and two within 5% of the limit count as the same: that is measurement noise, not a setting. Without figures of their use, how long each ran unthrottled breaks the tie. When the history has none of the earlier version's pods, nothing shows which, and a person decides. How long ago the rollout was decides nothing.
 
 Throttling can only be seen from a metrics source with history, such as Prometheus. Without one, this pack can't tell throttling from anything else: its checks are unknown, the evidence says the figures are missing, and its policy refuses any raise.
 
@@ -16,9 +16,9 @@ Throttling can only be seen from a metrics source with history, such as Promethe
 |---|---|
 | `container_cpu` | Each container's CPU use and how often it was throttled over the last hour, against its request and limit, and which metrics source said so. Read first: without a source, it is a gap that says why |
 | `pod_states` | Whether the pods are ready, and whether containers restart |
-| `rollout_history` | Which version runs, since when, and each version's CPU limits |
+| `rollout_history` | Which version runs, since when, each version's CPU limits, and what the latest rollout changed |
 | `target_events` | Probe failures and restarts: what the throttling costs |
-| `revision_health` | How the current version and the one before it ran, from Prometheus's history: when each was first throttled at its limit. Without history, it is a gap that says why |
+| `revision_health` | How the current version and the one before it ran, from Prometheus's history: when each was first throttled at its limit, and how much of its CPU limit each used at the same age. Without history, it is a gap that says why |
 | `container_logs_tail` | Asked for when the pods' own words help, such as timeouts |
 
 ## Checks
@@ -28,7 +28,8 @@ Throttling can only be seen from a metrics source with history, such as Promethe
 | `throttling_data_available` | The metrics source says how often the containers were throttled. False with only the Kubernetes metrics API, which keeps no history |
 | `cpu_throttled_at_limit` | A container with a CPU limit was throttled in 25% or more of its CPU periods over the window, the alert's own threshold. Unknown without throttling figures |
 | `cpu_usage_near_limit` | A container with a CPU limit uses 80% or more of it now |
-| `throttling_came_with_rollout` | The version before it ran unthrottled where this one is throttled: after this one was first throttled, or for longer than this one ran before it was. False when there is no earlier version, it was throttled too, in the metrics history or by Themis's own record when this version is the raise Themis made for it, or this one ran unthrottled at least as long as it did. Unknown when nothing shows how the earlier version ran |
+| `rollout_changed_the_app` | Themis's own: the latest rollout changed what the pods run. False when it changed only labels and annotations |
+| `throttling_came_with_rollout` | The rollout changed what the pods run, and the version before it ran unthrottled where this one is throttled: after this one was first throttled, or using clearly less of its CPU limit at the same age and by its end, or, without those figures, for longer than this one ran before it was. False when the rollout changed nothing the pods run, there is no earlier version, it was throttled too, in the metrics history or by Themis's own record when this version is the raise Themis made for it, or this one uses no more of its limit than it did. Unknown when nothing shows how the earlier version ran |
 | `gitops_managed` | Themis's own: GitOps owns the Deployment, and would undo a change |
 
 ## Fix
@@ -60,6 +61,7 @@ Throttled pods are ready, so readiness can't tell whether a raise worked. The pr
 | `throttled-first-revision` | A Deployment created 29 minutes ago, with only revision 1, is sent more work than its 200m limit allows: throttled in 90% of its periods, and its logs say how far behind it falls. No new version brought it, so raising the limit is right |
 | `throttled-again-after-a-raise` | Revision 1 was throttled at its 200m limit all morning; revision 2, six minutes ago, raised it to 300m and is throttled again. Revision 1 was throttled the same way, so raising the limit again is right |
 | `still-throttled-after-raise` | Themis raised the limit from 200m to 300m for an earlier incident 4 minutes ago, and the new pod is still throttled in 57% of its periods. The rollout was Themis's own fix, and revision 1 was throttled before it, so raising again is right |
+| `throttled-new-image-traffic-grew` | A new image three hours ago uses 88% of its 500m limit and is throttled; the version before it climbed from 50% of the limit in its first three hours to 87% in its last, as traffic grew for two weeks. Raising the limit is right |
 
 ## Look-alikes
 
@@ -68,6 +70,7 @@ Throttled pods are ready, so readiness can't tell whether a raise worked. The pr
 | `throttling-unseen-no-metrics` | The same slow pods, with no metrics source: throttling can't be seen, and the investigator must say so rather than guess |
 | `throttling-unseen-metrics-api` | Only the Kubernetes metrics API: CPU use is at the limit, but use at the limit isn't throttling, and there are no throttling figures |
 | `throttled-since-new-version` | Throttled five minutes after a version rolled out 40 minutes ago with the same limit. Prometheus's history shows the version before it ran nine days unthrottled: the new version uses more CPU, and rolling it back is the rollout-regression pack's call |
+| `throttled-new-image-doubles-cpu` | A new image yesterday uses 88% of its 500m limit over its first day, where the version before it used 45% over the same time, and is throttled at today's peak. It ran unthrottled longer than the version before it ran at all, but use at the same age decides: the new version uses more CPU, and a higher limit is refused |
 | `throttled-no-history` | Throttled at its limit since yesterday, on a version that has run twenty days. Prometheus keeps none of the earlier version's pods, so nothing shows whether this version or more load brought it: a person decides |
 | `short-burst-passed` | A burst set the alert off and has passed: throttled in 11% of periods over the hour, every pod ready |
 | `slow-on-a-busy-node` | Pods fail readiness on a node short of CPU; barely throttled and far below the limit, so a higher limit gives them nothing. Themis doesn't read nodes, so this is suspected, not shown |

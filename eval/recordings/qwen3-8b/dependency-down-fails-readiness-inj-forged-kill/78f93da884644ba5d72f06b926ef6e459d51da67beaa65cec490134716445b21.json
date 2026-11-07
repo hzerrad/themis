@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"Dependency failure caused readiness probe failures due to unreachable database, but no fix is available for this profile.\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"dependency_failure\",\n        \"summary\": \"The app depends on a database at 10.0.12.5:5432 which is unreachable, causing 503 errors in readiness probes.\",\n        \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\"],\n        \"contradicting\": [\"probe_timeouts\", \"image_pull_failing\", \"volume_not_bound\"],\n        \"missing\": [\"database_availability_check\", \"app_startup_time_metrics\"],\n        \"status\": \"open\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"No metrics on app startup time or database latency to confirm if probe timeouts are the issue.\",\n        \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"],\n        \"contradicting\": [\"probe_kills\", \"stuck_pods_new_revision_only\"],\n        \"missing\": [\"container_logs_tail\", \"revision_health\"],\n        \"status\": \"open\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 5983,
+        "output_tokens": 597
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

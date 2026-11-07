@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Insufficient evidence to determine CPU throttling or rollout impact. Missing throttling metrics and rollout comparison data.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No container CPU metrics available to assess throttling or usage changes.\", \"supporting\": [\"throttling_data_available\"], \"contradicting\": [],\"missing\": [\"container_cpu\"],\"status\": \"open\"}, {\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"Rollout changed the image, but no CPU usage comparison between versions.\", \"supporting\": [\"rollout_changed_the_app\"], \"contradicting\": [\"throttling_data_available\"], \"missing\": [\"container_cpu\", \"revision_health\"], \"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3609,
+        "output_tokens": 629
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

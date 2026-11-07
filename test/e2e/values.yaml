@@ -29,10 +29,13 @@ profiles:
     policy:
       mode: guarded
       rules:
+        # Themis has no metrics source here: whether the rollout changed
+        # what checkout runs is read from the live ReplicaSets.
         - name: rollback-needs-a-bad-rollout
           when: >-
             action.restore != "true" &&
             (predicates.failure_onset_after_rollout != "true" ||
+             predicates.rollout_changed_the_app != "true" ||
              predicates.config_changed_before_failure != "false" ||
              (predicates.oom_killed_new_revision != "true" &&
               predicates.earlier_revision_healthy != "true"))

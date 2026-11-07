@@ -1,0 +1,132 @@
+# What the metrics source says of each pod's containers, and what Prometheus's
+# history says of each ReplicaSet's pods: when it has them, their restarts and
+# OOM kills, and samples of how much of their memory limit they used.
+source: prometheus
+pods:
+  checkout-8e2a6c9d1-a1b2c:
+    app: {memory: 450Mi, peakMemory: 512Mi}
+  checkout-8e2a6c9d1-d3e4f:
+    app: {memory: 430Mi, peakMemory: 512Mi}
+  checkout-8e2a6c9d1-g5h6i:
+    app: {memory: 470Mi, peakMemory: 512Mi}
+revisions:
+  checkout-5c6a1e2f3:
+    seenFrom: '2026-10-25T10:00:30Z'
+    seenUntil: '2026-11-04T10:06:00Z'
+    use:
+    - at: '2026-10-25T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-25T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-25T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-26T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-26T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-26T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-26T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-27T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-27T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-27T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-27T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-28T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-28T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-28T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-28T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-29T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-29T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-29T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-29T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-30T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-30T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-30T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-30T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-31T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-10-31T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-31T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-31T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-01T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-01T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-01T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-01T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-02T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-02T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-02T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-02T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-03T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-03T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-03T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-03T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-04T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-04T10:05:00Z'
+      memory: {app: 0.62}
+  checkout-8e2a6c9d1:
+    seenFrom: '2026-11-04T10:00:30Z'
+    seenUntil: '2026-11-07T10:00:00Z'
+    restarts: 6
+    firstRestartAt: '2026-11-07T09:00:00Z'
+    oomKilled: 3
+    firstOOMKillAt: '2026-11-07T09:00:00Z'
+    use:
+    - at: '2026-11-04T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-04T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-04T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-05T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-05T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-05T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-05T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-06T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-06T10:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-06T16:05:00Z'
+      memory: {app: 0.62}
+    - at: '2026-11-06T22:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-07T04:05:00Z'
+      memory: {app: 0.58}
+    - at: '2026-11-07T09:45:00Z'
+      memory: {app: 0.97}

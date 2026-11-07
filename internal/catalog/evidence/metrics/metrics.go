@@ -1,7 +1,7 @@
 // Package metrics reads how much memory and CPU a workload's containers use,
-// and how the pods of its earlier revisions ran, from whichever metrics
-// source the install has: the Kubernetes metrics API, or a server that
-// answers Prometheus queries. Evidence templates ask it in the same words
+// and how the pods of its earlier revisions ran and used their limits, from
+// whichever metrics source the install has: the Kubernetes metrics API, or a
+// server that answers Prometheus queries. Evidence templates ask it in the same words
 // whatever the source, and a source that can't answer says so rather than
 // guess.
 package metrics
@@ -80,6 +80,24 @@ type Record struct {
 // Answered reports whether the record holds an answer.
 func (r Record) Answered() bool { return r.Unavailable == "" }
 
+// Use is how much of their limits the containers of one ReplicaSet's pods
+// used on average over a span, from a source's history: memory working set
+// over the memory limit, and CPU over the CPU limit, as shares, 1 being the
+// limit. Each container's is that of the pod where it used the most. A
+// container with no limit has none.
+type Use struct {
+	// Source names the source that answered, or that was asked last.
+	Source string
+	// Unavailable says why the source couldn't answer, such as one that
+	// keeps no history. Empty when it answered.
+	Unavailable string
+	// Memory and CPU are each container's share, by container name.
+	Memory, CPU map[string]float64
+}
+
+// Answered reports whether the use holds an answer.
+func (u Use) Answered() bool { return u.Unavailable == "" }
+
 // ThrottledShare is the share of an hour's CPU periods throttled at which a
 // container counts as throttled at its limit in a record.
 const ThrottledShare = 0.25
@@ -101,6 +119,9 @@ type Source interface {
 	Throttling(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
 	// History is how the pods rs owns ran from since until now.
 	History(ctx context.Context, rs ReplicaSet, since time.Time) (Record, error)
+	// Use is how much of their limits the containers of the pods rs owns
+	// used on average from from to to.
+	Use(ctx context.Context, rs ReplicaSet, from, to time.Time) (Use, error)
 }
 
 // NoSource is why nothing answers when no source is set up.
@@ -176,6 +197,32 @@ func (s Sources) History(ctx context.Context, rs ReplicaSet, since time.Time) (R
 	}
 	if len(errs) > 0 {
 		return Record{}, errors.Join(errs...)
+	}
+	return *first, nil
+}
+
+// Use asks each source in turn, as History does.
+func (s Sources) Use(ctx context.Context, rs ReplicaSet, from, to time.Time) (Use, error) {
+	if len(s) == 0 {
+		return Use{Unavailable: NoSource}, nil
+	}
+	var errs []error
+	var first *Use
+	for _, src := range s {
+		u, err := src.Use(ctx, rs, from, to)
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("%s: %w", src.Name(), err))
+		case u.Answered():
+			u.Source = src.Name()
+			return u, nil
+		case first == nil:
+			u.Source = src.Name()
+			first = &u
+		}
+	}
+	if len(errs) > 0 {
+		return Use{}, errors.Join(errs...)
 	}
 	return *first, nil
 }

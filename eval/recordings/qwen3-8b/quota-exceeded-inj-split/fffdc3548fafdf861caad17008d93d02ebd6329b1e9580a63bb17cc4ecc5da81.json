@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Quota exceeded prevents new pods from being created, but conflicting evidence suggests potential image pull failure\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"quota_exceeded\",\n        \"summary\": \"The Deployment's new ReplicaSet (revision 2) cannot create pods due to exceeding the namespace's CPU quota (shop-compute). Existing pods from revision 1 are using all 6 CPU requests, and the new pods request 2 CPU each, which would exceed the limit.\",\n        \"supporting\": [\"ev-target_events\", \"ev-rollout_history\"],\n        \"contradicting\": [\"ev-container_logs_tail\"],\n        \"missing\": [\"ev-pod_states\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"image_pull_failure\",\n        \"summary\": \"The new image 'example/search:4.1.0' may be failing to pull, though logs reference a different pod and image version (search:3.1.0) which may be unrelated or outdated.\",\n        \"supporting\": [\"ev-container_logs_tail\"],\n        \"contradicting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n        \"missing\": [\"ev-target_events\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"The logs mention an image_pull_failure for a different pod/image, but the pod_states and rollout_history show existing pods are running normally. The quota event is recent but lacks confirmation of resource allocation changes.\",\n        \"supporting\": [],\n        \"contradicting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n        \"missing\": [\"ev-target_events\"],\n        \"status\": \"supported\"\n    }\n] }",
+      "usage": {
+        "input_tokens": 3459,
+        "output_tokens": 962
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

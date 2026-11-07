@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Rollback to revision 1 due to image change causing crashes\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New image may have higher memory usage\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [],\"missing\": [\"revision_health\"],\"status\": \"open\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Restore working image version 2.3.1\", \"rationale\": \"New revision's image caused crashes, older revision runs without issues.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\"],\"cited_predicates\": [\"rollout_changed_the_app\", \"failures_came_with_rollout\"]}}",
+      "usage": {
+        "input_tokens": 3011,
+        "output_tokens": 623
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

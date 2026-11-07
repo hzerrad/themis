@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is insufficient, causing OOMKilled errors. Rolling back to revision 1 resolves the issue.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"New revision's memory limit (64Mi) is insufficient for the application.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"application_bug\",\n    \"summary\": \"The new image may have a bug causing memory exhaustion.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"ev-container_logs_tail\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  },\n  {\n    \"root_cause_class\": \"bad_configuration\",\n    \"summary\": \"The new revision's configuration is incorrect.\",\n    \"supporting\": [\"ev-rollout_history\"],\n    \"contradicting\": [\"ev-referenced_config\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.rollback-to-revision\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"checkout\",\n    \"uid\": \"uid-deployment-checkout\"\n  },\n  \"params\": {\n    \"revision\": 1\n  },\n  \"expected_effect\": \"Restores the previous memory limit (256Mi) and resolves OOMKilled errors.\",\n  \"rationale\": \"The new revision's memory limit (64Mi) is insufficient, as evidenced by OOMKilled pods and the earlier revision's successful operation with 256Mi. Logs show no application errors, confirming the memory limit is the root cause. Rollback aligns with the observed failure pattern post-rollout and absence of config changes.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"earlier_revision_healthy\", \"config_changed_before_failure\", \"gitops_managed\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4023,
+        "output_tokens": 775
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

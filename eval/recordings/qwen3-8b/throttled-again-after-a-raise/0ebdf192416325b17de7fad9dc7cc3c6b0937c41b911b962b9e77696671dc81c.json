@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The 'api' container in the search Deployment is throttled at its CPU limit of 300m, causing readiness probe failures. Increasing the CPU limit to 450m should alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Current CPU limit of 300m is insufficient for the container's demand, leading to throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"ev-revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The new version's CPU usage is higher than the previous version, but evidence shows the previous version was also throttled.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-revision_health\"],\n    \"contradicting\": [\"ev-container_cpu\"],\n    \"missing\": [],\n    \"status\": \"refuted\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Need more data on CPU usage trends between versions.\",\n    \"supporting\": [],\n    \"contradicting\": [\"ev-container_cpu\", \"ev-revision_health\"],\n    \"missing\": [\"ev-revision_health\"],\n    \"status\": \"refuted\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"api\": {\n        \"limits\": {\n          \"cpu\": \"450m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"The increased CPU limit should reduce throttling, allowing the container to meet its CPU demand and resolve readiness probe failures.\",\n  \"rationale\": \"The container is consistently throttled at 55% of its CPU periods, with usage near its 300m limit. Increasing the limit to 450m provides more headroom, addressing the throttling without affecting memory or other resources.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4786,
+        "output_tokens": 977
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

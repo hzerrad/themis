@@ -231,6 +231,55 @@ func (p promQL) seen(ctx context.Context, rs ReplicaSet, span, step time.Duratio
 	return r, pods, nil
 }
 
+// Use reads how much of their limits the containers of the pods rs owns used
+// on average from from to to: cAdvisor's working set and CPU use over
+// kube-state-metrics' limits, at each step of the span, for the pods
+// kube_pod_owner says rs owns then. Each container's average is that of the
+// pod where it was highest.
+func (p promQL) Use(ctx context.Context, rs ReplicaSet, from, to time.Time) (Use, error) {
+	span := max(to.Sub(from), minStep)
+	step := max((span / historySteps).Round(time.Second), minStep)
+	ns := strconv.Quote(rs.Namespace)
+	owned := fmt.Sprintf(`max by (pod) (kube_pod_owner{namespace=%s, owner_kind="ReplicaSet", owner_name=%s})`, ns, strconv.Quote(rs.Name))
+	limit := func(resource string) string {
+		return fmt.Sprintf(`max by (pod, container) (kube_pod_container_resource_limits{namespace=%s, resource=%q} > 0)`, ns, resource)
+	}
+	containers := fmt.Sprintf(`namespace=%s, container!="", container!="POD"`, ns)
+	shares := map[string]string{
+		"memory": fmt.Sprintf("max by (pod, container) (container_memory_working_set_bytes{%s})", containers),
+		"cpu":    fmt.Sprintf("max by (pod, container) (rate(container_cpu_usage_seconds_total{%s}[%s]))", containers, promDuration(RateWindow)),
+	}
+	queries := make([]string, 0, len(shares))
+	for _, part := range []string{"memory", "cpu"} {
+		share := fmt.Sprintf("%s / on (pod, container) %s * on (pod) group_left() %s", shares[part], limit(part), owned)
+		queries = append(queries, fmt.Sprintf(`label_replace(max by (container) (avg_over_time((%s)[%s:%s])), "part", %q, "", "")`,
+			share, seconds(span), seconds(step), part))
+	}
+	series, err := p.runAt(ctx, strings.Join(queries, " or "), from.Add(span))
+	if err != nil {
+		return Use{}, err
+	}
+	u := Use{Memory: map[string]float64{}, CPU: map[string]float64{}}
+	for _, s := range series {
+		v, ok := number(s)
+		c := s.Metric["container"]
+		if !ok || c == "" {
+			continue
+		}
+		switch s.Metric["part"] {
+		case "memory":
+			u.Memory[c] = v
+		case "cpu":
+			u.CPU[c] = v
+		}
+	}
+	if len(u.Memory) == 0 && len(u.CPU) == 0 {
+		u.Unavailable = "Prometheus has no memory or CPU figures, against a limit, for the pods of ReplicaSet " + rs.Name +
+			" from " + from.UTC().Format(time.RFC3339) + " to " + to.UTC().Format(time.RFC3339) + notScraped + " and kube-state-metrics"
+	}
+	return u, nil
+}
+
 // NotInHistory is why Prometheus can't say how the pods of a ReplicaSet ran.
 func NotInHistory(replicaSet string) string {
 	return "Prometheus has no pods of ReplicaSet " + replicaSet + " in its history: it keeps none that old, or doesn't scrape kube-state-metrics"
@@ -291,9 +340,18 @@ type response struct {
 }
 
 func (p promQL) run(ctx context.Context, query string) ([]series, error) {
+	return p.runAt(ctx, query, time.Time{})
+}
+
+// runAt runs query as of at, or now when at is zero.
+func (p promQL) runAt(ctx context.Context, query string, at time.Time) ([]series, error) {
 	qctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(qctx, http.MethodPost, p.query.String(), strings.NewReader(url.Values{"query": {query}}.Encode()))
+	form := url.Values{"query": {query}}
+	if !at.IsZero() {
+		form.Set("time", strconv.FormatInt(at.Unix(), 10))
+	}
+	req, err := http.NewRequestWithContext(qctx, http.MethodPost, p.query.String(), strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}

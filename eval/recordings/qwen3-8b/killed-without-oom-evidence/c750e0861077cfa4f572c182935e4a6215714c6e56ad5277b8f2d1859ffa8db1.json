@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's image caused OOM kills, rollback to revision 4 is justified.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"new_version_broken\", \"summary\": \"The new image (example/ledger:2.9.3) caused OOM kills with exit code 137, confirmed by pod_states and rollout_history.\", \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"], \"contradicting\": [\"oom_killed_new_revision\"], \"missing\": [\"memory_data_available\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit (768Mi) may be insufficient for its workload, despite same limit as previous revision.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [\"oom_killed_current_revision\"], \"missing\": [\"container_memory\"],\"status\": \"supported\"},\n    {\"root_cause_class\": \"configuration_change\", \"summary\": \"No ConfigMap changes detected before failure, but rollout changed the app image.\", \"supporting\": [\"ev-referenced_config\", \"ev-rollout_history\"], \"contradicting\": [\"config_changed_before_failure\"], \"missing\": [\"revision_health\"],\"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.rollback-to-revision\",\n    \"target\": {\n        \"group\": \"apps\",\n        \"kind\": \"Deployment\",\n        \"namespace\": \"shop\",\n        \"name\": \"ledger\",\n        \"uid\": \"uid-deployment-ledger\"\n    },\n    \"params\": {\n        \"revision\": 4\n    },\n    \"expected_effect\": \"Reverts to the previous revision (example/ledger:2.9.2) which did not show OOM kills, resolving the crash loop.\",\n    \"rationale\": \"The new revision's image caused OOM kills (exit code 137) after the rollout, and no memory metrics confirm the limit was sufficient. Rolling back to the stable revision 4 is justified as per rollout-regression profile guidelines when failures started after the rollout and the previous version ran without issues.\",\n    \"cited_evidence_ids\": [\"ev-pod_states\", \"ev-rollout_history\", \"ev-target_events\"],\n    \"cited_predicates\": [\"failure_onset_after_rollout\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5517,
+        "output_tokens": 1435
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

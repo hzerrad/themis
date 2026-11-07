@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Storage full in old revision contradicts rollback hypothesis; no allowed fix for storage issues\",\"hypotheses\":[{\"root_cause_class\":\"storage_full\",\"summary\":\"Old revision's cache directory full (no space left on device) in logs\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[\"ev-rollout_history\",\"ev-pod_states\"],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"New image (2.4.0) causes crashes with same memory limit as previous (2.3.1)\",\"supporting\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\"],\"contradicting\":[\"ev-container_logs_tail\",\"ev-referenced_config\"],\"missing\":[],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4280,
+        "output_tokens": 688
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

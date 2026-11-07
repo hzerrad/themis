@@ -2,14 +2,18 @@
 
 A Deployment's containers are killed for running out of memory: more load or more data now needs more than their memory limit. Themis checks that the kills are real, on the current version, that the latest rollout didn't bring them, and that the containers reached their limit, and may suggest raising the memory limit of the killed containers, which a person approves.
 
-What decides whether the latest rollout brought the kills is how the version before it ran, compared with the current one (`failures_came_with_rollout`):
+What decides whether the latest rollout brought the kills is what it changed, then how the version before it ran, compared with the current one (`failures_came_with_rollout`):
 
-| The version before it | Then |
+| The rollout, and the version before it | Then |
 |---|---|
-| Runs healthy beside the failing pods, or by Prometheus's history ran without failing for longer than the current one did before its first kill | The rollout brought them: rolling back is the rollout-regression pack's fix, and a raise is refused |
-| None, as for a Deployment created minutes ago, or it failed too | A higher limit is the fix |
-| Ran without failing, but the current one ran at least as long before its first kill | What changed since, such as more data or load, brought them: a higher limit is the fix |
+| Changed only labels and annotations, as a restart does (`rollout_changed_the_app` is false) | Rolling back would restart the pods the same way: a higher limit is the fix |
+| Changed what the pods run, and the version before it runs healthy beside the failing pods, or by Prometheus's history used clearly less of its memory limit at the same age and by its end | The rollout brought them: rolling back is the rollout-regression pack's fix, and a raise is refused |
+| None before it, as for a Deployment created minutes ago, or it failed too | A higher limit is the fix |
+| Changed what the pods run, but the current version uses as much of its limit as the one before it did at the same age, or no more than that one had come to use by its end | What changed since, such as more data or load, brought them: a higher limit is the fix |
+| Changed what the pods run, and the history has no figures of their use: then how long each ran without failing breaks the tie | The version before it running longer without failing brought them to the rollout; otherwise a higher limit |
 | Its pods are gone, and no history of them: no Prometheus, or none that old | Nothing shows which: neither fix goes ahead, and a person decides |
+
+Use is compared as an average share of the limit, over the same time since each version started: a version killed at its limit peaks there whatever it needs. Two averages within 5% of the limit count as the same, which is measurement noise, not a setting.
 
 How long ago the rollout was decides nothing.
 
@@ -25,8 +29,8 @@ A metrics source helps size the raise and is what tells, once the earlier versio
 |---|---|
 | `pod_states` | Which containers were OOMKilled, of which version, and how long they ran first |
 | `container_memory` | Each container's memory now and at its peak over the last hour, against its limit, and which metrics source said so. Without a source, it is a gap that says why |
-| `revision_health` | How the current version and the one before it ran, from Prometheus's history: restarts and OOM kills, and since when. Without history, it is a gap that says why |
-| `rollout_history` | Which version runs, since when, and each version's memory limits |
+| `revision_health` | How the current version and the one before it ran, from Prometheus's history: restarts and OOM kills, and since when, and how much of their memory limits they used at the same age. Without history, it is a gap that says why |
+| `rollout_history` | Which version runs, since when, each version's memory limits, and what the latest rollout changed |
 | `target_events` | Restarts, and evictions when the node runs short of memory |
 | `referenced_config` | Whether the configuration the pods read changed |
 | `container_logs_tail` | Asked for when the pods' own words help, such as memory growing while they run |
@@ -37,7 +41,8 @@ A metrics source helps size the raise and is what tells, once the earlier versio
 |---|---|
 | `oom_killed_current_revision` | A container of the current version was OOMKilled |
 | `earlier_revision_healthy` | Themis's own: the revision before the current one ran without failing, by its pods while they run, or with no restart or OOM kill in the metrics history once they are gone. False when there is none, or it failed; unknown with neither its pods nor a history of them |
-| `failures_came_with_rollout` | Themis's own: the latest rollout brought the failures, as the table above says. False when there is no earlier version, it failed too, or the current one ran without failing at least as long; unknown when nothing shows how it ran |
+| `rollout_changed_the_app` | Themis's own: the latest rollout changed what the pods run. False when it changed only labels and annotations |
+| `failures_came_with_rollout` | Themis's own: the latest rollout brought the failures, as the table above says. False when the rollout changed nothing the pods run, there is no earlier version, it failed too, or the current one uses no more of its limit than it did; unknown when nothing shows how it ran |
 | `memory_data_available` | The metrics source says each container's peak memory. False with only the Kubernetes metrics API, which keeps no history; unknown without a source |
 | `memory_at_limit_before_kill` | A container peaked at 90% or more of its memory limit over the window. Unknown without peak figures |
 | `oom_after_long_run` | Every OOM kill came after the container had run an hour or more |
@@ -69,13 +74,18 @@ While `oom_killed_current_revision` or `evicted_for_node_memory`, the pack's sym
 | `oom-after-rollout-history-oom` | A version rolled out an hour ago with the limit it kept is OOMKilled 40 minutes in; the older pods are gone, and Prometheus's history shows them OOMKilled at that limit too. A rollback goes back to a version that fails the same way: raising the limit is right |
 | `oom-first-revision` | A Deployment created 25 minutes ago, with only revision 1, is OOMKilled at 95% of its 60Mi limit. There is nothing to roll back to, so raising the limit is right. Raised by both packs' alert |
 | `oom-both-versions` | A version rolled out 30 minutes ago is OOMKilled at the limit it kept, and so are the pods of the version before it, since before the rollout. A rollback goes back to a version that fails the same way: raising the limit is right |
+| `oom-after-restart-only-rollout` | A `kubectl rollout restart` an hour ago, then a campaign doubles traffic and the containers are OOMKilled at their limit. The timing, and the history, which shows the version before it using less of its limit, point at the rollout, but it changed only an annotation: rolling back can't help, raising the limit is right. Both packs answer |
+| `oom-after-restart-only-rollout-no-history` | The same with no metrics source: what the rollout changed is read from the ReplicaSets, so a raise is still right, sized from the current limit |
+| `oom-new-image-continues-growth` | A new image an hour ago, OOMKilled 40 minutes in at 93% of the limit on average; the version before it climbed from 55% of the limit in its first hour to 90% in its last, as the catalog grew. Raising the limit is right |
+| `oom-new-image-same-use-demand-rose` | A new image three days ago uses 63% of the limit over its first three days, against 60% for the version before it: the same, within measurement noise. Demand doubled this morning, and the kills began. Raising the limit is right, though the version before it ran longer without failing |
 
 ## Look-alikes
 
 | Case | What it is |
 |---|---|
 | `oom-after-rollout` | A version rolled out 40 minutes ago lowered the limit, and is OOMKilled at it, while the version before it still runs healthy. Both packs answer: rolling back is right, and this pack's policy refuses the raise. The rollout-regression pack's `oom-new-version-healthy-before` is the same with the limit unchanged |
-| `oom-after-rollout-history-healthy` | A version rolled out an hour ago with the limit it kept is OOMKilled 40 minutes in; the older pods are gone, and Prometheus's history shows them running 15 days without a restart. Rolling back is right, and the raise is refused |
+| `oom-after-rollout-history-healthy` | A version rolled out an hour ago with the limit it kept is OOMKilled 40 minutes in; the older pods are gone, and Prometheus's history shows them running 15 days without a restart, with no figures of their use: how long each ran breaks the tie. Rolling back is right, and the raise is refused |
+| `oom-new-image-uses-more-memory` | A new image three days ago uses 93% of the 512Mi limit on average over its first two days, where the version before it used 45% over the same time, and is OOMKilled since this morning. It ran longer before its first kill than the version before it ran at all, but use at the same age decides: rolling back is right, and the raise is refused |
 | `oom-after-rollout-no-history` | The same, with only the Kubernetes metrics API, which keeps no history: nothing shows how the version before it ran, so neither fix goes ahead, and a person decides |
 | `oom-kills-no-metrics` | Two workers OOMKilled minutes into a larger batch, five days after a rollout, with no metrics source: the pod states show the kills, but nothing shows how the version before it ran, so a person decides |
 | `memory-grows-until-killed` | Containers climb while they run and are killed after five to six hours, again and again, with a limit that held for ten days, and logs showing the heap growing: a higher limit only delays the next kill. The checks can't tell this from steady growth, so the policy would let a raise reach a person; the guidance says to leave it to one |

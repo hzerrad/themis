@@ -1,6 +1,6 @@
 # Writing a check
 
-A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `earlier_revision_healthy`, whether a healthy version before the current one is there to go back to; `failures_came_with_rollout`, whether the latest rollout brought the failures, judged by how the version before it ran, from its pods or the metrics history; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence); and `rollout_recent`, for an operator's own profiles to show, which no pack runs. Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
+A check decides one fact from the evidence: `true`, `false` or `unknown`. It is a short YAML definition with [CEL](https://cel.dev) expressions; no Go. Checks live in the [scenario packs](scenarios.md), each in its pack's `checks.yaml`, such as [`scenarios/rollout-regression/checks.yaml`](../scenarios/rollout-regression/checks.yaml), compiled into the binary. Themis has its own too, in [`internal/catalog/check/builtin.yaml`](../internal/catalog/check/builtin.yaml): `earlier_revision_healthy`, whether a healthy version before the current one is there to go back to; `rollout_changed_the_app`, whether the latest rollout changed what the pods run, or only their labels and annotations; `failures_came_with_rollout`, whether the latest rollout brought the failures: it changed what the pods run, and the new version does worse than the one before it, from that one's pods or the metrics history; `gitops_managed`, which its [GitOps protection](configuration.md#gitops) reads; `evidence_has_instructions`, for policy to read about [suspicious evidence](configuration.md#suspicious-evidence); and `rollout_recent`, for an operator's own profiles to show, which no pack runs. Every pack may run them, and none may define a check of the same name. Every check is compiled when Themis starts, and one that doesn't compile stops it with a message naming the check.
 
 This is one of them:
 
@@ -61,7 +61,9 @@ This is one of them:
 | `failure_onset_after_rollout` | Any warning event, through `failures` | A pod of the current revision isn't ready, or a container of one restarted |
 | `config_changed_before_failure` | Any warning event, through `first_failure` | The pod it names shows a failure in its status, and started no later than the event |
 
-**Compare what the evidence shows, not a clock.** Whether a rollout brought the failures is never decided by how long ago it was: `failures_came_with_rollout` compares how long each version ran without failing, and is `unknown` when the evidence isn't there, so the policy leaves the fix to a person. A check of your own should do the same.
+**Compare what the evidence shows, not a clock.** Whether a rollout brought the failures is never decided by how long ago it was, nor by timing alone: `failures_came_with_rollout` asks what the rollout changed, then compares how the two versions ran and how much of their limits they used at the same age, with how long each ran without failing only as a tiebreak, and is `unknown` when the evidence isn't there, so the policy leaves the fix to a person. A check of your own should do the same.
+
+**No thresholds that decide.** Compare two things the evidence shows, such as two versions' use of their limits, rather than one against a number of your choosing. Where measurement noise makes a tolerance unavoidable, name it in a `let`, keep it small, and say in a comment that it is noise: `failures_came_with_rollout` counts two averages within 5% of the limit as the same.
 
 **Missing evidence needs no answer.** When a template an answer reads has no evidence, the check stops there as `unknown`, with a reason such as "no pod states", and the gap that explains it is attached, as for every check.
 
@@ -72,7 +74,7 @@ This is one of them:
 | `<template>`, such as `pod_states` | The template's latest evidence, as its JSON, except that times are timestamps and a time or object that isn't known is `null` |
 | `ids.<template>` | That evidence's ID, to cite |
 | `now` | When the checks run |
-| `current` | The current revision from `rollout_history`, or `null` |
+| `current` | The current revision from `rollout_history`, or `null`. What it changed from `prior` is `rollout_history.change`: `app`, each change to what the pods run in plain words, and `metadata`, each change to their labels and annotations only |
 | `prior` | The newest revision older than `current`, or `null`, as for a Deployment's first revision: there is nothing to go back to, and its creation is no rollout |
 | `rollout_at` | When `current` rolled out: its ReplicaSet's creation, or a later template change that reused it. `null` when unknown |
 | `current_revision` | The current revision's number: from `rollout_history`, or without it the newest revision among the pods |

@@ -10,11 +10,11 @@ A Deployment rolled out a new version, and the new version fails where the one b
 
 | Template | Why |
 |---|---|
-| `rollout_history` | Which revision is current, when it rolled out, and the ones before it |
+| `rollout_history` | Which revision is current, when it rolled out, the ones before it, and what it changed from the one before: in what the pods run, or only in their labels and annotations |
 | `pod_states` | Which pods fail, of which revision, and how they last ended |
 | `target_events` | When the failures started, compared with the rollout |
 | `referenced_config` | Whether a ConfigMap or Secret the pods read changed before they failed |
-| `revision_health` | How the revision before it ran once its pods are gone, from Prometheus's history: restarts and OOM kills, and since when. Without history, it is a gap that says why |
+| `revision_health` | How the revision before it ran once its pods are gone, from Prometheus's history: restarts and OOM kills, and since when, and how much of its memory limit it used at the same age as the current one. Without history, it is a gap that says why |
 | `container_logs_tail` | Asked for when the rest doesn't say why a pod fails |
 
 ## Checks
@@ -23,14 +23,15 @@ A Deployment rolled out a new version, and the new version fails where the one b
 |---|---|
 | `failure_onset_after_rollout` | The failures started after that rollout, and a pod of the current revision isn't ready or restarted: events alone make it `unknown`. False when some started before it, or there is no earlier revision |
 | `earlier_revision_healthy` | Themis's own: the revision before it ran without failing, by its pods while they run, or once they are gone, with no restart or OOM kill in the metrics history. False when there is none, or it failed; unknown with neither its pods nor a history of them |
-| `failures_came_with_rollout` | Themis's own: the latest rollout brought the failures. The revision before it runs healthy beside the failing pods, or, by the metrics history, ran without failing after the current one first failed, or for longer than the current one ran before its first failure. False when there is none, it failed too, or the current one ran without failing at least as long, so what changed since brought the failures. Unknown when nothing shows how it ran |
+| `rollout_changed_the_app` | Themis's own: the latest rollout changed what the pods run, such as the image, an environment variable or a limit. False when it changed only labels and annotations, as `kubectl rollout restart` does: a rollback would restart the pods the same way |
+| `failures_came_with_rollout` | Themis's own: the latest rollout brought the failures. It changed what the pods run, and the revision before it does better: it runs healthy beside the failing pods, or, by the metrics history, ran without failing after the current one first failed, or, for OOM kills, used clearly less of its memory limit at the same age, and by its end. Without those figures, or for other failures, it ran without failing for longer than the current one did before its first failure. False when the rollout changed nothing the pods run, there is no earlier revision, it failed too, or the current one uses no more of its limit than it did at the same age or by its end, so what changed since brought the failures. Unknown when nothing shows how it ran |
 | `oom_killed_new_revision` | A pod of the new revision was OOMKilled |
 | `gitops_managed` | A GitOps tool owns the Deployment |
 | `config_changed_before_failure` | Configuration the pods read changed before the failures, dated by the pods' status: an event alone can't move the first failure earlier |
 
 ## Fix
 
-`deployment.rollback-to-revision`, to the revision before the rollout. Themis refuses it unless the failures started after the rollout (`failure_onset_after_rollout`, the check the profile names to justify it). A Deployment's first revision has nothing to go back to: creating it isn't a rollout, so that check is false. The policy refuses it unless the latest rollout brought the failures (`failures_came_with_rollout`) and no configuration changed first. Once the older pods are gone, only Prometheus's history can show that the revision before it ran without failing: without it, nothing does, and a person decides. How long ago the rollout was decides nothing. A Deployment owned by GitOps is never rolled back: Git would undo it. Every rollback needs a person's approval.
+`deployment.rollback-to-revision`, to the revision before the rollout. Themis refuses it unless the failures started after the rollout (`failure_onset_after_rollout`, the check the profile names to justify it). A Deployment's first revision has nothing to go back to: creating it isn't a rollout, so that check is false. The policy refuses it unless the latest rollout brought the failures (`failures_came_with_rollout`) and no configuration changed first. A rollout that changed only labels and annotations brought nothing a rollback could undo. Once the older pods are gone, only Prometheus's history can show that the revision before it did better: without it, nothing does, and a person decides. How long ago the rollout was decides nothing. A Deployment owned by GitOps is never rolled back: Git would undo it. Every rollback needs a person's approval.
 
 While one of the pack's symptoms, `failure_onset_after_rollout` and `oom_killed_new_revision`, is true and no fix was applied, Themis never closes the incident with no change on its own: it refers it to a person and waits for the fix they suggest.
 

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills despite similar average usage. Increase the memory limit to accommodate peak demand.\",\n\"hypotheses\": [\n    {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\", \"supporting\": [\"ev-pod_states\", \"ev-container_memory\", \"ev-rollout_history\", \"ev-revision_health\"], \"contradicting\": [], \"missing\": [],\n    \"status\": \"supported\"},\n    {\"root_cause_class\": \"memory_limit_too_low\", \"summary\": \"The app's peak memory usage reached 100% of its limit, indicating the limit is insufficient.\", \"supporting\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\"], \"contradicting\": [], \"missing\": [], \"status\": \"supported\"}\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-resources\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n    \"params\": {\n        \"containers\": {\n            \"app\": {\n                \"limits\": {\n                    \"memory\": \"640Mi\"\n                }\n            }\n        }\n    },\n    \"expected_effect\": \"The increased memory limit should prevent OOM kills by allowing the app to use more memory without being terminated.\",\n    \"rationale\": \"The app's peak memory usage reached 100% of its 512Mi limit, causing OOM kills. Increasing the limit to 640Mi (25% higher than peak) should accommodate the memory demand without triggering OOM kills.\",\n    \"cited_evidence_ids\": [\"ev-container_memory\", \"ev-pod_states\", \"ev-revision_health\", \"ev-rollout_history\"],\n    \"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failures_came_with_rollout\", \"oom_killed_new_revision\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5596,
+        "output_tokens": 1276
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
