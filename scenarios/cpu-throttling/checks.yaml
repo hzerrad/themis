@@ -25,7 +25,7 @@
 # periods over the window, the share at which kube-prometheus-stack's
 # CPUThrottlingHigh fires. Only a CPU limit throttles a container.
 - name: cpu_throttled_at_limit
-  version: "1"
+  version: "2"
   description: A container is throttled at its CPU limit
   topic: Throttling at the CPU limit
   whenFalse: No container is throttled at its CPU limit
@@ -35,6 +35,11 @@
     measured: limited.filter(c, c.throttledRatio != null)
     throttled: >-
       measured.filter(c, c.throttledRatio >= 0.25).map(c,
+        c.name + " was throttled in " + string(int(c.throttledRatio * 100.0 + 0.5)) + "% of its CPU periods over " +
+        container_cpu.window + ", at its limit of " + string(c.limitCores) + " CPU")
+    # The most throttled container: how far below the threshold they all are.
+    most: >-
+      measured.filter(c, measured.all(o, o.throttledRatio <= c.throttledRatio)).map(c,
         c.name + " was throttled in " + string(int(c.throttledRatio * 100.0 + 0.5)) + "% of its CPU periods over " +
         container_cpu.window + ", at its limit of " + string(c.limitCores) + " CPU")
   answers:
@@ -55,7 +60,9 @@
       reason: no throttling figure for the ${size(limited)} container(s) with a CPU limit
       cite: [ids.container_cpu]
     - answer: false
-      reason: none of the ${size(measured)} container(s) with a CPU limit was throttled in 25% or more of its CPU periods over ${container_cpu.window}
+      reason: >-
+        ${most[0]}${size(measured) == 1 ? "" : ", the most of the " + string(size(measured)) + " containers with a CPU limit"},
+        below 25%
       cite: [ids.container_cpu]
 
 # A container with a CPU limit uses most of it now. Throttling while far below

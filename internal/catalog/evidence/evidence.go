@@ -71,6 +71,16 @@ type Template interface {
 	Collect(ctx context.Context, c client.Reader, w *workload.Workload, params map[string]string) (Item, error)
 }
 
+// Windowed is a template that reads over a window, which its window
+// parameter sets, such as how often a container was throttled. MinWindow is
+// the least that gives an answer worth reading.
+type Windowed interface {
+	MinWindow() time.Duration
+}
+
+// WindowParam is the parameter a Windowed template reads its window from.
+const WindowParam = "window"
+
 // Registry holds the templates Themis can run, by name.
 type Registry map[string]Template
 
@@ -94,6 +104,17 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, w *
 	if err != nil {
 		return Item{}, fmt.Errorf("collect %s: %w", name, err)
 	}
+	item, err = finish(item, name, w.Target, now)
+	if err != nil {
+		return Item{}, err
+	}
+	countItem(item)
+	return item, nil
+}
+
+// finish makes a template's answer an item about target, read at now: it
+// gets its ID, and secrets in it are hidden and suspicious text flagged.
+func finish(item Item, template string, target incident.TargetRef, now time.Time) (Item, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return Item{}, err
@@ -103,13 +124,12 @@ func (r Registry) Collect(ctx context.Context, c client.Reader, name string, w *
 	item.Redactions += n
 	item.Suspicious = Suspicions(item.Data)
 	item.ID = id.String()
-	item.Template = name
-	item.Target = w.Target
+	item.Template = template
+	item.Target = target
 	item.CollectedAt = now
 	if item.Classification == "" {
 		item.Classification = ClassificationInternal
 	}
-	countItem(item)
 	return item, nil
 }
 

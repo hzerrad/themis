@@ -154,7 +154,7 @@
   "predicates": [
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "true",
       "reason": "revision 2 rolled out 20m0s ago",
       "evidence_ids": [
@@ -174,7 +174,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "pod checkout-5c6a1e2f3-a1b2c of revision 1: app Error",
       "evidence_ids": [

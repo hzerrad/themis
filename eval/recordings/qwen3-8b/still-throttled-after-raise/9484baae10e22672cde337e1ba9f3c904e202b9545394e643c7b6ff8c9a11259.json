@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version's CPU usage exceeds its limit, causing throttling. Raising the CPU limit to 450m will alleviate the throttling and ensure smooth operation.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"The current revision (2) uses more CPU than the previous (1), even after increasing the limit, causing throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-themis_fix\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_cpu_contention\", \"transient_cpu_burst\", \"cpu_limit_too_low\", \"insufficient_evidence\", \"other\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"The current CPU limit of 300m is insufficient for the new version's usage, which is 280m (93.3% of the limit).\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\"],\n    \"contradicting\": [\"ev-themis_fix\"],\n    \"missing\": [\"node_cpu_contention\", \"transient_cpu_burst\", \"new_version_uses_more_cpu\", \"insufficient_evidence\", \"other\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"cpu\": \"450m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises the CPU limit from 300m to 450m to clear throttling, as the current usage is 280m (93.3% of 300m).\",\n  \"rationale\": \"The new version (revision 2) uses more CPU than the previous revision (1), even after increasing the limit. Raising the limit to 450m (1.5x current) will prevent throttling and ensure the app runs smoothly without node contention or memory issues.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-themis_fix\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_recent\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3979,
+        "output_tokens": 1004
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

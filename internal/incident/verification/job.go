@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
+	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
@@ -45,6 +46,18 @@ type Worker struct {
 	// Fixes are the fixes Themis can carry out, which read how a target is
 	// doing after them.
 	Fixes capability.Registry
+	// Checks decides the profiles' verification checks again from what the
+	// workload did since the change, and Words describes them. Without
+	// Checks, a fix is judged by its rollout alone.
+	Checks Rechecker
+	Words  check.List
+}
+
+// Rechecker decides checks again from what a workload did over a window,
+// as catalog.Catalog does.
+type Rechecker interface {
+	Recheck(ctx context.Context, c client.Reader, w *workload.Workload, names []string, window time.Duration, now time.Time) []check.Result
+	SignalWindow(names []string) time.Duration
 }
 
 func (w *Worker) Work(ctx context.Context, job *river.Job[VerifyArgs]) error {
@@ -87,7 +100,13 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 	}
 	// The strictest of the profiles offering the fix sets how it is watched.
 	v := w.Config.Current().Matched(in.Profiles()).Offering(a.Capability).Verification()
+	if w.Checks == nil {
+		v.Checks = nil
+	}
 	criteria := Criteria{Window: v.Window.Duration, Stability: v.Stability.Duration}
+	if len(v.Checks) > 0 {
+		criteria.Signal = w.Checks.SignalWindow(v.Checks)
+	}
 
 	var from json.RawMessage
 	switch rec, err := w.Store.Verification(ctx, w.Store.DB(), a.ID); {
@@ -102,50 +121,76 @@ func (w *Worker) Verify(ctx context.Context, args VerifyArgs) (bool, error) {
 		return false, err
 	}
 
-	final := false
+	var rec store.Verification
 	err = w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		rec, err := w.Store.StartVerification(ctx, tx, store.Verification{ActionID: a.ID, WindowStart: args.WindowStart, Start: reading.Start})
-		if err != nil {
-			return err
+		rec, err = w.Store.StartVerification(ctx, tx, store.Verification{ActionID: a.ID, WindowStart: args.WindowStart, Start: reading.Start})
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	var stableFor time.Duration
+	if reading.Health == capability.Healthy {
+		if rec.HealthySince == nil {
+			rec.HealthySince = &now
 		}
-		var stableFor time.Duration
-		if reading.Health == capability.Healthy {
-			if rec.HealthySince == nil {
-				rec.HealthySince = &now
-			}
-			stableFor = now.Sub(*rec.HealthySince)
-		} else {
-			rec.HealthySince = nil
+		stableFor = now.Sub(*rec.HealthySince)
+	} else {
+		rec.HealthySince = nil
+	}
+	outcome, done := Evaluate(reading, stableFor, criteria, now.Sub(rec.WindowStart))
+	if rec.Observation, err = json.Marshal(observed{Health: reading.Health, Facts: reading.Facts}); err != nil {
+		return false, err
+	}
+	verdict := Rollout(outcome, reading)
+	if done && len(v.Checks) > 0 {
+		if verdict, err = w.judge(ctx, in, v.Checks, outcome, reading, now.Sub(rec.WindowStart), now); err != nil {
+			return false, err
 		}
+	}
+	if done {
+		rec.Outcome = string(verdict.Outcome)
+	}
 
-		outcome, done := Evaluate(reading, stableFor, criteria, now.Sub(rec.WindowStart))
-		if rec.Observation, err = json.Marshal(observed{Health: reading.Health, Facts: reading.Facts}); err != nil {
-			return err
-		}
-		if done {
-			rec.Outcome = string(outcome)
-		}
+	err = w.Store.InTx(ctx, func(tx pgx.Tx) error {
 		if err := w.Store.UpdateVerification(ctx, tx, rec); err != nil || !done {
 			return err
 		}
-		final = true
-		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(outcome)).Inc)
-		reason := Explain(outcome, reading)
-		if outcome == Unchanged || outcome == Worsened {
+		store.AfterCommit(tx, verificationOutcomes.WithLabelValues(string(verdict.Outcome)).Inc)
+		if verdict.Restore {
 			// Put back what the fix changed, so people find the workload as
 			// they left it.
 			if err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: reason + " Restoring the previous state.", Actor: "verify",
+				ID: in.ID, From: incident.Verifying, To: incident.Restoring, Reason: verdict.Reason + " Restoring the previous state.", Actor: "verify",
 			}); err != nil {
 				return err
 			}
 			return w.Store.EnqueueTx(ctx, tx, governance.RestoreArgs{ActionID: a.ID, IncidentID: in.ID})
 		}
 		return w.Store.Transition(ctx, tx, store.TransitionArgs{
-			ID: in.ID, From: incident.Verifying, To: outcomes[outcome], Reason: reason, Actor: "verify",
+			ID: in.ID, From: incident.Verifying, To: outcomes[verdict.Outcome], Reason: verdict.Reason, Actor: "verify",
 		})
 	})
-	return final, err
+	return done && err == nil, err
+}
+
+// judge decides the profiles' verification checks named again from what the
+// workload did since the change, elapsed ago, and turns the rollout's
+// outcome into the verdict they give.
+func (w *Worker) judge(ctx context.Context, in store.Incident, names []string, outcome Outcome, r capability.Reading, elapsed time.Duration, now time.Time) (Verdict, error) {
+	if outcome != Resolved && outcome != Unchanged {
+		return Rollout(outcome, r), nil
+	}
+	target, err := workload.Read(ctx, w.Reader, in.Target)
+	if err != nil {
+		return Verdict{}, err
+	}
+	before, err := w.Store.Predicates(ctx, in.ID)
+	if err != nil {
+		return Verdict{}, err
+	}
+	found := w.Checks.Recheck(ctx, w.Reader, target, names, elapsed, now)
+	return Judge(outcome, r, found, before, w.Words), nil
 }
 
 // observed is what a verification shows of its latest reading.

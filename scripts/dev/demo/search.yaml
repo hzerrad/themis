@@ -3,7 +3,10 @@
 # `make demo-break-cpu` makes the feed send 250m of work, with no rollout:
 # more than search's 200m CPU limit allows, so the kernel throttles it in
 # nearly every period and it falls behind. A limit of 300m, 1.5 times the
-# current one, is enough. `make demo-fix-cpu` stops the work.
+# current one, is enough: it is then throttled in about 1 period in 10.
+# `make demo-break-cpu-more` sends 350m, which a limit of 300m doesn't
+# cover: Themis's first raise isn't enough, and the next one, to 450m, is.
+# `make demo-fix-cpu` stops the work.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -85,6 +88,10 @@ spec:
           args:
             - |
               trap 'exit 0' TERM
+              # It rests by waiting on a FIFO nothing writes to: read is
+              # built into the shell, so a rest costs no process, where 100
+              # sleep processes a second would cost a third of the work.
+              mkfifo /tmp/rest 2>/dev/null; exec 3<>/tmp/rest
               work=0 next=0 t0=0 u0=0
               while :; do
                 read -r up _ </proc/uptime
@@ -97,12 +104,17 @@ spec:
                     echo "search: the feed sends ${w}m of CPU work"
                     work=$w t0=$t u0=$u
                   fi
-                  behind=$((((t - t0) * work / 1000 - (u - u0)) / 100))
-                  [ "$behind" -gt 1 ] && echo "search: ${behind}s of CPU work behind the feed"
+                  # Work more than a minute behind is dropped, as a bounded
+                  # queue drops it: a higher limit catches up within a minute.
+                  behind=$(((t - t0) * work / 1000 - (u - u0)))
+                  if [ "$behind" -gt 6000 ]; then
+                    t0=$((t0 + (behind - 6000) * 1000 / work)) behind=6000
+                  fi
+                  [ "$behind" -gt 100 ] && echo "search: $((behind / 100))s of CPU work behind the feed"
                   next=$((t + 1000))
                 fi
                 [ $(((u - u0) * 1000)) -lt $(((t - t0) * work)) ] && continue
-                if [ "$work" -gt 0 ]; then sleep 0.01; else sleep 10; fi
+                if [ "$work" -gt 0 ]; then read -t 0.01 _ <&3; else read -t 10 _ <&3; fi
               done
           resources:
             requests:

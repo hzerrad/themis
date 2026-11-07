@@ -174,8 +174,8 @@ func (m Matched) InvestigationBudget() Investigation {
 }
 
 // Verification is the strictest of the profiles' verifications, with
-// defaults filled in: the longest window, and the longest the target must
-// stay healthy in it.
+// defaults filled in: the longest window, the longest the target must stay
+// healthy in it, and every check any of them names, each once.
 func (m Matched) Verification() Verification {
 	if len(m) == 0 {
 		return Profile{}.EffectiveVerification()
@@ -185,6 +185,7 @@ func (m Matched) Verification() Verification {
 		v := p.EffectiveVerification()
 		out.Window.Duration = max(out.Window.Duration, v.Window.Duration)
 		out.Stability.Duration = max(out.Stability.Duration, v.Stability.Duration)
+		out.Checks = union(out.Checks, v.Checks)
 	}
 	return out
 }

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Readiness probes failing despite CPU usage below limits and no throttling at limit. Need more data on application-specific bottlenecks.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No evidence of CPU throttling at limit or usage near limit, but readiness probes fail. Could be application-specific issues.\", \"supporting\": [\"ev-container_cpu\", \"ev-target_events\"], \"contradicting\": [\"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"],\"missing\": [\"container_logs_tail\"],\"status\": \"open\"}]}",
+      "usage": {
+        "input_tokens": 3477,
+        "output_tokens": 881
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

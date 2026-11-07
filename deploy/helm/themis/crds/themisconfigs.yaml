@@ -91,7 +91,9 @@ spec:
                   window:
                     description: |-
                       Window is how long an incident Themis couldn't decide stays open for a
-                      suggestion. Defaults to 15m with sources, and to none without.
+                      suggestion, and how long one waiting for a person's fix waits before
+                      Themis looks again: it keeps waiting while its checks find the failure.
+                      Defaults to 15m with sources, and to none without.
                     pattern: ^([0-9]+(\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$
                     type: string
                 type: object

@@ -74,7 +74,7 @@ A counter counts what was committed: a change the database rolled back is never 
 | `themis_gitops_refusals_total` | | Actions denied on a target a GitOps controller manages |
 | `themis_approvals_total` | `result` | `approved`, `denied`, `expired`, and refused attempts: `digest_mismatch` for a digest other than the one shown, `replayed` for an action already decided |
 | `themis_actions_total` (executor) | `capability`, `result` | Actions executed: `succeeded`, `stale`, `dry_run_failed`, `failed`, `ambiguous` |
-| `themis_verification_outcomes_total` | `outcome` | `resolved`, `contained`, `unchanged`, `worsened`, `inconclusive` (which includes a target that could not be observed) |
+| `themis_verification_outcomes_total` | `outcome` | `resolved`, `contained`, `unchanged`, `worsened`, `inconclusive` (which includes a target that could not be observed, and a verification check that couldn't be decided, such as throttling without a metrics source) |
 | `themis_notifications_total` | `result` | Webhook posts `delivered`, or `failed` and retried |
 | `themis_evidence_collected_total` | `template` | Evidence items collected |
 | `themis_evidence_truncated_total` | `template` | Items cut to their template's bound |

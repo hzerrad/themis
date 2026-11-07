@@ -42,7 +42,8 @@ const SAYS = {
   12: { has: ["Lengthened checkout's liveness probe timeout from 1s to 3s.", "Change checkout's memory request and memory limit"] },
   19: {
     has: ["Raise checkout's CPU limit from 200m to 300m?", "Approve the raise", "Deny the raise", "Supports the raise",
-      "2 checks support the raise. None is against it.", "Restarts 4 pods, up to 2 at a time.", "Then checks that the pods become ready and stay ready.",
+      "2 checks support the raise. None is against it.", "Restarts 4 pods, up to 2 at a time.",
+      "Then checks that the pods become ready and stay ready, and are no longer throttled at their CPU limit.",
       "Based on Prometheus's container CPU history over 1h."],
     not: [SECRETS, "Commands and arguments"],
   },
@@ -55,6 +56,14 @@ const SAYS = {
       "Then checks that the pods become ready and stay ready, with no restart."],
   },
   22: { has: ["Verifying the raise.", "Raised checkout's memory limit from 256Mi to 512Mi."], not: ["pods ready", "pods are ready"] },
+  23: {
+    has: ["Follows Themis's fix on an earlier incident, 4m before this incident opened: raised checkout's CPU limit from 200m to 300m.",
+      "Raise checkout's CPU limit from 300m to 450m?", "Themis's earlier fix"],
+  },
+  24: { has: ["Not fixed.", "The change stays, as it left the workload no worse."], not: ["Fixed. The workload recovered"] },
+  25: { has: ["Recovered before a fix."], not: ["Recovered before Themis acted."] },
+  26: { has: ["Closed by alice.", "Reason: handled by the vendor."], not: ["The evidence doesn't point to one cause.", "Some evidence was missing."] },
+  5: { has: ["Reason for closing (optional)", "Themis doesn't close it on its own while its checks find the failure."] },
 };
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
@@ -95,6 +104,7 @@ function api(o) {
     ["GET", /^\/v1\/incidents\/([\w-]+)$/, (_, id) => detail(id) || [404, "No such incident or fix."]],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/proposals$/, () => F.suggested],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/investigate$/, () => ({ state: "investigating" })],
+    ["POST", /^\/v1\/incidents\/([\w-]+)\/close$/, () => ({ state: "closed_no_action" })],
     ["POST", /^\/v1\/actions\/([\w-]+)\/(approve|deny)$/, () => ({})],
     ["GET", /^\/v1\/status$/, () => F.status[o.status || "mixed"]],
     ["GET", /^\/v1\/settings\/model$/, () => (o.model === null ? [404, "404 page not found"] : F.models[o.model || "unset"])],
@@ -401,6 +411,11 @@ for (const who of ["approver", "admin"]) {
     ok("approved");
   });
 }
+await visit("approver: close an incident that waits for a fix", { who: "approver", hash: "#/incidents/" + id(5) }, async (page, ok) => {
+  await act.type(page, field(page, "Reason for closing (optional)"), "Handled by the vendor.");
+  await act.click(page, "button", "Close");
+  ok("closed");
+});
 await visit("approver: deny the fix alice suggested", { who: "approver", hash: "#/incidents/" + id(3) }, async (page, ok) => {
   await act.type(page, field(page, "Reason for denying (optional)"), "Raise it in Git instead.");
   await act.click(page, "button", "Deny and close");

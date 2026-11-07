@@ -836,7 +836,77 @@ func uiIncidents(t *testing.T) []incidentRecord {
 				return a
 			}(), execution: uiExecuted("succeeded", "Raised checkout's memory limit from 256Mi to 512Mi.", 5), verification: uiVerified("", "unchanged", "")}},
 		},
+		// Following Themis's raise for incident 24, which wasn't enough:
+		// waiting for approval of another.
+		{
+			incident: throttled(23, incident.AwaitingApproval), evidence: append(uiThemisFix(t, uiID(24), uiAt(-23*90-4)), uiThrottled(t, evidenceOf)...), predicates: uiThrottling(),
+			investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
+				uiStep(incident.Proposed, incident.AwaitingApproval, "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."))...),
+			proposals: []store.Proposal{investigatorFix(p1, resources.Name, oneValue("app", "limits", "cpu", "450m"), "cpu_throttled_at_limit", "earlier_revision_healthy")},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionAwaitingApproval)
+				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, oneValue("app", "limits", "cpu", "450m"), []byte(cpuRaised), []byte(cpuRaisedAgain)
+				return a
+			}()}},
+		},
+		// A raise whose pods are ready but still throttled: not fixed, and
+		// kept.
+		{
+			incident: throttled(24, incident.Escalated), evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Proposed, "Fix proposed."),
+				approved,
+				uiStep(incident.Authorized, incident.Executing, "Raising checkout's CPU limit from 200m to 300m."),
+				uiStep(incident.Executing, incident.Verifying, "Raised checkout's CPU limit from 200m to 300m."),
+				uiStep(incident.Verifying, incident.Escalated, uiNotFixed))...),
+			proposals: []store.Proposal{investigatorFix(p1, resources.Name, cpuParams, "cpu_throttled_at_limit")},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionSucceeded)
+				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, cpuParams, []byte(cpuPre), []byte(cpuRaised)
+				return a
+			}(), execution: uiExecuted("succeeded", "Raised checkout's CPU limit from 200m to 300m.", 6), verification: uiVerified("unchanged", "healthy", "1 of 1 pods are ready.")}},
+		},
+		// Waited for a suggested fix, and recovered before one came.
+		{
+			incident: throttled(25, incident.SelfResolved), evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: uiInvestigation(t, "inconclusive", false),
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.AwaitingSuggestion, "No fix proposed. The checks found that a container is throttled at its CPU limit (app was throttled in 62% of its CPU periods over 1h, at its limit of 0.2 CPU). Referred to a person."),
+				uiStep(incident.AwaitingSuggestion, incident.SelfResolved, "Recovered before a fix. The checks now find that no container is throttled at its CPU limit (app was throttled in 3% of its CPU periods over 5m, at its limit of 0.2 CPU, below 25%)."))...),
+		},
+		// Closed by a person while it waited for a suggested fix.
+		{
+			incident: inc(26, incident.ClosedNoAction), evidence: evidenceOf, predicates: uiPredicates(false), investigation: uiInvestigation(t, "inconclusive", false),
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.AwaitingSuggestion, "No fix proposed. Referred to a person."),
+				store.Transition{From: incident.AwaitingSuggestion, To: incident.ClosedNoAction, Reason: "Closed by alice. Reason: handled by the vendor.", Actor: "alice"})...),
+		},
 	}
+}
+
+// uiNotFixed is what verification says of a raise that left its pods ready
+// and still throttled.
+const uiNotFixed = "Not fixed. Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m, at its limit of 0.3 CPU). " +
+	"1 of 1 pods are ready. The change stays, as it left the workload no worse. Referred to a person."
+
+// cpuRaisedAgain is the CPU limit of the only container, raised once more.
+const cpuRaisedAgain = `{"spec":{"containers":[{"name":"app","image":"shop/checkout:1.5.0","resources":{"limits":{"cpu":"450m"}}}]}}`
+
+// uiThemisFix is the evidence of Themis's raise for incident, which the
+// workload runs.
+func uiThemisFix(t *testing.T, incident string, appliedAt time.Time) []evidence.Item {
+	t.Helper()
+	item, err := evidence.NewThemisFix(evidence.ThemisFixView{
+		Incident: incident, Fix: resources.Name, Done: "Raised checkout's CPU limit from 200m to 300m.", AppliedAt: appliedAt, Replaced: "1", Outcome: "unchanged",
+		Found: []evidence.FoundView{{Check: "cpu_throttled_at_limit", Reason: "app was throttled in 62% of its CPU periods over 1h, at its limit of 0.2 CPU"}},
+	}, uiTarget, uiAt(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item.ID = "0192f0c1-1000-7000-8000-000000000099"
+	return []evidence.Item{item}
 }
 
 // uiSchemaFix is a fix the page has no form of its own for.

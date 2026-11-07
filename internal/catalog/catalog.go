@@ -208,6 +208,13 @@ func (c Catalog) CheckProfile(p config.Profile) error {
 			errs = append(errs, fmt.Errorf("symptoms names the check %q, %w", name, err))
 		}
 	}
+	// A verification check that doesn't run is never false, so no fix would
+	// ever count as fixed.
+	for _, name := range p.Verification.Checks {
+		if err := c.runs(p, name); err != nil {
+			errs = append(errs, fmt.Errorf("verification.checks names the check %q, %w", name, err))
+		}
+	}
 	compiled, err := policy.Compile(p.EffectivePolicy())
 	if err != nil {
 		return errors.Join(append(errs, err)...)

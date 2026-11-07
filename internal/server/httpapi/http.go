@@ -112,6 +112,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/incidents/{id}/proposals", a.authed(config.RoleApprover, a.suggest, incidentFields))
 	mux.Handle("POST /v1/actions/{id}/approve", a.authed(config.RoleApprover, a.approve, a.actionFields))
 	mux.Handle("POST /v1/actions/{id}/deny", a.authed(config.RoleApprover, a.deny, a.actionFields))
+	mux.Handle("POST /v1/incidents/{id}/close", a.authed(config.RoleApprover, a.close, incidentFields))
 	if a.Again != nil {
 		mux.Handle("POST /v1/incidents/{id}/investigate", a.authed(config.RoleApprover, a.investigate, incidentFields))
 	}

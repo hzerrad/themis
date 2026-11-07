@@ -144,7 +144,7 @@
     },
     {
       "name": "cpu_throttled_at_limit",
-      "version": "1",
+      "version": "2",
       "value": "true",
       "reason": "app was throttled in 90% of its CPU periods over 1h, at its limit of 0.2 CPU",
       "evidence_ids": [
@@ -162,7 +162,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "there is no revision before revision 1, so no rollout replaced one",
       "evidence_ids": [
@@ -171,7 +171,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "search has no earlier revision to roll back to",
       "evidence_ids": [

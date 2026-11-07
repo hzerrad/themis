@@ -188,7 +188,7 @@
   "predicates": [
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "true",
       "reason": "revision 2 rolled out 30m0s ago",
       "evidence_ids": [
@@ -207,7 +207,7 @@
     },
     {
       "name": "earlier_revision_healthy",
-      "version": "1",
+      "version": "2",
       "value": "false",
       "reason": "pod inventory-4b8d2f6a1-b7c9d of revision 1: app OOMKilled",
       "evidence_ids": [

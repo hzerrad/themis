@@ -183,7 +183,7 @@
     },
     {
       "name": "rollout_recent",
-      "version": "2",
+      "version": "3",
       "value": "false",
       "reason": "revision 12 rolled out 77h10m0s ago, beyond 6h0m0s",
       "evidence_ids": [

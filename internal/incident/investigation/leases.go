@@ -24,8 +24,11 @@ import (
 // DefaultLeaseFor is how long a lease lasts without renewal.
 const DefaultLeaseFor = time.Minute
 
-// investigator is who moves an incident along while it is investigated.
-const investigator = "investigator"
+// Investigator is who moves an incident along while it is investigated, as
+// its transitions record it.
+const Investigator = "investigator"
+
+const investigator = Investigator
 
 // Leases hands prepared investigations to an investigator, one lease at a
 // time; reads the evidence it asks for within its profile and budget; and

@@ -115,6 +115,13 @@ function moment(t) {
   const d = new Date(t);
   return h("time", { datetime: d.toISOString(), title: when(t) }, sameDay(d, new Date()) ? CLOCK.format(d) : DAY.format(d));
 }
+// span says how long s seconds are, as the timeline writes durations: 45s,
+// 4m, 2h.
+function span(s) {
+  if (90 > s) return Math.round(s) + "s";
+  if (90 * 60 > s) return Math.round(s / 60) + "m";
+  return Math.round(s / 3600) + "h";
+}
 // ago says how long ago t was, compactly: 4 s ago, 77 min ago.
 function ago(t) {
   const s = Math.max(0, Math.round((Date.now() - new Date(t)) / 1000));
@@ -216,6 +223,7 @@ function supports(p, fix) {
 const EVIDENCE_LABEL = {
   rollout_history: "Rollout history", pod_states: "Pod states", target_events: "Events", container_logs_tail: "Container logs",
   referenced_config: "Referenced config", container_memory: "Container memory", container_cpu: "Container CPU",
+  themis_fix: "Themis's earlier fix",
 };
 const ACTOR_LABEL = {
   intake: "Alert intake", investigation: "Themis", investigator: "The investigator", governance: "Policy",
@@ -1855,7 +1863,9 @@ function headline(d, ctx) {
     const [title, rest] = opening(reason, "No fix met the checks and policy.");
     return [title, rest || leading];
   }
-  if (s === "self_resolved") return ["Recovered before Themis acted.", reason];
+  // The reason's first sentence says why it closed: "Recovered before a
+  // fix.", "All of its alerts stopped firing.", "Fixed outside Themis, by …".
+  if (s === "self_resolved") return opening(reason, "Recovered before Themis acted.");
   return [reason || stateOf(s)[0] + ".", ""];
 }
 
@@ -1912,6 +1922,39 @@ function againBlock(d, reload) {
   return h("div", { class: "act" }, button, note ? h("p", { class: "fine" }, note) : null, error);
 }
 
+// closeBlock lets an approver close an incident that waits for a suggested
+// fix, with no change: Themis keeps one whose checks still find its failure
+// open until it recovers or a person closes it.
+function closeBlock(d, reload) {
+  if (!SUGGESTABLE.includes(d.Incident.state) || d.Incident.state === "investigating" || !can("approver")) return null;
+  const error = h("div", { class: "error", role: "alert" });
+  const reason = h("textarea", { rows: "2" });
+  const button = h("button", { class: "btn deny", type: "button",
+    onclick: async () => {
+      button.disabled = true;
+      error.textContent = "";
+      try {
+        await api("/v1/incidents/" + encodeURIComponent(d.Incident.id) + "/close", { method: "POST", body: JSON.stringify({ reason: reason.value }) });
+        flash = "Closed, no change.";
+        reload();
+      } catch (e) {
+        error.textContent = e.message;
+        button.disabled = false;
+      }
+    } }, "Close");
+  return h("div", { class: "act" }, field("Reason for closing (optional)", reason), button,
+    h("p", { class: "fine" }, "Closes the incident with no change. Themis doesn't close it on its own while its checks find the failure."), error);
+}
+
+// followsNote says which fix of Themis's the workload ran when the incident
+// opened, and links the incident whose fix it was.
+function followsNote(f) {
+  if (!f) return null;
+  const before = f.before >= 0 ? ", " + span(f.before) + " before this incident opened" : "";
+  const done = f.done ? ": " + f.done.charAt(0).toLowerCase() + f.done.slice(1) : ".";
+  return h("p", { class: "note" }, "Follows Themis's fix on ", h("a", { href: "#/incidents/" + f.incident }, "an earlier incident"), before + done);
+}
+
 async function detail(id) {
   const reload = () => detail(id).catch(showError);
   const d = await api("/v1/incidents/" + encodeURIComponent(id));
@@ -1944,6 +1987,7 @@ async function detail(id) {
   const fromPerson = source && !source.LeaseID ? source : null;
   const suggesting = SUGGESTABLE.includes(inc.state) && can("approver") ? suggestForm(d, reload) : null;
   const again = againBlock(d, reload);
+  const closing = closeBlock(d, reload);
   const said = flash;
   flash = null;
 
@@ -1957,9 +2001,10 @@ async function detail(id) {
     said ? h("p", { class: "flash", role: "status" }, said) : null,
     inc.supersededBy ? h("p", { class: "note" }, "The workload changed outside Themis and still fails. A newer incident covers it as it is now: ",
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
+    followsNote(d.Follows),
 
     action ? decision(action, d, ctx, true, reload) : suspicion(d, null, "fix"),
-    again || suggesting ? h("div", { class: "more" }, again, suggesting) : null,
+    again || suggesting || closing ? h("div", { class: "more" }, again, suggesting, closing) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix", fixed ? fixed.Capability : ""),
 
@@ -1979,7 +2024,7 @@ async function detail(id) {
       technical(d, action)));
 
   // Refreshing would discard what an approver or suggester is typing.
-  const typing = actions.some((a) => a.State === "awaiting_approval") || Boolean(suggesting);
+  const typing = actions.some((a) => a.State === "awaiting_approval") || Boolean(suggesting) || Boolean(closing);
   if (!typing) timer = setTimeout(reload, POLL_MS * 2);
   else timer = setTimeout(() => watchChanges(id, d, reload), POLL_MS * 2);
 }
