@@ -459,7 +459,7 @@ Themis never closes an incident with no change on its own while its checks find 
 
 The failure is found by the profiles' [symptoms](#profiles): checks that find the failure itself, such as `oom_killed_current_revision` or `cpu_throttled_at_limit`. A profile that lists none uses the checks that justify its fixes. Themis closes the incident with no change only when no symptom is true and the checks support no fix, when it recovered on its own, when Themis only recommends the fix because GitOps manages the workload, or when a person denies a fix and closes the incident, or closes it while it waits. An incident none of whose profiles offers a fix is referred to a person as before, with what the checks found.
 
-**No timer closes it while it fails.** Once an incident has waited for a suggested fix for `externalProposals.window`, 15 minutes when that is none, Themis decides its symptoms again every minute, from evidence read then. Evidence read over a window, such as CPU throttling, is read over the least it needs, 5 minutes for throttling, so "now" means the last few minutes rather than the hour the incident opened on. Then:
+**No timer closes it while it fails.** Once an incident has waited for a suggested fix for `externalProposals.window`, 15 minutes when that is none, Themis decides its symptoms again every minute, from evidence read then. Evidence read over a window, such as CPU throttling, is read over the least it needs, 5 minutes for throttling, so "now" means the last few minutes rather than the hour the incident opened on. Each minute it looks at up to 100 such incidents, those it looked at longest ago first, so however many wait, each comes up in turn. Then:
 
 | The symptoms now | What happens |
 |---|---|
@@ -468,7 +468,18 @@ The failure is found by the profiles' [symptoms](#profiles): checks that find th
 | Those its checks found are false | It closes as recovered: "Recovered before a fix. The checks now find that no container is throttled at its CPU limit (…)." |
 | Its checks never found its failure | It closes with no change, as before: "No fix was suggested within 15m." |
 
-So the window is how long Themis gives a person before it looks again, and it only closes an incident that it can see no longer fails. It also closes as recovered when every alert of the incident stops firing, and a change made outside Themis that fixes or replaces the workload closes or supersedes it, as [what protects what](architecture.md#what-protects-what) describes.
+So the window is how long Themis gives a person before it looks again, and it only closes an incident that it can see no longer fails. It also closes as recovered when every alert of the incident stops firing, and a change made outside Themis that fixes or replaces the workload closes or supersedes it, as below.
+
+**A change made outside Themis** is judged as verification judges Themis's own fix: ready pods aren't enough. Every 30 seconds, Themis compares the workload of each open incident it hasn't started applying a fix to with the template the incident was investigated against, up to 100 incidents a run, those it compared longest ago first. Once a change has stood for a minute:
+
+| The workload since the change | What happens |
+|---|---|
+| The rollout isn't complete, a replica isn't ready, or a container ran out of memory | A new incident replaces it: "Replaced by a new incident. The workload was changed outside Themis, by kubectl-set, and still fails." |
+| A verification check or a symptom is true | A new incident replaces it: "… by kubectl-set, and still fails. Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m, at its limit of 0.3 CPU)." |
+| A verification check can't be told, such as without a metrics source | A new incident replaces it: "… by kubectl-set. Unknown whether it recovered. Since the change, the checks found that throttling at the CPU limit is unknown (no throttling figures: no metrics source is set up)." |
+| Every verification check is false, and no symptom is true | It closes as recovered: "Recovered after a change outside Themis, by kubectl-set. Since the change, the checks found that no container is throttled at its CPU limit (…)." |
+
+The checks are the [verification checks](#verification) and [symptoms](#profiles) of every profile the incident matched, decided from evidence about the new pods only, read over the time since the change. Themis judges once the new pods have run as long as that evidence needs, 5 minutes for CPU throttling. A symptom that can't be told doesn't hold a recovery back, as when the failures started can't be told once every pod is ready: the rollout and the verification checks decide then. The recovery names the verification checks, and the symptoms the incident's checks found when it opened.
 
 What operators read about a decision comes from what Themis can check: the root cause from the investigator's list, the checks the fix cites with what Themis found, and the change the fix would make. The investigator's own summary, and a suggester's reasons, are shown apart, labelled "Written by the investigator's model" or "Written by the suggester".
 
