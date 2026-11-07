@@ -80,8 +80,8 @@ This section lists what `v0.1.0-alpha1` supports. More alert sources and workloa
 ```mermaid
 flowchart LR
   AM["Alert source (Alertmanager)"] -->|alerts| Core[themis-core]
-  Core <-->|evidence, proposals| Intel[themis-intelligence]
-  Agent[AI SRE agent] -->|proposals| Core
+  Core <-->|evidence, proposals| Inv["Investigator<br/>themis-intelligence or an AI SRE agent"]
+  People[Engineers] <-->|"web UI: evidence, suggestions, approvals"| Core
   Core -->|approved actions| Exec[themis-executor]
   Core -->|read| K8s[(Kubernetes API)]
   Exec -->|patch| K8s
@@ -91,7 +91,7 @@ flowchart LR
 | Component | Language | Role |
 |---|---|---|
 | `themis-core` | Go | Alert intake, evidence, checks, governance, approvals, verification, audit trail, HTTP API and web UI |
-| `themis-intelligence` | Python | The investigator: a bounded loop over the evidence and the model. Holds no cluster or database credentials |
+| `themis-intelligence` | Python | Themis's own investigator: a bounded loop over the evidence and the model. Optional, and replaceable by an external AI SRE agent. Holds no cluster or database credentials |
 | `themis-executor` | Go | Applies approved actions after checking them again. Optional; the only component with write access |
 | PostgreSQL | | State, audit trail and job queue |
 
