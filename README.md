@@ -1,9 +1,9 @@
+# Themis
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/themis-logo-dark.svg">
   <img src="docs/assets/themis-logo.svg" alt="" width="96" align="right">
 </picture>
-
-# Themis
 
 [![CI](https://github.com/hzerrad/themis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hzerrad/themis/actions/workflows/ci.yml)
 [![End-to-end](https://github.com/hzerrad/themis/actions/workflows/e2e.yml/badge.svg?branch=main)](https://github.com/hzerrad/themis/actions/workflows/e2e.yml)
