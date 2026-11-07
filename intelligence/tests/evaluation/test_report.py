@@ -158,7 +158,10 @@ def test_twins_are_compared_with_the_case_they_copy(
 def test_a_declined_fix_the_checks_support_is_handed_to_a_person() -> None:
     r = build_report(provenance(), [oom()], [record("abstained")], "")
     assert r.scenarios[0].handed_over == 1
-    said = "The checks support a rollback or a partial rollback (the failures started after the rollout)."
+    said = (
+        "The checks support a rollback or a partial rollback"
+        " (the failures started after the rollout)."
+    )
     assert said in to_markdown(r)
 
 
