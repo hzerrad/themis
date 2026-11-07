@@ -152,4 +152,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" dist/*.tgz --repo "$GITHUB_REPOSITORY" --title "Themis $TAG" --generate-notes --verify-tag
+        # A tag with a pre-release part, such as v0.1.0-alpha1, makes a
+        # pre-release that never becomes the latest release.
+        run: |
+          pre=()
+          case "$TAG" in *-*) pre=(--prerelease --latest=false) ;; esac
+          gh release create "$TAG" dist/*.tgz --repo "$GITHUB_REPOSITORY" --title "Themis $TAG" --generate-notes --verify-tag "${pre[@]}"
