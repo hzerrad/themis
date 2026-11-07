@@ -127,6 +127,16 @@ function api(o) {
     ["GET", /^\/v1\/incidents$/, () => (o.empty ? [] : F.incidents)],
     ["GET", /^\/v1\/incidents\/([\w-]+)$/, (_, id) => detail(id) || [404, "No such incident or fix."]],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/proposals$/, () => F.suggested],
+    // A raise of the memory limit to 72Mi would be accepted; any other
+    // value refused.
+    ["POST", /^\/v1\/incidents\/([\w-]+)\/proposals\/preview$/, (_h, _id, body) => {
+      const app = ((JSON.parse(body).params || {}).containers || {}).app || {};
+      return (app.limits || {}).memory === "72Mi" ? F.previews.accept : F.previews.refuse;
+    }],
+    ["POST", /^\/v1\/incidents\/([\w-]+)\/evidence$/, (_h, _id, body) => {
+      state.asked = JSON.parse(body);
+      return F.collected;
+    }],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/investigate$/, () => ({ state: "investigating" })],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/close$/, () => ({ state: "closed_no_action" })],
     ["POST", /^\/v1\/actions\/([\w-]+)\/(approve|deny)$/, () => ({})],
@@ -146,17 +156,19 @@ function api(o) {
     ["GET", /^\/v1\/audit\/accounts$/, () => F.accountRecord],
     ["POST", /^\/v1\/me\/password$/, () => { state.who = "admin"; return [204, ""]; }],
   ];
-  return (method, path, headers) => {
+  const answer = (method, path, headers, body) => {
     for (const [m, re, answer] of routes) {
       const match = path.match(re);
       if (m === method && match) {
-        const a = answer(headers, ...match.slice(1));
+        const a = answer(headers, ...match.slice(1), body);
         return Array.isArray(a) && typeof a[0] === "number" ? a : [200, JSON.stringify(a)];
       }
     }
     problems.push("the page asked for " + method + " " + path + ", which Themis doesn't serve");
     return [404, "404 page not found"];
   };
+  answer.state = state;
+  return answer;
 }
 
 // open loads the page at hash against the API o describes, and waits until
@@ -174,7 +186,7 @@ async function open(o) {
     beforeParse(window) {
       window.fetch = async (input, init = {}) => {
         const url = new URL(String(input), window.location.href);
-        const [status, text] = answer((init.method || "GET").toUpperCase(), url.pathname, init.headers || {});
+        const [status, text] = answer((init.method || "GET").toUpperCase(), url.pathname, init.headers || {}, init.body || "{}");
         return {
           ok: status >= 200 && status < 300, status, statusText: String(status),
           text: async () => text, json: async () => window.JSON.parse(text),
@@ -182,7 +194,7 @@ async function open(o) {
       };
     },
   });
-  const page = { dom, window: dom.window, document: dom.window.document, changes: 0 };
+  const page = { dom, window: dom.window, document: dom.window.document, changes: 0, api: answer.state };
   new dom.window.MutationObserver(() => page.changes++).observe(page.document, { subtree: true, childList: true, characterData: true, attributes: true });
   await new Promise((done, fail) => {
     dom.window.addEventListener("load", done);
@@ -270,6 +282,12 @@ const act = {
     const invalid = el.querySelector(":invalid");
     if (invalid) throw new Error("the form isn't valid: " + invalid.outerHTML.slice(0, 120));
     el.requestSubmit();
+    await settle(page);
+  },
+  // wait lets the page's own timers run, such as the preview's, a moment
+  // after an edit.
+  async wait(page, ms) {
+    await new Promise((done) => setTimeout(done, ms));
     await settle(page);
   },
   // refresh opens every fold, then has the page redraw itself in place, as
@@ -451,17 +469,71 @@ await visit("viewer: the facts, and no raw evidence", { who: "viewer", hash: "#/
   expect("no line of what each holds", [...doc.querySelectorAll(".ev .gist")].every((s) => !s.textContent.trim()));
   expect("every piece readable by responders only", [...doc.querySelectorAll(".ev .body")].every((b) => b.textContent.includes("Readable by responders only.")));
   expect("no raw data", !doc.querySelector("details.raw"));
+  expect("no way to collect more", ![...doc.querySelectorAll("button")].some((b) => b.textContent === "Collect more evidence"));
   ok("what a viewer reads");
+});
+
+// An approver has Themis collect more evidence, of a kind the incident's
+// profiles allow; the new piece lights up in place, and the timeline says
+// who asked for each.
+await visit("approver: collect more evidence", { who: "approver", hash: "#/incidents/" + id(30) }, async (page, ok) => {
+  const doc = page.document;
+  expect("the timeline to say who asked", doc.querySelector(".timeline").textContent.includes("Container logs collected by alice."));
+  await act.click(page, "button", "Collect more evidence");
+  const form = the(page, ".collect");
+  expect("the form open in place", !form.hidden && the(page, "button", "Collect more evidence").hidden);
+  ok("opened the form");
+  await act.choose(page, field(page, "Collect more", form), "Container logs");
+  await act.choose(page, field(page, "Pod", form), "catalog-68d6cb8cd5-ltnx7");
+  await act.choose(page, field(page, "Run", form), "Previous run");
+  ok("chose the previous run of another pod");
+  await act.choose(page, field(page, "Collect more", form), "Container memory");
+  await act.choose(page, field(page, "Over", form), "24 hours");
+  ok("chose memory over a day");
+  await act.choose(page, field(page, "Collect more", form), "Container logs");
+  await act.choose(page, field(page, "Pod", form), "catalog-68d6cb8cd5-ltnx7");
+  await act.click(page, ".collect button", "Collect");
+  const asked = page.api.asked || {};
+  expect("the logs of the pod chosen asked for", asked.template === "container_logs_tail" && asked.params.pod === "catalog-68d6cb8cd5-ltnx7" && asked.params.previous === "true");
+  expect("the new piece lit", doc.getElementById("ev-10").classList.contains("lit"));
+  says(page, { has: ["Collected. Added as evidence 10."] });
+  ok("collected");
+});
+
+// The preview says what Themis would do with the fix as it stands, a moment
+// after each edit.
+await visit("approver: the preview of a suggested fix", { who: "approver", hash: "#/incidents/" + id(30) }, async (page, ok) => {
+  const form = () => the(page, "[data-key=suggest] form");
+  const preview = () => the(page, "[data-key=suggest] .preview");
+  expect("the current values as hints", form().textContent.includes("Currently 60Mi. Peak 57Mi."));
+  await act.wait(page, 450);
+  expect("nothing to judge before a change", !preview().classList.contains("ok") && preview().textContent.includes("Change at least one value."));
+  ok("unchanged");
+  await act.type(page, field(page, "Memory limit", form()), "72Mi");
+  await act.wait(page, 450);
+  expect("the raise accepted", preview().classList.contains("ok") && preview().querySelector(".verdict").textContent === "Themis would accept this raise.");
+  says(page, { has: ["A container of the current version was OOMKilled", "No pod was evicted for its node's memory",
+    "Then policy rule raise-needs-approval of the oom-limit-too-low profile requires a person's approval."] });
+  ok("previewed the raise");
+  await act.type(page, field(page, "Memory limit", form()), "50Mi");
+  await act.wait(page, 450);
+  expect("the decrease refused", preview().classList.contains("no") && preview().querySelector(".verdict").textContent === "Themis would refuse this decrease.");
+  says(page, { has: ["Policy rule raise-a-memory-limit-only of the oom-limit-too-low profile forbids this fix."] });
+  ok("previewed the decrease");
+  await act.type(page, field(page, "Memory limit", form()), "lots");
+  await act.wait(page, 450);
+  expect("what to correct", preview().textContent.includes("isn't a Kubernetes quantity"));
+  ok("previewed a value that isn't a quantity");
 });
 
 // Suggesting each fix the incident offers, as an approver and an admin.
 for (const who of ["approver", "admin"]) {
   await visit(who + ": suggest every fix", { who, hash: "#/incidents/" + id(4) }, async (page, ok) => {
-    const kinds = [...the(page, "details[data-key=suggest] select").options].map((o) => o.textContent);
+    const kinds = [...the(page, "[data-key=suggest] select").options].map((o) => o.textContent);
     const offered = ["Rollback", "Memory or CPU change", "Probe change", "Scale change"];
     if (kinds.join() !== offered.join()) throw new Error("the form offers " + kinds.join(", ") + ", not " + offered.join(", "));
     for (const kind of kinds) {
-      const form = () => the(page, "details[data-key=suggest] form");
+      const form = () => the(page, "[data-key=suggest] form");
       await act.choose(page, field(page, "Fix", form()), kind);
       ok("chose " + kind);
       if (kind === "Memory or CPU change") {

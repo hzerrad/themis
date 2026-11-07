@@ -1590,29 +1590,88 @@ function evidenceRow(d, e) {
         h("summary", {}, "Raw data"), h("pre", {}, JSON.stringify(e.Data, null, 2)))));
 }
 
+// collected is the piece of evidence a person just had collected, which the
+// page lights when it next draws, and says so once.
+let collected = null;
+
+// collectMore lets an approver have Themis read more evidence, of the kinds
+// the incident's profiles allow, through the same templates it reads with.
+// Opening it stops the page refreshing, so nothing chosen is lost.
+function collectMore(d, hold, reload) {
+  const kinds = d.Collectable || [];
+  if (!kinds.length || !can("approver")) return null;
+  const status = h("span", { class: "status", role: "status" });
+  const args = h("div", { class: "args" });
+  let fields = [];
+  const what = h("select", { onchange: () => show() }, kinds.map((k, i) => h("option", { value: String(i) }, k.kind)));
+  const show = () => {
+    const k = kinds[Number(what.value)];
+    fields = (k.params || []).map((p) => ({ p, input: (p.choices || []).length
+      ? h("select", {}, p.choices.map((c) => h("option", { value: c.value }, c.label)))
+      : h("input", { type: "text", autocapitalize: "none", spellcheck: "false" }) }));
+    setChildren(args, fields.map((f) => field(f.p.label, f.input)));
+  };
+  show();
+  const button = h("button", { class: "btn small", type: "button", onclick: async () => {
+    const k = kinds[Number(what.value)];
+    const params = {};
+    for (const f of fields) if (f.input.value.trim()) params[f.p.name] = f.input.value.trim();
+    button.disabled = true;
+    status.textContent = "Collecting.";
+    try {
+      const r = await api("/v1/incidents/" + encodeURIComponent(d.Incident.id) + "/evidence", { method: "POST", body: JSON.stringify({ template: k.template, params }) });
+      collected = r.number;
+      reload();
+    } catch (e) {
+      status.textContent = e.message;
+      button.disabled = false;
+    }
+  } }, "Collect");
+  const form = h("div", { class: "collect", hidden: true }, field("Collect more", what), args, button, status);
+  const open = h("button", { class: "btn small more-ev", type: "button", onclick: () => {
+    open.hidden = true;
+    form.hidden = false;
+    hold();
+    what.focus();
+  } }, "Collect more evidence");
+  return [open, form];
+}
+
 // evidenceSection lists the evidence, numbered as facts and findings cite it.
-function evidenceSection(d) {
+function evidenceSection(d, hold, reload) {
   const items = d.Evidence || [];
   if (!items.length) return null;
+  const lit = collected;
+  collected = null;
   return h("section", { class: "evidence", "aria-label": "Evidence" },
     h("h2", {}, "Evidence ", h("span", { class: "n" }, String(items.length)),
       h("span", { class: "quiet small coll" }, "Collected at ", clock(items[0].CollectedAt))),
-    h("div", { class: "evs" }, items.map((e) => evidenceRow(d, e))));
+    h("div", { class: "evs" }, items.map((e) => {
+      const row = evidenceRow(d, e);
+      if (e.Number === lit) row.classList.add("lit");
+      return row;
+    })),
+    lit ? h("p", { class: "logmeta", role: "status" }, "Collected. Added as evidence " + lit + ".") : null,
+    collectMore(d, hold, reload));
 }
 
-// timelineFold lists every change of state, each reason as recorded. A step
-// taken for the same reason as the one before it reads as the state it
-// reached, not the reason again.
+// timelineFold lists every change of state, each reason as recorded, and
+// the evidence people asked for, in order. A step taken for the same reason
+// as the one before it reads as the state it reached, not the reason again.
 function timelineFold(d) {
   const ts = d.Transitions || [];
-  if (!ts.length) return null;
+  const asked = (d.Evidence || []).filter((e) => e.RequestedBy)
+    .map((e) => ({ At: e.CollectedAt, Reason: e.Kind + " collected by " + e.RequestedBy + ".", Asked: true }));
+  const all = [...ts, ...asked].sort((a, b) => new Date(a.At) - new Date(b.At));
+  if (!all.length) return null;
   return h("details", { class: "fold", "data-key": "timeline" },
-    h("summary", {}, "Timeline", h("span", { class: "n" }, plural(ts.length, "event", "events"))),
-    h("ol", { class: "timeline" }, ts.map((t, i) => {
-      const again = i > 0 && t.Reason && t.Reason === ts[i - 1].Reason;
+    h("summary", {}, "Timeline", h("span", { class: "n" }, plural(all.length, "event", "events"))),
+    h("ol", { class: "timeline" }, all.map((t, i) => {
+      const again = i > 0 && t.Reason && t.Reason === all[i - 1].Reason && !t.Asked;
       return h("li", {},
         h("time", { datetime: t.At }, when(t.At)),
-        h("span", {}, (!again && t.Reason) || stateOf(t.To)[0] + ".", " ", h("span", { class: "by" }, label(ACTOR_LABEL, t.Actor))));
+        h("span", {}, (!again && t.Reason) || stateOf(t.To)[0] + ".", " ",
+          t.Asked ? null : h("span", { class: "by" }, label(ACTOR_LABEL, t.Actor))));
     })));
 }
 
@@ -1691,7 +1750,7 @@ function rollbackFields(f, evidence) {
     ? h("select", {}, earlier.map((r) => h("option", { value: r.revision },
       "Revision " + r.revision + " · " + (r.containers || []).map((c) => c.image).join(", ") + (r.createdAt ? " · " + when(r.createdAt) : ""))))
     : h("input", { type: "number", min: "1", step: "1", required: true });
-  return { nodes: field("Roll back to", revision), params: () => ({ revision: Number(revision.value) }) };
+  return { first: field("Roll back to", revision), nodes: [], params: () => ({ revision: Number(revision.value) }) };
 }
 
 // SUFFIX is what each Kubernetes quantity suffix multiplies by.
@@ -1721,19 +1780,19 @@ const RESOURCES = [
   { kind: "requests", res: "cpu", label: "CPU request", example: "250m" },
 ];
 
-// usedBy says how much memory and CPU a container used, when a metrics
-// source could tell.
+// usedBy says how much memory a container used at its peak, and CPU now,
+// when a metrics source could tell: "Peak 57Mi.", by each limit's field.
 function usedBy(evidence, name) {
   const of = (template) => {
-    const e = evidence.find((x) => x.Template === template && x.Data);
+    const e = evidence.filter((x) => x.Template === template && x.Data).pop();
     return e ? (e.Data.containers || []).find((c) => c.name === name) || {} : {};
   };
   const memory = of("container_memory").peakBytes;
   const cpu = of("container_cpu").usageCores;
-  return [
-    typeof memory === "number" ? "Peak memory use " + Math.ceil(memory / 2 ** 20) + "Mi." : "",
-    typeof cpu === "number" ? "Highest CPU use " + Math.ceil(cpu * 1000) + "m." : "",
-  ].filter(Boolean).join(" ");
+  return {
+    "limits.memory": typeof memory === "number" ? "Peak " + Math.ceil(memory / 2 ** 20) + "Mi." : "",
+    "limits.cpu": typeof cpu === "number" ? "Now " + Math.ceil(cpu * 1000) + "m." : "",
+  };
 }
 
 // resourceFields set a container's memory and CPU limits and requests,
@@ -1741,18 +1800,18 @@ function usedBy(evidence, name) {
 function resourceFields(f, evidence) {
   const containers = currentContainers(evidence);
   const values = RESOURCES.map((r) => ({ ...r,
-    input: h("input", { type: "text", autocapitalize: "none", spellcheck: "false", placeholder: r.example }),
+    input: h("input", { type: "text", class: "mono", autocapitalize: "none", spellcheck: "false", placeholder: r.example }),
     hint: h("span", { class: "hint" }) }));
-  const use = h("p", { class: "quiet small" });
   const now = () => containers.find((c) => c.name === picker.value) || {};
   const was = (c, r) => (c[r.kind] || {})[r.res] || "";
   const fill = () => {
     const c = now();
+    const used = usedBy(evidence, picker.value);
     for (const r of values) {
       r.input.value = was(c, r);
-      r.hint.textContent = !containers.length ? "" : was(c, r) ? "Currently " + was(c, r) + "." : "Currently not set.";
+      const currently = !containers.length ? "" : was(c, r) ? "Currently " + was(c, r) + "." : "Currently not set.";
+      r.hint.textContent = [currently, used[r.kind + "." + r.res] || ""].filter(Boolean).join(" ");
     }
-    use.textContent = usedBy(evidence, picker.value);
   };
   const picker = containerPicker(containers, fill);
   fill();
@@ -1780,9 +1839,8 @@ function resourceFields(f, evidence) {
   };
   const box = (r) => h("label", { class: "field" }, r.label, r.input, r.hint);
   return {
-    nodes: [field("Container", picker), use,
-      h("div", { class: "inline" }, box(values[0]), box(values[1])),
-      h("div", { class: "inline" }, box(values[2]), box(values[3]))],
+    first: field("Container", picker),
+    nodes: [h("div", { class: "row2" }, box(values[0]), box(values[1])), h("div", { class: "row2" }, box(values[2]), box(values[3]))],
     params,
   };
 }
@@ -1840,7 +1898,7 @@ function probeFields(f, evidence) {
     if (!Object.keys(set).length) throw new Error(NO_CHANGE);
     return { container: picker.value.trim(), [kind.value]: set };
   };
-  return { nodes: [field("Container", picker), kindField, none, box], params };
+  return { first: field("Container", picker), nodes: [kindField, none, box], params };
 }
 
 // words makes a value's name a label: initialDelaySeconds reads "Initial
@@ -1943,20 +2001,31 @@ function suggestForm(d, reload) {
   const fixes = (d.Fixes || []).map((f) => ({ ...f, noun: fixNoun(f), fields: (FIX_FIELDS[f.name] || schemaFields)(f, evidence) }));
   if (!fixes.length) return null;
   let chosen = fixes[0];
-  const fields = h("div", { class: "form" });
+  const top = h("div", { class: "row2" });
+  const fields = h("div", { class: "fields" });
   const button = h("button", { class: "btn primary", type: "submit" });
-  const show = () => {
-    setChildren(fields, ...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
-    button.textContent = "Suggest the " + chosen.noun;
-  };
   const choice = fixes.length > 1
     ? h("select", { onchange: (e) => { chosen = fixes[e.target.selectedIndex]; show(); } },
       fixes.map((f) => h("option", { value: f.name }, cap(f.noun))))
     : null;
+  const show = () => {
+    setChildren(top, choice ? field("Fix", choice) : null, chosen.fields.first || null);
+    setChildren(fields, ...[chosen.fields.nodes].flat(Infinity).filter(Boolean));
+    button.textContent = "Suggest the " + chosen.noun;
+  };
   show();
-  const why = h("textarea", { rows: "3", placeholder: "Why this fixes it. Shown to the approver." });
+  const why = h("textarea", { rows: "2", placeholder: "Why this fixes it. Shown to the approver." });
   const effect = h("input", { type: "text", placeholder: "For example: pods stop crash-looping" });
   const error = h("div", { class: "error", role: "alert" });
+  const body = (params) => ({
+    clientProposalId: "ui-" + Date.now(),
+    target: { group: t.group || "apps", kind: t.kind, namespace: t.namespace, name: t.name, uid: t.uid },
+    capabilityName: chosen.name,
+    params,
+    rationale: why.value.trim(),
+    expectedEffect: effect.value.trim(),
+    citedEvidenceIds: evidence.map((x) => x.ID),
+  });
   const submit = async (e) => {
     e.preventDefault();
     error.textContent = "";
@@ -1971,17 +2040,8 @@ function suggestForm(d, reload) {
       error.textContent = err.message;
       return;
     }
-    const body = {
-      clientProposalId: "ui-" + Date.now(),
-      target: { group: t.group || "apps", kind: t.kind, namespace: t.namespace, name: t.name, uid: t.uid },
-      capabilityName: chosen.name,
-      params,
-      rationale: why.value.trim(),
-      expectedEffect: effect.value.trim(),
-      citedEvidenceIds: evidence.map((x) => x.ID),
-    };
     try {
-      const r = await api("/v1/incidents/" + encodeURIComponent(inc.id) + "/proposals", { method: "POST", body: JSON.stringify(body) });
+      const r = await api("/v1/incidents/" + encodeURIComponent(inc.id) + "/proposals", { method: "POST", body: JSON.stringify(body(params)) });
       // A refusal ends its status name with _REJECTED.
       if (r && String(r.status).endsWith("_REJECTED")) {
         error.textContent = REJECTION_LABEL[r.rejectionReason] || r.message || "Refused.";
@@ -1993,16 +2053,55 @@ function suggestForm(d, reload) {
       error.textContent = err.message;
     }
   };
-  const waiting = inc.state !== "investigating";
-  return h("details", { class: "fold", open: waiting, "data-key": "suggest" },
-    h("summary", {}, waiting ? "Suggest a fix" : "Suggest a fix while Themis investigates"),
-    h("form", { class: "form", onsubmit: submit },
-      choice ? field("Fix", choice) : null,
-      fields,
-      field("Reason", why),
-      field("Expected effect", effect),
-      h("div", {}, button),
-      error));
+
+  // The preview: what Themis would do with the fix as it stands, judged the
+  // way a suggestion is, a moment after each edit.
+  const preview = h("div", { class: "preview", "aria-live": "polite" });
+  const checksOf = (items, side) => items.map((c) => h("li", {},
+    h("span", { class: "k " + side, "aria-hidden": "true" }, MARK[side]),
+    h("span", {}, h("span", { class: "vh" }, MARK_WORD[side] + ": "), c.says, c.reason ? h("span", { class: "src" }, c.reason) : null)));
+  const showPreview = (r, note) => {
+    preview.className = "preview" + (r ? (r.accepted ? " ok" : " no") : "");
+    setChildren(preview, r ? [
+      h("div", { class: "verdict" }, r.verdict),
+      r.reason ? h("p", { class: "small" }, r.reason) : null,
+      (r.for || []).length || (r.against || []).length ? h("ul", { class: "checklist" }, checksOf(r.for || [], "for"), checksOf(r.against || [], "against")) : null,
+      r.then ? h("p", { class: "small then" }, r.then) : null,
+    ] : h("p", { class: "quiet small" }, note));
+  };
+  let wait = null;
+  let asked = 0;
+  const judge = async () => {
+    let params;
+    try {
+      params = chosen.fields.params();
+    } catch (err) {
+      showPreview(null, err.message);
+      return;
+    }
+    const mine = ++asked;
+    try {
+      const r = await api("/v1/incidents/" + encodeURIComponent(inc.id) + "/proposals/preview", { method: "POST", body: JSON.stringify(body(params)) });
+      if (mine === asked) showPreview(r);
+    } catch (err) {
+      if (mine === asked) showPreview(null, err.message);
+    }
+  };
+  const later = () => {
+    clearTimeout(wait);
+    wait = setTimeout(judge, 400);
+  };
+  if (d.Previewed) {
+    showPreview(null, "Change a value to see what Themis would do with it.");
+    later();
+  }
+  const form = h("form", { class: "fields", onsubmit: submit, oninput: d.Previewed ? later : null, onchange: d.Previewed ? later : null },
+    top, fields, field("Reason", why), field("Expected effect", effect), h("div", {}, button), error);
+  const grid = h("div", { class: d.Previewed ? "grid" : null }, form, d.Previewed ? preview : null);
+  if (inc.state === "investigating") {
+    return h("details", { class: "fold suggest", "data-key": "suggest" }, h("summary", {}, "Suggest a fix while Themis investigates"), grid);
+  }
+  return h("section", { class: "plate suggest", "data-key": "suggest", "aria-label": "Suggest a fix" }, h("h2", {}, "Suggest a fix"), grid);
 }
 
 // opening splits a reason Themis wrote into what happened, its first
@@ -2213,7 +2312,10 @@ async function detail(id) {
     again || suggesting || closing ? h("div", { class: "more" }, again, suggesting, closing) : null,
 
     findings(d, source ? source.CitedPredicates || [] : null, fx ? fx.noun : "fix", fixed ? fixed.Capability : ""),
-    evidenceSection(d),
+    evidenceSection(d, () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => watchChanges(id, d, reload), POLL_MS * 2);
+    }, reload),
 
     h("div", { class: "more" },
       actions.length > 1 ? h("details", { class: "fold", "data-key": "earlier" },

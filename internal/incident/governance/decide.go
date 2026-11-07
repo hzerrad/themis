@@ -3,6 +3,7 @@ package governance
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"sync"
 
@@ -81,6 +82,10 @@ type Decided struct {
 	Action store.Action
 	// ManagedBy names the GitOps tool that owns the target, if any.
 	ManagedBy string
+
+	// in is what policy read, and from the profile whose policy decided.
+	in   policy.Input
+	from string
 }
 
 // Decider decides fixes by their profiles' policies, the same way for every
@@ -109,12 +114,13 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 	for _, c := range fix.Checks {
 		predicates[c.Name] = c.Value.String()
 	}
-	decision, err := d.decide(fix, policy.Input{
+	in := policy.Input{
 		Capability: fix.Capability.Name(), Risk: plan.Risk, Namespace: fix.Target.Namespace,
 		ManagedBy: plan.ManagedBy, Predicates: predicates, Change: plan.Facts,
 		Source: fix.By.Source, Authenticated: fix.By.Authenticated, External: fix.By.External,
 		Restore: fix.Restores != "",
-	})
+	}
+	decision, from, err := d.decide(fix, in)
 	if err != nil {
 		return Decided{}, err
 	}
@@ -138,6 +144,7 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 			Digest: dg, Mark: plan.Mark,
 		},
 		ManagedBy: plan.ManagedBy,
+		in:        in, from: from,
 	}, nil
 }
 
@@ -153,27 +160,29 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 // Before any policy, a fix to a workload GitOps manages, or may manage, is
 // forbidden, whatever it changes: Argo CD or Flux would undo it, so Themis
 // only recommends it.
-func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
+//
+// It also names the profile whose policy decided, when one did.
+func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, string, error) {
 	offering := fix.Profiles.Offering(fix.governs())
 	if len(offering) == 0 {
 		for _, p := range fix.Profiles {
 			pol, err := d.policy(p)
 			if err != nil {
-				return policy.Decision{}, err
+				return policy.Decision{}, "", err
 			}
 			if r, ok := pol.Rule(in); ok && r.Outcome == policy.Deny {
-				return r.Of(p.Name), nil
+				return r.Of(p.Name), p.Name, nil
 			}
 		}
-		return policy.Decision{Outcome: policy.Deny, Reason: "Refused. None of the incident's profiles offers this fix."}, nil
+		return policy.Decision{Outcome: policy.Deny, Reason: "Refused. None of the incident's profiles offers this fix."}, "", nil
 	}
 	if fix.Restores == "" {
 		if reason, ok := justified(offering, fix.Capability, fix.Checks, fix.Words); !ok {
-			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: UnjustifiedRule}, nil
+			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: UnjustifiedRule}, "", nil
 		}
 	}
 	if reason, managed := gitOps(in); managed {
-		return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: GitOpsRule}, nil
+		return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: GitOpsRule}, "", nil
 	}
 	var (
 		out  policy.Decision
@@ -182,13 +191,63 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, error) {
 	for _, p := range offering {
 		pol, err := d.policy(p)
 		if err != nil {
-			return policy.Decision{}, err
+			return policy.Decision{}, "", err
 		}
 		if got := pol.Evaluate(in); from == "" || policy.Stricter(got.Outcome, out.Outcome) {
 			out, from = got, p.Name
 		}
 	}
-	return out.Of(from), nil
+	return out.Of(from), from, nil
+}
+
+// Bearing says which checks bore on a decided fix. Against are, for a fix a
+// profile's policy rule refused, the checks whose answer alone made that rule
+// match: another answer from one of them, and the rule wouldn't. Past are,
+// for a fix no rule refused, the checks the refusing rules of the profiles
+// governing it read, which it got past.
+func (d *Decider) Bearing(fix Fix, got Decided) (against, past []string, err error) {
+	add := func(list []string, name string) []string {
+		if slices.Contains(list, name) {
+			return list
+		}
+		return append(list, name)
+	}
+	for _, p := range fix.Profiles.Offering(fix.governs()) {
+		pol, err := d.policy(p)
+		if err != nil {
+			return nil, nil, err
+		}
+		refusing := map[string]bool{}
+		for _, r := range p.EffectivePolicy().Rules {
+			refusing[r.Name] = r.Decision == config.DecisionDeny
+		}
+		for _, r := range pol.Reads() {
+			switch {
+			case got.Decision.Outcome != policy.Deny && refusing[r.Rule]:
+				past = add(past, r.Check)
+			case got.Decision.Outcome == policy.Deny && p.Name == got.from && r.Rule == got.Decision.PolicyID && alone(pol, got.in, r):
+				against = add(against, r.Check)
+			}
+		}
+	}
+	return against, past, nil
+}
+
+// alone says whether another answer from the check r reads, all else the
+// same, would keep its rule from deciding in.
+func alone(pol *policy.Policy, in policy.Input, r policy.Read) bool {
+	for _, answer := range []check.Truth{check.True, check.False, check.Unknown} {
+		if in.Predicates[r.Check] == answer.String() {
+			continue
+		}
+		other := in
+		other.Predicates = maps.Clone(in.Predicates)
+		other.Predicates[r.Check] = answer.String()
+		if d, ok := pol.Rule(other); !ok || d.PolicyID != r.Rule {
+			return true
+		}
+	}
+	return false
 }
 
 // gitOps says why Themis only recommends a fix to in's workload, if it does:

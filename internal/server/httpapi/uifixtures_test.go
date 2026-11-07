@@ -31,6 +31,7 @@ import (
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/governance"
+	"github.com/hzerrad/themis/internal/incident/governance/policy"
 	"github.com/hzerrad/themis/internal/incident/intake/alertmanager"
 	"github.com/hzerrad/themis/internal/incident/intake/rules"
 	"github.com/hzerrad/themis/internal/incident/investigation"
@@ -67,6 +68,27 @@ type uiFixtureSet struct {
 	Accounts      jsontext.Value            `json:"accounts"`
 	AccountRecord jsontext.Value            `json:"accountRecord"`
 	Suggested     jsontext.Value            `json:"suggested"`
+	// Previews are what Themis would do with a suggested raise of the
+	// catalog's memory limit: accept one to 72Mi, refuse any other.
+	Previews map[string]previewView `json:"previews"`
+	// Collected is the piece of evidence a person just had collected.
+	Collected collectedView `json:"collected"`
+}
+
+// uiCollector stands in for collecting evidence: the fixtures only need the
+// page to offer it.
+type uiCollector struct{}
+
+func (uiCollector) Collect(context.Context, string, string, string, map[string]string) (evidence.Item, int, error) {
+	return evidence.Item{}, 0, nil
+}
+
+// uiPreviews stand in for previewing a fix: the fixtures only need the page
+// to offer it.
+type uiPreviews struct{}
+
+func (uiPreviews) Preview(context.Context, suggestion.Suggester, suggestion.Suggestion) (suggestion.Preview, error) {
+	return suggestion.Preview{}, nil
 }
 
 // TestUIFixtures builds the UI smoke test's fixtures with the views and
@@ -105,6 +127,7 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 	api := &API{
 		Fixes: cat.Fixes, CheckList: cat.Checks, RootCauses: cat.RootCauses, Config: cfg, Remedy: hint.Writer{Config: cfg},
 		Intake: config.Intake{URL: "http://themis.themis.svc:8080/v1/intake/alertmanager", TokenSecret: "themis-intake"}, Namespace: "themis",
+		Collect: uiCollector{}, Previews: uiPreviews{},
 		Now: func() time.Time { return uiAt(60) },
 	}
 
@@ -195,7 +218,43 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 		t.Fatal(err)
 	}
 	f.Suggested = reply
+	f.Previews = uiPreviewsOf(t, api, cfg, cat)
+	f.Collected = collectedView{Number: 10, Kind: kindOf(evidence.ContainerLogsTail)}
 	return f
+}
+
+// uiPreviewsOf are what the API answers a preview of a raise of the catalog's
+// memory limit: to 72Mi, accepted and put to a person by policy; to 50Mi,
+// refused by the rule that a raise must reach the memory limit's peak.
+func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog) map[string]previewView {
+	t.Helper()
+	_, checks := uiShop(t, cat)
+	in := store.Incident{ID: uiID(30), Profile: "oom-limit-too-low", Target: shopTarget}
+	matched := cfg.Matched(in.Profiles())
+	raise := func(limit string) store.Proposal {
+		return store.Proposal{Capability: resources.Name, Target: shopTarget, Params: map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": limit}}}}}
+	}
+	accepted := governance.Judgement{
+		Checks: checks, Past: []string{"failures_came_with_rollout", "memory_at_limit_before_kill", "evicted_for_node_memory"},
+		Decided: governance.Decided{
+			Decision: policy.Decision{Outcome: policy.RequireApproval, Reason: shopRaiseRule, PolicyID: "raise-needs-approval"},
+			Action:   store.Action{PreState: []byte(shopPre), Desired: []byte(shopRaised)},
+		},
+	}
+	refused := governance.Judgement{
+		Checks: checks,
+		Decided: governance.Decided{
+			Decision: policy.Decision{
+				Outcome: policy.Deny, PolicyID: "raise-a-memory-limit-only",
+				Reason: "Policy rule raise-a-memory-limit-only of the oom-limit-too-low profile forbids this fix.",
+			},
+			Action: store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))},
+		},
+	}
+	return map[string]previewView{
+		"accept": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("72Mi"), Judgement: &accepted}),
+		"refuse": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("50Mi"), Judgement: &refused, Refused: refused.Decided.Decision.Reason}),
+	}
 }
 
 // served is what h answers a request, which must succeed.
@@ -1059,6 +1118,9 @@ func uiShop(t *testing.T, cat catalog.Catalog) ([]evidence.Item, []check.Result)
 		item := evidence.Item{ID: it.id, Template: it.template, Target: shopTarget, Data: data, CollectedAt: uiAt(it.at), Classification: evidence.ClassificationInternal, Suspicious: evidence.Suspicions(data)}
 		if it.template == evidence.ContainerLogsTail {
 			item.Classification, item.Redactions = evidence.ClassificationSensitive, 1
+		}
+		if it.id == evShopNow {
+			item.RequestedBy = "alice"
 		}
 		out = append(out, item)
 	}
