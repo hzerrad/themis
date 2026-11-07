@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout due to startup delays\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeout is too short for application startup\",\n    \"supporting\": [\"probe_timeouts\", \"killed_during_startup\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_logs_tail\"],\n    \"status\": \"open\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"New version may have startup issues despite no code change\",\n    \"supporting\": [\"killed_during_startup\"],\n    \"contradicting\": [\"rollout_changed_the_app\"],\n    \"missing\": [],\n    \"status\": \"open\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"inventory\",\n    \"uid\": \"uid-deployment-inventory\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 10\n    }\n  },\n  \"expected_effect\": \"Extend liveness probe timeout to accommodate startup delays\",\n  \"rationale\": \"The application takes 25s to start but the liveness probe times out after 1s, causing premature restarts. Increasing the timeout allows the app to respond before the probe fails it.\",\n  \"cited_evidence_ids\": [\"ev-target_events\", \"ev-pod_states\", \"ev-rollout_history\"],\n  \"cited_predicates\": [\"probe_timeouts\", \"killed_during_startup\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6115,
+        "output_tokens": 821
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

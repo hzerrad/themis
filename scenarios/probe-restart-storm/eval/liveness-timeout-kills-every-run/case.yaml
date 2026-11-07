@@ -1,0 +1,27 @@
+name: liveness-timeout-kills-every-run
+version: 1
+description: inventory's health check answers in 2 seconds and its only probe, a liveness probe, gives it 1, so the kubelet kills each run 20 seconds in. Both pods have restarted 6 times and the 7th kill is under way, so the kubelet's repeated events last happened after the restart the pods' status shows, as they do on a real cluster in a probe storm. A liveness timeout above 2 seconds is right.
+tags: [probe-restart-storm, act, timeout, combined]
+source: synthetic
+difficulty: medium
+incident_class: probe_restart_storm
+now: "2026-11-06T10:08:07Z"
+alert: KubePodCrashLooping
+target: {kind: Deployment, namespace: shop, name: inventory}
+evidence:
+  initial: [rollout_history, pod_states, target_events, referenced_config, revision_health]
+  allowed: [rollout_history, pod_states, target_events, referenced_config, container_logs_tail, revision_health]
+fix:
+  capability: deployment.set-probes
+  params: {container: app, liveness: {timeoutSeconds: 3}}
+truth:
+  root_causes: [probe_timeout_too_short]
+  decision: propose
+  policy: require_approval
+  predicates:
+    probe_kills: "true"
+    probe_timeouts: "true"
+    killed_during_startup: "true"
+    crashed_on_its_own: "false"
+    failure_onset_after_rollout: "false"
+    failures_came_with_rollout: "false"
