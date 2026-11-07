@@ -9,7 +9,8 @@
 # Revision 2 ran unthrottled for 29 hours, longer than revision 1 ran at all:
 # how long each ran points the other way, but it only breaks a tie, and the
 # use at the same age decides. A higher limit would hide what the new version
-# costs: rolling it back is the rollout-regression pack's call, and a person's.
+# costs. Revision 1 ran with no restart, so rolling back to it is right, with
+# a person's approval.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -7,6 +7,12 @@
 # `make demo-break-cpu-more` sends 350m, which a limit of 300m doesn't
 # cover: Themis's first raise isn't enough, and the next one, to 450m, is.
 # `make demo-fix-cpu` stops the work.
+#
+# `make demo-break-cpu-rollout` sends 150m, which search does within its
+# limit, then rolls out a version of search that sets WORK_FACTOR=2 and so
+# does each unit of work twice: 300m for the same feed. The new version
+# brought the throttling, and rolling back to the one before it is the fix.
+# `make demo-fix-cpu-rollout` undoes it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -84,7 +90,9 @@ spec:
           # It spends the work's share of each second on CPU, by its own CPU
           # time in /proc/self/stat against the clock in /proc/uptime, both
           # in hundredths of a second. Within its limit it rests between
-          # turns; over it, it never rests. It asks the feed every 10s.
+          # turns; over it, it never rests. It asks the feed every 10s. A
+          # version with WORK_FACTOR set does each unit of work that many
+          # times.
           args:
             - |
               trap 'exit 0' TERM
@@ -92,7 +100,7 @@ spec:
               # built into the shell, so a rest costs no process, where 100
               # sleep processes a second would cost a third of the work.
               mkfifo /tmp/rest 2>/dev/null; exec 3<>/tmp/rest
-              work=0 next=0 t0=0 u0=0
+              sent=0 work=0 next=0 t0=0 u0=0
               while :; do
                 read -r up _ </proc/uptime
                 t=${up%.*}${up#*.}
@@ -100,9 +108,10 @@ spec:
                 set -- $stat
                 u=$((${14} + ${15}))
                 if [ "$t" -ge "$next" ]; then
-                  if w=$(wget -qO- -T 2 http://search-feed:8080/work) && [ "$w" != "$work" ]; then
-                    echo "search: the feed sends ${w}m of CPU work"
-                    work=$w t0=$t u0=$u
+                  if w=$(wget -qO- -T 2 http://search-feed:8080/work) && [ "$w" != "$sent" ]; then
+                    sent=$w work=$((w * ${WORK_FACTOR:-1}))
+                    echo "search: the feed sends ${w}m of CPU work${WORK_FACTOR:+, which takes this version ${work}m}"
+                    t0=$t u0=$u
                   fi
                   # Work more than a minute behind is dropped, as a bounded
                   # queue drops it: a higher limit catches up within a minute.

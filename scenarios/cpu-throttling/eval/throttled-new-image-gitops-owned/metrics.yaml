@@ -1,0 +1,95 @@
+# What the metrics source says of each pod's containers, and what Prometheus's
+# history says of each ReplicaSet's pods: when it has them, how throttled they
+# were, and samples of how much of their CPU limit they used.
+source: prometheus
+pods:
+  search-84f6d9c2b-a1b2c:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 495m
+      throttled: 0.61
+  search-84f6d9c2b-d3e4f:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 495m
+      throttled: 0.61
+  search-84f6d9c2b-g5h6i:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 470m
+      throttled: 0.61
+  search-84f6d9c2b-j7k8l:
+    api:
+      memory: 310Mi
+      peakMemory: 355Mi
+      cpu: 470m
+      throttled: 0.61
+revisions:
+  search-6b8c5d7f9:
+    seenFrom: '2026-11-04T08:00:30Z'
+    seenUntil: '2026-11-05T08:06:00Z'
+    throttled: 0.12
+    use:
+    - at: '2026-11-04T08:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T10:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T12:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T14:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T16:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T18:30:00Z'
+      cpu: {api: 0.5}
+    - at: '2026-11-04T20:30:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-04T22:30:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-05T00:30:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-05T02:30:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-05T04:30:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-05T06:30:00Z'
+      cpu: {api: 0.4}
+  search-84f6d9c2b:
+    seenFrom: '2026-11-05T08:00:30Z'
+    seenUntil: '2026-11-06T14:00:00Z'
+    throttled: 0.62
+    firstThrottledAt: '2026-11-06T13:00:00Z'
+    use:
+    - at: '2026-11-05T08:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T10:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T12:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T14:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T16:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T18:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-05T20:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-05T22:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-06T00:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-06T02:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-06T04:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-06T06:30:00Z'
+      cpu: {api: 0.83}
+    - at: '2026-11-06T08:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-06T10:30:00Z'
+      cpu: {api: 0.93}
+    - at: '2026-11-06T12:30:00Z'
+      cpu: {api: 0.93}

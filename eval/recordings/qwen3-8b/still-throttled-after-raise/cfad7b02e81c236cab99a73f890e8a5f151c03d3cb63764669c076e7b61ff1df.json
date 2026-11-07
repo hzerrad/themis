@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new version uses more CPU than the previous, even with a higher limit. Raise the CPU limit to 450m to alleviate throttling.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Current version uses 0.28 CPU (93% of 0.3 limit) vs previous 0.126 CPU (63% of 0.2 limit).\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-themis_fix\", \"ev-rollout_history\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"cpu_limit_too_low\",\n    \"summary\": \"Current CPU usage (0.28) is near the 0.3 limit, causing throttling.\",\n    \"supporting\": [\"ev-container_cpu\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"search\",\n    \"uid\": \"uid-deployment-search\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"cpu\": \"450m\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Raises CPU limit to 450m, allowing the app to use more CPU without throttling.\",\n  \"rationale\": \"Current version uses 0.28 CPU (93% of 0.3 limit) vs previous 0.126 CPU (63% of 0.2 limit). Raising the limit to 450m (1.5x current) should alleviate throttling without lowering the limit.\",\n  \"cited_evidence_ids\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-themis_fix\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"throttling_data_available\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\", \"rollout_changed_the_app\", \"throttling_came_with_rollout\", \"earlier_revision_healthy\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4546,
+        "output_tokens": 2566
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

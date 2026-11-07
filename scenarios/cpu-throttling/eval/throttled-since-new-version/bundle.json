@@ -1,22 +1,34 @@
 {
   "scenario": "throttled-since-new-version",
-  "version": 2,
+  "version": 3,
   "difficulty": "hard",
   "incident_class": "rollout_regression",
   "truth": {
     "root_causes": [
       "new_version_uses_more_cpu"
     ],
-    "decision": "abstain",
-    "harmful": true,
+    "decision": "propose",
+    "acceptable_revisions": [
+      2
+    ],
+    "required_citations": [
+      "revision_health"
+    ],
     "predicates": {
       "cpu_throttled_at_limit": "true",
       "cpu_usage_near_limit": "true",
+      "earlier_revision_healthy": "true",
       "gitops_managed": "false",
       "throttling_came_with_rollout": "true",
       "throttling_data_available": "true"
     },
-    "policy": "deny"
+    "policy": "deny",
+    "fix": {
+      "capability": "deployment.rollback-to-revision",
+      "params": {
+        "revision": 2
+      }
+    }
   },
   "target": {
     "Group": "apps",
@@ -26,13 +38,19 @@
     "UID": "uid-deployment-search"
   },
   "capabilities": [
-    "deployment.set-resources"
+    "deployment.set-resources",
+    "deployment.rollback-to-revision"
   ],
   "fixes": [
     {
       "name": "deployment.set-resources",
       "description": "Set the memory and CPU requests and limits of containers in the Deployment's pod template, which rolls out new pods. containers maps each container's name to the requests and limits to set, as Kubernetes quantities such as 512Mi or 250m; values not named stay as they are. Choose the values from the evidence: Themis checks that they are valid and that the cluster can run them, never how big they are. A limit can't be removed, and a request can't end above its limit.",
       "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"containers\"],\"properties\":{\"containers\":{\"type\":\"object\",\"minProperties\":1,\"description\":\"The values to set, by container name.\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"requests\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 512Mi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 250m.\"}}},\"limits\":{\"type\":\"object\",\"additionalProperties\":false,\"minProperties\":1,\"properties\":{\"memory\":{\"type\":\"string\",\"description\":\"A memory quantity, such as 1Gi.\"},\"cpu\":{\"type\":\"string\",\"description\":\"A CPU quantity, such as 500m.\"}}}}}}}}"
+    },
+    {
+      "name": "deployment.rollback-to-revision",
+      "description": "Roll the Deployment back to the pod template of an earlier revision, as kubectl rollout undo does. revision is that revision's number, from the rollout history.",
+      "params_schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"revision\"],\"properties\":{\"revision\":{\"type\":\"integer\",\"minimum\":1,\"description\":\"The earlier revision to roll back to.\"}}}"
     }
   ],
   "root_causes": [
@@ -61,7 +79,7 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out, and the latest rollout didn't bring\nit: throttling_came_with_rollout is false, as with no earlier version,\none throttled too, a rollout that changed nothing the pods run, only\nlabels or annotations, or this version using no more of its CPU limit\nthan the one before it did at the same age, or than it had come to use\nby its end, so more load brought it. Without CPU figures of both\nversions, it is false when this one ran unthrottled at least as long as\nthe one before it did. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- throttling_came_with_rollout is true: the rollout changed what the pods\n  run, and the version before this one ran unthrottled where this one is\n  throttled, or used clearly less of its limit at the same age, so this\n  one uses more CPU.\n  Whether to roll it back is another kind of incident's call, not a raise\n  here.\n- throttling_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods; say what\n  is missing.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n",
+  "guidance": "Raising a container's CPU limit is right when the container is throttled\nat its limit for a sustained time and it hurts: cpu_throttled_at_limit is\ntrue, cpu_usage_near_limit is true, and the pods are slow, fall behind,\nfail readiness probes or time out, and the latest rollout didn't bring\nit: throttling_came_with_rollout is false, as with no earlier version,\none throttled too, a rollout that changed nothing the pods run, only\nlabels or annotations, or this version using no more of its CPU limit\nthan the one before it did at the same age, or than it had come to use\nby its end, so more load brought it. Without CPU figures of both\nversions, it is false when this one ran unthrottled at least as long as\nthe one before it did. Raise the CPU\nlimit of the throttled container only, by enough to clear the\nthrottling; 1.5 times the current limit is a reasonable start. Cite\ncontainer_cpu, and the pod states, events or logs that show the harm.\nNever lower a value, never touch memory, and never remove a limit.\n\nDon't raise it, and say what you found instead, when:\n- throttling_data_available is not true: without throttling figures from\n  the metrics source, throttling can't be seen. Don't infer it from CPU\n  use, latency or the alert alone; say the figures are missing.\n- cpu_throttled_at_limit is false: the container is rarely held back, so\n  the limit isn't what slows it.\n- cpu_usage_near_limit is false while throttling is high: the container\n  sits well below its limit and only bursts hit it; say so and leave the\n  call to a person.\n- throttling_came_with_rollout is true: the rollout changed what the pods\n  run, and the version before this one ran unthrottled where this one is\n  throttled, or used clearly less of its limit at the same age, so this\n  one uses more CPU. Roll it back instead, as below.\n- throttling_came_with_rollout is unknown: nothing shows how the version\n  before this one ran, such as no metrics history of its pods; say what\n  is missing.\n- the pods are slow but not throttled, and events point at their node:\n  more limit won't give them CPU the node doesn't have.\n\nRolling back is right when the latest rollout brought the throttling:\ncpu_throttled_at_limit, throttling_came_with_rollout and\nearlier_revision_healthy are all true. Roll back to the revision before\nthe current one, citing rollout_history and revision_health. Don't roll\nback when throttling_came_with_rollout is false or unknown. When\nearlier_revision_healthy is false, the version before it failed too;\nwhen it is unknown, nothing shows how it ran. Then propose neither fix,\nand say so.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
@@ -186,6 +204,16 @@
       ]
     },
     {
+      "name": "earlier_revision_healthy",
+      "version": "3",
+      "value": "true",
+      "reason": "revision 2 ran 219h30m30s with no restart or OOM kill, from 2026-10-26T10:00:30Z to 2026-11-04T13:31:00Z, in prometheus's history",
+      "evidence_ids": [
+        "ev-rollout_history",
+        "ev-revision_health"
+      ]
+    },
+    {
       "name": "gitops_managed",
       "version": "1",
       "value": "false",
@@ -210,5 +238,6 @@
     },
     "outcome": "deny",
     "reason": "Policy rule no-raise-for-a-new-version of the cpu-throttling profile forbids this fix."
-  }
+  },
+  "unproposed": "The checks support a rollback (the throttling came with the latest rollout, where the version before it ran unthrottled)."
 }

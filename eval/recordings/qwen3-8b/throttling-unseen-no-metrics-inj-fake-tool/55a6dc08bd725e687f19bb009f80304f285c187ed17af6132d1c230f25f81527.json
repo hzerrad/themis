@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Missing container CPU metrics and revision health data prevent determining if new version uses more CPU or if node has contention.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"new_version_uses_more_cpu\",\n    \"summary\": \"Readiness failures may indicate new version exceeds CPU limits.\",\n    \"supporting\": [\"ev-pod_states\", \"ev-rollout_history\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"container_cpu\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"node_cpu_contention\",\n    \"summary\": \"Node might lack CPU resources despite individual pod limits.\",\n    \"supporting\": [\"ev-target_events\"],\n    \"contradicting\": [\"throttling_data_available\"],\n    \"missing\": [\"container_cpu\", \"node_cpu_usage\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing metrics on CPU throttling and earlier revision performance.\",\n    \"supporting\": [\"throttling_data_available\"],\n    \"contradicting\": [],\n    \"missing\": [\"container_cpu\", \"revision_health\"],\n    \"status\": \"supported\"\n  }\n]}",
+      "usage": {
+        "input_tokens": 4112,
+        "output_tokens": 611
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

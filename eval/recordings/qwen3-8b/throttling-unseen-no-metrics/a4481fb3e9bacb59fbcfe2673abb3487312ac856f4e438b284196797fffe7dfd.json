@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"template\":null,\"params\":{},\"summary\":\"Insufficient evidence to determine root cause: missing CPU throttling metrics and earlier revision health data.\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Readiness probe failures and image change suggest new version may use more CPU.\",\"supporting\":[\"ev-pod_states\",\"ev-rollout_history\",\"ev-target_events\"],\"contradicting\":[],\"missing\":[\"container_cpu\",\"revision_health\"],\"status\":\"open\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Missing metrics history for earlier revision and throttling data prevents conclusive analysis.\",\"supporting\":[],\"contradicting\":[],\"missing\":[\"throttling_data_available\",\"earlier_revision_healthy\",\"cpu_throttled_at_limit\",\"cpu_usage_near_limit\",\"throttling_came_with_rollout\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4369,
+        "output_tokens": 634
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

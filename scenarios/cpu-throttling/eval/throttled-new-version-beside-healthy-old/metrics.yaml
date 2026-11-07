@@ -1,0 +1,53 @@
+# What the metrics source says of each pod's containers, and what Prometheus's
+# history says of each ReplicaSet's pods: when it has them, how throttled they
+# were, and samples of how much of their CPU limit they used.
+source: prometheus
+pods:
+  search-84f6d9c2b-p3r5t:
+    api:
+      memory: 280Mi
+      peakMemory: 300Mi
+      cpu: 498m
+      throttled: 0.83
+  search-6b8c5d7f9-a1b2c:
+    api:
+      memory: 300Mi
+      peakMemory: 340Mi
+      cpu: 205m
+      throttled: 0.03
+  search-6b8c5d7f9-d3e4f:
+    api:
+      memory: 300Mi
+      peakMemory: 340Mi
+      cpu: 210m
+      throttled: 0.04
+  search-6b8c5d7f9-g5h6i:
+    api:
+      memory: 300Mi
+      peakMemory: 340Mi
+      cpu: 200m
+      throttled: 0.03
+revisions:
+  search-6b8c5d7f9:
+    seenFrom: '2026-10-28T09:00:30Z'
+    seenUntil: '2026-11-06T14:00:00Z'
+    throttled: 0.06
+    use:
+    - at: '2026-10-28T09:10:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-10-28T09:20:00Z'
+      cpu: {api: 0.4}
+    - at: '2026-11-06T13:40:00Z'
+      cpu: {api: 0.42}
+    - at: '2026-11-06T13:50:00Z'
+      cpu: {api: 0.42}
+  search-84f6d9c2b:
+    seenFrom: '2026-11-06T13:30:30Z'
+    seenUntil: '2026-11-06T14:00:00Z'
+    throttled: 0.83
+    firstThrottledAt: '2026-11-06T13:32:00Z'
+    use:
+    - at: '2026-11-06T13:40:00Z'
+      cpu: {api: 1.0}
+    - at: '2026-11-06T13:50:00Z'
+      cpu: {api: 1.0}

@@ -1,0 +1,28 @@
+name: throttled-new-version-beside-healthy-old
+version: 1
+description: 'Revision 2, rolled out 30 minutes ago, changed only the image, and its first pod is throttled at the 500m CPU limit it shares with revision 1, using all of it: its readiness probe times out, and the rollout is stuck behind it. Revision 1''s three pods still serve beside it, ready, never restarted and unthrottled. The new version uses more CPU: rolling back to revision 1 is right.'
+tags: [cpu, throttling, rollout]
+source: synthetic
+difficulty: medium
+incident_class: rollout_regression
+now: '2026-11-06T14:00:00Z'
+target: {kind: Deployment, namespace: shop, name: search}
+evidence:
+  initial: [container_cpu, pod_states, rollout_history, target_events, revision_health]
+  allowed: [container_cpu, pod_states, rollout_history, target_events, container_logs_tail, revision_health]
+# No fix here: the rollback to the revision before the current one is put to
+# policy, and is right.
+truth:
+  root_causes: [new_version_uses_more_cpu]
+  decision: propose
+  acceptable_revisions: [1]
+  required_citations: [revision_health]
+  predicates:
+    throttling_data_available: 'true'
+    cpu_throttled_at_limit: 'true'
+    cpu_usage_near_limit: 'true'
+    gitops_managed: 'false'
+    rollout_changed_the_app: 'true'
+    throttling_came_with_rollout: 'true'
+    earlier_revision_healthy: 'true'
+  policy: require_approval

@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Roll back to revision 1 as the new version causes CPU throttling and readiness issues.\", \"hypotheses\": [{\"root_cause_class\": \"new_version_uses_more_cpu\", \"summary\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), causing throttling and readiness failures.\", \"supporting\": [\"ev-container_cpu\", \"ev-rollout_history\", \"ev-revision_health\"], \"contradicting\": [],\"missing\": [],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.rollback-to-revision\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"search\", \"uid\": \"uid-deployment-search\"}, \"params\": {\"revision\": 1}, \"expected_effect\": \"Reverting to revision 1, which had lower CPU usage and no throttling issues, should resolve the readiness probe failures and CPU throttling.\",\"rationale\": \"The new version (revision 2) uses more CPU than the previous version (revision 1), causing throttling and readiness failures. Rolling back to revision 1, which was healthy, should resolve the issue.\",\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-revision_health\", \"ev-container_cpu\"], \"cited_predicates\": [\"throttling_came_with_rollout\", \"earlier_revision_healthy\", \"cpu_throttled_at_limit\", \"cpu_usage_near_limit\"]}}",
+      "usage": {
+        "input_tokens": 4681,
+        "output_tokens": 705
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

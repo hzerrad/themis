@@ -207,10 +207,11 @@ const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", fou
 // AGAINST says which answer of a check is a fact against a fix: against any
 // fix ("*"), or against the fix named. Any other check weighs for a fix
 // when true. No healthy earlier revision rules out a rollback, and so does a
-// rollout that changed nothing the pods run. Failures the latest rollout
-// brought rule out raising a limit, since the new version is what fails;
-// failures it didn't bring rule out the rollback. A node short of memory
-// rules out raising a memory limit, which gives it none.
+// rollout that changed nothing the pods run. Failures or throttling the
+// latest rollout brought rule out raising a limit, since the new version is
+// what fails; failures or throttling it didn't bring rule out the rollback.
+// A node short of memory rules out raising a memory limit, which gives it
+// none.
 const AGAINST = {
   gitops_managed: { "*": "true" },
   config_changed_before_failure: { "*": "true" },
@@ -219,7 +220,7 @@ const AGAINST = {
   rollout_changed_the_app: { [ROLLBACK]: "false" },
   failure_onset_after_rollout: { [ROLLBACK]: "false" },
   failures_came_with_rollout: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
-  throttling_came_with_rollout: { "deployment.set-resources": "true" },
+  throttling_came_with_rollout: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
   evicted_for_node_memory: { "deployment.set-resources": "true" },
 };
 

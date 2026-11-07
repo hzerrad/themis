@@ -242,8 +242,9 @@
         than revision ${prior.revision} did, by more than measurement noise (${pct[3]} of the limit): ${compared}
       cite: [ids.rollout_history, ids.revision_health]
       fact: >-
-        In its first ${age}, `${top[0].container}` used ${pct[0]} of its CPU limit in revision ${current.revision},
-        more than revision ${prior.revision} used then.
+        In revision ${current.revision}, `${top[0].container}` uses ${pct[0]} of its CPU limit at ${age} old.
+        In revision ${prior.revision}, it used
+        ${at_start != null ? pct[1] + " at the same age" + (at_end != null ? ", and " + pct[2] + " in its last " + age : "") : pct[2] + " in its last " + age}.
     - when: size(then) > 0 && at_start != null && now_use <= at_start + noise
       answer: false
       reason: >-
