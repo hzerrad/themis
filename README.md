@@ -10,7 +10,7 @@
 
 Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 
-Themis turns Alertmanager alerts about Kubernetes Deployments into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
+Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
 > [!WARNING]
 > Themis is in alpha (`v0.1.0-alpha1`). Configuration and APIs may change between releases. It is not ready for production use.
@@ -41,7 +41,13 @@ A Deployment `checkout` in namespace `shop` is rolled out with a new image and a
 
 ## Capabilities
 
-**Incident types.** Each is a [scenario pack](docs/scenarios.md) of checks, fixes, policy and evaluation cases. Alerts that no pack matches are recorded and ignored.
+This section lists what `v0.1.0-alpha1` supports. More alert sources and workload kinds are planned.
+
+**Alert sources.** Alertmanager, read through its API or received by webhook.
+
+**Workloads.** Deployments.
+
+**Incident types.** Each is a [scenario pack](docs/scenarios.md) of checks, fixes, policy and evaluation cases, and new incident types are added as new packs. Alerts that no pack matches are recorded and ignored.
 
 | Incident | Alerts | Fixes offered |
 |---|---|---|
@@ -73,7 +79,7 @@ A Deployment `checkout` in namespace `shop` is rolled out with a new image and a
 
 ```mermaid
 flowchart LR
-  AM[Alertmanager] -->|alerts| Core[themis-core]
+  AM["Alert source (Alertmanager)"] -->|alerts| Core[themis-core]
   Core <-->|evidence, proposals| Intel[themis-intelligence]
   Agent[AI SRE agent] -->|proposals| Core
   Core -->|approved actions| Exec[themis-executor]
@@ -101,7 +107,7 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 4. **Ownership.** Workloads managed by Argo CD or Flux receive a recommendation, never a change.
 5. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
 6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
-7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role allows `get` and `patch` on Deployments, and reading ReplicaSets, in enrolled namespaces.
+7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in enrolled namespaces: today `get` and `patch` on Deployments, and reading ReplicaSets.
 8. **Verification.** Themis decides the fix's symptom checks again from the new pods. A fix that made things worse is undone. An incident whose symptoms persist is referred to a person.
 
 Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
@@ -120,7 +126,7 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Requirement | Supported |
 |---|---|
 | Kubernetes | 1.35, 1.36, 1.37 |
-| Alertmanager | API v2, 0.16 or later |
+| Alert source | Alertmanager, API v2, 0.16 or later |
 | Model (optional) | Claude through Anthropic's API, or an OpenAI-compatible endpoint with JSON-schema structured output, such as OpenAI, Ollama or vLLM |
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
@@ -137,8 +143,9 @@ helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
 
 ## Limitations
 
-- Deployments only. StatefulSets, DaemonSets and other workloads are not supported.
-- Five incident types. Alertmanager is the only alert source.
+- Deployments are the only supported workload kind. StatefulSets, DaemonSets and others are not supported yet.
+- Alertmanager is the only supported alert source.
+- Five incident types, listed under [Capabilities](#capabilities).
 - Every change needs a person's approval. There is no autonomous mode.
 - Without a Prometheus-compatible server, Themis can't measure CPU throttling, peak memory or an earlier revision's history. Checks that need them answer unknown, and an unknown check never justifies a fix.
 - A partial rollback restores earlier values only. Setting new values is not supported.
