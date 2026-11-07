@@ -88,7 +88,7 @@
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"payments\",\"currentRevision\":\"4\",\"generation\":0,\"observedGeneration\":6,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-09-30T08:01:00Z\",\"lastTransitionTime\":\"2026-09-30T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-23T16:02:00Z\",\"lastTransitionTime\":\"2026-10-23T16:02:00Z\"}]},\"revisions\":[{\"replicaSet\":\"payments-8a2e6f1c3\",\"revision\":\"4\",\"current\":true,\"createdAt\":\"2026-10-23T16:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"limits\":{\"memory\":\"512Mi\"}}]},{\"replicaSet\":\"payments-79c5b8d4f\",\"revision\":\"3\",\"createdAt\":\"2026-10-16T10:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.1\",\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":2}",
+      "data": "{\"deployment\":{\"name\":\"payments\",\"currentRevision\":\"4\",\"generation\":0,\"observedGeneration\":6,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-09-30T08:01:00Z\",\"lastTransitionTime\":\"2026-09-30T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-23T16:02:00Z\",\"lastTransitionTime\":\"2026-10-23T16:02:00Z\"}]},\"revisions\":[{\"replicaSet\":\"payments-8a2e6f1c3\",\"revision\":\"4\",\"current\":true,\"createdAt\":\"2026-10-23T16:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.2\",\"limits\":{\"memory\":\"512Mi\"}}]},{\"replicaSet\":\"payments-79c5b8d4f\",\"revision\":\"3\",\"createdAt\":\"2026-10-16T10:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/payments:7.0.1\",\"limits\":{\"memory\":\"512Mi\"}}]}],\"totalRevisions\":2,\"change\":{\"from\":\"3\",\"to\":\"4\",\"app\":[\"the image of container app changed from example/payments:7.0.1 to example/payments:7.0.2\"],\"metadata\":[]}}",
       "classification": "internal"
     },
     {
@@ -117,7 +117,7 @@
     },
     {
       "name": "rollout_history",
-      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
     },
     {
       "name": "referenced_config",

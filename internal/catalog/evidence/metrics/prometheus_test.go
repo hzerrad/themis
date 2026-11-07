@@ -17,10 +17,10 @@ import (
 )
 
 // promServer answers each query with reply(query), and records the last
-// query and the token it came with.
+// query, the time it was asked as of, and the token it came with.
 type promServer struct {
-	reply        func(query string) (status int, body string)
-	query, token string
+	reply            func(query string) (status int, body string)
+	query, at, token string
 }
 
 func (p *promServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -28,7 +28,7 @@ func (p *promServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p.query, p.token = r.FormValue("query"), r.Header.Get("Authorization")
+	p.query, p.at, p.token = r.FormValue("query"), r.FormValue("time"), r.Header.Get("Authorization")
 	status, body := p.reply(p.query)
 	w.WriteHeader(status)
 	_, _ = fmt.Fprint(w, body)
@@ -226,6 +226,47 @@ func TestPrometheus_HistoryHasNone(t *testing.T) {
 	}
 }
 
+// Use reads each container's average share of its limits over the span, as
+// of its end, for the pods the ReplicaSet owned then: a ReplicaSet the
+// history has no figures of says so.
+func TestPrometheus_Use(t *testing.T) {
+	answer := vector(
+		labelled("0.46", "part", "memory", "container", "app"),
+		labelled("0.2", "part", "cpu", "container", "app"),
+		labelled("0.1", "part", "memory", "container", "sidecar"),
+		labelled("0.9", "part", "memory"),
+	)
+	fake := &promServer{reply: func(string) (int, string) { return http.StatusOK, answer }}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	src := newPrometheus(t, srv, nil)
+	rs := metrics.ReplicaSet{Namespace: "shop", Name: "checkout-5c6a1e2f3"}
+	from := time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)
+
+	u, err := src.Use(t.Context(), rs, from, from.Add(48*time.Hour))
+	if err != nil || !u.Answered() || u.Memory["app"] != 0.46 || u.Memory["sidecar"] != 0.1 || u.CPU["app"] != 0.2 || len(u.Memory) != 2 || len(u.CPU) != 1 {
+		t.Fatalf("use = %+v, %v, want each container's share by part", u, err)
+	}
+	if fake.at != fmt.Sprint(from.Add(48*time.Hour).Unix()) {
+		t.Errorf("asked as of %q, want the span's end", fake.at)
+	}
+	// Two days at a thousand steps is a step of 173 seconds.
+	for _, want := range []string{
+		`owner_kind="ReplicaSet"`, `owner_name="checkout-5c6a1e2f3"`, "container_memory_working_set_bytes{", "rate(container_cpu_usage_seconds_total{",
+		`kube_pod_container_resource_limits{namespace="shop", resource="memory"} > 0`, `resource="cpu"`, "avg_over_time(", "[172800s:173s]",
+	} {
+		if !strings.Contains(fake.query, want) {
+			t.Errorf("query %s lacks %s", fake.query, want)
+		}
+	}
+
+	answer = vector()
+	u, err = src.Use(t.Context(), rs, from, from.Add(time.Hour))
+	if err != nil || u.Answered() || !strings.Contains(u.Unavailable, "checkout-5c6a1e2f3 from 2026-10-20T08:00:00Z to 2026-10-20T09:00:00Z") {
+		t.Errorf("use = %+v, %v, want it to say Prometheus has no figures then", u, err)
+	}
+}
+
 // A password in the address is never shown.
 func withPassword(c *config.Prometheus) {
 	c.Address = strings.Replace(c.Address, "http://", "http://admin:hunter2@", 1)
@@ -236,6 +277,7 @@ type stub struct {
 	name string
 	r    metrics.Reading
 	h    metrics.Record
+	u    metrics.Use
 	err  error
 }
 
@@ -255,4 +297,8 @@ func (s stub) Throttling(context.Context, metrics.Pods, time.Duration) (metrics.
 
 func (s stub) History(context.Context, metrics.ReplicaSet, time.Time) (metrics.Record, error) {
 	return s.h, s.err
+}
+
+func (s stub) Use(context.Context, metrics.ReplicaSet, time.Time, time.Time) (metrics.Use, error) {
+	return s.u, s.err
 }

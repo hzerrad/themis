@@ -25,6 +25,7 @@ func item(t *testing.T, id, template string, view any) evidence.Item {
 	return evidence.Item{ID: id, Template: template, Data: data}
 }
 
+// history is scenario 1's: revision 2 lowered the memory limit.
 func history() evidence.RolloutHistoryView {
 	return evidence.RolloutHistoryView{
 		Deployment: evidence.DeploymentView{Name: "checkout", Revision: "2"},
@@ -32,6 +33,7 @@ func history() evidence.RolloutHistoryView {
 			{ReplicaSet: "checkout-7d9f8b6c4", Revision: "2", Current: true, CreatedAt: rolloutAt, Replicas: 1},
 			{ReplicaSet: "checkout-5c6a1e2f3", Revision: "1", CreatedAt: rolloutAt.Add(-7 * 24 * time.Hour), Replicas: 3, ReadyReplicas: 3},
 		},
+		Change: &evidence.TemplateChangeView{From: "1", To: "2", App: []string{"the memory limit of container app changed from 256Mi to 64Mi"}},
 	}
 }
 
@@ -339,6 +341,121 @@ func TestFailuresCameWithRollout(t *testing.T) {
 	// Nothing failing: nothing to say the rollout brought.
 	healthy := replace(t, scaledDown(t, seen(week, rolloutAt)), evidence.PodStates, pods(healthyPod("checkout-7d9f8b6c4-x2kqp", "2")))
 	assertTruth(t, run("failures_came_with_rollout", healthy), check.Unknown)
+}
+
+// A rollout that changed what the pods run may have brought a failure; one
+// that changed only their labels and annotations, such as a restart, can't
+// have, however the versions ran: a rollback would undo nothing they run.
+func TestRolloutChangedTheApp(t *testing.T) {
+	restart := history()
+	restart.Change = &evidence.TemplateChangeView{From: "1", To: "2", Metadata: []string{"the annotation kubectl.kubernetes.io/restartedAt was added"}}
+	same := history()
+	same.Change = &evidence.TemplateChangeView{From: "1", To: "2"}
+	unsaid := history()
+	unsaid.Change = nil
+	for _, tt := range []struct {
+		name   string
+		h      evidence.RolloutHistoryView
+		want   check.Truth
+		reason string
+	}{
+		{"the memory limit", history(), check.True, "revision 2 changed what its pods run (the memory limit of container app changed from 256Mi to 64Mi)"},
+		{"a restart", restart, check.False, "revision 2 changed only its pods' labels and annotations (the annotation kubectl.kubernetes.io/restartedAt was added), nothing they run"},
+		{"the same template", same, check.False, "revisions 1 and 2 have the same pod template"},
+		{"not said", unsaid, check.Unknown, "the rollout history doesn't say what revision 2 changed from revision 1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			b := replace(t, scenario1(t), evidence.RolloutHistory, tt.h)
+			r := run("rollout_changed_the_app", b)
+			assertTruth(t, r, tt.want)
+			if r.Reason != tt.reason {
+				t.Errorf("reason = %q, want %q", r.Reason, tt.reason)
+			}
+			// Revision 1's pods run healthy beside revision 2's failing one,
+			// and still the rollout brought nothing it didn't change.
+			if got := run("failures_came_with_rollout", b).Value; tt.want == check.False && got != check.False {
+				t.Errorf("failures_came_with_rollout = %s, want false", got)
+			}
+		})
+	}
+}
+
+// Once the earlier version's pods are gone, how much of its limit each
+// version used over the same time since it started decides, for OOM kills
+// and for throttling: the current one using more than measurement noise
+// beyond what the one before used at that age and in its last that long
+// brought them; no more than either, more demand did.
+func TestRolloutBroughtIt_UseAtTheSameAge(t *testing.T) {
+	share := func(v float64) *float64 { return &v }
+	week := rolloutAt.Add(-7 * 24 * time.Hour)
+	tests := []struct {
+		name        string
+		first, last *float64
+		now         float64
+		want        check.Truth
+		says        string
+	}{
+		{"about half as much before", share(0.45), share(0.47), 0.96, check.True, "uses more of its LIMIT than revision 1 did"},
+		{"as much at the same age", share(0.6), share(0.61), 0.64, check.False, "as much of its LIMIT as revision 1 did at the same age"},
+		{"at the noise, the same", share(0.5), share(0.5), 0.55, check.False, "at the same age, within measurement noise (5% of the limit)"},
+		{"past the noise, more", share(0.5), share(0.5), 0.551, check.True, "by more than measurement noise (5% of the limit)"},
+		{"climbing before the rollout", share(0.55), share(0.9), 0.93, check.False, "revision 1 had come to use as much of its LIMIT before the rollout"},
+		{"climbing, and more still", share(0.4), share(0.6), 0.97, check.True, "uses more of its LIMIT"},
+		{"its start is past the history", nil, share(0.47), 0.96, check.True, "against 47% in revision 1's last 20m"},
+		{"its start is past the history, and it used as much", nil, share(0.92), 0.95, check.False, "had come to use as much"},
+	}
+	for _, tt := range tests {
+		earlier := []evidence.UseView{{Container: "app", First: tt.first, Last: tt.last}}
+		current := []evidence.UseView{{Container: "app", First: share(tt.now)}, {Container: "sidecar", First: share(0.1)}}
+		t.Run("memory, "+tt.name, func(t *testing.T) {
+			b := scaledDown(t, evidence.RevisionRecordView{SeenFrom: week, SeenUntil: rolloutAt.Add(5 * time.Minute), Memory: earlier})
+			h := health(
+				evidence.RevisionRecordView{
+					Revision: "2", Current: true, SeenFrom: rolloutAt.Add(30 * time.Second), SeenUntil: now,
+					Restarts: 7, FirstRestartAt: rolloutAt.Add(14 * time.Minute), OOMKilled: 1, FirstOOMKillAt: rolloutAt.Add(14 * time.Minute), Memory: current,
+				},
+				evidence.RevisionRecordView{Revision: "1", SeenFrom: week, SeenUntil: rolloutAt.Add(5 * time.Minute), Memory: earlier})
+			h.ComparedAge = "20m"
+			r := run("failures_came_with_rollout", with(t, b, h))
+			assertTruth(t, r, tt.want)
+			if says := strings.ReplaceAll(tt.says, "LIMIT", "memory limit"); !strings.Contains(r.Reason, says) {
+				t.Errorf("reason = %q, want it to say %q", r.Reason, says)
+			}
+		})
+		t.Run("CPU, "+tt.name, func(t *testing.T) {
+			h := health(
+				evidence.RevisionRecordView{
+					Revision: "2", Current: true, SeenFrom: rolloutAt.Add(30 * time.Second), SeenUntil: now,
+					FirstThrottledAt: rolloutAt.Add(5 * time.Minute), CPU: current,
+				},
+				evidence.RevisionRecordView{Revision: "1", SeenFrom: week, SeenUntil: rolloutAt.Add(2 * time.Minute), CPU: earlier})
+			h.ComparedAge = "20m"
+			r := run("throttling_came_with_rollout", with(t, scenario1(t), h))
+			assertTruth(t, r, tt.want)
+			if says := strings.ReplaceAll(tt.says, "LIMIT", "CPU limit"); !strings.Contains(r.Reason, says) {
+				t.Errorf("reason = %q, want it to say %q", r.Reason, says)
+			}
+		})
+	}
+
+	// The whole reason, once.
+	b := scaledDown(t, evidence.RevisionRecordView{})
+	h := health(
+		evidence.RevisionRecordView{
+			Revision: "2", Current: true, SeenFrom: rolloutAt, SeenUntil: now, OOMKilled: 1, FirstOOMKillAt: rolloutAt.Add(14 * time.Minute),
+			Memory: []evidence.UseView{{Container: "app", First: share(0.96)}},
+		},
+		evidence.RevisionRecordView{
+			Revision: "1", SeenFrom: week, SeenUntil: rolloutAt.Add(5 * time.Minute),
+			Memory: []evidence.UseView{{Container: "app", First: share(0.45), Last: share(0.47)}},
+		})
+	h.ComparedAge = "20m"
+	want := "revision 2 changed what its pods run (the memory limit of container app changed from 256Mi to 64Mi), and uses more of its memory limit " +
+		"than revision 1 did, by more than measurement noise (5% of the limit): app used 96% of its memory limit on average in revision 2's first 20m, " +
+		"against 45% in revision 1's first 20m and 47% in its last 20m, in prometheus's history"
+	if r := run("failures_came_with_rollout", with(t, b, h)); r.Reason != want {
+		t.Errorf("reason = %q\nwant %q", r.Reason, want)
+	}
 }
 
 func TestGitOpsManaged(t *testing.T) {

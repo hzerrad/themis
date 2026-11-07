@@ -52,6 +52,10 @@ func (*throttling) History(context.Context, metrics.ReplicaSet, time.Time) (metr
 	return metrics.Record{Unavailable: "none"}, nil
 }
 
+func (*throttling) Use(context.Context, metrics.ReplicaSet, time.Time, time.Time) (metrics.Use, error) {
+	return metrics.Use{Unavailable: "none"}, nil
+}
+
 func (*throttling) CPU(context.Context, metrics.Pods) (metrics.Reading, error) {
 	return metrics.Reading{Unavailable: "none"}, nil
 }

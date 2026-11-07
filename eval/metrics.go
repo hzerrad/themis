@@ -47,6 +47,18 @@ type revisionHistory struct {
 	FirstOOMKillAt   time.Time `json:"firstOOMKillAt,omitzero"`
 	Throttled        *float64  `json:"throttled,omitempty"`
 	FirstThrottledAt time.Time `json:"firstThrottledAt,omitzero"`
+	// Use is how much of their limits its containers used, sampled: a
+	// span's figure for each container is the average of its samples then.
+	Use []useSample `json:"use,omitempty"`
+}
+
+// useSample is each container's share of its limits at one time, by
+// container name: memory working set over the memory limit, and CPU use
+// over the CPU limit, 1 being the limit.
+type useSample struct {
+	At     time.Time          `json:"at"`
+	Memory map[string]float64 `json:"memory,omitempty"`
+	CPU    map[string]float64 `json:"cpu,omitempty"`
 }
 
 type containerFigures struct {
@@ -174,6 +186,41 @@ func (p promFigures) History(_ context.Context, rs metrics.ReplicaSet, _ time.Ti
 		OOMKilled: h.OOMKilled, FirstOOMKill: h.FirstOOMKillAt,
 		Throttled: h.Throttled, FirstThrottled: h.FirstThrottledAt,
 	}, nil
+}
+
+// Use averages each container's samples from from to to, as Prometheus
+// averages what it scraped then: a span with no samples is one it has no
+// figures of.
+func (p promFigures) Use(_ context.Context, rs metrics.ReplicaSet, from, to time.Time) (metrics.Use, error) {
+	var then []useSample
+	for _, s := range p.Revisions[rs.Name].Use {
+		if !s.At.Before(from) && !s.At.After(to) {
+			then = append(then, s)
+		}
+	}
+	u := metrics.Use{
+		Memory: average(then, func(s useSample) map[string]float64 { return s.Memory }),
+		CPU:    average(then, func(s useSample) map[string]float64 { return s.CPU }),
+	}
+	if len(u.Memory) == 0 && len(u.CPU) == 0 {
+		u.Unavailable = "Prometheus has no memory or CPU figures, against a limit, for the pods of ReplicaSet " + rs.Name + " then"
+	}
+	return u, nil
+}
+
+// average is each container's average over the samples of one resource.
+func average(samples []useSample, of func(useSample) map[string]float64) map[string]float64 {
+	sum, n := map[string]float64{}, map[string]float64{}
+	for _, s := range samples {
+		for c, v := range of(s) {
+			sum[c] += v
+			n[c]++
+		}
+	}
+	for c := range sum {
+		sum[c] /= n[c]
+	}
+	return sum
 }
 
 func (p promFigures) read(pods metrics.Pods, value func(containerFigures) (float64, bool, error)) (metrics.Reading, error) {

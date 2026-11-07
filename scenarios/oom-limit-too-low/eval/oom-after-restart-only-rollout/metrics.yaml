@@ -1,0 +1,67 @@
+# What the metrics source says of each pod's containers, and what Prometheus's
+# history says of each ReplicaSet's pods: when it has them, their restarts and
+# OOM kills, and samples of how much of their memory limit they used. It keeps
+# 15 days, so it has none from before 20 Oct 14:00.
+source: prometheus
+pods:
+  checkout-6d8b2f4a7-a1b2c:
+    app: {memory: 140Mi, peakMemory: 512Mi}
+  checkout-6d8b2f4a7-d3e4f:
+    app: {memory: 120Mi, peakMemory: 512Mi}
+  checkout-6d8b2f4a7-g5h6i:
+    app: {memory: 410Mi, peakMemory: 512Mi}
+revisions:
+  checkout-5c6a1e2f3:
+    seenFrom: '2026-10-20T14:00:00Z'
+    seenUntil: '2026-11-04T13:06:00Z'
+    use:
+    - at: '2026-10-20T14:30:00Z'
+      memory: {app: 0.6}
+    - at: '2026-10-21T14:30:00Z'
+      memory: {app: 0.607}
+    - at: '2026-10-22T14:30:00Z'
+      memory: {app: 0.613}
+    - at: '2026-10-23T14:30:00Z'
+      memory: {app: 0.62}
+    - at: '2026-10-24T14:30:00Z'
+      memory: {app: 0.627}
+    - at: '2026-10-25T14:30:00Z'
+      memory: {app: 0.633}
+    - at: '2026-10-26T14:30:00Z'
+      memory: {app: 0.64}
+    - at: '2026-10-27T14:30:00Z'
+      memory: {app: 0.647}
+    - at: '2026-10-28T14:30:00Z'
+      memory: {app: 0.653}
+    - at: '2026-10-29T14:30:00Z'
+      memory: {app: 0.66}
+    - at: '2026-10-30T14:30:00Z'
+      memory: {app: 0.667}
+    - at: '2026-10-31T14:30:00Z'
+      memory: {app: 0.673}
+    - at: '2026-11-01T14:30:00Z'
+      memory: {app: 0.68}
+    - at: '2026-11-02T14:30:00Z'
+      memory: {app: 0.687}
+    - at: '2026-11-03T14:30:00Z'
+      memory: {app: 0.693}
+  checkout-6d8b2f4a7:
+    seenFrom: '2026-11-04T13:00:30Z'
+    seenUntil: '2026-11-04T14:00:00Z'
+    restarts: 7
+    firstRestartAt: '2026-11-04T13:40:00Z'
+    oomKilled: 3
+    firstOOMKillAt: '2026-11-04T13:40:00Z'
+    use:
+    - at: '2026-11-04T13:05:00Z'
+      memory: {app: 0.95}
+    - at: '2026-11-04T13:15:00Z'
+      memory: {app: 0.95}
+    - at: '2026-11-04T13:25:00Z'
+      memory: {app: 0.95}
+    - at: '2026-11-04T13:35:00Z'
+      memory: {app: 0.95}
+    - at: '2026-11-04T13:45:00Z'
+      memory: {app: 0.95}
+    - at: '2026-11-04T13:55:00Z'
+      memory: {app: 0.95}

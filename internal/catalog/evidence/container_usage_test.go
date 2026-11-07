@@ -27,6 +27,19 @@ type fakeSource struct {
 
 	asked   metrics.Pods
 	windows []time.Duration
+
+	// use answers Use; spans records each span Use was asked about.
+	use   func(rs string, from, to time.Time) metrics.Use
+	spans []string
+}
+
+// Use answers from use, or that it has no figures, and records the span.
+func (f *fakeSource) Use(_ context.Context, rs metrics.ReplicaSet, from, to time.Time) (metrics.Use, error) {
+	f.spans = append(f.spans, rs.Name+" "+from.Format(time.RFC3339)+" "+to.Format(time.RFC3339))
+	if f.use == nil {
+		return metrics.Use{Unavailable: f.noHistory}, f.err
+	}
+	return f.use(rs.Name, from, to), f.err
 }
 
 func (f *fakeSource) Name() string { return "fake" }

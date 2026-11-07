@@ -1,0 +1,362 @@
+# checkout loads its catalog into memory, and the catalog grows every day.
+# Revision 1 ran ten days at the 512Mi limit: Prometheus's history shows its
+# containers using 55% of it on average in their first hour, and 90% in their
+# last. Revision 2, an hour ago, changed the image, from 2.4.0 to 2.5.0, loads
+# the same catalog and uses 93% of the limit; from 13:40 its containers are
+# OOMKilled at it. Revision 2 uses more than revision 1 did at the same age,
+# but no more than revision 1 had come to use by its end: the catalog grew,
+# and revision 1 would be killed too. Rolling back can't help: raising the
+# limit is right.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: checkout
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.5.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  observedGeneration: 2
+  replicas: 3
+  updatedReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+  unavailableReplicas: 2
+  conditions:
+  - type: Available
+    status: 'False'
+    reason: MinimumReplicasUnavailable
+    lastUpdateTime: '2026-11-04T13:44:00Z'
+    lastTransitionTime: '2026-11-04T13:44:00Z'
+  - type: Progressing
+    status: 'True'
+    reason: NewReplicaSetAvailable
+    lastUpdateTime: '2026-11-04T13:06:00Z'
+    lastTransitionTime: '2026-11-04T13:00:00Z'
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-5c6a1e2f3
+  creationTimestamp: '2026-10-25T10:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 5c6a1e2f3
+  annotations:
+    deployment.kubernetes.io/revision: '1'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 5c6a1e2f3
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 5c6a1e2f3
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.4.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  replicas: 0
+  fullyLabeledReplicas: 0
+  readyReplicas: 0
+  availableReplicas: 0
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: checkout-8e2a6c9d1
+  creationTimestamp: '2026-11-04T13:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 8e2a6c9d1
+  annotations:
+    deployment.kubernetes.io/revision: '2'
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: checkout
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+      pod-template-hash: 8e2a6c9d1
+  template:
+    metadata:
+      labels:
+        app: checkout
+        pod-template-hash: 8e2a6c9d1
+    spec:
+      containers:
+      - name: app
+        image: example/checkout:2.5.0
+        resources:
+          requests:
+            cpu: 250m
+            memory: 384Mi
+          limits:
+            memory: 512Mi
+status:
+  replicas: 3
+  fullyLabeledReplicas: 3
+  readyReplicas: 1
+  availableReplicas: 1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-8e2a6c9d1-a1b2c
+  creationTimestamp: '2026-11-04T13:00:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 8e2a6c9d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-8e2a6c9d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.5.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:00:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-04T13:52:40Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.5.0
+    imageID: 'example/checkout@sha256:4444444444444444444444444444444444444444444444444444444444444444'
+    ready: false
+    started: false
+    restartCount: 3
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:47:10Z'
+        finishedAt: '2026-11-04T13:52:40Z'
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: 'back-off 40s restarting failed container=app pod=checkout-8e2a6c9d1-a1b2c'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-8e2a6c9d1-d3e4f
+  creationTimestamp: '2026-11-04T13:02:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 8e2a6c9d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-8e2a6c9d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.5.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:02:00Z'
+  conditions:
+  - type: Ready
+    status: 'False'
+    lastTransitionTime: '2026-11-04T13:55:20Z'
+    reason: ContainersNotReady
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.5.0
+    imageID: 'example/checkout@sha256:4444444444444444444444444444444444444444444444444444444444444444'
+    ready: false
+    started: false
+    restartCount: 2
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:50:00Z'
+        finishedAt: '2026-11-04T13:55:20Z'
+    state:
+      waiting:
+        reason: CrashLoopBackOff
+        message: 'back-off 40s restarting failed container=app pod=checkout-8e2a6c9d1-d3e4f'
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: checkout-8e2a6c9d1-g5h6i
+  creationTimestamp: '2026-11-04T13:04:00Z'
+  labels:
+    app: checkout
+    pod-template-hash: 8e2a6c9d1
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: ReplicaSet
+    name: checkout-8e2a6c9d1
+    controller: true
+    blockOwnerDeletion: true
+spec:
+  containers:
+  - name: app
+    image: example/checkout:2.5.0
+    resources:
+      requests:
+        cpu: 250m
+        memory: 384Mi
+      limits:
+        memory: 512Mi
+status:
+  phase: Running
+  startTime: '2026-11-04T13:04:00Z'
+  conditions:
+  - type: Ready
+    status: 'True'
+    lastTransitionTime: '2026-11-04T13:55:00Z'
+  containerStatuses:
+  - name: app
+    image: example/checkout:2.5.0
+    imageID: 'example/checkout@sha256:4444444444444444444444444444444444444444444444444444444444444444'
+    ready: true
+    started: true
+    restartCount: 2
+    lastState:
+      terminated:
+        reason: OOMKilled
+        exitCode: 137
+        startedAt: '2026-11-04T13:49:05Z'
+        finishedAt: '2026-11-04T13:54:10Z'
+    state:
+      running:
+        startedAt: '2026-11-04T13:55:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout.scaled-down
+involvedObject:
+  apiVersion: apps/v1
+  kind: Deployment
+  name: checkout
+type: Normal
+reason: ScalingReplicaSet
+message: 'Scaled down replica set checkout-5c6a1e2f3 from 1 to 0'
+source:
+  component: deployment-controller
+count: 1
+firstTimestamp: '2026-11-04T13:06:00Z'
+lastTimestamp: '2026-11-04T13:06:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-8e2a6c9d1-a1b2c.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-8e2a6c9d1-a1b2c
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod checkout-8e2a6c9d1-a1b2c'
+source:
+  component: kubelet
+count: 4
+firstTimestamp: '2026-11-04T13:40:30Z'
+lastTimestamp: '2026-11-04T13:58:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-8e2a6c9d1-d3e4f.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-8e2a6c9d1-d3e4f
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod checkout-8e2a6c9d1-d3e4f'
+source:
+  component: kubelet
+count: 3
+firstTimestamp: '2026-11-04T13:43:00Z'
+lastTimestamp: '2026-11-04T13:57:00Z'
+---
+apiVersion: v1
+kind: Event
+metadata:
+  name: checkout-8e2a6c9d1-g5h6i.backoff
+involvedObject:
+  apiVersion: v1
+  kind: Pod
+  name: checkout-8e2a6c9d1-g5h6i
+type: Warning
+reason: BackOff
+message: 'Back-off restarting failed container app in pod checkout-8e2a6c9d1-g5h6i'
+source:
+  component: kubelet
+count: 3
+firstTimestamp: '2026-11-04T13:45:30Z'
+lastTimestamp: '2026-11-04T13:56:00Z'
