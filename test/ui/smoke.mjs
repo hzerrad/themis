@@ -64,18 +64,34 @@ const SAYS = {
   25: { has: ["Recovered before a fix."], not: ["Recovered before Themis acted."] },
   26: { has: ["Closed by alice.", "Reason: handled by the vendor."], not: ["The evidence doesn't point to one cause.", "Some evidence was missing."] },
   5: { has: ["Reason for closing (optional)", "Themis doesn't close it on its own while its checks find the failure."] },
-  27: {
+  30: {
     has: ["catalog runs out of memory.", "No investigator is installed. Suggest a fix below, or send one from an AI SRE agent.",
       "The memory of app peaked at 57Mi of its 60Mi limit over 1h.", "No pod was evicted for its node's memory.",
       "1 check found the failure.", "Evidence 10", "2 pods, 1 ready, 3 restarts. Last ended OOMKilled, exit 137",
       "6 events. BackOff ×4, Started ×2.", "Peak 57Mi of 60Mi (95%) over 1h, from Prometheus.", "1 revision. Created",
       "No earlier revision.", "1 value that looks like a secret is hidden.", "Memory pressure", "Raw data"],
   },
-  28: { has: ["Raise catalog's memory limit from 60Mi to 72Mi?", "3 checks support the raise. None is against it.", "Restarts 2 pods, one at a time."] },
+  31: { has: ["Raise catalog's memory limit from 60Mi to 72Mi?", "3 checks support the raise. None is against it.", "Restarts 2 pods, one at a time."] },
+  27: {
+    has: ["Recovered after a change outside Themis, by kubectl-edit.",
+      "Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m"],
+    not: ["Recovered before Themis acted."],
+  },
+  28: {
+    has: ["The workload was changed outside Themis, by kubectl-edit, and still fails.",
+      "Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m",
+      "A newer incident covers the workload as it is now"],
+  },
+  29: {
+    has: ["Unknown whether it recovered.", "throttling at the CPU limit is unknown (no throttling figures: no metrics source is set up)",
+      "A newer incident covers the workload as it is now"],
+    not: ["still fails", "still failing"],
+  },
 };
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
-  "Change checkout's liveness probe?", "Roll checkout back to revision 1?"];
+  "Change checkout's liveness probe?", "Roll checkout back to revision 1?",
+  "Changed outside Themis and still failing.", "Changed outside Themis. Unknown whether it recovered."];
 
 // Problems are what went wrong since the last check, wherever the page was:
 // unhandled rejections reach the process, not the window.
@@ -386,7 +402,7 @@ function expect(what, holds) {
 // The facts cite the evidence, which opens where it is and lights up for a
 // moment; each kind of evidence opens to a view of its own, labelled where
 // its figures are.
-await visit("admin: the facts and every kind of evidence", { hash: "#/incidents/" + id(27) }, async (page, ok) => {
+await visit("admin: the facts and every kind of evidence", { hash: "#/incidents/" + id(30) }, async (page, ok) => {
   const doc = page.document;
   const ev = (n) => doc.getElementById("ev-" + n);
   expect("the title to say what fails", doc.querySelector("h1").textContent === "catalog runs out of memory.");
@@ -429,7 +445,7 @@ await visit("admin: Themis's earlier fix", { hash: "#/incidents/" + id(23) }, as
   expect("a link to the earlier incident", the(page, "#ev-1 a", "an earlier incident").getAttribute("href") === "#/incidents/" + id(24));
   ok("the fix it follows");
 });
-await visit("viewer: the facts, and no raw evidence", { who: "viewer", hash: "#/incidents/" + id(27) }, async (page, ok) => {
+await visit("viewer: the facts, and no raw evidence", { who: "viewer", hash: "#/incidents/" + id(30) }, async (page, ok) => {
   const doc = page.document;
   expect("the facts", doc.querySelectorAll(".facts p").length === 4);
   expect("no line of what each holds", [...doc.querySelectorAll(".ev .gist")].every((s) => !s.textContent.trim()));

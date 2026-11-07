@@ -895,16 +895,16 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 		// No investigator is installed: the facts, and every kind of
 		// evidence, wait for a person to suggest a fix.
 		{
-			incident: shop(27, incident.AwaitingSuggestion), evidence: shopEvidence, predicates: shopChecks,
+			incident: shop(30, incident.AwaitingSuggestion), evidence: shopEvidence, predicates: shopChecks,
 			transitions: []store.Transition{
-				{From: "", To: incident.Received, Reason: "Alert KubePodOOMKilled fired for shop/catalog.", Actor: "intake", At: uiAt(-27 * 90)},
+				{From: "", To: incident.Received, Reason: "Alert KubePodOOMKilled fired for shop/catalog.", Actor: "intake", At: uiAt(-30 * 90)},
 				{From: incident.Received, To: incident.AwaitingSuggestion, Reason: "Collected 10 pieces of evidence and ran the checks. No investigator is installed. Waiting for a suggested fix.", Actor: "investigation", At: uiAt(1)},
 			},
 		},
 		// The investigator's raise of that memory limit, waiting for
 		// approval.
 		{
-			incident: shop(28, incident.AwaitingApproval), evidence: shopEvidence, predicates: shopChecks, investigation: done,
+			incident: shop(31, incident.AwaitingApproval), evidence: shopEvidence, predicates: shopChecks, investigation: done,
 			transitions: append(uiOpened(), uiPath(2,
 				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
 				uiStep(incident.Diagnosed, incident.Proposed, "Checked against the cluster."),
@@ -923,6 +923,43 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 				a.DecisionReason, a.PolicyID = shopRaiseRule, "raise-needs-approval"
 				return a
 			}()}},
+		},
+		// Waited for a suggested fix, and a person raised the limit by hand:
+		// the new pods are no longer throttled.
+		{
+			incident: throttled(27, incident.SelfResolved), evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: uiInvestigation(t, "inconclusive", false),
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.AwaitingSuggestion, "No fix proposed. The checks found that a container is throttled at its CPU limit (app was throttled in 62% of its CPU periods over 1h, at its limit of 0.2 CPU). Referred to a person."),
+				uiChangedOutside(incident.AwaitingSuggestion, incident.SelfResolved, "Recovered after a change outside Themis, by kubectl-edit. "+
+					"Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m, at its limit of 0.3 CPU, below 25%)."))...),
+		},
+		// Changed by hand while it waited for approval, ready and still
+		// throttled: a newer incident covers it.
+		{
+			incident: func() store.Incident {
+				in := throttled(28, incident.Canceled)
+				in.SupersededBy = uiID(19)
+				return in
+			}(),
+			evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.AwaitingApproval, "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval."),
+				uiChangedOutside(incident.AwaitingApproval, incident.Canceled, "Replaced by a new incident. The workload was changed outside Themis, by kubectl-edit, and still fails. "+
+					"Since the change, the checks found that a container is throttled at its CPU limit (app was throttled in 57% of its CPU periods over 7m, at its limit of 0.3 CPU)."))...),
+		},
+		// Changed by hand while it waited for a suggested fix, with no metrics
+		// source to tell whether it recovered.
+		{
+			incident: func() store.Incident {
+				in := throttled(29, incident.Canceled)
+				in.SupersededBy = uiID(20)
+				return in
+			}(),
+			evidence: uiThrottled(t, evidenceOf), predicates: uiThrottling(), investigation: uiInvestigation(t, "inconclusive", false),
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.AwaitingSuggestion, "No fix proposed. The checks found that a container is throttled at its CPU limit (app was throttled in 62% of its CPU periods over 1h, at its limit of 0.2 CPU). Referred to a person."),
+				uiChangedOutside(incident.AwaitingSuggestion, incident.Canceled, "Replaced by a new incident. The workload was changed outside Themis, by kubectl-edit. Unknown whether it recovered. "+
+					"Since the change, the checks found that throttling at the CPU limit is unknown (no throttling figures: no metrics source is set up)."))...),
 		},
 	}
 }
@@ -1031,6 +1068,12 @@ func uiShop(t *testing.T, cat catalog.Catalog) ([]evidence.Item, []check.Result)
 	}
 	checks := cat.Checks.For(append(slices.Clone(profile.Checks), check.GitOpsManaged))
 	return out, checks.Evaluate(evidence.Bundle{Target: shopTarget, Items: out}, uiAt(1))
+}
+
+// uiChangedOutside is how reconciliation ends an incident whose workload was
+// changed outside Themis.
+func uiChangedOutside(from, to incident.State, reason string) store.Transition {
+	return store.Transition{From: from, To: to, Reason: reason, Actor: "reconcile"}
 }
 
 // uiNotFixed is what verification says of a raise that left its pods ready

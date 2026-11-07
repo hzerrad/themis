@@ -156,6 +156,15 @@ function fixWords(x) {
 // with no fix applied then waits for the fix they suggest.
 const REFERRAL = /\s*Referred to a person\.\s*$/;
 
+// changedOutside says, in the list, why a newer incident covers one the
+// workload's change outside Themis replaced, from the reason Themis wrote:
+// it still fails, or Themis can't tell whether it recovered.
+function changedOutside(reason) {
+  if (/, and still fails\./.test(reason)) return "Changed outside Themis and still failing. ";
+  if (/ Unknown whether it recovered\./.test(reason)) return "Changed outside Themis. Unknown whether it recovered. ";
+  return "Changed outside Themis. ";
+}
+
 // States. One name per state, everywhere: docs/writing.md lists them.
 const TERMINAL = ["resolved", "contained_escalated", "escalated", "closed_no_action", "self_resolved", "rejected", "canceled"];
 const REFERRED = ["escalated", "contained_escalated"];
@@ -935,7 +944,7 @@ function rowWhat(i) {
   const cause = s.cause ? causeText(s.cause.name, s.cause.description) : null;
   const fx = s.fix ? fixWords(s.fix) : null;
   const em = (text) => (text ? h("em", {}, text) : null);
-  if (i.supersededBy) return ["Changed outside Themis and still failing. ", em("A newer incident covers it.")];
+  if (i.supersededBy) return [changedOutside(s.reason || ""), em("A newer incident covers it.")];
   if (i.state === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(fx.short + "?")];
   if (WORKING.includes(i.state)) return "Collecting and weighing evidence.";
   if (i.state === "awaiting_suggestion" && REFERRAL.test(s.reason || "")) return [cause ? cause + " " : null, em("Referred to a person.")];
@@ -2058,7 +2067,8 @@ function headline(d, ctx) {
     return [title, rest || leading];
   }
   // The reason's first sentence says why it closed: "Recovered before a
-  // fix.", "All of its alerts stopped firing.", "Fixed outside Themis, by …".
+  // fix.", "All of its alerts stopped firing.", "Recovered after a change
+  // outside Themis, by …".
   if (s === "self_resolved") return opening(reason, "Recovered before Themis acted.");
   return [reason || stateOf(s)[0] + ".", ""];
 }
@@ -2194,7 +2204,7 @@ async function detail(id) {
     h("h1", { class: "question" }, title),
     because ? h("p", { class: plain ? "because plain" : "because" }, because) : null,
     told ? h("p", { class: "flash", role: "status" }, told) : null,
-    inc.supersededBy ? h("p", { class: "note" }, "The workload changed outside Themis and still fails. A newer incident covers it as it is now: ",
+    inc.supersededBy ? h("p", { class: "note" }, "A newer incident covers the workload as it is now: ",
       h("a", { href: "#/incidents/" + inc.supersededBy }, "open the newer incident"), ".") : null,
     followsNote(d.Follows),
     factsBlock(d),

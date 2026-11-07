@@ -26,7 +26,7 @@ func TestFacts(t *testing.T) {
 	api := &API{CheckList: cat.Checks, Fixes: cat.Fixes, Config: config.Config{Profiles: cat.Profiles}}
 	items, results := uiShop(t, cat)
 	rec := incidentRecord{
-		incident: store.Incident{ID: uiID(27), State: incident.AwaitingSuggestion, Profile: "oom-limit-too-low", Target: shopTarget, CreatedAt: uiAt(0)},
+		incident: store.Incident{ID: uiID(30), State: incident.AwaitingSuggestion, Profile: "oom-limit-too-low", Target: shopTarget, CreatedAt: uiAt(0)},
 		evidence: items, predicates: results,
 	}
 

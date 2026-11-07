@@ -217,7 +217,7 @@ func Run(ctx context.Context, o Options) error {
 	defer closeExecutor()
 	telemetry.AddIncidentWorker(workers, &governance.ExecuteWorker{Store: s, Executor: executor})
 	telemetry.AddIncidentWorker(workers, &verification.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Fixes: cat.Fixes, Checks: cat, Words: cat.Checks})
-	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Store: s, Reader: mgr.GetAPIReader(), Logger: log})
+	telemetry.AddUnscopedWorker(workers, &reconciliation.Worker{Config: current, Store: s, Reader: mgr.GetAPIReader(), Checks: cat, Words: cat.Checks, Logger: log})
 	telemetry.AddIncidentWorker(workers, &notification.Worker{Store: s, Config: cfg.Notifications, Remedy: hint.Writer{Config: current}})
 	if executor == nil {
 		log.WarnContext(ctx, "no executor is configured: approved actions are canceled, never executed")
