@@ -1,46 +1,53 @@
 # Contributing to Themis
 
-Thank you for your interest in Themis. The project is in early development, so expect the structure to change.
+Themis is in alpha, which makes this a good time to get involved. The design is still open, and a report or a pull request now can change where the project goes. Expect its structure and configuration to move between releases while that happens.
 
 ## Where to start
 
-- **Try an alpha** and tell us what you found with the **Alpha feedback** issue form.
-- **Add an incident type.** Scenario packs are how Themis learns to handle new kinds of incident. Start with [docs/scenarios.md](docs/scenarios.md) and `make scenario NAME=my-scenario`.
-- **Pick an issue** labelled `good first issue` or `help wanted`.
+You don't need to write code to help.
+
+- **Run the alpha and tell us how it went.** The [Alpha feedback](https://github.com/hzerrad/themis/issues/new?template=alpha-feedback.yml) form asks what Themis decided and whether that was right. A wrong call, with the evidence that led to it, is one of the most useful things you can send.
+- **Teach Themis a new kind of incident.** Incident types are scenario packs. `make scenario NAME=my-scenario` creates one to fill in, and [docs/scenarios.md](docs/scenarios.md) walks through the rest.
+- **Pick up an issue** labelled [`good first issue`](https://github.com/hzerrad/themis/labels/good%20first%20issue) or [`help wanted`](https://github.com/hzerrad/themis/labels/help%20wanted).
+- **Planning something large?** Start a thread in [Discussions](https://github.com/hzerrad/themis/discussions) first, so we can agree on the approach before you spend a weekend on it.
 
 Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Ground rules
 
-- Changes that touch governance, approval, execution, or verification must include tests that demonstrate the safety property they affect.
-- Model output is untrusted input everywhere, including inside the intelligence component.
-- Keep pull requests small and focused on one logical change.
+Themis exists to keep bad changes away from clusters, so a few rules here are stricter than in most projects.
+
+- **Changes to governance, approval, execution or verification must include tests that demonstrate the safety property they affect.** A bug there may not crash anything. It can let through a change that should have been stopped.
+- **Model output is untrusted input everywhere**, including inside `themis-intelligence`. A model can be wrong, and logs or events can carry text written to steer it.
+- **A new scenario pack comes with evaluation cases**, as [docs/scenarios.md](docs/scenarios.md) describes. They show how the investigator handles the new incident, and whether a harmful fix could get through.
+- **Text people read follows [docs/writing.md](docs/writing.md):** the web UI, the messages Themis writes, and the docs for operators. Themis has one voice, plain and precise, and the guide describes it.
+- **Keep each pull request to one logical change.** Small ones get reviewed faster.
 
 ## Commit messages and pull requests
 
-Pull requests are squash-merged, so the pull request's title becomes the commit on `main`. Write it as one plain sentence that says what changes and why it matters, without a type prefix:
+We squash-merge, so your pull request's title becomes the commit on `main`. Write it as one plain sentence that says what changes and why it matters, without a type prefix like `feat:`:
 
 ```
-Raise or roll back by whether a healthy earlier version exists
+Roll back only the changes of a rollout that broke it
 ```
 
-Keep each commit to a one-line subject and a sign-off. Explain the details in the pull request's description.
+Keep each commit to a one-line subject and a sign-off, and put the details in the pull request's description.
 
-There are templates for common kinds of change. Add `?expand=1&template=scenario-pack.md` or `?expand=1&template=bug-fix.md` to the compare URL to use one.
+Scenario packs and bug fixes have their own templates. Add `?expand=1&template=scenario-pack.md` or `?expand=1&template=bug-fix.md` to the compare URL to use one.
 
 ## Developer Certificate of Origin
 
-All commits must be signed off to certify the [Developer Certificate of Origin](https://developercertificate.org/):
+Every commit needs a sign-off. It certifies the [Developer Certificate of Origin](https://developercertificate.org/): that you wrote the change, or have the right to submit it under the project's license.
 
 ```bash
 git commit -s
 ```
 
-CI checks that every commit of a pull request carries a `Signed-off-by` matching its author.
+CI checks that each commit in a pull request carries a `Signed-off-by` matching its author.
 
-## Local checks
+## Running the checks locally
 
-You need Docker, plus Go, [uv](https://docs.astral.sh/uv/), Node, Helm and kubectl at the versions pinned in `mise.toml`: with [mise](https://mise.jdx.dev/), `mise install` installs them. The other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`.
+You need Docker, plus Go, [uv](https://docs.astral.sh/uv/), Node, Helm and kubectl at the versions pinned in `mise.toml`. With [mise](https://mise.jdx.dev/), `mise install` sets them all up. The other tools (buf, golangci-lint, kind, envtest) are pinned in `tools/go.mod` and run through `go tool`, so there's nothing more to install.
 
 ```bash
 make help            # list targets
@@ -51,12 +58,12 @@ make scenario-check  # every scenario pack's cases, replayed against recorded mo
 make vuln            # known vulnerabilities in the Go and Python dependencies
 ```
 
-Run `make lint test` before opening a pull request. CI runs the same targets, and `make e2e`, which runs the bad-rollout scenarios on a fresh kind cluster with a fake model, so it needs only Docker.
+Run `make lint test` before you open a pull request. CI runs the same targets, plus `make e2e`, which plays the bad-rollout scenarios on a fresh kind cluster with a fake model. It needs only Docker, so you can run it locally too.
 
-`make test` includes `make test-ui`, which runs the web UI: it loads the page in jsdom against what the API serves, built by the Go views from incidents in every state, visits every page as an admin, an approver and a viewer, and works the forms. It fails on an uncaught exception or rejection, a `console.error`, a "Not loaded:" box, and text a missing value leaves, such as `null` or `NaN`. A new page or state belongs in its fixtures (`internal/server/httpapi/uifixtures_test.go`) and its visits (`test/ui/smoke.mjs`).
+`make test` includes `make test-ui`. It loads the web UI in jsdom against what the API serves for incidents in every state, built by the Go views, visits every page as an admin, an approver and a viewer, and works the forms. It fails on an uncaught exception or rejection, a `console.error`, a "Not loaded:" box, or text left by a missing value, such as `null` or `NaN`. If you add a page or a state, add it to the fixtures (`internal/server/httpapi/uifixtures_test.go`) and the visits (`test/ui/smoke.mjs`).
 
-Changes to the investigation prompt or loop are easiest to judge against a real model: see [Running locally](docs/demo.md#running-locally).
+Changing the investigation prompt or loop? Judge it against a real model. [Running locally](docs/demo.md#running-locally) shows how.
 
-## Reporting security issues
+## Security issues
 
-Do not open public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).
+Please don't report vulnerabilities in public issues. [SECURITY.md](SECURITY.md) explains how to report them privately.
