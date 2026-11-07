@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 as the new revision caused OOM kills post-rollout\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit is too low\",\"supporting\":[\"ev-container_memory\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[\"ev-container_memory_for_revision_1\"],\"status\":\"supported\"},{\"root_cause_class\":\"application_bug\",\"summary\":\"New revision's code has a memory leak or bug\",\"supporting\":[\"ev-pod_states\",\"ev-revision_health\"],\"contradicting\":[\"ev-referenced_config\"],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"Config changes post-rollout caused memory issues\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[\"ev-rollout_history\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Revert to revision 1 which ran without OOM kills\",\"rationale\":\"Failures began after rollout to revision 2, which had OOM kills. Earlier revision 1 ran without issues, indicating the rollout caused the problem. Rolling back to revision 1 would resolve the O.M. kills and restore stability.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-revision_health\",\"ev-pod_states\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\",\"oom_killed_new_revision\"]}}",
+      "usage": {
+        "input_tokens": 6005,
+        "output_tokens": 1353
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

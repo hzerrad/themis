@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Node memory pressure evicted pods, but no evidence of node capacity. Memory leak suspected but contradicted by memory_at_limit_before_kill.\",\"hypotheses\":[{\"root_cause_class\":\"node_memory_pressure\",\"summary\":\"Node ran out of memory evicting pods\",\"supporting\":[\"evicted_for_node_memory\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[\"node_memory_capacity\"],\"status\":\"supported\"},{\"root_cause_class\":\"memory_leak\",\"summary\":\"Long-running OOM kills suggest memory growth\",\"supporting\":[\"oom_after_long_run\"],\"contradicting\":[\"memory_at_limit_before_kill\"],\"missing\":[\"memory_usage_trend\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No node memory metrics to confirm pressure\",\"supporting\":[\"evicted_for_node_memory\"],\"contradicting\":[],\"missing\":[\"node_memory_capacity\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 5043,
+        "output_tokens": 771
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

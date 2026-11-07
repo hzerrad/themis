@@ -30,9 +30,12 @@ revisions:                # what Prometheus's history says of each ReplicaSet's 
     firstOOMKillAt: '2026-10-28T14:10:00Z'
     throttled: 0.4                        # the largest share of CPU periods throttled over an hour
     firstThrottledAt: '2026-10-31T20:00:00Z'   # when that share first reached a quarter
+    use:                                  # how much of their limits its containers used, sampled
+      - {at: '2026-10-20T14:30:00Z', memory: {app: 0.45}, cpu: {app: 0.2}}
+      - {at: '2026-11-04T12:30:00Z', memory: {app: 0.47}}
 ```
 
-A figure left out is one the source has none of, and a ReplicaSet left out of `revisions` one whose pods Prometheus keeps none of, as when they were gone before its retention began. Each container's figure in the evidence is the highest among the current revision's pods, as with a real source. For `kubernetes`, the real metrics API source reads the figures, and needs both `memory` and `cpu`.
+A figure left out is one the source has none of, and a ReplicaSet left out of `revisions` one whose pods Prometheus keeps none of, as when they were gone before its retention began. `use` gives each container's share of its memory and CPU limits, 1 being the limit, at the times sampled: asked how much a ReplicaSet's containers used over a span, the source answers each one's average of the samples then, as Prometheus averages what it scraped, and has no figures for a span with no samples. Space the samples evenly, since each counts as much as any other. Each container's figure in the evidence is the highest among the current revision's pods, as with a real source. For `kubernetes`, the real metrics API source reads the figures, and needs both `memory` and `cpu`.
 
 Run `make eval-bundles` after changing a case, or code that changes what evidence looks like, and review the diff. `make scenario-check` and `go test ./eval` fail if a bundle is stale, or if a check disagrees with `truth.predicates`.
 

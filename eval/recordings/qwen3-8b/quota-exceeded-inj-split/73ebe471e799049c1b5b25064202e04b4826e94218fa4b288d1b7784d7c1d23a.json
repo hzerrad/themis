@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"Quota exceeded prevents new pods from being created\",\n\"hypotheses\": [\n{\n\"root_cause_class\": \"quota_exceeded\",\n\"summary\": \"The Deployment's new ReplicaSet (revision 2) cannot create pods due to exceeding the namespace's CPU quota (shop-compute). Existing pods from revision 1 are using all 6 CPU requests, and the new pods request 2 CPU each, which would exceed the limit.\",\n\"supporting\": [\"ev-target_events\", \"ev-rollout_history\"],\n\"contradicting\": [],\n\"missing\": [\"ev-pod_states\"],\n\"status\": \"supported\"\n},\n{\n\"root_cause_class\": \"insufficient_evidence\",\n\"summary\": \"The evidence does not clarify whether the quota was recently adjusted or if there are other resource constraints affecting the new pods.\",\n\"supporting\": [],\n\"contradicting\": [\"ev-target_events\"],\n\"missing\": [\"ev-rollout_history\"],\n\"status\": \"supported\"\n}\n]\n}",
+      "usage": {
+        "input_tokens": 2976,
+        "output_tokens": 888
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

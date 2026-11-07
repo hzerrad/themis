@@ -89,7 +89,7 @@
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-15T08:01:00Z\",\"lastTransitionTime\":\"2026-10-15T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-22T10:02:00Z\",\"lastTransitionTime\":\"2026-10-22T10:02:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-22T10:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"registry.example.com/shop/checkout:2.4.0\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-15T08:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"registry.example.com/shop/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2}",
+      "data": "{\"deployment\":{\"name\":\"checkout\",\"currentRevision\":\"2\",\"generation\":0,\"observedGeneration\":2,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":2,\"unavailableReplicas\":1,\"conditions\":[{\"type\":\"Available\",\"status\":\"True\",\"reason\":\"MinimumReplicasAvailable\",\"lastUpdateTime\":\"2026-10-15T08:01:00Z\",\"lastTransitionTime\":\"2026-10-15T08:01:00Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"lastUpdateTime\":\"2026-10-22T10:02:00Z\",\"lastTransitionTime\":\"2026-10-22T10:02:00Z\"}]},\"revisions\":[{\"replicaSet\":\"checkout-7d9f8b6c4\",\"revision\":\"2\",\"current\":true,\"createdAt\":\"2026-10-22T10:00:00Z\",\"replicas\":3,\"readyReplicas\":2,\"containers\":[{\"name\":\"app\",\"image\":\"registry.example.com/shop/checkout:2.4.0\",\"limits\":{\"memory\":\"256Mi\"}}]},{\"replicaSet\":\"checkout-5c6a1e2f3\",\"revision\":\"1\",\"createdAt\":\"2026-10-15T08:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"registry.example.com/shop/checkout:2.3.1\",\"limits\":{\"memory\":\"256Mi\"}}]}],\"totalRevisions\":2,\"change\":{\"from\":\"1\",\"to\":\"2\",\"app\":[\"the image of container app changed from registry.example.com/shop/checkout:2.3.1 to registry.example.com/shop/checkout:2.4.0\"],\"metadata\":[]}}",
       "classification": "internal"
     },
     {
@@ -118,7 +118,7 @@
     },
     {
       "name": "rollout_history",
-      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
     },
     {
       "name": "referenced_config",

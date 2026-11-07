@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new revision's memory limit is too low, causing OOM kills. Rolling back to revision 1 will resolve the issue.\",\n\"hypotheses\": [\n{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"The new revision's memory limit is too low, leading to OOM kills.\", \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"contradicting\": [], \"missing\": [],\n\"status\": \"supported\"},\n{\"root_cause_class\": \"application_bug\", \"summary\": \"The new revision's code may have a memory leak.\", \"supporting\": [], \"contradicting\": [\"ev-rollout_history\", \"ev-pod_states\"], \"missing\": [\"container_logs_tail\"],\n\n\"status\": \"refuted\"},\n{\"root_cause_class\": \"configuration_change\", \"summary\": \"A ConfigMap/Secret change caused the issue.\", \"supporting\": [], \"contradicting\": [\"ev-referenced_config\"], \"missing\": [], \"status\": \"refuted\"}\n],\n\"proposal\": {\n\"capability\": \"deployment.rollback-to-revision\",\n\"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"},\n\"params\": {\"revision\": 1},\n\"expected_effect\": \"The Deployment will revert to revision 1, which is known to be healthy and not experiencing OOM kills.\",\n\"rationale\": \"The new revision (2) has a memory limit of 64Mi, which is likely insufficient for the application's needs, causing OOM kills. Revision 1 uses 256Mi and is functioning without issues. Rolling back to revision 1 will resolve the memory constraints and stop the OOM errors.\",\n\"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-referenced_config\"],\n\"cited_predicates\": [\"failure_onset_after_rollout\", \"oom_killed_new_revision\", \"rollout_changed_the_app\", \"failures_came_with_rollout\", \"earlier_revision_healthy\", \"config_changed_before_failure\"]\n}\n}",
+      "usage": {
+        "input_tokens": 3421,
+        "output_tokens": 778
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -68,14 +68,14 @@
       "description": "none of these: say what in the summary"
     }
   ],
-  "guidance": "Changing a probe's timing is right when the application works and the\nprobe fails it only because it is slower than the probe allows: it is\nkilled while still starting (killed_during_startup), or its probes time\nout (probe_timeouts) on answers that come a little after the probe's\ntimeout. The logs then show it starting or serving normally until it is\nstopped, and crashed_on_its_own is false. Each revision's probe timings\nare in the rollout history: compare them with how long containers ran and\nwith the probe failure messages.\n\nDecide which probes to change and to what, from that evidence: liveness,\nreadiness or startup, and initialDelaySeconds, periodSeconds,\ntimeoutSeconds, failureThreshold or, for readiness, successThreshold.\nGive the values the evidence supports, such as a timeout above the\nanswers' latency, or enough delay or failures to cover the start the logs\nshow, and cite them. A readiness probe made more lenient keeps sending\ntraffic to pods that fail it for longer: change it only when the\nevidence shows readiness failing a pod that serves.\n\nDon't change a probe, and say what you found instead, when:\n- the application is failing: errors or stack traces in the logs,\n  crashed_on_its_own is true, or probes get error answers from a\n  container that is up. A probe failing is then a symptom.\n- the latest rollout brought the failures, where the revision before it\n  ran without failing (failures_came_with_rollout is true): whether to\n  roll back is another kind of incident's call, unless the logs show the\n  new version only starts slower.\n- something the application calls is down, and its readiness probe says\n  so: a more lenient probe would send traffic to pods that can't serve\n  it, and hide the outage.\n- probe_kills and probe_timeouts are both false: nothing shows the probes\n  failing a container that works.\n",
+  "guidance": "Changing a probe's timing is right when the application works and the\nprobe fails it only because it is slower than the probe allows: it is\nkilled while still starting (killed_during_startup), or its probes time\nout (probe_timeouts) on answers that come a little after the probe's\ntimeout. The logs then show it starting or serving normally until it is\nstopped, and crashed_on_its_own is false. Each revision's probe timings\nare in the rollout history: compare them with how long containers ran and\nwith the probe failure messages.\n\nDecide which probes to change and to what, from that evidence: liveness,\nreadiness or startup, and initialDelaySeconds, periodSeconds,\ntimeoutSeconds, failureThreshold or, for readiness, successThreshold.\nGive the values the evidence supports, such as a timeout above the\nanswers' latency, or enough delay or failures to cover the start the logs\nshow, and cite them. A readiness probe made more lenient keeps sending\ntraffic to pods that fail it for longer: change it only when the\nevidence shows readiness failing a pod that serves.\n\nDon't change a probe, and say what you found instead, when:\n- the application is failing: errors or stack traces in the logs,\n  crashed_on_its_own is true, or probes get error answers from a\n  container that is up. A probe failing is then a symptom.\n- the latest rollout changed what the pods run and brought the failures,\n  where the revision before it ran without failing\n  (failures_came_with_rollout is true): whether to\n  roll back is another kind of incident's call, unless the logs show the\n  new version only starts slower.\n- something the application calls is down, and its readiness probe says\n  so: a more lenient probe would send traffic to pods that can't serve\n  it, and hide the outage.\n- probe_kills and probe_timeouts are both false: nothing shows the probes\n  failing a container that works.\n",
   "max_steps": 8,
   "max_evidence_requests": 6,
   "initial": [
     {
       "id": "ev-rollout_history",
       "template": "rollout_history",
-      "data": "{\"deployment\":{\"name\":\"search-api\",\"currentRevision\":\"12\",\"generation\":0,\"observedGeneration\":12,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":0,\"unavailableReplicas\":3,\"conditions\":[{\"type\":\"Available\",\"status\":\"False\",\"reason\":\"MinimumReplicasUnavailable\",\"message\":\"Deployment does not have minimum availability.\",\"lastUpdateTime\":\"2026-11-04T14:08:15Z\",\"lastTransitionTime\":\"2026-11-04T14:08:15Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"message\":\"ReplicaSet \\\"search-api-58f7c9d2b\\\" has successfully progressed.\",\"lastUpdateTime\":\"2026-11-01T09:04:00Z\",\"lastTransitionTime\":\"2026-11-01T09:00:00Z\"}]},\"revisions\":[{\"replicaSet\":\"search-api-58f7c9d2b\",\"revision\":\"12\",\"current\":true,\"createdAt\":\"2026-11-01T09:00:00Z\",\"replicas\":3,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search-api:5.4.1\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":0,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":0,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]},{\"replicaSet\":\"search-api-3a1e8b7f4\",\"revision\":\"11\",\"createdAt\":\"2026-10-20T10:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search-api:5.4.0\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":0,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":0,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]}],\"totalRevisions\":2}",
+      "data": "{\"deployment\":{\"name\":\"search-api\",\"currentRevision\":\"12\",\"generation\":0,\"observedGeneration\":12,\"replicas\":3,\"updatedReplicas\":3,\"readyReplicas\":0,\"unavailableReplicas\":3,\"conditions\":[{\"type\":\"Available\",\"status\":\"False\",\"reason\":\"MinimumReplicasUnavailable\",\"message\":\"Deployment does not have minimum availability.\",\"lastUpdateTime\":\"2026-11-04T14:08:15Z\",\"lastTransitionTime\":\"2026-11-04T14:08:15Z\"},{\"type\":\"Progressing\",\"status\":\"True\",\"reason\":\"NewReplicaSetAvailable\",\"message\":\"ReplicaSet \\\"search-api-58f7c9d2b\\\" has successfully progressed.\",\"lastUpdateTime\":\"2026-11-01T09:04:00Z\",\"lastTransitionTime\":\"2026-11-01T09:00:00Z\"}]},\"revisions\":[{\"replicaSet\":\"search-api-58f7c9d2b\",\"revision\":\"12\",\"current\":true,\"createdAt\":\"2026-11-01T09:00:00Z\",\"replicas\":3,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search-api:5.4.1\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":0,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":0,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]},{\"replicaSet\":\"search-api-3a1e8b7f4\",\"revision\":\"11\",\"createdAt\":\"2026-10-20T10:00:00Z\",\"replicas\":0,\"readyReplicas\":0,\"containers\":[{\"name\":\"app\",\"image\":\"example/search-api:5.4.0\",\"probes\":{\"liveness\":{\"initialDelaySeconds\":0,\"periodSeconds\":10,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1},\"readiness\":{\"initialDelaySeconds\":0,\"periodSeconds\":5,\"timeoutSeconds\":1,\"failureThreshold\":3,\"successThreshold\":1}}}]}],\"totalRevisions\":2,\"change\":{\"from\":\"11\",\"to\":\"12\",\"app\":[\"the image of container app changed from example/search-api:5.4.0 to example/search-api:5.4.1\"],\"metadata\":[]}}",
       "classification": "internal"
     },
     {
@@ -120,7 +120,7 @@
   "templates": [
     {
       "name": "rollout_history",
-      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, and each ReplicaSet revision with its images and resource limits."
+      "description": "The Deployment's rollout progress, conditions, GitOps ownership markers, each ReplicaSet revision with its images and resource limits, and what the current revision changed from the one before it: in what its pods run, or only in their labels and annotations."
     },
     {
       "name": "pod_states",
@@ -141,7 +141,7 @@
     },
     {
       "name": "revision_health",
-      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+      "description": "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed; and how much of its memory and CPU limits each container used on average, over the same time since each revision started, and for the one before, over its last that long. A source without history says so."
     }
   ],
   "gaps": [
@@ -193,8 +193,17 @@
       ]
     },
     {
-      "name": "failures_came_with_rollout",
+      "name": "rollout_changed_the_app",
       "version": "1",
+      "value": "true",
+      "reason": "revision 12 changed what its pods run (the image of container app changed from example/search-api:5.4.0 to example/search-api:5.4.1)",
+      "evidence_ids": [
+        "ev-rollout_history"
+      ]
+    },
+    {
+      "name": "failures_came_with_rollout",
+      "version": "2",
       "value": "unknown",
       "reason": "no metrics history",
       "gaps": [

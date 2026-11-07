@@ -95,7 +95,7 @@ func TestShown(t *testing.T) {
 func TestRevisionChanges(t *testing.T) {
 	items := uiEvidence(t, true)
 	digest, view := shown(items[0], items)
-	if want := "2 revisions. Revision 2 replaced 1 at 2026-11-06T08:40:00Z. The image of app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0."; digest.String() != want {
+	if want := "2 revisions. Revision 2 replaced 1 at 2026-11-06T08:40:00Z. The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0. 2 other changes."; digest.String() != want {
 		t.Errorf("digest = %q, want %q", digest.String(), want)
 	}
 	var changed []string
@@ -103,15 +103,33 @@ func TestRevisionChanges(t *testing.T) {
 		changed = append(changed, c.String())
 	}
 	want := []string{
-		"The image of app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.",
-		"Memory limit of app from 512Mi to 256Mi.",
-		"Liveness probe timeout of app from 3s to 1s.",
+		"The image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0.",
+		"The memory limit of container app changed from 512Mi to 256Mi.",
+		"The liveness probe of container app changed.",
 	}
-	if strings.Join(changed, "\n") != strings.Join(want, "\n") {
-		t.Errorf("changed =\n%s\nwant\n%s", strings.Join(changed, "\n"), strings.Join(want, "\n"))
+	if strings.Join(changed, "\n") != strings.Join(want, "\n") || view.Revisions[0].From != "1" {
+		t.Errorf("changed from %q =\n%s\nwant\n%s", view.Revisions[0].From, strings.Join(changed, "\n"), strings.Join(want, "\n"))
 	}
 	if r := view.Revisions[1]; !r.First || len(r.Changed) > 0 {
 		t.Errorf("the first revision = %+v", r)
+	}
+
+	// A restart changes only an annotation: said quietly, in place of what
+	// the pods run.
+	var history evidence.RolloutHistoryView
+	if err := json.Unmarshal(items[0].Data, &history); err != nil {
+		t.Fatal(err)
+	}
+	history.Change = &evidence.TemplateChangeView{From: "1", To: "2", App: []string{}, Metadata: []string{"the annotation kubectl.kubernetes.io/restartedAt changed"}}
+	restart := items[0]
+	data, err := json.Marshal(history)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restart.Data = data
+	digest, view = shown(restart, items)
+	if r := view.Revisions[0]; r.Quiet != "Only annotations changed." || len(r.Changed) > 0 || !strings.HasSuffix(digest.String(), "at 2026-11-06T08:40:00Z. Only annotations changed.") {
+		t.Errorf("a restart = %q, %+v", digest.String(), r)
 	}
 
 	// The log line written to steer Themis is marked.

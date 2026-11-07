@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\": \"propose\", \"summary\": \"Memory limit regression in new revision causing OOM kills\", \"hypotheses\": [{\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New revision's memory limit is too low for its workload\", \"supporting\": [\"oom_killed_new_revision\", \"memory_at_limit_before_kill\", \"failure_onset_after_rollout\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"container_memory_peak_details\"],\"status\": \"supported\"}], \"proposal\": {\"capability\": \"deployment.set-resources\", \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"shop\", \"name\": \"checkout\", \"uid\": \"uid-deployment-checkout\"}, \"params\": {\"containers\": {\"app\": {\"limits\": {\"memory\": \"1Gi\"}}}},\"expected_effect\": \"Raise memory limit to prevent OOM kills in new revision\", \"rationale\": \"New revision's app container peaked at 100% of its 512Mi memory limit, causing OOM kills. Increasing the limit to 1Gi should accommodate higher memory usage without triggering OOM.\",\"cited_evidence_ids\": [\"ev-container_memory\", \"ev-rollout_history\", \"ev-pod_states\"],\"cited_predicates\": [\"oom_killed_current_revision\", \"memory_at_limit_before_kill\", \"failure_onset_after_rollout\"]}}",
+      "usage": {
+        "input_tokens": 5501,
+        "output_tokens": 730
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

@@ -357,6 +357,12 @@ func uiEvidence(t *testing.T, instructions bool) []evidence.Item {
 				}},
 			},
 			TotalRevisions: 2,
+			// What revision 2 changed, as the rollout history words it.
+			Change: &evidence.TemplateChangeView{From: "1", To: "2", App: []string{
+				"the image of container app changed from shop/checkout:1.4.1 to shop/checkout:1.5.0",
+				"the memory limit of container app changed from 512Mi to 256Mi",
+				"the liveness probe of container app changed",
+			}, Metadata: []string{}},
 		}},
 		{evPods, evidence.PodStates, evidence.PodStatesView{TotalPods: 1, Pods: []evidence.PodView{{
 			Name: uiPod, Revision: "2", Phase: "Running", StartedAt: uiAt(-19),

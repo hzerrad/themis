@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Missing revision health metrics to compare pre-and post-rollout stability. Logs point to dependency failure (orders-db timeouts), but cannot confirm if this was present in earlier revision.\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Orders-db connection timeouts in logs\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"No config changes detected\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"No OOM kills in new revision\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4184,
+        "output_tokens": 614
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

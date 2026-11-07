@@ -50,6 +50,72 @@ func TestRevisionHealth_CurrentAndTheOneBefore(t *testing.T) {
 	}
 }
 
+// Once the history has both revisions, it compares how much of their limits
+// their containers used over the same time since each started, the shorter
+// of the two lives, and the earlier one's over its last that long too.
+func TestRevisionHealth_ComparesUseAtTheSameAge(t *testing.T) {
+	target := loadScenario1(t)
+	w := read(t, target)
+	revisions, err := w.Revisions(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := map[string]time.Time{}
+	for _, r := range revisions {
+		created[r.Object.Name] = r.Object.CreationTimestamp.UTC()
+	}
+	curSince := created["checkout-7d9f8b6c4"]
+	if w.WrittenAt.After(curSince) {
+		curSince = w.WrittenAt
+	}
+	priorSince := created["checkout-5c6a1e2f3"]
+	week := 7 * 24 * time.Hour
+	src := &fakeSource{
+		records: map[string]metrics.Record{
+			"checkout-7d9f8b6c4": {Source: "prometheus", SeenFrom: curSince, SeenUntil: curSince.Add(20 * time.Minute)},
+			"checkout-5c6a1e2f3": {Source: "prometheus", SeenFrom: priorSince, SeenUntil: priorSince.Add(week)},
+		},
+		use: func(rs string, from, _ time.Time) metrics.Use {
+			switch {
+			case rs == "checkout-7d9f8b6c4":
+				return metrics.Use{Memory: map[string]float64{"app": 0.97}}
+			case from.Equal(priorSince):
+				return metrics.Use{Memory: map[string]float64{"app": 0.45}, CPU: map[string]float64{"app": 0.2}}
+			default:
+				return metrics.Use{Memory: map[string]float64{"app": 0.47123}}
+			}
+		},
+	}
+	item, err := evidence.NewRevisionHealth(src).Collect(t.Context(), k8s, w, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var view evidence.RevisionHealthView
+	if err := json.Unmarshal(item.Data, &view); err != nil {
+		t.Fatal(err)
+	}
+	at := func(t time.Time) string { return t.Format(time.RFC3339) }
+	want := []string{
+		"checkout-7d9f8b6c4 " + at(curSince) + " " + at(curSince.Add(20*time.Minute)),
+		"checkout-5c6a1e2f3 " + at(priorSince) + " " + at(priorSince.Add(20*time.Minute)),
+		"checkout-5c6a1e2f3 " + at(priorSince.Add(week-20*time.Minute)) + " " + at(priorSince.Add(week)),
+	}
+	if strings.Join(src.spans, "\n") != strings.Join(want, "\n") {
+		t.Errorf("asked about\n%s\nwant\n%s", strings.Join(src.spans, "\n"), strings.Join(want, "\n"))
+	}
+	if view.ComparedAge != "20m" {
+		t.Errorf("comparedAge = %q, want the current revision's 20m", view.ComparedAge)
+	}
+	cur, prior := view.Revisions[0], view.Revisions[1]
+	if len(cur.Memory) != 1 || *cur.Memory[0].First != 0.97 || cur.Memory[0].Last != nil || cur.CPU != nil {
+		t.Errorf("current = %+v, want app's memory over its first 20m only", cur.Memory)
+	}
+	if len(prior.Memory) != 1 || *prior.Memory[0].First != 0.45 || *prior.Memory[0].Last != 0.471 ||
+		len(prior.CPU) != 1 || *prior.CPU[0].First != 0.2 || prior.CPU[0].Last != nil {
+		t.Errorf("before = %+v %+v, want app's memory over its first and last 20m, and its CPU over its first", prior.Memory, prior.CPU)
+	}
+}
+
 // A source with no history of either revision leaves a gap that says why.
 func TestRevisionHealth_NoHistory(t *testing.T) {
 	target := loadScenario1(t)

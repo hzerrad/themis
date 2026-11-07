@@ -65,6 +65,10 @@ func (metricsAPI) History(context.Context, ReplicaSet, time.Time) (Record, error
 	return Record{Unavailable: NoRevisionHistory}, nil
 }
 
+func (metricsAPI) Use(context.Context, ReplicaSet, time.Time, time.Time) (Use, error) {
+	return Use{Unavailable: NoRevisionHistory}, nil
+}
+
 // read lists the namespace's pod metrics, keeping the highest value of each
 // container among pods.
 func (k metricsAPI) read(ctx context.Context, pods Pods, value func(metricsv1beta1.ContainerMetrics) float64) (Reading, error) {

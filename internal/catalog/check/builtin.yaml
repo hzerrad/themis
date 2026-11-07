@@ -80,7 +80,8 @@
       answer: true
       reason: ${size(pods)} pods of revision ${prior.revision} are ready and never failed
       cite: [ids.rollout_history, ids.pod_states]
-      fact: ${size(pods)} pods of revision ${prior.revision}, the version before it, are ready and never failed.
+    # A healthy version before it is a fact failures_came_with_rollout states
+    # beside how the current one fails, so this one states none.
     # Its pods are gone: from here, Themis's own record, then the metrics
     # history, tells.
     - when: themis_fix != null && themis_fix.replaced == prior.revision && size(themis_fix.found) > 0
@@ -114,27 +115,79 @@
         revision ${prior.revision} ran ${record[0].seenUntil - record[0].seenFrom} with no restart or
         OOM kill, from ${record[0].seenFrom} to ${record[0].seenUntil}, in ${record[0].source}'s history
       cite: [ids.rollout_history, ids.revision_health]
-      fact: >-
-        Revision ${prior.revision}, the version before it, ran ${record[0].seenUntil - record[0].seenFrom}
-        with no restart or OOM kill.
 
-# The failures came with the latest rollout: the version before it ran
-# without failing where the current one fails. Its pods show that while they
-# run healthy beside the failing ones. Once they are gone, Themis's own
-# record shows the version before failed when the current one is the fix
-# Themis made for it, and the metrics history compares the two: the version before ran without failing until
-# after the current one first failed, or for longer than the current one ran
-# before its first failure. A current version that ran without failing at
-# least as long as the one before it was seen to is no worse for the rollout:
-# what changed since, such as more data or load, brought the failures. With
-# no earlier revision, or one that failed too, the rollout didn't bring them.
-- name: failures_came_with_rollout
+# The latest rollout changed what the pods run: their containers, volumes or
+# other pod settings, which a rollback to the revision before it undoes. One
+# that changed only the pod template's labels and annotations, as kubectl
+# rollout restart does, changed nothing they run: a rollback would restart
+# them the same way, reading the same config. A Deployment's first revision
+# replaced none.
+- name: rollout_changed_the_app
   version: "1"
+  description: The latest rollout changed what the pods run
+  topic: What the rollout changed
+  whenFalse: The latest rollout changed nothing the pods run
+  reads: [rollout_history]
+  let:
+    change: rollout_history.change
+    more: >-
+      size(change.app) > 1 ? ", and " + string(size(change.app) - 1) + " other change" + (size(change.app) > 2 ? "s" : "") : ""
+    others: >-
+      size(change.metadata) > 1 ? ", and " + string(size(change.metadata) - 1) + " other label or annotation" + (size(change.metadata) > 2 ? "s" : "") : ""
+  answers:
+    - when: current == null
+      answer: unknown
+      reason: the current revision is unknown
+    - when: prior == null
+      answer: false
+      reason: there is no revision before revision ${current.revision}, so no rollout changed what its pods run
+      cite: [ids.rollout_history]
+      fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
+    - when: change == null || change.from != prior.revision
+      answer: unknown
+      reason: the rollout history doesn't say what revision ${current.revision} changed from revision ${prior.revision}
+      cite: [ids.rollout_history]
+    - when: size(change.app) > 0
+      answer: true
+      reason: revision ${current.revision} changed what its pods run (${change.app[0]}${more})
+      cite: [ids.rollout_history]
+      fact: In revision ${current.revision}, ${change.app[0]}${more}.
+    - when: size(change.metadata) > 0
+      answer: false
+      reason: revision ${current.revision} changed only its pods' labels and annotations (${change.metadata[0]}${others}), nothing they run
+      cite: [ids.rollout_history]
+      fact: Revision ${current.revision} changed only its pods' labels and annotations, nothing they run.
+    - answer: false
+      reason: revisions ${prior.revision} and ${current.revision} have the same pod template
+      cite: [ids.rollout_history]
+      fact: Revisions ${prior.revision} and ${current.revision} have the same pod template.
+
+# The failures came with the latest rollout: it changed what the pods run,
+# and the new version does worse than the one before it. A rollout that
+# changed only labels and annotations, such as a restart, can't have brought
+# them: a rollback would undo nothing they run. Otherwise the version before
+# it must run without failing where the current one fails: its pods show
+# that while they run healthy beside the failing ones, and the metrics
+# history while they ran on past the current one's first failure. Once they
+# are gone, Themis's own record shows the version before failed when the
+# current one is the fix Themis made for it; the metrics history shows
+# whether it failed while it ran; and, for OOM kills, it compares how much of
+# its memory limit each version used over the same time since it started.
+# The current version using clearly more than the one before did then, and
+# than it did in its last that long, brought the kills. Using no more than
+# either, the version before would run out too: what changed since, such as
+# more data or load, brought them. Only without those figures, or for
+# failures other than OOM kills, does how long each ran without failing
+# decide, as a tiebreak: the version before ran without failing for longer
+# than the current one did before its first failure.
+- name: failures_came_with_rollout
+  version: "2"
   description: The failures came with the latest rollout, where the version before it ran without failing
   topic: Whether the rollout brought the failures
   whenFalse: The failures didn't come with the latest rollout
   reads: [rollout_history, pod_states, revision_health]
   let:
+    change: rollout_history.change
     pods: pod_states.pods.filter(p, p.revision == prior.revision)
     problems: >-
       pods.map(p,
@@ -155,6 +208,43 @@
         + (first_failure != null ? [first_failure.at] : [])).filter(t, t != null).sort()
     ran: dated[0] - rollout_at
     seen: earlier[0].seenUntil - earlier[0].seenFrom
+    # The current revision's containers were OOMKilled.
+    oom: >-
+      pod_states.pods.exists(p, p.revision == current_revision &&
+        p.containers.exists(c, [c.state, c.lastTermination].exists(s, s != null && s.reason == "OOMKilled")))
+      || (size(latest) > 0 && latest[0].oomKilled > 0)
+    # How much of its memory limit each version used on average over the
+    # same time since it started: the container of the current revision that
+    # used the most of its limit, and that container in the one before, over
+    # its first and its last that long.
+    measured: >-
+      size(latest) > 0 ? latest[0].memory.filter(u, u.first != null) : []
+    top: measured.filter(u, measured.all(o, o.first <= u.first))
+    then: >-
+      size(top) > 0 && size(earlier) > 0 ?
+        earlier[0].memory.filter(u, u.container == top[0].container && (u.first != null || u.last != null)) : []
+    # Measurement noise, not a decision: two averages of the same use
+    # differ by a few hundredths of the limit, from where the samples fall.
+    # Within it, two versions use the same.
+    noise: "0.05"
+    now_use: top[0].first
+    at_start: then[0].first
+    at_end: then[0].last
+    worse: >-
+      (at_start == null || now_use > at_start + noise) &&
+      (at_end == null || now_use > at_end + noise)
+    # Each share as a percentage: now, at the start and at the end, and the
+    # noise.
+    pct: >-
+      [now_use, at_start, at_end, noise].map(v, v == null ? "" : string(int(v * 100.0 + 0.5)) + "%")
+    age: revision_health.comparedAge
+    compared: >-
+      top[0].container + " used " + pct[0] + " of its memory limit on average in revision " + current.revision +
+      "'s first " + age + ", against " +
+      (at_start != null ? pct[1] + " in revision " + prior.revision + "'s first " + age : "") +
+      (at_start != null && at_end != null ? " and " : "") +
+      (at_end != null ? pct[2] + " in " + (at_start != null ? "its" : "revision " + prior.revision + "'s") + " last " + age : "") +
+      ", in " + earlier[0].source + "'s history"
   answers:
     - when: current == null
       answer: unknown
@@ -164,6 +254,19 @@
       reason: there is no revision before revision ${current.revision}, so no rollout brought the failures
       cite: [ids.rollout_history]
       fact: Revision ${current.revision} is the first revision, so there is no earlier version to roll back to.
+    - when: change == null || change.from != prior.revision
+      answer: unknown
+      reason: the rollout history doesn't say what revision ${current.revision} changed from revision ${prior.revision}
+      cite: [ids.rollout_history]
+    - when: size(change.app) == 0
+      answer: false
+      reason: >-
+        revision ${current.revision} changed nothing its pods run${size(change.metadata) > 0 ? ", only their labels and annotations (" + change.metadata[0] + ")" : ""},
+        so the version before it runs the same and the rollout didn't bring the failures
+      cite: [ids.rollout_history]
+      fact: >-
+        Revision ${current.revision} changed nothing its pods run, so a rollback would undo nothing and the
+        rollout didn't bring the failures.
     - when: "!failing"
       answer: unknown
       reason: every pod of revision ${current_revision} is ready and none restarted
@@ -176,7 +279,9 @@
       fact: Revision ${prior.revision}, the version before it, fails too.
     - when: size(pods) > 0
       answer: true
-      reason: ${size(pods)} pods of revision ${prior.revision} run without failing while revision ${current.revision} fails
+      reason: >-
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and ${size(pods)} pods of
+        revision ${prior.revision} run without failing while revision ${current.revision} fails
       cite: [ids.rollout_history, ids.pod_states]
       fact: >-
         ${size(pods)} pods of revision ${prior.revision}, the version before it, run without failing while
@@ -227,17 +332,49 @@
     - when: earlier[0].seenUntil >= dated[0]
       answer: true
       reason: >-
-        pods of revision ${prior.revision} ran without failing until ${earlier[0].seenUntil}, after
-        revision ${current.revision} first failed at ${dated[0]}
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and pods of revision
+        ${prior.revision} ran without failing until ${earlier[0].seenUntil}, after revision ${current.revision}
+        first failed at ${dated[0]}
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
       fact: >-
         Revision ${prior.revision}, the version before it, ran without failing until ${earlier[0].seenUntil},
         after revision ${current.revision} first failed at ${dated[0]}.
+    # OOM kills: how much of its memory limit each version used at the same
+    # age decides.
+    - when: oom && size(then) > 0 && worse
+      answer: true
+      reason: >-
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and uses more of its memory limit
+        than revision ${prior.revision} did, by more than measurement noise (${pct[3]} of the limit): ${compared}
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        In its first ${age}, `${top[0].container}` used ${pct[0]} of its memory limit in revision ${current.revision},
+        more than revision ${prior.revision} used then.
+    - when: oom && size(then) > 0 && at_start != null && now_use <= at_start + noise
+      answer: false
+      reason: >-
+        revision ${current.revision} uses as much of its memory limit as revision ${prior.revision} did at the same
+        age, within measurement noise (${pct[3]} of the limit): ${compared}, so more demand since brought the kills
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${current.revision} uses as much of its memory limit as revision ${prior.revision} did at the same
+        age, so more demand since brought the kills.
+    - when: oom && size(then) > 0
+      answer: false
+      reason: >-
+        revision ${prior.revision} had come to use as much of its memory limit before the rollout, within measurement
+        noise (${pct[3]} of the limit): ${compared}, so demand grew before the rollout
+      cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
+      fact: >-
+        Revision ${prior.revision} had come to use as much of its memory limit before the rollout, so demand grew
+        before it.
+    # Without those figures, or for other failures, how long each ran
+    # without failing breaks the tie.
     - when: ran < seen
       answer: true
       reason: >-
-        revision ${current.revision} first failed ${ran} after its rollout; revision ${prior.revision}
-        ran ${seen} without failing, in ${earlier[0].source}'s history
+        revision ${current.revision} changed what its pods run (${change.app[0]}), and first failed ${ran} after its
+        rollout; revision ${prior.revision} ran ${seen} without failing, in ${earlier[0].source}'s history
       cite: [ids.rollout_history, ids.pod_states, ids.revision_health]
       fact: >-
         Revision ${current.revision} first failed ${ran} after it rolled out. Revision ${prior.revision}, the

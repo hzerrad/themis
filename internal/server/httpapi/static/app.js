@@ -206,15 +206,17 @@ const MARK = { for: "✓", against: "✕", unknown: "?", found: "✓" };
 const MARK_WORD = { for: "Supports", against: "Against", unknown: "Unknown", found: "Found" };
 // AGAINST says which answer of a check is a fact against a fix: against any
 // fix ("*"), or against the fix named. Any other check weighs for a fix
-// when true. No healthy earlier revision rules out a rollback. Failures the
-// latest rollout brought rule out raising a limit, since the new version is
-// what fails; failures it didn't bring rule out the rollback. A node short of
-// memory rules out raising a memory limit, which gives it none.
+// when true. No healthy earlier revision rules out a rollback, and so does a
+// rollout that changed nothing the pods run. Failures the latest rollout
+// brought rule out raising a limit, since the new version is what fails;
+// failures it didn't bring rule out the rollback. A node short of memory
+// rules out raising a memory limit, which gives it none.
 const AGAINST = {
   gitops_managed: { "*": "true" },
   config_changed_before_failure: { "*": "true" },
   evidence_has_instructions: { "*": "true" },
   earlier_revision_healthy: { [ROLLBACK]: "false" },
+  rollout_changed_the_app: { [ROLLBACK]: "false" },
   failure_onset_after_rollout: { [ROLLBACK]: "false" },
   failures_came_with_rollout: { [ROLLBACK]: "false", "deployment.set-resources": "true" },
   throttling_came_with_rollout: { "deployment.set-resources": "true" },
@@ -1552,8 +1554,10 @@ function evidenceView(d, e) {
     out.push(h("div", { class: "revs" }, v.revisions.map((r) => h("div", { class: "rev" },
       h("div", {}, h("b", {}, "Revision " + r.revision), r.current ? h("div", { class: "quiet" }, "current") : null),
       h("div", {}, r.createdAt ? ["Created ", clock(r.createdAt), ". "] : null, r.runs.map((x) => [said(x), " "]),
-        (r.changed || []).length ? h("ul", { class: "changed" }, r.changed.map((c) => h("li", {}, said(c))))
-          : h("div", { class: "quiet small" }, r.first ? "No earlier revision." : "No change Themis can see in images, resources or probes."))))));
+        (r.changed || []).length ? [h("div", { class: "quiet small" }, "Changed from revision " + r.from + ":"),
+          h("ul", { class: "changed" }, r.changed.map((c) => h("li", {}, said(c))))]
+          : r.quiet ? h("div", { class: "quiet small" }, r.quiet)
+            : r.first ? h("div", { class: "quiet small" }, "No earlier revision.") : null)))));
   }
   if (v.config) {
     out.push(v.config.length ? table(v.config, [

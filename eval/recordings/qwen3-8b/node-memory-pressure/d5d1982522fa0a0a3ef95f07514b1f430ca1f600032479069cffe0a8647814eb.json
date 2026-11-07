@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"The incident is due to node memory pressure, which cannot be resolved by adjusting container memory limits. The node's memory threshold was breached, leading to pod eviction.\", \"hypotheses\": [{\"root_cause_class\": \"node_memory_pressure\", \"summary\": \"Pods were evicted due to node memory pressure, not container memory limits.\", \"supporting\": [\"evicted_for_node_memory\"], \"contradicting\": [], \"missing\": [\"node_memory_usage_data\"],\"status\": \"supported\"}] }",
+      "usage": {
+        "input_tokens": 4521,
+        "output_tokens": 664
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

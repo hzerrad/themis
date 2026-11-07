@@ -148,10 +148,14 @@ type revisionView struct {
 	ReplicaSet string    `json:"replicaSet"`
 	// Runs says what each container runs.
 	Runs []phrase `json:"runs"`
-	// Changed says what changed from the revision before it; First is set
-	// when none came before it.
+	// From is the revision it replaced, when the rollout history says what
+	// changed: Changed in what its pods run, or, when nothing they run
+	// changed, Quiet says what did, such as "Only annotations changed.".
+	From    string   `json:"from,omitempty"`
 	Changed []phrase `json:"changed,omitempty"`
-	First   bool     `json:"first,omitempty"`
+	Quiet   string   `json:"quiet,omitempty"`
+	// First is set when no revision came before it.
+	First bool `json:"first,omitempty"`
 }
 
 type configRow struct {
@@ -676,11 +680,10 @@ func (r *readable) rollout(it evidence.Item) (phrase, error) {
 		for _, c := range rev.Containers {
 			row.Runs = append(row.Runs, runs(c, len(rev.Containers) > 1))
 		}
-		if i+1 < len(revs) {
-			row.Changed = revisionChanges(revs[i+1], rev)
-		} else {
-			row.First = v.TotalRevisions <= len(v.Revisions)
+		if c := v.Change; c != nil && c.To == rev.Revision {
+			row.From, row.Changed, row.Quiet = c.From, changed(*c), quietly(*c)
 		}
+		row.First = i+1 == len(revs) && v.TotalRevisions <= len(v.Revisions)
 		r.Revisions = append(r.Revisions, row)
 	}
 	if v.TotalRevisions > len(v.Revisions) {
@@ -698,15 +701,51 @@ func (r *readable) rollout(it evidence.Item) (phrase, error) {
 		return phrase{}.text("1 revision. Created ").at(revs[0].CreatedAt).text("."), nil
 	}
 	newest := r.Revisions[0]
-	d := phrase{}.text(fmt.Sprintf("%d revisions. Revision %s replaced %s", v.TotalRevisions, revs[0].Revision, revs[1].Revision))
+	d := phrase{}.text(fmt.Sprintf("%d revisions. Revision %s replaced %s", v.TotalRevisions, revs[0].Revision, cmp.Or(newest.From, revs[1].Revision)))
 	if !revs[0].CreatedAt.IsZero() {
 		d = d.text(" at ").at(revs[0].CreatedAt)
 	}
 	d = d.text(".")
-	if len(newest.Changed) > 0 {
+	switch {
+	case len(newest.Changed) > 0:
 		d = append(d.text(" "), newest.Changed[0]...)
+		if more := len(newest.Changed) - 1; more > 0 {
+			d = d.text(" " + plural(more, "other change", "other changes") + ".")
+		}
+	case newest.Quiet != "":
+		d = d.text(" " + newest.Quiet)
 	}
 	return d, nil
+}
+
+// changed says what a revision changed in what its pods run, each change a
+// sentence, as the rollout history words it.
+func changed(c evidence.TemplateChangeView) []phrase {
+	out := make([]phrase, 0, len(c.App))
+	for _, s := range c.App {
+		out = append(out, phrase{}.text(cap1(strings.TrimSuffix(s, "."))+"."))
+	}
+	return out
+}
+
+// quietly says, of a revision that changed nothing its pods run, what it
+// changed instead, such as the annotation a restart writes. Empty for one
+// that changed what they run.
+func quietly(c evidence.TemplateChangeView) string {
+	if len(c.App) > 0 {
+		return ""
+	}
+	labels := slices.ContainsFunc(c.Metadata, func(s string) bool { return strings.HasPrefix(s, "the label ") })
+	annotations := slices.ContainsFunc(c.Metadata, func(s string) bool { return strings.HasPrefix(s, "the annotation ") })
+	switch {
+	case labels && annotations:
+		return "Only labels and annotations changed."
+	case labels:
+		return "Only labels changed."
+	case annotations:
+		return "Only annotations changed."
+	}
+	return "The pod template is the same."
 }
 
 func number(s string) int64 {
@@ -749,88 +788,6 @@ func runs(c evidence.TemplateContainerView, named bool) phrase {
 		p = p.text(".")
 	}
 	return p
-}
-
-// revisionChanges says what changed from one revision to the next, in the
-// fields the rollout history keeps: images, memory and CPU, and probe
-// timing. Other fields of the pod template, such as env, it doesn't keep.
-func revisionChanges(before, after evidence.RevisionView) []phrase {
-	var out []phrase
-	was := map[string]evidence.TemplateContainerView{}
-	for _, c := range before.Containers {
-		was[c.Name] = c
-	}
-	for _, c := range after.Containers {
-		old, ok := was[c.Name]
-		if !ok {
-			out = append(out, phrase{}.text("Container ").value(c.Name).text(" added."))
-			continue
-		}
-		delete(was, c.Name)
-		if old.Image != c.Image {
-			out = append(out, phrase{}.text("The image of ").value(c.Name).text(" changed from ").value(old.Image).text(" to ").value(c.Image).text("."))
-		}
-		for _, kind := range []string{"limit", "request"} {
-			olds, news := old.Limits, c.Limits
-			if kind == "request" {
-				olds, news = old.Requests, c.Requests
-			}
-			for _, res := range []string{"memory", "cpu"} {
-				if olds[res] == news[res] {
-					continue
-				}
-				what := map[string]string{"memory": "memory", "cpu": "CPU"}[res] + " " + kind
-				p := phrase{}.text(strings.ToUpper(what[:1]) + what[1:] + " of ").value(c.Name)
-				switch {
-				case olds[res] == "":
-					p = p.text(" set to ").value(news[res])
-				case news[res] == "":
-					p = p.text(" removed, from ").value(olds[res])
-				default:
-					p = p.text(" from ").value(olds[res]).text(" to ").value(news[res])
-				}
-				out = append(out, p.text("."))
-			}
-		}
-		out = append(out, probeChanges(c.Name, old.Probes, c.Probes)...)
-	}
-	for _, name := range slices.Sorted(maps.Keys(was)) {
-		out = append(out, phrase{}.text("Container ").value(name).text(" removed."))
-	}
-	return out
-}
-
-func probeChanges(container string, before, after map[string]evidence.ProbeView) []phrase {
-	var out []phrase
-	for _, kind := range []string{"liveness", "readiness", "startup"} {
-		old, had := before[kind]
-		p, has := after[kind]
-		switch {
-		case !had && has:
-			out = append(out, phrase{}.text(cap1(kind)+" probe of ").value(container).text(" added."))
-		case had && !has:
-			out = append(out, phrase{}.text(cap1(kind)+" probe of ").value(container).text(" removed."))
-		case had && has && old != p:
-			fields := []struct {
-				name       string
-				was, after int32
-				unit       string
-			}{
-				{"initial delay", old.InitialDelaySeconds, p.InitialDelaySeconds, "s"},
-				{"period", old.PeriodSeconds, p.PeriodSeconds, "s"},
-				{"timeout", old.TimeoutSeconds, p.TimeoutSeconds, "s"},
-				{"failure threshold", old.FailureThreshold, p.FailureThreshold, ""},
-				{"success threshold", old.SuccessThreshold, p.SuccessThreshold, ""},
-			}
-			for _, f := range fields {
-				if f.was != f.after {
-					out = append(out, phrase{}.text(cap1(kind)+" probe "+f.name+" of ").value(container).
-						text(fmt.Sprintf(" from %d%s to %d%s.", f.was, f.unit, f.after, f.unit)))
-				}
-			}
-		}
-	}
-	return out
 }
 
 func cap1(s string) string {

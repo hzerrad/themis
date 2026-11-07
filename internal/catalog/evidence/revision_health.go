@@ -14,13 +14,19 @@ import (
 
 // RevisionHealth is the template that reads how the pods of the target's
 // current revision, and of the one before it, ran while each was current,
-// from the install's metrics source's history.
+// and how much of their limits they used, from the install's metrics
+// source's history.
 const RevisionHealth = "revision_health"
 
 // RevisionHealthView is how each revision ran: the current one first, then
 // the one before it, when there is one.
 type RevisionHealthView struct {
 	Revisions []RevisionRecordView `json:"revisions"`
+	// ComparedAge is the time since each revision started over which their
+	// use of their limits is compared: the current revision's time so far,
+	// or the whole time the one before it ran, when that is shorter. Empty
+	// without figures of both.
+	ComparedAge string `json:"comparedAge,omitempty"`
 }
 
 // RevisionRecordView is how one revision's pods ran, from Since until the
@@ -52,6 +58,23 @@ type RevisionRecordView struct {
 	// FirstThrottledAt is when that share first reached a quarter.
 	ThrottledRatio   *float64  `json:"throttledRatio"`
 	FirstThrottledAt time.Time `json:"firstThrottledAt,omitzero"`
+
+	// Memory and CPU are how much of its limit each container used on
+	// average: memory working set over the memory limit, CPU use over the
+	// CPU limit, 1 being the limit. Left out without figures, as for a
+	// container with no limit.
+	Memory []UseView `json:"memory,omitempty"`
+	CPU    []UseView `json:"cpu,omitempty"`
+}
+
+// UseView is how much of its limit one container used on average, from 0 to
+// 1: First over the first comparedAge since its revision started, and, for
+// the revision before the current one, Last over the last comparedAge before
+// its pods were gone. Null when the history has no figures for that time.
+type UseView struct {
+	Container string   `json:"container"`
+	First     *float64 `json:"first"`
+	Last      *float64 `json:"last,omitempty"`
 }
 
 type revisionHealth struct{ source metrics.Source }
@@ -67,10 +90,14 @@ func NewRevisionHealth(source metrics.Source) Template {
 func (revisionHealth) Name() string { return RevisionHealth }
 
 func (revisionHealth) Description() string {
-	return "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed. A source without history says so."
+	return "How the pods of the current revision and of the one before it ran, from the metrics source's history: when it first and last has them, their restarts and OOM kills, and their CPU throttling, each with when it first showed; and how much of its memory and CPU limits each container used on average, over the same time since each revision started, and for the one before, over its last that long. A source without history says so."
 }
 
 func (revisionHealth) Params() []string { return nil }
+
+// minComparedAge is the least time use is compared over: a step of the
+// history.
+const minComparedAge = time.Minute
 
 func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workload.Workload, _ map[string]string) (Item, error) {
 	revisions, err := w.Revisions(ctx)
@@ -83,7 +110,7 @@ func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workloa
 		switch {
 		case r.Number == w.Revision && w.Revision > 0:
 			current = r
-		case r.Number < w.Revision && (prior == nil || r.Number > prior.Number):
+		case r.Number > 0 && r.Number < w.Revision && (prior == nil || r.Number > prior.Number):
 			prior = r
 		}
 	}
@@ -97,6 +124,7 @@ func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workloa
 		since = w.WrittenAt
 	}
 	view := RevisionHealthView{}
+	var records []metrics.Record
 	answered := false
 	why := ""
 	for _, r := range []struct {
@@ -110,7 +138,7 @@ func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workloa
 		if from.IsZero() {
 			from = r.rev.Object.CreationTimestamp.UTC()
 		}
-		rec, err := h.source.History(ctx, metrics.ReplicaSet{Namespace: w.Target.Namespace, Name: r.rev.Object.Name}, from)
+		rec, err := h.source.History(ctx, replicaSetOf(w, r.rev), from)
 		if err != nil {
 			return Item{}, err
 		}
@@ -118,6 +146,7 @@ func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workloa
 		if why == "" {
 			why = rec.Unavailable
 		}
+		records = append(records, rec)
 		view.Revisions = append(view.Revisions, viewRecord(r.rev, r.rev == current, from, rec))
 	}
 	// A source with no history at all leaves nothing to read: a gap that
@@ -125,11 +154,69 @@ func (h revisionHealth) Collect(ctx context.Context, _ client.Reader, w *workloa
 	if !answered {
 		return Item{}, fmt.Errorf("%w: %s", ErrNoMetrics, why)
 	}
+	if err := h.compare(ctx, w, current, prior, records, &view); err != nil {
+		return Item{}, err
+	}
 	data, err := json.Marshal(view, json.Deterministic(true))
 	if err != nil {
 		return Item{}, err
 	}
 	return Item{Data: data}, nil
+}
+
+// compare reads how much of their limits the containers of both revisions
+// used over the same time since each started, and the earlier one over its
+// last that long too, once the history has both.
+func (h revisionHealth) compare(ctx context.Context, w *workload.Workload, current, prior *workload.Revision, records []metrics.Record, view *RevisionHealthView) error {
+	if len(records) < 2 || records[0].SeenFrom.IsZero() || records[1].SeenFrom.IsZero() {
+		return nil
+	}
+	now, before := view.Revisions[0], view.Revisions[1]
+	age := min(records[0].SeenUntil.Sub(now.Since), records[1].SeenUntil.Sub(before.Since))
+	age = max(age, minComparedAge).Truncate(time.Second)
+	read := func(r *workload.Revision, from time.Time) (metrics.Use, error) {
+		return h.source.Use(ctx, replicaSetOf(w, r), from, from.Add(age))
+	}
+	cur, err := read(current, now.Since)
+	if err != nil {
+		return err
+	}
+	first, err := read(prior, before.Since)
+	if err != nil {
+		return err
+	}
+	last, err := read(prior, records[1].SeenUntil.Add(-age))
+	if err != nil {
+		return err
+	}
+	if !cur.Answered() && !first.Answered() && !last.Answered() {
+		return nil
+	}
+	view.ComparedAge = windowText(age)
+	view.Revisions[0].Memory, view.Revisions[0].CPU = uses(cur.Memory, nil), uses(cur.CPU, nil)
+	view.Revisions[1].Memory, view.Revisions[1].CPU = uses(first.Memory, last.Memory), uses(first.CPU, last.CPU)
+	return nil
+}
+
+// uses is each container's share over the first and the last span, by
+// container name.
+func uses(first, last map[string]float64) []UseView {
+	var out []UseView
+	for _, c := range keys(first, last) {
+		u := UseView{Container: c}
+		if v, ok := first[c]; ok {
+			u.First = rounded(&v)
+		}
+		if v, ok := last[c]; ok {
+			u.Last = rounded(&v)
+		}
+		out = append(out, u)
+	}
+	return out
+}
+
+func replicaSetOf(w *workload.Workload, r *workload.Revision) metrics.ReplicaSet {
+	return metrics.ReplicaSet{Namespace: w.Target.Namespace, Name: r.Object.Name}
 }
 
 func viewRecord(r *workload.Revision, current bool, since time.Time, rec metrics.Record) RevisionRecordView {

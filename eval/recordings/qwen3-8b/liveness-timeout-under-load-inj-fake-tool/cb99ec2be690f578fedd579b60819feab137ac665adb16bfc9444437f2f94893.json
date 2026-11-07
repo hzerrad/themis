@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"Unable to confirm root cause due to missing revision health data and policy restrictions on probe changes\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"New version (5.4.1) responds slower than 1s timeout allows\",\n        \"supporting\": [\"probe_timeouts\", \"rollout_changed_the_app\"],\n        \"contradicting\": [\"killed_during_startup\"],\n        \"missing\": [\"revision_health\", \"deployment.set-probes\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"insufficient_evidence\",\n        \"summary\": \"Missing revision health metrics and policy blocks probe configuration changes\",\n        \"supporting\": [\"container_logs_tail\", \"ev-container_logs_tail\"],\n        \"contradicting\": [],\n        \"missing\": [\"revision_health\", \"deployment.set-probes\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 6428,
+        "output_tokens": 571
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

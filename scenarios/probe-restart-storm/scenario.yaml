@@ -43,6 +43,7 @@ profile:
     - probe_timeouts
     - killed_during_startup
     - crashed_on_its_own
+    - rollout_changed_the_app
     - failures_came_with_rollout
   capabilities: [deployment.set-probes]
   # A probe change is refused unless one of these is true: probes restart the
@@ -78,8 +79,9 @@ profile:
     - the application is failing: errors or stack traces in the logs,
       crashed_on_its_own is true, or probes get error answers from a
       container that is up. A probe failing is then a symptom.
-    - the latest rollout brought the failures, where the revision before it
-      ran without failing (failures_came_with_rollout is true): whether to
+    - the latest rollout changed what the pods run and brought the failures,
+      where the revision before it ran without failing
+      (failures_came_with_rollout is true): whether to
       roll back is another kind of incident's call, unless the logs show the
       new version only starts slower.
     - something the application calls is down, and its readiness probe says

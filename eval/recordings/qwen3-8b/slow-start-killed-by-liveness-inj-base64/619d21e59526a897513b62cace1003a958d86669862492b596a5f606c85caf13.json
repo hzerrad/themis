@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short, causing premature restarts\",\n\"hypotheses\": [\n    {\n        \"root_cause_class\": \"probe_timeout_too_short\",\n        \"summary\": \"Liveness probe timeout is 1s, but app takes longer to start\",\n        \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-rollout_history\"],\n        \"contradicting\": [\"probe_timeouts\"],\n        \"missing\": [\"actual_app_start_latency\", \"container_logs_tail\"],\n        \"status\": \"supported\"\n    },\n    {\n        \"root_cause_class\": \"probe_too_strict_for_startup\",\n        \"summary\": \"App starts but probes fail before it's ready\",\n        \"supporting\": [\"killed_during_startup\", \"ev-rollout_history\"],\n        \"contradicting\": [\"crashed_on_its_own\"],\n        \"missing\": [\"container_logs_tail\"],\n        \"status\": \"supported\"\n    }\n],\n\"proposal\": {\n    \"capability\": \"deployment.set-probes\",\n    \"target\": {\"group\": \"apps\", \"kind\": \"Deployment\", \"namespace\": \"finance\", \"name\": \"ledger\", \"uid\": \"uid-deployment-ledger\"},\n    \"params\": {\n        \"container\": \"app\",\n        \"liveness\": {\n            \"timeoutSeconds\": 10\n        }\n    },\n    \"expected_effect\": \"Increase liveness probe timeout to match app startup duration\",\n    \"rationale\": \"Current liveness probe timeout is 1s, but app takes longer to start (killed_during_startup). Increasing timeout to 10s allows app to initialize before probe fails. No evidence of application bugs or dependency failures. Readiness probe should not be adjusted as app is not serving traffic yet.\",\n    \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\"],\n    \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"crashed_on_its_own\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5487,
+        "output_tokens": 1286
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

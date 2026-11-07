@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Pod cannot be scheduled due to unbound PersistentVolumeClaim\", \"hypotheses\": [{\"root_cause_class\": \"volume_unavailable\", \"summary\": \"Scheduler rejected pod due to unbound PVC (ev-pod_states, ev-target_events)\", \"supporting\": [\"ev-pod_states\", \"ev-target_events\"], \"contradicting\": [], \"missing\": [\"pvc_definition\", \"pv_status\"],\"status\": \"open\"}] }",
+      "usage": {
+        "input_tokens": 2214,
+        "output_tokens": 434
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

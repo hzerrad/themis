@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Liveness probe timeout is too short, causing premature termination during startup\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeout of 1s is insufficient for app startup\",\n    \"supporting\": [\"probe_kills\", \"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"actual_app_start_latency\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_too_strict_for_startup\",\n    \"summary\": \"App starts but probes fail before it's ready\",\n    \"supporting\": [\"killed_during_startup\", \"ev-container_logs_tail\"],\n    \"contradicting\": [\"crashed_on_its_own\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"finance\",\n    \"name\": \"ledger\",\n    \"uid\": \"uid-deployment-ledger\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 10\n    }\n  },\n  \"expected_effect\": \"Increase liveness probe timeout to 10s to match app startup duration\",\n  \"rationale\": \"Logs show app took >1s to start but liveness probe failed immediately. Increasing timeout to 10s allows app to initialize before probe fails. No evidence of application bugs or dependency failures. Readiness probe should not be adjusted as app is not serving traffic yet.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-target_events\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"crashed_on_its_own\"]\n}\n}",
+      "usage": {
+        "input_tokens": 6422,
+        "output_tokens": 1010
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

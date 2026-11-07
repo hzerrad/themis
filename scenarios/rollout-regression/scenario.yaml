@@ -50,6 +50,7 @@ profile:
   checks:
     - failure_onset_after_rollout
     - earlier_revision_healthy
+    - rollout_changed_the_app
     - failures_came_with_rollout
     - oom_killed_new_revision
     - gitops_managed
@@ -65,16 +66,19 @@ profile:
   # right and when it is wrong. Guidance only: the checks and the policy
   # below decide.
   guidance: |
-    A rollback is right when the latest rollout brought the failures: the
-    revision before it ran without failing where the current one fails
-    (failures_came_with_rollout is true). If the failure started before the
-    rollout, if there is no earlier revision or it failed too, if the current
-    revision ran without failing at least as long as the one before it did
-    (failures_came_with_rollout is false), if the target is managed by
-    GitOps, if its config changed before the failure, or if the evidence is
-    missing, such as no history of the revision before it
-    (failures_came_with_rollout is unknown), do not propose a rollback:
-    conclude inconclusive and say what is missing.
+    A rollback is right when the latest rollout brought the failures: it
+    changed what the pods run (rollout_changed_the_app is true), and the
+    revision before it does better, running without failing beside the
+    failing pods, or using clearly less of its memory limit at the same age
+    (failures_came_with_rollout is true). If the rollout changed only labels
+    or annotations, such as a restart, if the failure started before the
+    rollout, if there is no earlier revision or it failed too, if the
+    current revision uses no more of its limit than the one before it did
+    at the same age or by its end, so demand grew (failures_came_with_rollout
+    is false), if the target is managed by GitOps, if its config changed
+    before the failure, or if the evidence is missing, such as no history of
+    the revision before it (failures_came_with_rollout is unknown), do not
+    propose a rollback: conclude inconclusive and say what is missing.
 
     When oom_killed_new_revision, failure_onset_after_rollout and
     failures_came_with_rollout are all true, and gitops_managed and
@@ -90,10 +94,10 @@ profile:
     # these rules say: it only recommends the fix.
     rules:
       # justifiedBy asks that the failures started after the rollout. The
-      # rollout must also have brought them: the version before it ran
-      # without failing where the current one fails, by its pods or the
-      # metrics history. And no config may have changed before the failures.
-      # How long ago the rollout was decides nothing.
+      # rollout must also have brought them: it changed what the pods run,
+      # and the version before it does better, by its pods or the metrics
+      # history. And no config may have changed before the failures. How
+      # long ago the rollout was decides nothing.
       - name: rollback-needs-a-bad-rollout
         when: >-
           action.capability == "deployment.rollback-to-revision" && action.restore != "true" &&

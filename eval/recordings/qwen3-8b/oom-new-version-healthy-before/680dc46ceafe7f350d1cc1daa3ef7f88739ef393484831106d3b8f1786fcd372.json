@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Rollback to revision 1 due to memory issues in the new image\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New image uses more memory than limit\",\"supporting\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"image_pull_failure\",\"summary\":\"New image has memory issues\",\"supporting\":[\"ev-pod_states\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"No config changes detected\",\"supporting\":[\"ev-referenced_config\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Prevents OOMKilled by reverting to stable revision 1\",\"rationale\":\"New revision's image caused memory exhaustion, while revision 1 ran without issues. Rollback is justified as failures began after rollout and previous revision is healthy.\",\"cited_evidence_ids\":[\"ev-pod_states\",\"ev-rollout_history\",\"ev-target_events\",\"ev-container_memory\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"earlier_revision_healthy\",\"rollout_changed_the_app\",\"failures_came_with_rollout\",\"oom_killed_new_revision\",\"oom_killed_current_revision\",\"memory_at_limit_before_kill\"]}}",
+      "usage": {
+        "input_tokens": 5312,
+        "output_tokens": 661
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
