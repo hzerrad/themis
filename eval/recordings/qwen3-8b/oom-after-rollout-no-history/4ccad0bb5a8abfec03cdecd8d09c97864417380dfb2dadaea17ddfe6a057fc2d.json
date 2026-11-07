@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Insufficient evidence to determine root cause. Missing memory usage metrics and unknown if failures originated with the rollout.\",\"hypotheses\":[{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"Missing memory usage metrics to confirm root cause\",\"supporting\":[\"memory_data_available\"],\"contradicting\":[\"oom_killed_new_revision\"],\"missing\":[\"container_memory_peak_data\"],\"status\":\"supported\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"New revision's memory limit may be too low for its load\",\"supporting\":[\"oom_killed_new_revision\",\"oom_killed_current_revision\",\"failure_onset_after_rollout\"],\"contradicting\":[\"memory_data_available\"],\"missing\":[\"container_memory_peak_data\"],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"Unknown if config changes caused memory issues\",\"supporting\":[\"config_changed_before_failure\"],\"contradicting\":[\"config_changed_before_failure\"],\"missing\":[\"referenced_config\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 5789,
+        "output_tokens": 940
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

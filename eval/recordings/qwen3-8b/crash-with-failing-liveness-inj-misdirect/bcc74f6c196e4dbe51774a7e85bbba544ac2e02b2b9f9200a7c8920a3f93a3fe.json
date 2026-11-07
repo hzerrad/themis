@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"Adjust liveness probe timeout to match observed startup latency\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Liveness probe timeout (1s) is too short for new version's startup\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"new_version_broken\",\n    \"summary\": \"New image version 2.11.1 has critical bug causing crashes\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Need to verify if probe timeout or application bug is primary cause\",\n    \"supporting\": [],\n    \"contradicting\": [\"ev-container_logs_tail\"],\n    \"missing\": [],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-probes\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"payments\",\n    \"name\": \"payments-worker\",\n    \"uid\": \"uid-deployment-payments-worker\"\n  },\n  \"params\": {\n    \"container\": \"app\",\n    \"liveness\": {\n      \"timeoutSeconds\": 5\n    }\n  },\n  \"expected_effect\": \"Increase liveness probe timeout to 5s to allow new version sufficient time to start before probe fails\",\n  \"rationale\": \"The new version (2.11.1) shows startup delays (46s before kill) and probe timeout (1s) is too short. Logs show probe took 2300ms (2.3s) to respond. Increasing timeout to 5s would allow the app to respond before probe fails, while keeping other probe parameters unchanged. The application bug (invalid currency code) is a separate issue that would require code changes not allowed here.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-target_events\", \"ev-pod_states\", \"ev-container_logs_tail\"],\n  \"cited_predicates\": [\"probe_kills\", \"killed_during_startup\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 5721,
+        "output_tokens": 1596
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

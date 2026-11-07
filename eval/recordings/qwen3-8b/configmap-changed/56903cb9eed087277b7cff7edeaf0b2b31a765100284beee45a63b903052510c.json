@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"summary\":\"Rollback to revision 1 to resolve config.yaml invalid value issue\",\"hypotheses\":[{\"root_cause_class\":\"configuration_change\",\"summary\":\"ConfigMap checkout-config change introduced invalid max_connections value\",\"supporting\":[\"ev-referenced_config\",\"ev-rollout_history\",\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"bad_configuration\",\"summary\":\"New revision's config settings contain invalid value for max_connections\",\"supporting\":[\"ev-container_logs_tail\",\"ev-rollout_history\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.rollback-to-revision\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"revision\":1},\"expected_effect\":\"Resolve config.yaml invalid value error by reverting to previous revision's configuration\",\"rationale\":\"The new revision's ConfigMap contains invalid value 'fifty' for max_connections, causing CrashLoopBackOff. Rolling back to revision 1 which used the old configuration before the change will resolve the issue.\",\"cited_evidence_ids\":[\"ev-container_logs_tail\",\"ev-referenced_config\",\"ev-rollout_history\"],\"cited_predicates\":[\"failure_onset_after_rollout\",\"failures_came_with_rollout\",\"config_changed_before_failure\"]}}",
+      "usage": {
+        "input_tokens": 3936,
+        "output_tokens": 567
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

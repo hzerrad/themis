@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"summary\": \"The root cause is node memory pressure, but no fix is available through Deployment resource limits. The node's memory threshold was breached, and increasing container limits won't resolve node-level resource exhaustion.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"node_memory_pressure\",\n    \"summary\": \"Pods were evicted due to node memory pressure, not container memory limits.\",\n    \"supporting\": [\"evicted_for_node_memory\", \"oom_after_long_run\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_memory_usage_data\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No metrics show node memory usage trends, making it hard to confirm if node pressure persists.\",\n    \"supporting\": [\"evicted_for_node_memory\"],\n    \"contradicting\": [],\n    \"missing\": [\"node_memory_usage_data\"],\n    \"status\": \"supported\"\n  }\n]\n}",
+      "usage": {
+        "input_tokens": 4835,
+        "output_tokens": 663
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

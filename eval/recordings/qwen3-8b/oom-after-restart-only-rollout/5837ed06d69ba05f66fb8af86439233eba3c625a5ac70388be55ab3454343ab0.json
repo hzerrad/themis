@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"The current revision's memory limit is too low, causing OOM kills. Increase the memory limit to 640Mi.\",\"hypotheses\":[{\"root_cause_class\":\"memory_limit_too_low\",\"summary\":\"The app's memory usage peaked at 100% of its 512Mi limit, leading to OOM kills.\",\"supporting\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-revision_health\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"The rollout didn't change the app code, but the memory limit is insufficient for the current load.\",\"supporting\":[\"ev-rollout_history\",\"ev-revision_health\"],\"contradicting\":[],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-resources\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"shop\",\"name\":\"checkout\",\"uid\":\"uid-deployment-checkout\"},\"params\":{\"containers\":{\"app\":{\"limits\":{\"memory\":\"640Mi\"}}}},\"expected_effect\":\"The increased memory limit should prevent OOM kills by allowing the app to use more memory without being terminated.\",\"rationale\":\"The app's memory usage peaked at 100% of its 512Mi limit, causing OOM kills. Increasing the limit to 640Mi provides a buffer for higher memory usage without triggering OOM kills.\",\"cited_evidence_ids\":[\"ev-container_memory\",\"ev-pod_states\",\"ev-revision_health\",\"ev-rollout_history\"],\"cited_predicates\":[\"oom_killed_current_revision\",\"memory_at_limit_before_kill\",\"failures_came_with_rollout\",\"rollout_changed_the_app\"]}}",
+      "usage": {
+        "input_tokens": 5997,
+        "output_tokens": 706
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

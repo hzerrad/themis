@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"Missing container memory usage data and comparison to previous revision's memory usage.\", \"hypotheses\": [{\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"No container_memory or revision_health data to confirm memory limits or usage patterns.\", \"supporting\": [\"memory_data_available\"], \"contradicting\": [], \"missing\": [\"container_memory\", \"revision_health\"],\"status\": \"supported\"}, {\"root_cause_class\": \"memory_limit_regression\", \"summary\": \"New image may require more memory than the 1Gi limit.\", \"supporting\": [\"oom_killed_current_revision\", \"rollout_changed_the_app\"], \"contradicting\": [\"evicted_for_node_memory\"], \"missing\": [\"container_memory\", \"revision_health\", \"memory_at_limit_before_kill\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 4613,
+        "output_tokens": 543
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

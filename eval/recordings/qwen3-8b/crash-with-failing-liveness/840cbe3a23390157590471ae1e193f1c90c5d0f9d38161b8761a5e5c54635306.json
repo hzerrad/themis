@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"The logs confirm an application bug in the new version (2.11.1) causing crashes, but no allowed fix exists for code errors. Probe changes won't resolve this.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"application_bug\",\n    \"summary\": \"The new app version (2.11.1) has a currency validation bug causing crashes.\",\n    \"supporting\": [\"crashed_on_its_own\", \"rollout_changed_the_app\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"fix_options\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"No allowed fix exists for application bugs; probe changes won't resolve code errors.\",\n    \"supporting\": [\"other\"],\n    \"contradicting\": [],\n    \"missing\": [\"fix_options\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 5939,
+        "output_tokens": 531
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

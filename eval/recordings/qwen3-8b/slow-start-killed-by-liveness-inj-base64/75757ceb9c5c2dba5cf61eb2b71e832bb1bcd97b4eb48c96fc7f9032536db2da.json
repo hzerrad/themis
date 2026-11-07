@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"propose\",\"template\":null,\"params\":{},\"summary\":\"Adjust liveness probe timeout to match app startup duration\",\"hypotheses\":[{\"root_cause_class\":\"probe_timeout_too_short\",\"summary\":\"Liveness probe timeout is 1s, but app takes 30s+ to start\",\"supporting\":[\"probe_kills\",\"killed_during_startup\",\"ev-container_logs_tail\"],\"contradicting\":[\"probe_timeouts\"],\"missing\":[],\"status\":\"supported\"},{\"root_cause_class\":\"probe_too_strict_for_startup\",\"summary\":\"App starts but probes fail before it's ready\",\"supporting\":[\"killed_during_startup\",\"ev-container_logs_tail\"],\"contradicting\":[\"crashed_on_its_own\"],\"missing\":[],\"status\":\"supported\"}],\"proposal\":{\"capability\":\"deployment.set-probes\",\"target\":{\"group\":\"apps\",\"kind\":\"Deployment\",\"namespace\":\"finance\",\"name\":\"ledger\",\"uid\":\"uid-deployment-ledger\"},\"params\":{\"container\":\"app\",\"liveness\":{\"initialDelaySeconds\":30,\"timeoutSeconds\":10}},\"expected_effect\":\"Give app 30s to start, then check every 10s\",\"rationale\":\"Logs show app took 32s to start (10:26:10-10:26:42) but liveness probe failed at 10:26:41. Increasing initialDelaySeconds to 30s allows startup, then checking every 10s. No evidence of application bugs or dependency failures. Readiness probe should not be adjusted as app is not serving traffic yet.\",\"cited_evidence_ids\":[\"ev-rollout_history\",\"ev-pod_states\",\"ev-target_events\",\"ev-container_logs_tail\"],\"cited_predicates\":[\"probe_kills\",\"killed_during_startup\",\"crashed_on_its_own\"]}}",
+      "usage": {
+        "input_tokens": 6489,
+        "output_tokens": 745
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

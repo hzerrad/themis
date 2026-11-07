@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"request_evidence\",\"template\":\"revision_health\",\"params\":{\"target\":\"Deployment/shop-checkout\"},\"summary\":\"Need revision health metrics to compare pre-and post-rollout stability\",\"hypotheses\":[{\"root_cause_class\":\"dependency_failure\",\"summary\":\"Orders-db connection timeouts in logs\",\"supporting\":[\"ev-container_logs_tail\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"},{\"root_cause_class\":\"configuration_change\",\"summary\":\"No config changes detected\",\"supporting\":[\"ev-referenced_config\"],\"contradicting\":[],\"missing\":[],\"status\":\"open\"},{\"root_cause_class\":\"memory_limit_regression\",\"summary\":\"No OOM kills in new revision\",\"supporting\":[\"ev-pod_states\"],\"contradicting\":[],\"missing\":[\"ev-revision_health\"],\"status\":\"open\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4001,
+        "output_tokens": 524
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

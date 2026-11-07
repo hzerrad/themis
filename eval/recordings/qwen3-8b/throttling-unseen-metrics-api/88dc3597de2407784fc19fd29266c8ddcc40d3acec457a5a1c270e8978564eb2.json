@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"conclude_inconclusive\",\"summary\":\"Missing throttling metrics to confirm if CPU limit adjustment is needed\",\"hypotheses\":[{\"root_cause_class\":\"new_version_uses_more_cpu\",\"summary\":\"Rollout changed image and CPU usage near limit\",\"supporting\":[\"ev-rollout_history\",\"ev-container_cpu\"],\"contradicting\":[\"throttling_data_available\"],\"missing\":[\"throttling_data_available\"],\"status\":\"supported\"},{\"root_cause_class\":\"insufficient_evidence\",\"summary\":\"No throttling metrics to confirm throttling at limit\",\"supporting\":[\"throttling_data_available\"],\"contradicting\":[\"cpu_throttled_at_limit\"],\"missing\":[\"throttling_data_available\"],\"status\":\"supported\"}],\"proposal\":null}",
+      "usage": {
+        "input_tokens": 4253,
+        "output_tokens": 660
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

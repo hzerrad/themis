@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\", \"summary\": \"The OOM kills are due to node memory pressure, but increasing container limits isn't a valid fix here. Missing evidence on node memory capacity.\", \"hypotheses\": [{\"root_cause_class\": \"node_memory_pressure\", \"summary\": \"Pods evicted due to node memory shortage\", \"supporting\": [\"evicted_for_node_memory\"], \"contradicting\": [], \"missing\": [\"node_memory_capacity\"],\"status\": \"supported\"}, {\"root_cause_class\": \"memory_leak\", \"summary\": \"Memory grows until OOM kill\", \"supporting\": [\"oom_after_long_run\"], \"contradicting\": [\"memory_at_limit_before_kill\"], \"missing\": [\"memory_usage_trend\"], \"status\": \"supported\"}, {\"root_cause_class\": \"insufficient_evidence\", \"summary\": \"Unclear if rollout caused memory issues\", \"supporting\": [\"failures_came_with_rollout\"], \"contradicting\": [\"earlier_revision_healthy\"], \"missing\": [\"revision_1_memory_usage\"], \"status\": \"supported\"}]}",
+      "usage": {
+        "input_tokens": 4521,
+        "output_tokens": 1086
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

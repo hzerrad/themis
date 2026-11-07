@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"propose\",\n\"summary\": \"The new image in revision 4 may require more memory than the previous version's limits, leading to OOMKilled. Increasing the memory limit addresses this.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"memory_limit_regression\",\n    \"summary\": \"The new revision's memory limit is too low for the updated image.\",\n    \"supporting\": [\"oom_killed_current_revision\", \"rollout_changed_the_app\"],\n    \"contradicting\": [\"earlier_revision_healthy\"],\n    \"missing\": [\"memory_data_available\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": {\n  \"capability\": \"deployment.set-resources\",\n  \"target\": {\n    \"group\": \"apps\",\n    \"kind\": \"Deployment\",\n    \"namespace\": \"shop\",\n    \"name\": \"reports\",\n    \"uid\": \"uid-deployment-reports\"\n  },\n  \"params\": {\n    \"containers\": {\n      \"app\": {\n        \"limits\": {\n          \"memory\": \"1.5Gi\"\n        }\n      }\n    }\n  },\n  \"expected_effect\": \"Increase the memory limit for the app container to prevent OOMKilled errors.\",\n  \"rationale\": \"The new image in revision 4 may require more memory than the previous version, which had the same limits. Increasing the limit to 1.5Gi addresses the memory constraint.\",\n  \"cited_evidence_ids\": [\"ev-rollout_history\", \"ev-pod_states\"],\n  \"cited_predicates\": [\"oom_killed_current_revision\", \"rollout_changed_the_app\"]\n}\n}",
+      "usage": {
+        "input_tokens": 4220,
+        "output_tokens": 1181
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

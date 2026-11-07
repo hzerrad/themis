@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\"kind\":\"request_evidence\",\"template\":\"revision_health\",\"params\":{\"target\": \"{\\\"group\\\": \\\"apps\\\", \\\"kind\\\": \\\"Deployment\\\", \\\"namespace\\\": \\\"shop\\\", \\\"name\\\": \\\"checkout\\\", \\\"uid\\\": \\\"uid-deployment-checkout\\\"}\"}}",
+      "usage": {
+        "input_tokens": 4306,
+        "output_tokens": 625
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}

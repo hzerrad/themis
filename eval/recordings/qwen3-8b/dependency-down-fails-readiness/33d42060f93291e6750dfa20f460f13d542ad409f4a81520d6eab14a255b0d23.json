@@ -1,0 +1,14 @@
+{
+  "replies": [
+    {
+      "content": "{\n\n\"kind\": \"conclude_inconclusive\",\n\"template\": null,\n\"params\": {},\n\"summary\": \"Insufficient evidence to determine root cause. Missing revision health data and container logs to confirm if the issue is probe configuration or database dependency.\",\n\"hypotheses\": [\n  {\n    \"root_cause_class\": \"dependency_failure\",\n    \"summary\": \"Application cannot connect to database (10.0.12.5:5432), causing 503 errors. Logs show repeated connection refused errors.\",\n    \"supporting\": [\"ev-container_logs_tail\", \"ev-target_events\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"probe_timeout_too_short\",\n    \"summary\": \"Readiness probe timeout (2s) is too short for new image version (example/orders:7.2.1) to establish database connection.\",\n    \"supporting\": [\"ev-rollout_history\", \"ev-target_events\"],\n    \"contradicting\": [\"probe_timeouts\"],\n    \"missing\": [\"container_logs_tail\", \"revision_health\"],\n    \"status\": \"supported\"\n  },\n  {\n    \"root_cause_class\": \"insufficient_evidence\",\n    \"summary\": \"Missing revision health metrics and container logs to confirm if the issue is probe configuration or application startup delay.\",\n    \"supporting\": [\"ev-container_logs_tail\"],\n    \"contradicting\": [],\n    \"missing\": [\"revision_health\", \"container_logs_tail\"],\n    \"status\": \"supported\"\n  }\n],\n\"proposal\": null\n}",
+      "usage": {
+        "input_tokens": 5791,
+        "output_tokens": 948
+      },
+      "model": "qwen3:8b-16k",
+      "truncated": false,
+      "refused": false
+    }
+  ]
+}
