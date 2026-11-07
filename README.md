@@ -1,4 +1,7 @@
-<img src="docs/assets/themis-logo.svg" alt="" width="96" align="right">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/themis-logo-dark.svg">
+  <img src="docs/assets/themis-logo.svg" alt="" width="96" align="right">
+</picture>
 
 # Themis
 
