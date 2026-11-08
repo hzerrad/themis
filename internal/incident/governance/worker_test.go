@@ -93,6 +93,13 @@ func (e *env) notices(t *testing.T, incidentID string) int {
 // back to revision, and returns the proposal's ID.
 func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []check.Result) (string, string) {
 	t.Helper()
+	return e.suggested(t, profile, results, "deployment.rollback-to-revision", map[string]any{"revision": revision})
+}
+
+// suggested creates an incident diagnosed with an accepted proposal of fix
+// with params, and returns the proposal's ID.
+func (e *env) suggested(t *testing.T, profile string, results []check.Result, fix string, params map[string]any) (string, string) {
+	t.Helper()
 	ctx := t.Context()
 	var incidentID, proposalID string
 	err := e.store.InTx(ctx, func(tx pgx.Tx) error {
@@ -112,8 +119,8 @@ func (e *env) diagnosed(t *testing.T, profile string, revision int64, results []
 		}
 		p, _, err := e.store.InsertProposal(ctx, tx, store.Proposal{
 			IncidentID: incidentID, LeaseID: "0192f0c1-0000-7000-8000-" + strings.Repeat("0", 11) + "1", ClientProposalID: incidentID,
-			Capability: "deployment.rollback-to-revision", CapabilityVersion: "1",
-			Target: e.target, Params: map[string]any{"revision": revision}, Status: store.ProposalAccepted,
+			Capability: fix, CapabilityVersion: "1",
+			Target: e.target, Params: params, Status: store.ProposalAccepted,
 		})
 		proposalID = p.ID
 		return err

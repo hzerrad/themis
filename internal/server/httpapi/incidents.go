@@ -137,7 +137,7 @@ func (a *API) viewDetail(rec incidentRecord, raw bool) detailView {
 		d.InvestigateAgain = &againView{Refused: rec.again.Refused}
 	}
 	for _, p := range rec.proposals {
-		d.Proposals = append(d.Proposals, proposalView{Proposal: p, Words: a.Fixes.Words(p.Capability, p.Target.Name, p.Params, nil, nil)})
+		d.Proposals = append(d.Proposals, proposalView{Proposal: p, Words: a.Fixes.Words(p.Capability, p.Target.Name, p.Params, nil)})
 	}
 	for _, c := range a.CheckList {
 		d.Checks[c.Name] = checkWords{True: c.Description, False: c.WhenFalse, Topic: c.Topic, Reads: c.Reads, Availability: c.Availability}
@@ -253,7 +253,7 @@ func changes(a store.Action, fixes capability.Registry) []capability.Change {
 	if !ok {
 		return unknown
 	}
-	list, err := f.Changes(a.PreState, a.Desired)
+	list, err := f.Changes(a.Record)
 	if err != nil {
 		return unknown
 	}

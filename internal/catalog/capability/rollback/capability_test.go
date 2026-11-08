@@ -42,7 +42,7 @@ func TestFix_BindsWhatRollbackBound(t *testing.T) {
 
 // A rollback is named by the revision it goes back to.
 func TestWords(t *testing.T) {
-	w := rollback.Capability{}.Words("checkout", map[string]any{"revision": int64(1)}, nil, nil)
+	w := rollback.Capability{}.Words("checkout", map[string]any{"revision": int64(1)}, nil)
 	if w.Noun != "rollback" || w.Act != "Roll checkout back to revision 1" || w.Done != "Rolled checkout back to revision 1." {
 		t.Errorf("Words = %+v", w)
 	}
@@ -75,7 +75,7 @@ func TestRollback_SaysWhatItUndoes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w := (rollback.Capability{}).Words("checkout", p.Params, p.Before, p.After); w.Note != "Rolling back undoes 6 changes, including the image." {
+	if w := (rollback.Capability{}).Words("checkout", p.Params, p.Record); w.Note != "Rolling back undoes 6 changes, including the image." {
 		t.Errorf("Note = %q", w.Note)
 	}
 	more, err := rollback.Capability{}.Describe(t.Context(), k8s, p)

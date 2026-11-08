@@ -90,11 +90,11 @@ func (a *API) viewPreview(pv suggestion.Preview) previewView {
 	p := pv.Proposal
 	// The fix named by what it changes, once worked out against the cluster:
 	// a raise, a decrease, a rollback.
-	var before, after []byte
+	var record []byte
 	if j := pv.Judgement; j != nil {
-		before, after = j.Decided.Action.PreState, j.Decided.Action.Desired
+		record = j.Decided.Action.Record
 	}
-	words := a.Fixes.Words(p.Capability, pv.Incident.Target.Name, p.Params, before, after)
+	words := a.Fixes.Words(p.Capability, pv.Incident.Target.Name, p.Params, record)
 	noun := words.Noun
 	if noun == "" {
 		noun = "fix"

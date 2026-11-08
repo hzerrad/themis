@@ -1,14 +1,17 @@
 package rollback_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/hzerrad/themis/internal/catalog/capability"
 	"github.com/hzerrad/themis/internal/catalog/capability/rollback"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
@@ -184,18 +187,72 @@ func TestExplain(t *testing.T) {
 	}
 }
 
-// The template a rollback replaced is still a ReplicaSet's: rolling back to
-// its revision puts the workload back.
-func TestRevisionOf_FindsTheReplicaSetWithTheTemplate(t *testing.T) {
+// The template a rollback replaced is still a ReplicaSet's, found by its
+// hash: rolling back to its revision puts the workload back.
+func TestRevisionWith_FindsTheReplicaSetWithTheTemplate(t *testing.T) {
 	target, _ := load(t)
-	prior := read(t, target, 1).Desired
-	if got, err := rollback.RevisionOf(t.Context(), k8s, target, prior); err != nil || got != 1 {
-		t.Errorf("RevisionOf = %d, %v; want 1", got, err)
+	live := read(t, target, 1)
+	if got, err := rollback.RevisionWith(t.Context(), k8s, target, live.DesiredHash); err != nil || got != 1 {
+		t.Errorf("RevisionWith = %d, %v; want 1", got, err)
 	}
-	other := *prior.DeepCopy()
-	other.Spec.Containers[0].Image = "example/checkout:9.9.9"
-	if _, err := rollback.RevisionOf(t.Context(), k8s, target, other); !errors.Is(err, rollback.ErrNoSuchRevision) {
+	if _, err := rollback.RevisionWith(t.Context(), k8s, target, "sha256:no-such-template"); !errors.Is(err, rollback.ErrNoSuchRevision) {
 		t.Errorf("unknown template: err = %v, want ErrNoSuchRevision", err)
+	}
+}
+
+// A rollback or partial rollback an earlier version of Themis stored with
+// whole pod templates keeps, once upgraded, what people saw of it, no
+// secret of either template, and what putting it back needs: the revision
+// it replaced, found by its template's hash.
+func TestRecord_OfStoredTemplates(t *testing.T) {
+	target, _ := load(t)
+	live := read(t, target, 1)
+	pre, _ := json.Marshal(live.PreState)
+	earlier, _ := json.Marshal(live.Desired)
+	partial := *live.PreState.DeepCopy()
+	partial.Spec.Containers[0].Resources.Limits["memory"] = corev1.MustParse("256Mi")
+	after, _ := json.Marshal(partial)
+	limit := "the memory limit of container app changed from 256Mi to 64Mi"
+
+	for _, tt := range []struct {
+		fix           capability.Capability
+		params        map[string]any
+		before, after json.RawMessage
+		act, note     string
+	}{
+		{
+			rollback.Capability{},
+			map[string]any{"revision": int64(1)},
+			pre, earlier,
+			"Roll checkout back to revision 1", "Rolling back undoes 2 changes, including the image.",
+		},
+		{
+			rollback.Partial{},
+			map[string]any{"revision": int64(1), "changes": []any{limit}},
+			json.RawMessage(`{"template":` + string(pre) + `,"earlier":` + string(earlier) + `}`), after,
+			"Roll back checkout's memory limit to revision 1", "Keeps the rollout's new image.",
+		},
+	} {
+		record, err := tt.fix.(capability.Templating).Record(tt.params, tt.before, tt.after)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.fix.Name(), err)
+		}
+		if strings.Contains(string(record), "fixture-s3cr3t-do-not-leak") {
+			t.Errorf("%s: the record keeps the literal DB_PASSWORD: %s", tt.fix.Name(), record)
+		}
+		changes, err := tt.fix.Changes(record)
+		if err != nil || !strings.Contains(fmt.Sprint(changes), "limits") {
+			t.Errorf("%s: changes %+v, %v; want the memory limit", tt.fix.Name(), changes, err)
+		}
+		if w := tt.fix.Words("checkout", tt.params, record); w.Act != tt.act || w.Note != tt.note {
+			t.Errorf("%s: words %+v, want %q noting %q", tt.fix.Name(), w, tt.act, tt.note)
+		}
+		if name, params, err := tt.fix.Undo(t.Context(), k8s, target, record); err != nil || name != rollback.Name || params["revision"] != int64(2) {
+			t.Errorf("%s: Undo = %s %v, %v; want a rollback to revision 2", tt.fix.Name(), name, params, err)
+		}
+	}
+	if _, err := (rollback.Capability{}).Record(nil, json.RawMessage(`[]`), earlier); err == nil {
+		t.Error("Record read a template that isn't one")
 	}
 }
 

@@ -12,13 +12,14 @@ import (
 // Words name the change by what it does to the values: a raise when every
 // value it changes goes up, a decrease when every one goes down, and a change
 // otherwise. One value is named with what it was and what it becomes;
-// several by name only, the change itself shows them. Without before and
-// after, only what params set is known.
-func (Capability) Words(target string, params map[string]any, before, after json.RawMessage) capability.Words {
-	var pre, desired corev1.PodTemplateSpec
+// several by name only, the change itself shows them. Without the fix's
+// record, only what params set is known.
+func (Capability) Words(target string, params map[string]any, raw json.RawMessage) capability.Words {
 	var ds []diff
-	if json.Unmarshal(before, &pre) == nil && json.Unmarshal(after, &desired) == nil {
-		ds = diffs(pre, desired)
+	only := false
+	if rec, err := readRecord(raw); err == nil {
+		ds, _ = rec.diffs()
+		only = rec.Only
 	}
 	known := len(ds) > 0
 	if !known {
@@ -43,7 +44,7 @@ func (Capability) Words(target string, params map[string]any, before, after json
 			names[i] += "s"
 		}
 	}
-	what := capability.Of(target, containers, known && len(pre.Spec.Containers) == 1, capability.And(names))
+	what := capability.Of(target, containers, known && only, capability.And(names))
 
 	noun, verb := "change", capability.VerbChange
 	switch way(ds, "") {

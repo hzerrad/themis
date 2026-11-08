@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"regexp"
 	"slices"
@@ -48,19 +49,20 @@ type Capability interface {
 	// since, and returns the target's resulting generation.
 	Apply(ctx context.Context, c client.Client, p Plan, dryRun bool) (int64, error)
 
-	// Undo works out how to put back a change this fix made, from the state
-	// before it: the fix to use and its parameters. A *Refusal says why it
-	// can't be put back.
-	Undo(ctx context.Context, r client.Reader, t incident.TargetRef, before json.RawMessage) (string, map[string]any, error)
+	// Undo works out how to put back a change this fix made, from the
+	// record Plan kept of it: the fix to use and its parameters. A *Refusal
+	// says why it can't be put back.
+	Undo(ctx context.Context, r client.Reader, t incident.TargetRef, record json.RawMessage) (string, map[string]any, error)
 
-	// Changes lists what the change does, for the person approving it.
-	Changes(before, after json.RawMessage) ([]Change, error)
+	// Changes lists what the change does, for the person approving it, from
+	// the record Plan kept of it.
+	Changes(record json.RawMessage) ([]Change, error)
 
-	// Words name the change params ask for, writing after over before to
-	// the workload named target, for the people who decide on it. before
-	// and after are nil until the fix is worked out against the cluster:
-	// the words then say what params ask for.
-	Words(target string, params map[string]any, before, after json.RawMessage) Words
+	// Words name the change params ask for to the workload named target, for
+	// the people who decide on it, from the record Plan kept of it. record
+	// is nil until the fix is worked out against the cluster: the words then
+	// say what params ask for.
+	Words(target string, params map[string]any, record json.RawMessage) Words
 
 	// Mark reads, from the live target, the same mark Plan records for the
 	// state the fix leaves: a different one means the target no longer has
@@ -87,10 +89,18 @@ type Feasibility interface {
 // Commanding is a fix that says how a person makes its change with kubectl,
 // for one Themis only recommends.
 type Commanding interface {
-	// Commands are kubectl commands that make the change params ask for,
-	// writing after over before, to the workload t: that change exactly,
-	// printing no value Changes withholds. None when kubectl can't.
-	Commands(t incident.TargetRef, params map[string]any, before, after json.RawMessage) []string
+	// Commands are kubectl commands that make the change params ask for, as
+	// record has it, to the workload t: that change exactly, printing no
+	// more of a value than Changes shows. None when kubectl can't.
+	Commands(t incident.TargetRef, params map[string]any, record json.RawMessage) []string
+}
+
+// Templating is a fix whose change writes a new pod template. Record is the
+// record Plan keeps of a change from the template before to the one after,
+// for params. Themis once stored those two templates whole: the migration
+// that removed them keeps this record instead.
+type Templating interface {
+	Record(params map[string]any, before, after json.RawMessage) (json.RawMessage, error)
 }
 
 // Kubectl is a kubectl command on the workload t, such as
@@ -156,10 +166,13 @@ type Plan struct {
 	Target digest.TargetIdentity
 	Params map[string]any
 
-	// Before and After are the target's state the fix replaces and writes,
-	// for showing the change and putting it back.
-	Before json.RawMessage
-	After  json.RawMessage
+	// Record is what Themis keeps of the change: what the approver is shown
+	// of it, and what putting it back needs. It holds revisions, ReplicaSets
+	// and hashes of pod templates, the values the fix sets when they are
+	// never secret, such as memory limits, and the change as Changes lists
+	// it, values that look secret withheld: never the pod template itself,
+	// whose environment can hold secrets. The digest doesn't bind it.
+	Record json.RawMessage
 
 	// ManagedBy names the GitOps tool that owns the target, if any.
 	ManagedBy string
@@ -230,6 +243,20 @@ func NewRegistry(capabilities ...Capability) Registry {
 // Names lists the registered fixes, sorted.
 func (r Registry) Names() []string {
 	return slices.Sorted(maps.Keys(r))
+}
+
+// ErrNoRecord means a fix's record says nothing of its change: Themis kept
+// none, or couldn't convert the one an earlier version kept.
+var ErrNoRecord = errors.New("no record of the change")
+
+// Record is the record the fix name keeps of a change from the pod template
+// before to the one after, for params, as Templating works it out.
+func (r Registry) Record(name string, params map[string]any, before, after json.RawMessage) (json.RawMessage, error) {
+	f, ok := r[name].(Templating)
+	if !ok {
+		return nil, fmt.Errorf("%s keeps no record of a pod template's change", name)
+	}
+	return f.Record(params, before, after)
 }
 
 // Fields are the digest fields of p, made by f, for an incident. restores

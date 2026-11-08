@@ -49,12 +49,19 @@ func TestWords(t *testing.T) {
 			act:    "Set the readiness probe period of inventory's app container to 20s", verifies: "the pods become ready and stay ready",
 		},
 	} {
-		got := (probes.Capability{}).Words("inventory", tc.params, tc.before, tc.after)
+		var record json.RawMessage
+		if tc.before != nil {
+			var err error
+			if record, err = (probes.Capability{}).Record(tc.params, tc.before, tc.after); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got := (probes.Capability{}).Words("inventory", tc.params, record)
 		if got.Noun != "probe change" || got.Act != tc.act || got.Verifies != tc.verifies {
 			t.Errorf("%s: %+v, want %q verifying %q", name, got, tc.act, tc.verifies)
 		}
 	}
-	if got := (probes.Capability{}).Words("inventory", map[string]any{}, nil, nil); got != capability.Say("probe change", capability.VerbChange, "the probes of inventory", capability.PodsStayReady) {
+	if got := (probes.Capability{}).Words("inventory", map[string]any{}, nil); got != capability.Say("probe change", capability.VerbChange, "the probes of inventory", capability.PodsStayReady) {
 		t.Errorf("no params: %+v", got)
 	}
 }

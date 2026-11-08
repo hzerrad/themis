@@ -141,7 +141,7 @@ func (w *Worker) renew(ctx context.Context, actionID, by string) (store.Action, 
 	if err != nil {
 		return store.Action{}, err
 	}
-	noun := w.Fixes.Words(expired.Capability, in.Target.Name, expired.Params, expired.PreState, expired.Desired).Noun
+	noun := w.Fixes.Words(expired.Capability, in.Target.Name, expired.Params, expired.Record).Noun
 	if why := w.unsupported(j, noun); why != "" {
 		return store.Action{}, &Refusal{Reason: why}
 	}

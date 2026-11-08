@@ -23,6 +23,7 @@ type Capability struct{}
 var (
 	_ capability.Capability  = Capability{}
 	_ capability.Feasibility = Capability{}
+	_ capability.Templating  = Capability{}
 )
 
 func (Capability) Name() string    { return Name }
@@ -107,22 +108,18 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 	if err != nil {
 		return capability.Plan{}, err
 	}
-	before, err := json.Marshal(w.Template)
-	if err != nil {
-		return capability.Plan{}, err
-	}
-	desired, err := json.Marshal(after)
+	rec, err := json.Marshal(newRecord(changed, len(after.Spec.Containers), w.TemplateHash, mark))
 	if err != nil {
 		return capability.Plan{}, err
 	}
 	return capability.Plan{
 		Target: w.Identity(), Params: a.params(),
-		Before: before, After: desired,
+		Record:      rec,
 		ManagedBy:   w.ManagedBy,
 		Risk:        "medium",
 		BlastRadius: capability.Rollout(w),
 		Facts:       facts(changed),
-		Done:        Capability{}.Words(t.Name, a.params(), before, desired).Done,
+		Done:        Capability{}.Words(t.Name, a.params(), rec).Done,
 		Mark:        mark,
 		State:       planned{workload: w, after: after, changed: changed},
 	}, nil
@@ -137,13 +134,17 @@ func (Capability) Apply(ctx context.Context, c client.Client, p capability.Plan,
 	return s.workload.SetTemplate(ctx, c, s.after, dryRun)
 }
 
-// Undo sets back every value that differs from the template before the fix.
-// A value the template didn't have can't be put back: the fix never removes
-// one.
-func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, before json.RawMessage) (string, map[string]any, error) {
-	var pre corev1.PodTemplateSpec
-	if err := json.Unmarshal(before, &pre); err != nil {
-		return "", nil, fmt.Errorf("template before the fix: %w", err)
+// Undo sets back every value the fix changed that differs now from what it
+// was, as the fix's record keeps it. A value the template didn't have can't
+// be put back: the fix never removes one.
+func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, raw json.RawMessage) (string, map[string]any, error) {
+	rec, err := readRecord(raw)
+	var ds []diff
+	if err == nil {
+		ds, err = rec.diffs()
+	}
+	if err != nil {
+		return "", nil, &capability.Refusal{Reason: "Not restored. Themis kept no record of the resources from before it acted. The fix stays in place."}
 	}
 	w, err := workload.Read(ctx, r, t)
 	if e, ok := errors.AsType[*workload.Error](err); ok {
@@ -153,15 +154,19 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 		return "", nil, err
 	}
 	back := asked{}
-	for _, d := range diffs(w.Template, pre) {
-		if d.after == nil {
+	for _, d := range ds {
+		i := slices.IndexFunc(w.Template.Spec.Containers, func(c corev1.Container) bool { return c.Name == d.container })
+		if i < 0 || equal(d.field.get(&w.Template.Spec.Containers[i]), d.before) {
+			continue
+		}
+		if d.before == nil {
 			return "", nil, &capability.Refusal{Reason: fmt.Sprintf(
 				"Not restored. Container %s had no %s before, and Themis never removes one. The fix stays in place.", d.container, d.field)}
 		}
 		if back[d.container] == nil {
 			back[d.container] = map[field]resource.Quantity{}
 		}
-		back[d.container][d.field] = *d.after
+		back[d.container][d.field] = *d.before
 	}
 	if len(back) == 0 {
 		return "", nil, &capability.Refusal{Reason: "Nothing to restore. The workload's resources are already as they were before Themis acted.", NoOp: true}
@@ -169,20 +174,43 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	return Name, back.params(), nil
 }
 
-// Changes lists, for each container, the values the fix changes.
-func (Capability) Changes(before, after json.RawMessage) ([]capability.Change, error) {
-	var pre, desired corev1.PodTemplateSpec
-	if err := json.Unmarshal(before, &pre); err != nil {
+// Changes lists, for each container, the values the fix changes, as its
+// record keeps them.
+func (Capability) Changes(raw json.RawMessage) ([]capability.Change, error) {
+	rec, err := readRecord(raw)
+	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(after, &desired); err != nil {
+	ds, err := rec.diffs()
+	if err != nil {
 		return nil, err
 	}
 	var out []capability.Change
-	for _, d := range diffs(pre, desired) {
+	for _, d := range ds {
 		out = append(out, d.change())
 	}
 	return out, nil
+}
+
+// Record is the record of a change from the template before to the one
+// after: the values it sets, and the hashes of both.
+func (Capability) Record(_ map[string]any, before, after json.RawMessage) (json.RawMessage, error) {
+	var pre, desired corev1.PodTemplateSpec
+	if err := json.Unmarshal(before, &pre); err != nil {
+		return nil, fmt.Errorf("template before the fix: %w", err)
+	}
+	if err := json.Unmarshal(after, &desired); err != nil {
+		return nil, fmt.Errorf("template the fix writes: %w", err)
+	}
+	from, err := workload.TemplateHash(pre)
+	if err != nil {
+		return nil, err
+	}
+	to, err := workload.TemplateHash(desired)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(newRecord(diffs(pre, desired), len(pre.Spec.Containers), from, to))
 }
 
 // Mark is the hash of the target's live pod template.

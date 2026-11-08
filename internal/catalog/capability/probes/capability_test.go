@@ -72,7 +72,11 @@ func withProbes(liveness, readiness *corev1.Probe) json.RawMessage {
 func TestChanges(t *testing.T) {
 	before := withProbes(&corev1.Probe{PeriodSeconds: 10}, &corev1.Probe{TimeoutSeconds: 1})
 	after := withProbes(&corev1.Probe{PeriodSeconds: 5}, &corev1.Probe{TimeoutSeconds: 5, FailureThreshold: 3})
-	got, err := probes.Capability{}.Changes(before, after)
+	record, err := probes.Capability{}.Record(nil, before, after)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := probes.Capability{}.Changes(record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +88,10 @@ func TestChanges(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Changes =\n%+v\nwant\n%+v", got, want)
 	}
-	if _, err := (probes.Capability{}).Changes(json.RawMessage(`[]`), after); err == nil {
-		t.Error("Changes read a template that isn't one")
+	if _, err := (probes.Capability{}).Changes(json.RawMessage(`[]`)); err == nil {
+		t.Error("Changes read a record that isn't one")
+	}
+	if _, err := (probes.Capability{}).Record(nil, json.RawMessage(`[]`), after); err == nil {
+		t.Error("Record read a template that isn't one")
 	}
 }

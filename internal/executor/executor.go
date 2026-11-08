@@ -175,6 +175,11 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	if err != nil || current != a.Digest {
 		return Result{Status: Stale, Message: "Not applied. The workload changed after the fix was approved."}
 	}
+	// The template rebuilt from the live workload, and the ReplicaSet a
+	// rollback takes it from, must be the one approved, to the hash.
+	if plan.Mark != a.Mark {
+		return Result{Status: Stale, Message: "Not applied. The workload changed after the fix was approved."}
+	}
 
 	if _, err := f.Apply(ctx, e.Client, plan, true); err != nil {
 		return Result{Status: Failed, Message: "Not applied. Kubernetes rejected the change in a dry run: " + err.Error() + ".", dryRunFailed: true}

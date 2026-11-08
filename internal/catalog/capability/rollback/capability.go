@@ -22,6 +22,7 @@ type Capability struct{}
 var (
 	_ capability.Capability = Capability{}
 	_ capability.Describing = Capability{}
+	_ capability.Templating = Capability{}
 )
 
 func (Capability) Name() string    { return Name }
@@ -59,17 +60,13 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 	if err != nil {
 		return capability.Plan{}, err
 	}
-	before, err := json.Marshal(live.PreState)
-	if err != nil {
-		return capability.Plan{}, err
-	}
-	after, err := json.Marshal(live.Desired)
+	rec, err := json.Marshal(newRecord(live.from, live.to, live.PreState, live.Desired))
 	if err != nil {
 		return capability.Plan{}, err
 	}
 	return capability.Plan{
 		Target: live.Target, Params: Params(revision, live.DesiredHash),
-		Before: before, After: after,
+		Record:      rec,
 		ManagedBy:   live.ManagedBy,
 		Risk:        "medium",
 		BlastRadius: capability.Rollout(live.Workload),
@@ -88,70 +85,63 @@ func (Capability) Apply(ctx context.Context, c client.Client, p capability.Plan,
 	return Apply(ctx, c, live, dryRun)
 }
 
-// Undo is a rollback to the revision whose template was there before.
-func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, before json.RawMessage) (string, map[string]any, error) {
-	var template corev1.PodTemplateSpec
-	if err := json.Unmarshal(before, &template); err != nil {
-		return "", nil, fmt.Errorf("template before the fix: %w", err)
-	}
-	revision, err := RevisionOf(ctx, r, t, template)
-	if errors.Is(err, ErrNoSuchRevision) {
-		return "", nil, &capability.Refusal{Reason: "Not restored. Kubernetes no longer keeps the revision from before Themis acted. The fix stays in place."}
-	}
-	if errors.Is(err, workload.ErrGone) {
-		return "", nil, &capability.Refusal{Reason: "Not restored. The workload was deleted."}
-	}
-	if errors.Is(err, ErrStale) {
-		return "", nil, &capability.Refusal{Reason: "Not restored. The workload was replaced by a new one with the same name."}
-	}
-	if err != nil {
-		return "", nil, err
-	}
-	return Name, map[string]any{"revision": revision}, nil
+// Undo is a rollback to the revision the rollback replaced, by the hash of
+// its template.
+func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, raw json.RawMessage) (string, map[string]any, error) {
+	rec, _ := readRecord(raw)
+	return undo(ctx, r, t, rec.From)
 }
 
-// Changes lists what writing after over before changes in the pod template.
-func (Capability) Changes(before, after json.RawMessage) ([]capability.Change, error) {
-	var pre, desired corev1.PodTemplateSpec
-	if err := json.Unmarshal(before, &pre); err != nil {
+// Changes lists what the rollback changes in the pod template, as its
+// record keeps them.
+func (Capability) Changes(raw json.RawMessage) ([]capability.Change, error) {
+	rec, err := readRecord(raw)
+	if err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal(after, &desired); err != nil {
+	return rec.Changes, nil
+}
+
+// Record is the record of a rollback from the template before to the one
+// after, the revision params name: the revisions by their templates'
+// hashes, since the templates don't say which ReplicaSets hold them.
+func (Capability) Record(params map[string]any, before, after json.RawMessage) (json.RawMessage, error) {
+	pre, desired, err := templates(before, after)
+	if err != nil {
 		return nil, err
 	}
-	return Changes(pre, desired), nil
+	from, err := hashWithout(pre)
+	if err != nil {
+		return nil, err
+	}
+	to, err := TemplateHash(desired)
+	if err != nil {
+		return nil, err
+	}
+	revision, _ := RevisionParam(params)
+	return json.Marshal(newRecord(revisionRef{TemplateHash: from}, revisionRef{Number: revision, TemplateHash: to}, pre, desired))
 }
 
 // Words name a rollback by the revision it goes back to: "Roll checkout
 // back to revision 1". Worked out against the cluster, they say how many of
 // the changes to what the pods run it undoes, when it undoes several, and
 // whether the image is one: nobody takes back new code without seeing it.
-func (Capability) Words(target string, params map[string]any, before, after json.RawMessage) capability.Words {
+func (Capability) Words(target string, params map[string]any, raw json.RawMessage) capability.Words {
 	to := "an earlier revision"
 	if revision, ok := RevisionParam(params); ok {
 		to = fmt.Sprintf("revision %d", revision)
 	}
 	roll := capability.Verb{Base: "Roll", Doing: "Rolling", Done: "Rolled"}
 	w := capability.Say("rollback", roll, target+" back to "+to, capability.PodsStayReady)
-	var pre, desired corev1.PodTemplateSpec
-	if before == nil || after == nil || json.Unmarshal(before, &pre) != nil || json.Unmarshal(after, &desired) != nil {
+	rec, err := readRecord(raw)
+	if err != nil || rec.Undoes < 2 {
 		return w
 	}
-	undone, _ := workload.Changes(desired, pre)
-	if len(undone) < 2 {
-		return w
-	}
-	images := 0
-	for _, c := range undone {
-		if c.Image {
-			images++
-		}
-	}
-	w.Note = fmt.Sprintf("Rolling back undoes %d changes", len(undone))
+	w.Note = fmt.Sprintf("Rolling back undoes %d changes", rec.Undoes)
 	switch {
-	case images == 1:
+	case rec.Images == 1:
 		w.Note += ", including the image"
-	case images > 1:
+	case rec.Images > 1:
 		w.Note += ", including the images"
 	}
 	w.Note += "."

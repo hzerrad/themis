@@ -309,35 +309,50 @@ func TestChanges(t *testing.T) {
 		}},
 		"nothing differs": {after: before},
 	} {
-		b, _ := json.Marshal(before)
-		a, _ := json.Marshal(tc.after)
-		got, err := fix.Changes(b, a)
+		got, err := fix.Changes(record(t, before, tc.after))
 		if err != nil || !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: Changes = %+v, %v; want %+v", name, got, err, tc.want)
 		}
 	}
+	if _, err := fix.Changes(json.RawMessage(`{}`)); !errors.Is(err, capability.ErrNoRecord) {
+		t.Errorf("no record: err = %v, want ErrNoRecord", err)
+	}
 }
 
-// Undo can't put back what the fix can't write, and says so.
+// record is the record of a change from before to after.
+func record(t *testing.T, before, after corev1.PodTemplateSpec) json.RawMessage {
+	t.Helper()
+	b, _ := json.Marshal(before)
+	a, _ := json.Marshal(after)
+	r, err := fix.Record(nil, b, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// Undo can't put back what the fix can't write, or without its record, and
+// says so.
 func TestUndo_Refused(t *testing.T) {
 	without := checkout().Spec.Template
 	without.Spec.Containers[0].Resources.Limits = nil
+	same := record(t, checkout().Spec.Template, checkout().Spec.Template)
 	for name, tc := range map[string]struct {
-		before corev1.PodTemplateSpec
+		record json.RawMessage
 		uid    string
 		reason string
 		noOp   bool
 	}{
-		"a value there wasn't": {before: without, reason: "Not restored. Container app had no memory limit before, and Themis never removes one. The fix stays in place."},
-		"nothing differs":      {before: checkout().Spec.Template, reason: "Nothing to restore. The workload's resources are already as they were before Themis acted.", noOp: true},
-		"replaced":             {before: checkout().Spec.Template, uid: "d-0", reason: "Not restored. The workload was replaced by a new object with the same name."},
+		"a value there wasn't": {record: record(t, without, checkout().Spec.Template), reason: "Not restored. Container app had no memory limit before, and Themis never removes one. The fix stays in place."},
+		"nothing differs":      {record: same, reason: "Nothing to restore. The workload's resources are already as they were before Themis acted.", noOp: true},
+		"replaced":             {record: same, uid: "d-0", reason: "Not restored. The workload was replaced by a new object with the same name."},
+		"no record":            {record: json.RawMessage(`{}`), reason: "Not restored. Themis kept no record of the resources from before it acted. The fix stays in place."},
 	} {
 		tt := target
 		if tc.uid != "" {
 			tt.UID = tc.uid
 		}
-		before, _ := json.Marshal(tc.before)
-		_, _, err := fix.Undo(t.Context(), cluster(), tt, before)
+		_, _, err := fix.Undo(t.Context(), cluster(), tt, tc.record)
 		if r, ok := errors.AsType[*capability.Refusal](err); !ok || r.Reason != tc.reason || r.NoOp != tc.noOp {
 			t.Errorf("%s: err = %v, want the refusal %q", name, err, tc.reason)
 		}

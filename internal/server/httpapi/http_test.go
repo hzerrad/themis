@@ -101,15 +101,20 @@ func (e *env) awaiting(t *testing.T) store.Action {
 			return err
 		}
 		expires := now.Add(30 * time.Minute)
+		record, err := catalog.Fixes().Record(rollback.Name, map[string]any{"revision": int64(1)},
+			[]byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"leak"},{"name":"DB_PASSWORD","value":"s3cret-now"}]}]}}`),
+			[]byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"healthy"},{"name":"DB_PASSWORD","value":"s3cret-before"}]}]}}`))
+		if err != nil {
+			return err
+		}
 		a = store.Action{
 			IncidentID: id, ProposalID: p.ID, Capability: "deployment.rollback-to-revision", CapabilityVersion: "1",
 			Target:   digest.TargetIdentity{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: target.UID, Generation: 2, SpecHash: "sha256:s"},
 			Params:   map[string]any{"revision": int64(1), "templateHash": "sha256:t"},
 			Decision: "require_approval", PolicyID: "approve", PolicyDigest: "sha256:p", Constraints: map[string]any{},
 			BlastRadius: map[string]any{"replicas": int64(3)}, Risk: "medium",
-			PreState: []byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"leak"},{"name":"DB_PASSWORD","value":"s3cret-now"}]}]}}`),
-			Desired:  []byte(`{"spec":{"containers":[{"name":"app","image":"busybox","env":[{"name":"MODE","value":"healthy"},{"name":"DB_PASSWORD","value":"s3cret-before"}]}]}}`),
-			State:    store.ActionAwaitingApproval, ExpiresAt: &expires,
+			Record: record,
+			State:  store.ActionAwaitingApproval, ExpiresAt: &expires,
 		}
 		a.Digest, err = digest.Compute(a.Fields())
 		if err != nil {

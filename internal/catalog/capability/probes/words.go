@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/hzerrad/themis/internal/catalog/capability"
 )
 
@@ -26,12 +24,12 @@ var (
 // Words name a change to one field by what it does to it, "Lengthen
 // inventory's liveness probe timeout from 1s to 3s", and a change to several
 // by the probes they belong to, "Change inventory's liveness probe". Without
-// before and after, only what params set is known.
-func (Capability) Words(target string, params map[string]any, before, after json.RawMessage) capability.Words {
-	var pre, desired corev1.PodTemplateSpec
+// the fix's record, only what params set is known.
+func (Capability) Words(target string, params map[string]any, raw json.RawMessage) capability.Words {
 	var edits []edit
-	if json.Unmarshal(before, &pre) == nil && json.Unmarshal(after, &desired) == nil {
-		edits = diff(pre, desired)
+	only := false
+	if rec, err := readRecord(raw); err == nil {
+		edits, only = rec.edits(), rec.Only
 	}
 	known := len(edits) > 0
 	if !known {
@@ -53,7 +51,7 @@ func (Capability) Words(target string, params map[string]any, before, after json
 		verifies = capability.PodsNoRestart
 	}
 	of := func(what string) string {
-		return capability.Of(target, []string{edits[0].container}, known && len(pre.Spec.Containers) == 1, what)
+		return capability.Of(target, []string{edits[0].container}, known && only, what)
 	}
 	if len(edits) > 1 {
 		what := capability.And(probes) + " probe"

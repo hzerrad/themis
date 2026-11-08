@@ -70,7 +70,7 @@ func viewSummary(s store.IncidentSummary, target string, causes []catalog.RootCa
 		}
 	}
 	if s.Capability != "" {
-		v.Fix = &fixView{Capability: s.Capability, Params: s.Params, Words: fixes.Words(s.Capability, target, s.Params, s.PreState, s.Desired)}
+		v.Fix = &fixView{Capability: s.Capability, Params: s.Params, Words: fixes.Words(s.Capability, target, s.Params, s.Record)}
 	}
 	return v
 }
@@ -117,7 +117,8 @@ type suspicionView struct {
 }
 
 // actionView lists its fields rather than embedding store.Action: the
-// templates hold env values and must never be served.
+// fix's record is served only as its fix words it, through Changes,
+// Commands and Words.
 type actionView struct {
 	ID                string
 	IncidentID        string
@@ -270,7 +271,7 @@ func viewAction(a store.Action, fixes capability.Registry) actionView {
 		Target: a.Target, Params: a.Params, BlastRadius: a.BlastRadius, Risk: a.Risk,
 		Decision: a.Decision, DecisionReason: a.DecisionReason, PolicyID: a.PolicyID, PolicyDigest: a.PolicyDigest,
 		Digest: a.Digest, State: a.State, ExpiresAt: a.ExpiresAt, CreatedAt: a.CreatedAt,
-		Changes: changes(a, fixes), Commands: commands(a, fixes), Words: fixes.Words(a.Capability, a.Target.Name, a.Params, a.PreState, a.Desired),
+		Changes: changes(a, fixes), Commands: commands(a, fixes), Words: fixes.Words(a.Capability, a.Target.Name, a.Params, a.Record),
 	}
 }
 
@@ -282,5 +283,5 @@ func commands(a store.Action, fixes capability.Registry) []string {
 		return nil
 	}
 	t := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
-	return f.Commands(t, a.Params, a.PreState, a.Desired)
+	return f.Commands(t, a.Params, a.Record)
 }

@@ -85,7 +85,14 @@ func TestWords(t *testing.T) {
 			},
 		},
 	} {
-		if got := (resources.Capability{}).Words("search", tc.params, tc.before, tc.after); got != tc.want {
+		var record json.RawMessage
+		if tc.before != nil {
+			var err error
+			if record, err = (resources.Capability{}).Record(tc.params, tc.before, tc.after); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := (resources.Capability{}).Words("search", tc.params, record); got != tc.want {
 			t.Errorf("%s:\n got %+v\nwant %+v", name, got, tc.want)
 		}
 	}

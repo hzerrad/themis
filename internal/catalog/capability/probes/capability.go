@@ -19,7 +19,10 @@ import (
 // Capability is deployment.set-probes as a capability.Capability.
 type Capability struct{}
 
-var _ capability.Capability = Capability{}
+var (
+	_ capability.Capability = Capability{}
+	_ capability.Templating = Capability{}
+)
 
 func (Capability) Name() string    { return Name }
 func (Capability) Version() string { return Version }
@@ -117,22 +120,18 @@ func (Capability) Plan(ctx context.Context, r client.Reader, t incident.TargetRe
 	if err != nil {
 		return capability.Plan{}, err
 	}
-	before, err := json.Marshal(w.Template)
-	if err != nil {
-		return capability.Plan{}, err
-	}
-	after, err := json.Marshal(desired)
+	rec, err := json.Marshal(newRecord(edits, len(desired.Spec.Containers), w.TemplateHash, mark))
 	if err != nil {
 		return capability.Plan{}, err
 	}
 	return capability.Plan{
 		Target: w.Identity(), Params: req.params(),
-		Before: before, After: after,
+		Record:      rec,
 		ManagedBy:   w.ManagedBy,
 		Risk:        "medium",
 		BlastRadius: capability.Rollout(w),
 		Facts:       facts(edits, req.container),
-		Done:        Capability{}.Words(t.Name, req.params(), before, after).Done,
+		Done:        Capability{}.Words(t.Name, req.params(), rec).Done,
 		Mark:        mark,
 		State:       state{workload: w, desired: desired},
 	}, nil
@@ -160,12 +159,13 @@ func (Capability) Apply(ctx context.Context, c client.Client, p capability.Plan,
 	return s.workload.SetTemplate(ctx, c, s.desired, dryRun)
 }
 
-// Undo sets back the probe fields that differ between the template before
-// the fix and the live one, on the one container the fix changed.
-func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, before json.RawMessage) (string, map[string]any, error) {
-	var template corev1.PodTemplateSpec
-	if err := json.Unmarshal(before, &template); err != nil {
-		return "", nil, fmt.Errorf("template before the fix: %w", err)
+// Undo sets back each probe field the fix changed that differs now from
+// what it was, as the fix's record keeps it, on the one container the fix
+// changed.
+func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, raw json.RawMessage) (string, map[string]any, error) {
+	rec, err := readRecord(raw)
+	if err != nil {
+		return "", nil, &capability.Refusal{Reason: "Not restored. Themis kept no record of the probes from before it acted. The fix stays in place."}
 	}
 	w, err := workload.Read(ctx, r, t)
 	if errors.Is(err, workload.ErrGone) {
@@ -177,40 +177,63 @@ func (Capability) Undo(ctx context.Context, r client.Reader, t incident.TargetRe
 	if err != nil {
 		return "", nil, err
 	}
-	edits := diff(w.Template, template)
-	if len(edits) == 0 {
-		hash, err := workload.TemplateHash(template)
-		if err != nil {
-			return "", nil, err
+	var back []edit
+	for _, e := range rec.edits() {
+		c := container(&w.Template, e.container)
+		if c == nil {
+			continue
 		}
-		if hash == w.TemplateHash {
+		if p := probe(c, e.kind); p != nil && value(p, e.field) != e.before {
+			back = append(back, e)
+		}
+	}
+	if len(back) == 0 {
+		if rec.From == w.TemplateHash {
 			return "", nil, &capability.Refusal{NoOp: true, Reason: "Nothing to restore. The probes are already as they were before Themis acted."}
 		}
 		return "", nil, &capability.Refusal{Reason: "Not restored. The workload changed after Themis's fix, so it stays as it is."}
 	}
-	req := request{container: edits[0].container, set: map[string]map[string]int32{}}
-	for _, e := range edits {
+	req := request{container: back[0].container, set: map[string]map[string]int32{}}
+	for _, e := range back {
 		if e.container != req.container {
 			return "", nil, &capability.Refusal{Reason: "Not restored. The probes of more than one container changed after Themis acted, so they stay as they are."}
 		}
 		if req.set[e.kind] == nil {
 			req.set[e.kind] = map[string]int32{}
 		}
-		req.set[e.kind][e.field] = e.after
+		req.set[e.kind][e.field] = e.before
 	}
 	return Name, req.params(), nil
 }
 
-// Changes lists each probe field writing after over before changes.
-func (Capability) Changes(before, after json.RawMessage) ([]capability.Change, error) {
+// Changes lists each probe field the fix changes, as its record keeps them.
+func (Capability) Changes(raw json.RawMessage) ([]capability.Change, error) {
+	rec, err := readRecord(raw)
+	if err != nil {
+		return nil, err
+	}
+	return changes(rec.edits()), nil
+}
+
+// Record is the record of a change from the template before to the one
+// after: the probe fields it sets, and the hashes of both.
+func (Capability) Record(_ map[string]any, before, after json.RawMessage) (json.RawMessage, error) {
 	var pre, desired corev1.PodTemplateSpec
 	if err := json.Unmarshal(before, &pre); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("template before the fix: %w", err)
 	}
 	if err := json.Unmarshal(after, &desired); err != nil {
+		return nil, fmt.Errorf("template the fix writes: %w", err)
+	}
+	from, err := workload.TemplateHash(pre)
+	if err != nil {
 		return nil, err
 	}
-	return changes(diff(pre, desired)), nil
+	to, err := workload.TemplateHash(desired)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(newRecord(diff(pre, desired), len(pre.Spec.Containers), from, to))
 }
 
 // Mark is the hash of the target's live pod template: the fix leaves the

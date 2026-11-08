@@ -3,6 +3,7 @@ package capability_test
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hzerrad/themis/internal/catalog/capability"
@@ -12,9 +13,10 @@ import (
 	"github.com/hzerrad/themis/internal/incident"
 )
 
-// A fix Themis only recommends says how to make its change with kubectl:
-// exactly that change, each value quoted for a shell, and never a value
-// that looks secret. When kubectl can't make it exactly, it says nothing.
+// A fix Themis only recommends says how to make its change with kubectl,
+// from the record it keeps: exactly that change, each value quoted for a
+// shell, and never a value that looks secret, or more of one than the
+// change shows. When kubectl can't make it exactly, it says nothing.
 func TestCommands(t *testing.T) {
 	checkout := incident.TargetRef{Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "checkout", UID: "u1"}
 	app := func(image, env, memory string) string {
@@ -57,6 +59,10 @@ func TestCommands(t *testing.T) {
 			templates: partial(app("a:1", `{"name":"API_TOKEN","value":"old"}`, "48Mi"), app("a:1", `{"name":"API_TOKEN","value":"new"}`, "48Mi")),
 		},
 		{
+			name: "a value longer than the change shows", fix: rollback.Partial{},
+			templates: partial(app("a:1", mode("x"), "48Mi"), app("a:1", mode(strings.Repeat("long words ", 12)), "48Mi")),
+		},
+		{
 			name: "a value from a Secret", fix: rollback.Partial{},
 			templates: partial(app("a:1", mode("x"), "48Mi"), app("a:1", `{"name":"MODE","valueFrom":{"secretKeyRef":{"name":"s","key":"k"}}}`, "48Mi")),
 		},
@@ -75,7 +81,14 @@ func TestCommands(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.fix.Commands(checkout, tt.params, tt.templates[0], tt.templates[1]); !slices.Equal(got, tt.want) {
+			var record json.RawMessage
+			if tt.templates[0] != nil {
+				var err error
+				if record, err = tt.fix.(capability.Templating).Record(tt.params, tt.templates[0], tt.templates[1]); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := tt.fix.Commands(checkout, tt.params, record); !slices.Equal(got, tt.want) {
 				t.Errorf("commands = %q, want %q", got, tt.want)
 			}
 		})

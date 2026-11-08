@@ -85,14 +85,14 @@ func And(words []string) string {
 }
 
 // Words name the change a fix of the registry makes to target, as the fix
-// words it: a restore as one, whatever the fix, and a fix Themis doesn't
-// know as a change.
-func (r Registry) Words(name, target string, params map[string]any, before, after json.RawMessage) Words {
+// words it from its record: a restore as one, whatever the fix, and a fix
+// Themis doesn't know as a change.
+func (r Registry) Words(name, target string, params map[string]any, record json.RawMessage) Words {
 	if _, ok := params["restores"]; ok {
 		return Say("restore", Verb{"Restore", "Restoring", "Restored"}, "the previous state of "+target, "")
 	}
 	if f, ok := r[name]; ok {
-		return f.Words(target, params, before, after)
+		return f.Words(target, params, record)
 	}
 	return Words{Noun: "change", Act: "Apply this change to " + target, Doing: "Applying the change to " + target + ".", Done: "Changed " + target + "."}
 }
