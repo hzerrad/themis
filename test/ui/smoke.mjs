@@ -708,7 +708,7 @@ for (const s of setups) {
 // A read-only install: the investigator and the executor are off by choice,
 // each with the Helm value that turns it on, and Setup asks for no model.
 const READ_ONLY = {
-  has: ["To have Themis investigate, set investigator.enabled=true.", "To have Themis apply the fixes a person approves, set executor.enabled=true."],
+  has: ["To have Themis investigate, set investigator.enabled=true.", "To have Themis apply the fixes a person approves, set executor.enabled=true and executor.namespaces."],
   not: ["Failing", "Not set", "Not installed", "Test the connection"],
 };
 for (const hash of ["#/status", "#/setup"]) {

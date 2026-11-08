@@ -115,7 +115,13 @@ func TestValidate_Errors(t *testing.T) {
 		{"webhook not http", func(c *config.Config) { c.Notifications.Webhook = &config.Webhook{URL: "file:///etc/passwd"} }, "notifications.webhook.url"},
 		{"webhook without url", func(c *config.Config) { c.Notifications.Webhook = &config.Webhook{} }, "notifications.webhook"},
 		{"bad external URL", func(c *config.Config) { c.Notifications.ExternalURL = "themis.local" }, "notifications.externalURL"},
-		{"executor without address", func(c *config.Config) { c.Executor = &config.Executor{BearerTokenFile: "/t"} }, "executor.address"},
+		{"executor without address", func(c *config.Config) {
+			c.Executor = &config.Executor{BearerTokenFile: "/t", Namespaces: []string{"shop"}}
+		}, "executor.address"},
+		{"executor without namespaces", func(c *config.Config) { c.Executor = &config.Executor{Address: "e:9091", BearerTokenFile: "/t"} }, "executor.namespaces"},
+		{"executor in a namespace not enrolled", func(c *config.Config) {
+			c.Executor = &config.Executor{Address: "e:9091", BearerTokenFile: "/t", Namespaces: []string{"shop", "billing"}}
+		}, "executor.namespaces[1]"},
 		{"unknown model provider", func(c *config.Config) { c.Model.Provider = "gemini" }, "model.provider"},
 		{"prometheus not http", func(c *config.Config) { c.Metrics.Prometheus = &config.Prometheus{Address: "prometheus:9090"} }, "metrics.prometheus.address"},
 		{"client certificate without key", func(c *config.Config) {

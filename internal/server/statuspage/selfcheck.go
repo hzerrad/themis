@@ -493,7 +493,7 @@ func (c *Checker) executor(ctx context.Context) Check {
 	ch := Check{Name: "Fixes"}
 	if c.Executor == "" {
 		ch.State, ch.Summary = Off, "Fixes are proposed, never applied."
-		ch.TurnOn = "To have Themis apply the fixes a person approves, set executor.enabled=true."
+		ch.TurnOn = "To have Themis apply the fixes a person approves, set executor.enabled=true and executor.namespaces."
 		return ch
 	}
 	dctx, cancel := context.WithTimeout(ctx, checkTimeout)

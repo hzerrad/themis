@@ -73,8 +73,9 @@ Investigator: Off. Each incident waits for a fix suggested by a person or a
               investigator.enabled=true and a model in investigator.model.
 {{- end }}
 {{- if .Values.executor.enabled }}
-Fixes:        On. A person approves each one.
+Fixes:        On in {{ include "themis.executorNamespaces" . | fromJsonArray | join ", " }}{{ with .Values.executor.fixes }}, {{ join ", " . }} only{{ end }}. A person approves each one.
 {{- else }}
 Fixes:        Off. Themis never applies a fix. To have it apply the fixes a
-              person approves, set executor.enabled=true.
+              person approves, set executor.enabled=true and
+              executor.namespaces.
 {{- end }}

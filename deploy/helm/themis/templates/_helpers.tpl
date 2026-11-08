@@ -54,6 +54,23 @@ true.
 {{- end }}
 
 {{/*
+The namespaces the executor may change, as JSON: executor.namespaces, each
+also enrolled. The executor is refused without them.
+*/}}
+{{- define "themis.executorNamespaces" -}}
+{{- $namespaces := (.Values.executor.namespaces | default list) | uniq -}}
+{{- if not $namespaces -}}
+{{- fail "executor.namespaces is empty. List the namespaces Themis may change, such as --set executor.namespaces='{shop}'." -}}
+{{- end -}}
+{{- range $namespaces -}}
+{{- if not (has . $.Values.enrolledNamespaces) -}}
+{{- fail (printf "executor.namespaces lists %s, which isn't in enrolledNamespaces. Add it to enrolledNamespaces, or remove it from executor.namespaces." .) -}}
+{{- end -}}
+{{- end -}}
+{{- toJson $namespaces -}}
+{{- end }}
+
+{{/*
 The API the investigator speaks: openai, the default, or anthropic, which has
 its own address.
 */}}

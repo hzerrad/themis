@@ -117,7 +117,7 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 4. **Ownership.** Workloads managed by Argo CD or Flux receive a recommendation, never a change.
 5. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
 6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
-7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in enrolled namespaces: today `get` and `patch` on Deployments, and reading ReplicaSets.
+7. **Execution.** The executor checks the fix against the namespaces and fixes the install lets it change, rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in the namespaces listed for it: today `get` and `patch` on Deployments, and reading ReplicaSets.
 8. **Verification.** Themis decides the fix's symptom checks again from the new pods. If the fix made things worse, Themis tries to restore the previous state, and escalates with its change in place when it can't. An incident whose symptoms persist is referred to a person.
 
 Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
@@ -151,7 +151,7 @@ A default install is read-only. The investigator and fixes are turned on separat
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true` | None, unless the investigator is on | Each one after a person approves it |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
 
 - The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
 - Until the first admin account is created, Themis serves only the page that creates it.

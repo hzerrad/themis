@@ -53,6 +53,9 @@ func TestCheckConfig(t *testing.T) {
 		{"unknown fix for an outside agent", func(c *config.Config) {
 			c.ExternalProposals.Sources = []config.ProposalSource{{ServiceAccount: "agents/triage", Capabilities: []string{"delete.everything"}}}
 		}, `externalProposals: sources[0].capabilities[0]: unknown capability "delete.everything"`},
+		{"unknown fix for the executor", func(c *config.Config) {
+			c.Executor = &config.Executor{Fixes: []string{"deployment.rollback-to-revision", "deployment.rollback"}}
+		}, `executor.fixes[1]: unknown capability "deployment.rollback"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

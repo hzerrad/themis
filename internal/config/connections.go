@@ -101,12 +101,21 @@ type Investigators struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-// Executor configures the connection to themis-executor.
+// Executor configures the connection to themis-executor, and what it may
+// change.
 type Executor struct {
 	Address string `json:"address" jsonschema:"minLength=1"`
 
 	// BearerTokenFile holds the token the executor requires.
 	BearerTokenFile string `json:"bearerTokenFile" jsonschema:"minLength=1"`
+
+	// Namespaces are those the executor may change, each enrolled. The
+	// chart gives it a Role in each, and in no other.
+	Namespaces []string `json:"namespaces" jsonschema:"minItems=1,uniqueItems=true"`
+
+	// Fixes are the fixes the executor may apply, by name, such as
+	// deployment.rollback-to-revision. Empty: every fix Themis has.
+	Fixes []string `json:"fixes,omitempty" jsonschema:"uniqueItems=true"`
 }
 
 // Notifications configures outbound notices.

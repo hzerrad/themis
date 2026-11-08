@@ -240,7 +240,7 @@ themis-up: kind-load ## Install Themis on kind with the investigator and the exe
 	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
 		--set image.repository= --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=IfNotPresent \
-		--set executor.enabled=true --set investigator.enabled=true --set investigator.model.provider=$(MODEL_PROVIDER) \
+		--set executor.enabled=true --set executor.namespaces='{shop}' --set investigator.enabled=true --set investigator.model.provider=$(MODEL_PROVIDER) \
 		$(if $(MODEL_URL),--set investigator.model.baseURL=$(MODEL_URL)) --set investigator.model.name=$(MODEL_NAME) \
 		$(if $(MODEL_KEY_SECRET),--set investigator.model.apiKeySecret=$(MODEL_KEY_SECRET)) \
 		--set metrics.prometheus.address=$(PROMETHEUS_URL) --wait --timeout 5m
@@ -419,7 +419,7 @@ run: dev-tokens ## Run themis-core locally against the kind cluster and the dev-
 
 .PHONY: run-executor
 run-executor: dev-tokens ## Run themis-executor locally against the kind cluster and the dev-db database
-	$(DEV_DB_ENV) go run ./cmd/themis-executor --kube-context kind-$(KIND_CLUSTER) --token-file $(DEV_EXECUTOR_TOKEN) \
+	$(DEV_DB_ENV) go run ./cmd/themis-executor --kube-context kind-$(KIND_CLUSTER) --token-file $(DEV_EXECUTOR_TOKEN) --namespaces default,shop \
 		--grpc-addr 127.0.0.1:9091 --probe-addr 127.0.0.1:8091 --metrics-addr 127.0.0.1:8092
 
 # The investigator's /metrics would listen on every interface, so it is off here.

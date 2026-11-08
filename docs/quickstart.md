@@ -8,7 +8,7 @@ Themis is turned on in steps, each with its own Helm values:
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true` | None, unless the investigator is on | Each one after a person approves it |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
 
 Each numbered step below has a **kind** path and a **your cluster** path. On kind, Themis is installed with the investigator and fixes on, so you see the whole loop. The kind path uses the repository's `make` targets; for more detail on it, see [the demo](demo.md). On your cluster, Themis starts read-only, and steps 5 and 6 add the investigator, then fixes.
 
@@ -50,6 +50,7 @@ helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis 
   --set investigator.model.apiKeySecret=model-key \
   --set investigator.model.schemaDialect=openai-strict \
   --set executor.enabled=true \
+  --set executor.namespaces='{shop}' \
   --wait
 ```
 
@@ -64,6 +65,7 @@ helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis 
   --set investigator.model.name=claude-haiku-5-5 \
   --set investigator.model.apiKeySecret=model-key \
   --set executor.enabled=true \
+  --set executor.namespaces='{shop}' \
   --wait
 ```
 
@@ -80,18 +82,20 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
 
 | Value | What it does |
 |---|---|
-| `enrolledNamespaces` | The namespaces Themis may read and, with the executor, change. It gets a Role in each, and nothing else. |
+| `enrolledNamespaces` | The namespaces Themis watches. It gets a read-only Role in each, and nothing else. |
 | `investigator.enabled` | Installs the investigator, which sends the evidence to the model in `investigator.model`. Off, each incident waits for a fix suggested by a person or a tool such as HolmesGPT. |
 | `executor.enabled` | Installs the only part that can change workloads. Off, Themis applies no fix. |
+| `executor.namespaces` | The namespaces the executor may change, each also enrolled. Required with the executor: it gets a Role in each, and in no other. `executor.fixes` can also limit which fixes it applies. |
 
 The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one. The bundled PostgreSQL is for trying Themis. For anything longer, set `database.existingSecret` to a Secret with a `DATABASE_URL` key. All values are in the [chart README](../deploy/helm/themis/README.md#values).
 
 ## 2. Enroll a namespace
 
-Themis only looks at enrolled namespaces. Both paths above enrolled `shop`. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and upgrade:
+Themis only looks at enrolled namespaces. Both paths above enrolled `shop`, and on kind let the executor change it. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and `executor.namespaces` where the executor is on, and upgrade:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values --set enrolledNamespaces='{payments}'
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set enrolledNamespaces='{payments}' --set executor.namespaces='{payments}'
 ```
 
 Put a workload there that you can break. The sample one is a Deployment named `checkout` in `shop`, with a revision that runs out of memory on every start:
@@ -208,7 +212,7 @@ On kind, fixes are on already.
 On your cluster, upgrade with the executor, the only part that can change workloads, then roll checkout back and break it again, as in step 5:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.enabled=true --wait
+helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.enabled=true --set executor.namespaces='{shop}' --wait
 ```
 
 Click **Approve the rollback**. You approve exactly what you were shown: if the workload changes first, the approval no longer applies.

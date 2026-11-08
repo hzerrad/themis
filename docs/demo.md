@@ -45,7 +45,7 @@ Small local models work, but make more mistakes: a wrong target, or giving up ea
 
 ```bash
 make monitoring-up                            # Prometheus, kube-state-metrics and Alertmanager, first, so the chart finds Alertmanager
-make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the investigator and the executor
+make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the investigator and the executor in shop
 make demo-up                                  # the healthy checkout, catalog and search workloads in namespace shop
 ```
 
@@ -142,7 +142,7 @@ make demo-break
 make demo-alert                           # once a checkout pod is crash looping: posts the alert Alertmanager would
 ```
 
-`make run` and `make run-executor` use the `make dev-db` database; set `DATABASE_URL` to use another.
+`make run` and `make run-executor` use the `make dev-db` database; set `DATABASE_URL` to use another. `make run-executor` may change namespaces `default` and `shop`, the ones [`scripts/dev/themis.yaml`](../scripts/dev/themis.yaml) lists under `executor.namespaces`.
 
 | Process | Port | Serves |
 |---|---|---|

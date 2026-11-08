@@ -8,7 +8,7 @@ By default Themis is **read-only**: it collects evidence and runs its checks, se
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true` | None, unless the investigator is on | Each one after a person approves it |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
 
 ## Install
 
@@ -54,10 +54,13 @@ Container logs are classified `sensitive`, and with the default `investigator.mo
 ## Turn on fixes
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.enabled=true
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set executor.enabled=true --set executor.namespaces='{shop}'
 ```
 
-This installs `themis-executor` with a Role in each enrolled namespace: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. In the default `guarded` mode every action still needs a human to approve its digest in the UI.
+This installs `themis-executor` with a Role in each namespace `executor.namespaces` lists: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. Each must also be in `enrolledNamespaces`, and the chart refuses the executor with none listed. In the default `guarded` mode every action still needs a person to approve its digest in the UI.
+
+To limit which fixes it applies, list them in `executor.fixes`, such as `--set executor.fixes='{deployment.rollback-to-revision}'`. The executor checks the list itself before every write, and refuses any other fix, even one approved. Empty, it applies every fix the scenario packs offer.
 
 ## Upgrade
 
@@ -178,7 +181,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `telemetry.otlp.endpoint` | `""` | Where every component sends its traces over OTLP; empty, nothing is traced |
 | `telemetry.otlp.protocol` | `grpc` | `grpc` or `http/protobuf` |
 | `telemetry.otlp.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the collector, on ports 4317 and 4318 |
-| `enrolledNamespaces` | `[shop]` | Namespaces Themis may read and, with the executor, write. Each gets its own Roles; Themis never creates RBAC at runtime. |
+| `enrolledNamespaces` | `[shop]` | Namespaces Themis watches. Each gets its own Roles; Themis never creates RBAC at runtime. The executor changes only those `executor.namespaces` lists. |
 | `alerting.mode` | `""` | `poll`: Themis reads the active alerts from Alertmanager's API. `push`: Alertmanager sends them to Themis's webhook. Empty starts in poll mode, and the Setup page can switch it. `alerting.alertmanager.enabled=false`, from earlier charts, means `push` |
 | `alerting.alertmanager.address` | `""` | Alertmanager's base URL, read in poll mode. Empty: the chart looks for one in the cluster at install, or the Setup page sets it |
 | `alerting.alertmanager.tokenSecret` | `""` | A Secret with a `token` key, sent as a bearer token. Needs `address` |
@@ -214,6 +217,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `investigator.model.temperature` | `""` (`0`) | The temperature sent: a number, or `default` to send none and leave the model's own, as OpenAI's newer models require |
 | `investigator.model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |
 | `executor.enabled` | `false` | Install the executor and its write Roles |
+| `executor.namespaces` | `[]` | Required with the executor: the namespaces it may change, each also in `enrolledNamespaces`. Its Roles are only there |
+| `executor.fixes` | `[]` | The fixes the executor may apply, such as `deployment.rollback-to-revision`. Empty: every fix the scenario packs offer |
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |
 | `notifications.externalURL` | `""` | Where people reach the UI, for links in notices |

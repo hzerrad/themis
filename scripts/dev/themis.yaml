@@ -24,6 +24,9 @@ api:
 executor:
   address: 127.0.0.1:9091
   bearerTokenFile: bin/dev/executor-token
+  # The namespaces make run-executor may change: keep them in step with its
+  # --namespaces.
+  namespaces: [default, shop]
 
 # The profiles are the scenario packs' (scenarios/), as shipped: a profile
 # here named like a pack's would replace it entirely.

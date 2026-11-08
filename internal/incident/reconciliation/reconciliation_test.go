@@ -163,6 +163,31 @@ func TestReconcile_FixedOutsideThemis_SelfResolves(t *testing.T) {
 	}
 }
 
+// Themis's fix for another incident on the same workload is judged like any
+// other change, and named as Themis's.
+func TestReconcile_ThemisFixForAnotherIncident(t *testing.T) {
+	e := newEnv(t)
+	id := e.open(t, incident.AwaitingApproval)
+	// Field managers' times are in seconds: the latest writer is told apart
+	// from the fixture's only in a later one.
+	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
+	d := k8s.Deployment(t, e.ns, "checkout")
+	d.Spec.Template.Annotations = map[string]string{"fixed": "by-themis"}
+	if err := client.WithFieldOwner(k8s.Client, workload.FieldManager).Update(t.Context(), d); err != nil {
+		t.Fatal(err)
+	}
+	e.heal(t)
+	e.reconcile(t)
+	trail, err := e.store.Transitions(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := trail[len(trail)-1]
+	if want := "Recovered after a change by Themis, for another incident."; last.To != incident.SelfResolved || last.Reason != want {
+		t.Errorf("last transition = %s %q, want self_resolved %q", last.To, last.Reason, want)
+	}
+}
+
 // An incident handed to a person, waiting for the fix they suggest, is
 // watched too: fixed by hand, it closes as recovered; changed and still
 // failing, a new incident replaces it, so the next alert isn't lost in it.
