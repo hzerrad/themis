@@ -27,7 +27,6 @@ On kind, run `make kind-up` before this, and add `--context kind-themis-dev` to 
 On kind, create the cluster first with `make kind-up` (skip it if you did above), then install Prometheus and Alertmanager, so the chart finds Alertmanager at install. `KubePodCrashLooping` fires after 30 seconds there, instead of 15 minutes:
 
 ```bash
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 make monitoring-up
 ```
 

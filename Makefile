@@ -258,7 +258,7 @@ ui: ## Open the in-cluster Themis UI on http://localhost:8090, reconnecting when
 
 .PHONY: monitoring-up monitoring-down
 monitoring-up: ## Install Prometheus and Alertmanager on kind; Themis installed after finds Alertmanager and reads it
-	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring prometheus-community/prometheus \
+	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install monitoring oci://ghcr.io/prometheus-community/charts/prometheus \
 		--version $(PROMETHEUS_CHART) -n monitoring --create-namespace -f scripts/dev/monitoring/values.yaml -f scripts/dev/monitoring/rules.yaml --wait --timeout 5m
 
 monitoring-down: ## Uninstall the monitoring stack from kind
