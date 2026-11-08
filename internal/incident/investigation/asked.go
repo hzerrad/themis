@@ -78,7 +78,7 @@ func refuseAsk(k AskKind, format string, args ...any) error {
 // is closed.
 func TakesEvidence(state incident.State) bool {
 	return slices.Contains([]incident.State{
-		incident.Investigating, incident.AwaitingSuggestion, incident.Inconclusive, incident.AwaitingApproval,
+		incident.Investigating, incident.AwaitingSuggestion, incident.Inconclusive, incident.AwaitingApproval, incident.Recommended,
 		incident.Escalated, incident.ContainedEscalated,
 	}, state)
 }
@@ -194,7 +194,7 @@ func closedFor(state incident.State) string {
 		return "Themis is still reading the incident's first evidence."
 	case state.Terminal():
 		return "The incident is closed."
-	case state == incident.Diagnosed || state == incident.Proposed || state == incident.Recommended:
+	case state == incident.Diagnosed || state == incident.Proposed:
 		return "Themis is deciding a fix. Ask once it is decided."
 	}
 	return "Themis is applying or checking a fix. Ask once it is done."

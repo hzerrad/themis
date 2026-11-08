@@ -19,9 +19,47 @@ import (
 )
 
 // GitOpsRule names the decision of Themis's own rule that it never changes a
-// workload Argo CD or Flux manages, or may manage: it only recommends the fix.
-// Every profile's policy comes after it.
+// workload Argo CD or Flux manages, or may manage: it only recommends a fix
+// policy allows.
 const GitOpsRule = "gitops-owns-the-target"
+
+// ExecutorRule names the decision of Themis's own rule that it only
+// recommends a fix policy allows that the executor may not apply: none is
+// installed, or the install doesn't let it change the workload's namespace,
+// or apply that fix.
+const ExecutorRule = "executor-may-not-apply"
+
+// Recommends says whether d only recommends its fix, by one of the rules
+// above: Themis can't apply it, and a person makes the change.
+func Recommends(d policy.Decision) bool {
+	return d.PolicyID == GitOpsRule || d.PolicyID == ExecutorRule
+}
+
+// Reach is what the install lets Themis change, as the executor's own flags
+// say: Executor is nil when no executor is installed.
+type Reach struct {
+	Executor *config.Executor
+}
+
+// Why says why the executor may not apply fix to a workload in namespace,
+// or is empty when it may. A nil Reach lets it apply any, as the evaluation
+// decides.
+func (r *Reach) Why(namespace string, fix capability.Capability) string {
+	switch {
+	case r == nil:
+		return ""
+	case r.Executor == nil:
+		return "The executor is off."
+	case !slices.Contains(r.Executor.Namespaces, namespace):
+		return "The executor may not change workloads in " + namespace + ", as executor.namespaces doesn't list it."
+	case len(r.Executor.Fixes) > 0 && !slices.Contains(r.Executor.Fixes, fix.Name()):
+		return "The executor may not apply " + fix.Noun() + ", as executor.fixes doesn't list " + fix.Name() + "."
+	}
+	return ""
+}
+
+// yourself is where a person makes the change the executor may not.
+const yourself = " Apply the change yourself."
 
 // UnjustifiedRule names the decision of Themis's own rule that a fix needs
 // one of the checks its profile names for it to be true: evidence anyone may
@@ -59,6 +97,10 @@ type Fix struct {
 	// Undoes is the fix a restore puts back: the profiles offering it govern
 	// the restore.
 	Undoes string
+
+	// Reach is what the install lets Themis change: a fix policy allows that
+	// it can't apply is only recommended. Nil decides as though it could.
+	Reach *Reach
 }
 
 // governs is the fix whose profiles govern this one.
@@ -173,9 +215,10 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 // here; the evaluation, which skips judging, learns from the first profile
 // with a rule forbidding it which rule that is.
 //
-// Before any policy, a fix to a workload GitOps manages, or may manage, is
-// forbidden, whatever it changes: Argo CD or Flux would undo it, so Themis
-// only recommends it.
+// A fix policy allows that Themis can't apply is only recommended: to a
+// workload GitOps manages, or may manage, whatever it changes, since Argo CD
+// or Flux would undo it, or one the executor may not apply. A fix policy
+// forbids is never recommended.
 //
 // It also names the profile whose policy decided, when one did.
 func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, string, error) {
@@ -197,9 +240,6 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, string, err
 			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: UnjustifiedRule}, "", nil
 		}
 	}
-	if reason, managed := gitOps(in); managed {
-		return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: GitOpsRule}, "", nil
-	}
 	var (
 		out  policy.Decision
 		from string
@@ -213,14 +253,38 @@ func (d *Decider) decide(fix Fix, in policy.Input) (policy.Decision, string, err
 			out, from = got, p.Name
 		}
 	}
+	if out.Outcome != policy.Deny {
+		if reason, rule, ok := recommendation(fix, in); ok {
+			return policy.Decision{Outcome: policy.Deny, Reason: reason, PolicyID: rule}, "", nil
+		}
+	}
 	return out.Of(from), from, nil
+}
+
+// recommendation says why Themis only recommends fix, and by which of its
+// own rules, when it can't apply it to the workload in reads: Argo CD or
+// Flux manages it, or may, or the executor may not apply it. The reason ends
+// with where a person makes the change, but for a restore, which Themis
+// refers to a person with its fix in place.
+func recommendation(fix Fix, in policy.Input) (reason, rule string, ok bool) {
+	why, where, rule := gitOps(in), " Apply the change in Git.", GitOpsRule
+	if why == "" {
+		why, where, rule = fix.Reach.Why(in.Namespace, fix.Capability), yourself, ExecutorRule
+	}
+	switch {
+	case why == "":
+		return "", "", false
+	case fix.Restores != "":
+		return why, rule, true
+	}
+	return why + where, rule, true
 }
 
 // Bearing says which checks bore on a decided fix. Against are, for a fix a
 // profile's policy rule refused, the checks whose answer alone made that rule
 // match: another answer from one of them, and the rule wouldn't. Past are,
-// for a fix no rule refused, the checks the refusing rules of the profiles
-// governing it read, which it got past.
+// for a fix no rule refused, one only recommended included, the checks the
+// refusing rules of the profiles governing it read, which it got past.
 func (d *Decider) Bearing(fix Fix, got Decided) (against, past []string, err error) {
 	add := func(list []string, name string) []string {
 		if slices.Contains(list, name) {
@@ -237,9 +301,10 @@ func (d *Decider) Bearing(fix Fix, got Decided) (against, past []string, err err
 		for _, r := range p.EffectivePolicy().Rules {
 			refusing[r.Name] = r.Decision == config.DecisionDeny
 		}
+		allowed := got.Decision.Outcome != policy.Deny || Recommends(got.Decision)
 		for _, r := range pol.Reads() {
 			switch {
-			case got.Decision.Outcome != policy.Deny && refusing[r.Rule]:
+			case allowed && refusing[r.Rule]:
 				past = add(past, r.Check)
 			case got.Decision.Outcome == policy.Deny && p.Name == got.from && r.Rule == got.Decision.PolicyID && alone(pol, got.in, r):
 				against = add(against, r.Check)
@@ -266,26 +331,25 @@ func alone(pol *policy.Policy, in policy.Input, r policy.Read) bool {
 	return false
 }
 
-// gitOps says why Themis only recommends a fix to in's workload, if it does:
-// Argo CD or Flux manages it, as read live or by check.GitOpsManaged, or the
-// check couldn't tell, or didn't run.
-func gitOps(in policy.Input) (string, bool) {
-	const recommend = " Apply the change in Git."
+// gitOps says why Themis may not change in's workload, if it may not: Argo
+// CD or Flux manages it, as read live or by check.GitOpsManaged, or the check
+// couldn't tell, or didn't run.
+func gitOps(in policy.Input) string {
 	if in.ManagedBy != "" {
 		tool, ok := gitOpsTools[in.ManagedBy]
 		if !ok {
 			tool = in.ManagedBy
 		}
-		return tool + " manages this workload." + recommend, true
+		return tool + " manages this workload."
 	}
 	switch check.ParseTruth(in.Predicates[check.GitOpsManaged]) {
 	case check.False:
-		return "", false
+		return ""
 	case check.True:
-		return "Argo CD or Flux manages this workload." + recommend, true
+		return "Argo CD or Flux manages this workload."
 	case check.Unknown:
 	}
-	return "Themis couldn't tell whether Argo CD or Flux manages this workload." + recommend, true
+	return "Themis couldn't tell whether Argo CD or Flux manages this workload."
 }
 
 // Reads are the checks p's policy rules read, in rule order, each once.

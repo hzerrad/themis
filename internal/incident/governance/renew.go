@@ -56,8 +56,12 @@ func (w *Worker) renewable(in store.Incident, actions []store.Action, id string)
 	case in.State != incident.AwaitingSuggestion:
 		return "Refused. The incident isn't waiting for a fix."
 	}
-	if _, ok := w.Fixes[actions[i].Capability]; !ok {
+	f, ok := w.Fixes[actions[i].Capability]
+	if !ok {
 		return "Refused. Themis can't carry out this kind of fix."
+	}
+	if why := w.Reach.Why(in.Target.Namespace, f); why != "" {
+		return "Refused. " + why
 	}
 	matched := w.Config.Current().Matched(in.Profiles())
 	if len(matched) == 0 {

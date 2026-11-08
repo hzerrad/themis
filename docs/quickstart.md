@@ -164,10 +164,10 @@ kubectl -n shop set env deployment/checkout MODE=leak
 | After | You see |
 |---|---|
 | about 1 minute on kind | A checkout pod crash-loops, Themis reads the alert from Alertmanager, and an incident appears |
-| 1 to 5 minutes more, with the investigator | The incident is **Investigating** while Themis and the model read the evidence, then **Waiting for your approval** of the rollback they suggest |
+| 1 to 5 minutes more, with the investigator and fixes, as on kind | The incident is **Investigating** while Themis and the model read the evidence, then **Waiting for your approval** of the rollback they suggest |
 | seconds more, read-only | Themis collects the evidence and runs its checks. The incident is **Waiting for a suggested fix** |
 
-Open the incident. It states the facts Themis's checks found, each citing its evidence by number, then every piece of evidence, numbered, each opening to a view of its kind with its raw data. **Collect more evidence**, under the list, has Themis read more of it, such as another pod's logs. On a read-only install, the title says what fails, such as "checkout runs out of memory.", and you suggest the fix below the facts, with a preview of what Themis would do with it as you type. With the investigator, the page opens with the fix it asks you to approve, and adds below the facts the exact change Themis would make, read from the live cluster, with every field the rollback changes and the pods it restarts, and the checks for and against it, in one line that opens.
+Open the incident. It states the facts Themis's checks found, each citing its evidence by number, then every piece of evidence, numbered, each opening to a view of its kind with its raw data. **Collect more evidence**, under the list, has Themis read more of it, such as another pod's logs. On a read-only install, the title says what fails, such as "checkout runs out of memory.", and you suggest the fix below the facts, with a preview of what Themis would do with it as you type. Without fixes, Themis applies none: a fix it accepts is **Recommended**, and the page shows the exact change, the reason, and the kubectl command that makes it. With the investigator and fixes, the page opens with the fix it asks you to approve, and adds below the facts the exact change Themis would make, read from the live cluster, with every field the rollback changes and the pods it restarts, and the checks for and against it, in one line that opens.
 
 ## 5. Add the investigator
 
@@ -203,7 +203,7 @@ kubectl -n shop rollout undo deployment/checkout
 kubectl -n shop set env deployment/checkout MODE=leak
 ```
 
-Within 1 to 5 minutes, the investigator reads the evidence and suggests a rollback, and Themis checks it. Themis applies it only once fixes are on.
+Within 1 to 5 minutes, the investigator reads the evidence and suggests a rollback, and Themis checks it. With fixes off, the incident is **Recommended**, with the reason "The executor is off. Apply the change yourself." and the command that makes the change: `kubectl rollout undo` to the revision before the break. Run it, and Themis closes the incident once checkout recovers, as "Recovered after a change outside Themis".
 
 ## 6. Turn on fixes and approve the rollback
 

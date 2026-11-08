@@ -86,7 +86,7 @@ func Deny(ctx context.Context, s *store.Store, actionID, approver, reason string
 // DenyAndClose denies the action awaiting approval as Deny does, and closes
 // its incident with no change.
 func DenyAndClose(ctx context.Context, s *store.Store, actionID, approver, reason string, now time.Time) error {
-	return deny(ctx, s, actionID, approver, reason, now, incident.AwaitingApproval, incident.Recommended, incident.ClosedNoAction)
+	return deny(ctx, s, actionID, approver, reason, now, incident.AwaitingApproval, incident.ClosedNoAction)
 }
 
 func deny(ctx context.Context, s *store.Store, actionID, approver, reason string, now time.Time, path ...incident.State) error {

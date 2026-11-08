@@ -234,7 +234,8 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 
 // uiPreviewsOf are what the API answers a preview of a raise of the catalog's
 // memory limit: to 72Mi, accepted and put to a person by policy; to 50Mi,
-// refused by the rule that a raise must reach the memory limit's peak.
+// refused by the rule that a raise must reach the memory limit's peak; to
+// 80Mi, only recommended, as the executor is off.
 func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog) map[string]previewView {
 	t.Helper()
 	_, checks := uiShop(t, cat)
@@ -260,6 +261,13 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 			Action: store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))},
 		},
 	}
+	recommended := governance.Judgement{
+		Checks: checks, Past: accepted.Past,
+		Decided: governance.Decided{
+			Decision: policy.Decision{Outcome: policy.Deny, Reason: uiExecutorOff, PolicyID: governance.ExecutorRule},
+			Action:   store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"80Mi"`, 1))},
+		},
+	}
 	// A partial rollback of MODE on checkout, which keeps its new image.
 	rolledBack := store.Incident{ID: uiID(4), Profile: "rollout-regression", Target: uiTarget}
 	partial := governance.Judgement{
@@ -273,8 +281,9 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 		},
 	}
 	return map[string]previewView{
-		"accept": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("72Mi"), Judgement: &accepted}),
-		"refuse": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("50Mi"), Judgement: &refused, Refused: refused.Decided.Decision.Reason}),
+		"accept":    api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("72Mi"), Judgement: &accepted}),
+		"refuse":    api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("50Mi"), Judgement: &refused, Refused: refused.Decided.Decision.Reason}),
+		"recommend": api.viewPreview(suggestion.Preview{Incident: in, Matched: matched, Proposal: raise("80Mi"), Judgement: &recommended, Recommended: uiExecutorOff}),
 		"partial": api.viewPreview(suggestion.Preview{
 			Incident: rolledBack, Matched: cfg.Matched(rolledBack.Profiles()), Judgement: &partial,
 			Proposal: store.Proposal{Capability: rollback.PartialName, Target: uiTarget, Params: map[string]any{"revision": int64(1), "changes": []any{partialMode}}},
@@ -847,11 +856,11 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 		// Only recommended: Argo CD manages the workload.
 		{
 			incident: inc(13, incident.Recommended), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
-			transitions: append(uiProposed(), uiPath(4, uiStep(incident.Proposed, incident.Recommended, "Argo CD manages checkout: apply the change in Git."))...),
+			transitions: append(uiProposed(), uiPath(4, uiStep(incident.Proposed, incident.Recommended, uiGitOps))...),
 			proposals:   []store.Proposal{uiInvestigatorProposal(p1, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionDenied)
-				a.Decision, a.DecisionReason, a.PolicyID = "deny", "Argo CD manages checkout: apply the change in Git.", governance.GitOpsRule
+				a.Decision, a.DecisionReason, a.PolicyID = "deny", uiGitOps, governance.GitOpsRule
 				return a
 			}()}},
 		},
@@ -1080,6 +1089,54 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 				return a
 			}()}},
 		},
+		// Only recommended: the executor is off. The page shows the command
+		// that makes the rollback.
+		{
+			incident: inc(35, incident.Recommended), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			transitions: append(uiProposed(), uiPath(4, uiStep(incident.Proposed, incident.Recommended, uiExecutorOff))...),
+			proposals:   []store.Proposal{uiInvestigatorProposal(p1, store.ProposalAccepted)},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionDenied)
+				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", uiExecutorOff, governance.ExecutorRule, nil
+				return a
+			}()}},
+		},
+		// Only recommended: the executor may not apply a memory or CPU change.
+		{
+			incident: shop(36, incident.Recommended), evidence: shopEvidence, predicates: shopChecks, investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, uiNotListed),
+				uiStep(incident.Proposed, incident.Recommended, uiNotListed))...),
+			proposals: []store.Proposal{shopFix()},
+			actions: []actionRecord{{action: func() store.Action {
+				a := shopAction(a1, store.ActionDenied)
+				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", uiNotListed, governance.ExecutorRule, nil
+				return a
+			}()}},
+		},
+		// Only recommended: the executor may not change shop. Helm deploys
+		// checkout, so its manifest needs the change too.
+		{
+			incident: inc(37, incident.Recommended), evidence: evidenceOf, predicates: uiPredicates(false), investigation: done,
+			transitions: append(uiOpened(), uiPath(2,
+				uiStep(incident.Investigating, incident.Diagnosed, "Fix proposed."),
+				uiStep(incident.Diagnosed, incident.Proposed, uiOtherNamespace),
+				uiStep(incident.Proposed, incident.Recommended, uiOtherNamespace))...),
+			proposals: []store.Proposal{func() store.Proposal {
+				p := uiInvestigatorProposal(p1, store.ProposalAccepted)
+				p.Capability, p.Params = rollback.PartialName, map[string]any{"revision": int64(1), "changes": []any{partialMode}}
+				return p
+			}()},
+			actions: []actionRecord{{action: func() store.Action {
+				a := rb(a1, p1, store.ActionDenied)
+				a.Capability, a.PreState, a.Desired = rollback.PartialName, []byte(partialPre), []byte(partialDesired)
+				a.Params = map[string]any{"revision": int64(1), "changes": []any{partialMode}, "templateHash": "sha256:t2"}
+				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(1), "deployedBy": "Helm"}
+				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", uiOtherNamespace, governance.ExecutorRule, nil
+				return a
+			}()}},
+		},
 		// Waited for a suggested fix, and a person raised the limit by hand:
 		// the new pods are no longer throttled.
 		{
@@ -1143,6 +1200,14 @@ const (
 
 // shopRaise sets the memory limit of the catalog's app container alone.
 var shopRaise = map[string]any{"containers": map[string]any{"app": map[string]any{"limits": map[string]any{"memory": "72Mi"}}}}
+
+// Why Themis only recommends a fix: GitOps, or the executor may not apply it.
+const (
+	uiGitOps         = "Argo CD manages this workload. Apply the change in Git."
+	uiExecutorOff    = "The executor is off. Apply the change yourself."
+	uiNotListed      = "The executor may not apply a memory or CPU change, as executor.fixes doesn't list deployment.set-resources. Apply the change yourself."
+	uiOtherNamespace = "The executor may not change workloads in shop, as executor.namespaces doesn't list it. Apply the change yourself."
+)
 
 const (
 	// shopExpired is how an approval nobody gave ends.

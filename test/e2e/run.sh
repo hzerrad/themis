@@ -248,15 +248,18 @@ check "the incident closes without action" [ "$(state "$ID")" = closed_no_action
 check "approving after a denial is refused" [ "$(approve "$ID")" = 409 ]
 check "checkout is untouched" [ "$($K -n shop get deploy checkout -o jsonpath='{.spec.template.spec.containers[0].env[0].value}')" = leak ]
 
-log "3. a GitOps-managed target is not changed"
+log "3. a GitOps-managed target gets a recommendation, and the change made by hand closes it"
 heal
 $K -n shop annotate deploy/checkout argocd.argoproj.io/tracking-id=shop:apps/Deployment:shop/checkout --overwrite >/dev/null
 BEFORE=$(latest)
 $K -n shop set env deploy/checkout MODE=leak >/dev/null
 DEADLINE=$((SECONDS + 240)); ID=$BEFORE
 while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(latest); done
-check "Themis only recommends the fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated)" = closed_no_action ]
-check "the denying rule is gitops-owns-the-target" [ "$(action "$ID" '["PolicyID"]')" = gitops-owns-the-target ]
+check "Themis only recommends the fix" [ "$(wait_state "$ID" 300 recommended closed_no_action awaiting_approval escalated)" = recommended ]
+check "the rule is gitops-owns-the-target" [ "$(action "$ID" '["PolicyID"]')" = gitops-owns-the-target ]
+check "approving a recommendation is refused" [ "$(approve "$ID")" = 409 ]
+$K -n shop set env deploy/checkout MODE=healthy >/dev/null
+check "the change made by hand closes the incident as recovered" [ "$(wait_state "$ID" 240 self_resolved canceled escalated)" = self_resolved ]
 
 log "4. a human edit during verification makes the outcome inconclusive"
 ID=$(incident_after_break)

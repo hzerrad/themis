@@ -40,6 +40,9 @@ type Worker struct {
 	// from it, for a fix whose approval a person asks for again. Without
 	// it, nobody can.
 	Recheck Rechecker
+	// Reach is what the install lets Themis change: a fix it can't apply is
+	// only recommended. Nil decides as though it could apply any.
+	Reach *Reach
 
 	decider Decider
 }
@@ -57,8 +60,8 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[GovernArgs]) error {
 // The investigator's own refused fix hands the incident to a person, who
 // suggests another, while its checks find its failure or support a fix, and
 // closes it otherwise, as an investigation that proposes nothing does.
-// Themis only recommending a fix, GitOps owning the workload, ends it
-// either way.
+// A fix Themis only recommends, as it can't apply it, waits either way for a
+// person to make the change.
 func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 	p, err := w.Store.Proposal(ctx, w.Store.DB(), proposalID)
 	if err != nil {
@@ -121,23 +124,28 @@ func (w *Worker) Govern(ctx context.Context, proposalID string) error {
 			if waits {
 				return w.Store.TransitionPath(ctx, tx, in.ID, busy, actor, incident.Diagnosed, incident.AwaitingSuggestion)
 			}
-			return w.Store.TransitionPath(ctx, tx, in.ID, busy, actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+			return w.Store.TransitionPath(ctx, tx, in.ID, busy, actor, incident.Diagnosed, incident.ClosedNoAction)
 		}
 		if err != nil {
 			return err
 		}
 		store.AfterCommit(tx, policyDecisions.WithLabelValues(decisionLabel(d.Decision)).Inc)
-		if d.Decision.Outcome == policy.Deny && d.ManagedBy != "" {
+		if d.Decision.PolicyID == GitOpsRule {
 			store.AfterCommit(tx, gitOpsRefusals.Inc)
 		}
-		if d.Decision.Outcome == policy.Deny && waits && d.Decision.PolicyID != GitOpsRule {
+		// A person makes the change Themis only recommends. It watches the
+		// workload meanwhile, and judges the change once made.
+		if Recommends(d.Decision) {
+			return w.Store.ReferPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended)
+		}
+		if d.Decision.Outcome == policy.Deny && waits {
 			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingSuggestion)
 		}
-		if d.Decision.Outcome == policy.Deny && referral != "" && d.Decision.PolicyID != GitOpsRule {
+		if d.Decision.Outcome == policy.Deny && referral != "" {
 			return w.Store.ReferPath(ctx, tx, in.ID, referred(d.Decision.Reason, referral), actor, incident.Diagnosed, incident.Proposed, incident.AwaitingSuggestion)
 		}
 		if d.Decision.Outcome == policy.Deny {
-			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.Recommended, incident.ClosedNoAction)
+			return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.ClosedNoAction)
 		}
 		return w.Store.TransitionPath(ctx, tx, in.ID, d.Decision.Reason, actor, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval)
 	})
@@ -191,7 +199,8 @@ func (w *Worker) judge(ctx context.Context, in store.Incident, matched config.Ma
 	fix := Fix{
 		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks, Words: w.Checks, EvidenceHasInstructions: flagged,
 		Capability: f, Params: p.Params,
-		By: Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
+		By:    Suggester{Source: p.Provenance["source"], Authenticated: p.Authenticated, External: p.LeaseID == ""},
+		Reach: w.Reach,
 	}
 	d, err := w.decider.Decide(ctx, w.Reader, fix)
 	if errors.Is(err, capability.ErrInvalidParams) {
@@ -277,7 +286,7 @@ func referred(reason, referral string) string {
 
 func (w *Worker) close(ctx context.Context, incidentID, reason string) error {
 	return w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		return w.Store.TransitionPath(ctx, tx, incidentID, reason, actor, incident.Diagnosed, incident.Recommended, incident.ClosedNoAction)
+		return w.Store.TransitionPath(ctx, tx, incidentID, reason, actor, incident.Diagnosed, incident.ClosedNoAction)
 	})
 }
 

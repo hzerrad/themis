@@ -177,7 +177,7 @@ const SUGGESTABLE = ["investigating", "awaiting_suggestion", "inconclusive"];
 const REFUSING = ["diagnosed", "proposed"];
 
 // stateOf names an incident's state, with its tone. how says what the state
-// alone can't: whether the fix was undone, or only recommended.
+// alone can't: whether the fix was undone.
 function stateOf(state, how = {}) {
   if (state === "awaiting_approval") return [can("approver") ? "Waiting for your approval" : "Waiting for approval", "wait"];
   if (state === "awaiting_suggestion" || state === "inconclusive") return ["Waiting for a suggested fix", "wait"];
@@ -188,7 +188,7 @@ function stateOf(state, how = {}) {
   if (state === "resolved") return ["Fixed", "good"];
   if (state === "escalated" && how.restored) return ["Restored", "bad"];
   if (REFERRED.includes(state)) return ["Referred to a person", "bad"];
-  if (state === "recommended" || (state === "closed_no_action" && how.recommended)) return ["Recommended", "done"];
+  if (state === "recommended") return ["Recommended", "wait"];
   if (state === "closed_no_action" || state === "rejected") return ["Closed, no change", "done"];
   if (state === "self_resolved") return ["Recovered on its own", "done"];
   if (state === "canceled") return ["Canceled", "done"];
@@ -931,22 +931,30 @@ function queueGroup(i) {
   if (i.supersededBy) return "closed";
   if (i.state === "awaiting_approval") return can("approver") ? "needs" : "open";
   if (i.state === "awaiting_suggestion" || i.state === "inconclusive") return can("approver") ? "needs" : "open";
+  if (i.state === "recommended") return can("responder") ? "needs" : "open";
   if (REFERRED.includes(i.state)) return can("responder") ? "needs" : "open";
   return TERMINAL.includes(i.state) ? "closed" : "open";
 }
 
-// GITOPS is the rule by which Themis only recommends a fix: Argo CD or Flux
-// manages the workload. A fix denied or set aside passes through the same
-// state, but isn't recommended.
+// GITOPS and EXECUTOR are the rules by which Themis only recommends a fix
+// policy allows, for a person to make the change: Argo CD or Flux manages
+// the workload, or the executor may not apply the fix there.
 const GITOPS = "gitops-owns-the-target";
+const EXECUTOR = "executor-may-not-apply";
+const RECOMMENDING = [GITOPS, EXECUTOR];
 
-// listHow tells apart, from an incident's summary, a fix undone and one only
-// recommended. A restore that didn't happen says "Not restored".
+// nextStep is how a person makes the change Themis recommends: in Git
+// under GitOps, or else themselves.
+function nextStep(rule) {
+  return rule === GITOPS ? "Apply it in Git." : "Apply it yourself.";
+}
+
+// listHow tells, from an incident's summary, a fix undone. A restore that
+// didn't happen says "Not restored".
 function listHow(i) {
   const s = i.summary || {};
   return {
     restored: i.state === "escalated" && s.from === "restoring" && !String(s.reason || "").startsWith("Not restored"),
-    recommended: s.rule === GITOPS,
   };
 }
 
@@ -958,12 +966,13 @@ function rowWhat(i) {
   const em = (text) => (text ? h("em", {}, text) : null);
   if (i.supersededBy) return [changedOutside(s.reason || ""), em("A newer incident covers it.")];
   if (i.state === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(fx.short + "?")];
+  if (i.state === "recommended" && fx) return [cause ? cause + " " : null, em(sentence(fx.short) + " " + nextStep(s.rule))];
   if (WORKING.includes(i.state)) return "Collecting and weighing evidence.";
   if (i.state === "awaiting_suggestion" && REFERRAL.test(s.reason || "")) return [cause ? cause + " " : null, em("Referred to a person.")];
   if (i.state === "awaiting_suggestion" && s.from === "awaiting_approval" && fx) return [cause ? cause + " " : null, em(cap(fx.noun) + " denied. Waiting for another fix.")];
   if (i.state === "awaiting_suggestion" && REFUSING.includes(s.from)) return [cause ? cause + " " : null, em("Suggested fix refused. Waiting for another fix.")];
   if (i.state === "awaiting_suggestion" || i.state === "inconclusive") return [cause ? cause + " " : null, em("No fix proposed yet.")];
-  if (i.state === "closed_no_action" && !listHow(i).recommended && cause) return [cause + " ", em(s.reason)];
+  if (i.state === "closed_no_action" && cause) return [cause + " ", em(s.reason)];
   return s.reason || cause || "";
 }
 
@@ -1236,8 +1245,9 @@ function decision(a, d, ctx, latest, reload) {
   const fx = fixWords(a);
   const awaiting = a.State === "awaiting_approval";
   const gitOps = a.PolicyID === GITOPS;
+  const recommending = RECOMMENDING.includes(a.PolicyID);
   const facts = [
-    awaiting || gitOps ? restarts(a.BlastRadius) : null,
+    awaiting || recommending ? restarts(a.BlastRadius) : null,
     awaiting && a.ExpiresAt ? ["Approve before ", h("b", {}, when(a.ExpiresAt)), ". "] : null,
     awaiting ? "Applies exactly this change. " : null,
     awaiting && fx.verifies ? "Then checks that " + fx.verifies + ". " : null,
@@ -1276,17 +1286,24 @@ function decision(a, d, ctx, latest, reload) {
       field("Reason for denying (optional)", reason), deny, close, error);
   } else if (awaiting) {
     side = h("div", { class: "act" }, h("p", { class: "quiet" }, "Approving or denying requires the approver role."));
-  } else if (gitOps) {
-    side = h("div", { class: "act" }, h("h3", {}, "Next step"), h("p", {}, "Apply this change in Git."));
+  } else if (recommending && latest && d.Incident.state === "recommended") {
+    const commands = a.Commands || [];
+    const how = gitOps ? h("p", {}, "Apply this change in Git.")
+      : commands.length ? [h("p", {}, commands.length > 1 ? "Run these commands:" : "Run this command:"), copyable(commands.join("\n"))]
+        : h("p", {}, "Make this change with kubectl, or where " + t.name + "'s manifest lives.");
+    side = h("div", { class: "act" }, h("h3", {}, "Next step"), how,
+      h("p", { class: "fine" }, "Themis checks the change once it is made."));
+  } else if (recommending) {
+    side = h("div", {}, h("h3", {}, "Decision"), h("p", {}, "Recommended. " + a.DecisionReason));
   } else {
     side = h("div", {}, h("h3", {}, "Decision"), result(a));
   }
   // Something else deploys the workload, such as Helm: its next deploy writes
-  // the template it has over this change. GitOps is only recommended to.
-  const deployer = awaiting && !gitOps && !(a.Params || {}).restores && (a.BlastRadius || {}).deployedBy;
+  // the template it has over this change. Under GitOps, it is made in Git.
+  const deployer = (awaiting || recommending) && !gitOps && !(a.Params || {}).restores && (a.BlastRadius || {}).deployedBy;
   return h("section", { class: "decide", "aria-label": latest ? "The change" : "An earlier change" },
     h("div", {},
-      h("h3", {}, latest ? (gitOps ? "The recommended change" : "The exact change") : cap(fx.short)),
+      h("h3", {}, latest ? (recommending ? "The recommended change" : "The exact change") : cap(fx.short)),
       changesTable(a.Changes, a.BlastRadius),
       fx.note ? h("p", { class: "terms" }, fx.note) : null,
       facts.some(Boolean) ? h("p", { class: "terms" }, facts) : null,
@@ -2204,8 +2221,8 @@ function headline(d, ctx) {
   const { fx, cause, action } = ctx;
   const s = inc.state;
   if (s === "awaiting_approval" && fx) return [fx.question, cause || reason];
-  if (ctx.recommended && fx && !["resolved", "self_resolved", "canceled"].includes(s)) {
-    return [sentence(fx.short + " in Git"), action ? action.DecisionReason : reason];
+  if (s === "recommended" && fx && action) {
+    return [sentence(fx.short + (action.PolicyID === GITOPS ? " in Git" : "")), action.DecisionReason];
   }
   if (s === "received" || s === "investigating") {
     const got = [...new Set((d.Evidence || []).map((e) => (String(e.Kind).startsWith("Themis") ? e.Kind : String(e.Kind).toLowerCase())))];
@@ -2319,10 +2336,12 @@ function againBlock(d, reload) {
 }
 
 // closeBlock lets an approver close an incident that waits for a suggested
-// fix, with no change: Themis keeps one whose checks still find its failure
-// open until it recovers or a person closes it.
+// fix, or for a person to make the change Themis recommends, with no change:
+// Themis keeps one whose checks still find its failure open until it
+// recovers or a person closes it.
 function closeBlock(d, reload) {
-  if (!SUGGESTABLE.includes(d.Incident.state) || d.Incident.state === "investigating" || !can("approver")) return null;
+  const state = d.Incident.state;
+  if (!(SUGGESTABLE.includes(state) || state === "recommended") || state === "investigating" || !can("approver")) return null;
   const error = h("div", { class: "error", role: "alert" });
   const reason = h("textarea", { rows: "2" });
   const button = h("button", { class: "btn deny", type: "button",
@@ -2339,7 +2358,9 @@ function closeBlock(d, reload) {
       }
     } }, "Close");
   return h("div", { class: "act" }, field("Reason for closing (optional)", reason), button,
-    h("p", { class: "fine" }, "Closes the incident with no change. Themis doesn't close it on its own while its checks find the failure."), error);
+    h("p", { class: "fine" }, state === "recommended"
+      ? "Closes the incident with no change. Otherwise Themis closes it once the change is made and the workload recovers, or its alerts stop."
+      : "Closes the incident with no change. Themis doesn't close it on its own while its checks find the failure."), error);
 }
 
 // followsNote says which fix of Themis's the workload ran when the incident
@@ -2372,7 +2393,6 @@ async function detail(id) {
     undone: undone ? fixWords(undone) : fx,
     cause: lead ? causeText(lead.rootCauseClass, (d.Causes || {})[lead.rootCauseClass]) : null,
     restored: actions.some((a) => (a.Params || {}).restores && a.Execution && a.Execution.Status === "succeeded"),
-    recommended: actions.some((a) => a.PolicyID === GITOPS),
   };
   const [word, tone] = stateOf(inc.state, ctx);
   const [title, because, plain] = headline(d, ctx);

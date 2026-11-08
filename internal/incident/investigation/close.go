@@ -12,17 +12,18 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// Close closes an incident waiting for a suggested fix with no change, as
-// the person by asked, keeping their reason, if any, exactly as written:
-// "Closed by alice. Reason: handled by the vendor." Nothing else closes one
-// whose checks still find its failure. A *Refusal says why it can't be.
+// Close closes an incident waiting for a suggested fix, or for a person to
+// make the change Themis recommends, with no change, as the person by asked,
+// keeping their reason, if any, exactly as written: "Closed by alice.
+// Reason: handled by the vendor." Nothing else closes one whose checks still
+// find its failure. A *Refusal says why it can't be.
 func Close(ctx context.Context, s *store.Store, incidentID, by, reason string) error {
 	return s.InTx(ctx, func(tx pgx.Tx) error {
 		state, err := s.LockIncident(ctx, tx, incidentID)
 		if err != nil {
 			return err
 		}
-		if state != incident.AwaitingSuggestion && state != incident.Inconclusive {
+		if state != incident.AwaitingSuggestion && state != incident.Inconclusive && state != incident.Recommended {
 			return &Refusal{Reason: "The incident isn't waiting for a fix."}
 		}
 		err = s.Transition(ctx, tx, store.TransitionArgs{

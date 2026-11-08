@@ -29,6 +29,9 @@ type Preview struct {
 	// Refused says why Themis would refuse it, in the words of the refusal
 	// it would keep; empty when the fix would go to a person.
 	Refused string
+	// Recommended says why Themis would only recommend it, in the words of
+	// the decision, for a person to make the change; empty otherwise.
+	Recommended string
 	// Judgement is governing's, once the suggestion gets that far.
 	Judgement *governance.Judgement
 }
@@ -83,11 +86,13 @@ func (b *Inbox) Preview(ctx context.Context, from Suggester, s Suggestion) (Prev
 		return Preview{}, err
 	}
 	out.Judgement = &j
-	switch {
+	switch d := j.Decided.Decision; {
 	case j.Refused != "":
 		out.Refused = j.Refused
-	case j.Decided.Decision.Outcome == policy.Deny:
-		out.Refused = j.Decided.Decision.Reason
+	case governance.Recommends(d):
+		out.Recommended = d.Reason
+	case d.Outcome == policy.Deny:
+		out.Refused = d.Reason
 	}
 	return out, nil
 }

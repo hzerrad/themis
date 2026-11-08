@@ -85,7 +85,8 @@ func TestCanTransition(t *testing.T) {
 		{incident.Received, incident.Executing, false},
 		// Side exits.
 		{incident.AwaitingApproval, incident.AwaitingSuggestion, true}, // denied: another fix may come
-		{incident.AwaitingApproval, incident.Recommended, true},        // denied and closed
+		{incident.AwaitingApproval, incident.ClosedNoAction, true},     // denied and closed
+		{incident.AwaitingApproval, incident.Recommended, false},       // only a decision recommends
 		{incident.AwaitingApproval, incident.Escalated, false},         // approval expired: it waits for a person's fix
 		{incident.AwaitingApproval, incident.Diagnosed, false},         // one decision at a time
 		{incident.Proposed, incident.Authorized, true},                 // policy allows without approval

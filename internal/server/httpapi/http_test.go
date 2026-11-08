@@ -25,6 +25,7 @@ import (
 	"github.com/hzerrad/themis/internal/config"
 	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/incident/investigation"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/server/httpapi"
@@ -176,6 +177,17 @@ func TestApprove_Expired(t *testing.T) {
 	e.clock = now.Add(time.Hour)
 	if rec := e.approve(t, a, a.Digest); rec.Code != http.StatusGone {
 		t.Errorf("status = %d, want 410", rec.Code)
+	}
+}
+
+// A fix put to a person before the install stopped Themis applying it isn't
+// approved, and the refusal says why: the executor wouldn't apply it.
+func TestApprove_FixThemisCantApplyNow(t *testing.T) {
+	e := newEnvWith(t, func(a *httpapi.API) { a.Reach = &governance.Reach{} })
+	a := e.awaiting(t)
+	rec := e.approve(t, a, a.Digest)
+	if got := strings.TrimSpace(rec.Body.String()); rec.Code != http.StatusConflict || got != "Refused. The executor is off." {
+		t.Errorf("status = %d, body = %q; want 409 and why", rec.Code, got)
 	}
 }
 

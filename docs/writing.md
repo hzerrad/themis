@@ -72,7 +72,7 @@ When checks of the incident read that kind of evidence, the second sentence name
 | Referred to a person | Themis hands the incident over | escalated, needs a human |
 | Waiting for a suggested fix | The incident waits for a fix a person or a tool suggests: after a denial or a refusal, or referred with no fix applied | pending, waiting for input |
 | Closed, no change | Nothing was applied | closed without acting, nothing changed |
-| Recommended | A change Themis may not apply itself (GitOps) | suggested |
+| Recommended | A change Themis can't apply here, which a person makes: the executor is off or may not apply it, or GitOps manages the workload | suggested |
 | Operational | A part of the install works (Status) | working, OK, healthy |
 | Action required | A part of the install needs a change by a person (Status) | needs attention, warning |
 | Failing | A part of the install doesn't work (Status) | not working, broken, down |

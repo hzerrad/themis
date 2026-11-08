@@ -75,7 +75,8 @@ Investigator: Off. Each incident waits for a fix suggested by a person or a
 {{- if .Values.executor.enabled }}
 Fixes:        On in {{ include "themis.executorNamespaces" . | fromJsonArray | join ", " }}{{ with .Values.executor.fixes }}, {{ join ", " . }} only{{ end }}. A person approves each one.
 {{- else }}
-Fixes:        Off. Themis never applies a fix. To have it apply the fixes a
+Fixes:        Off. Themis recommends each fix, with the kubectl commands that
+              make it, and never applies one. To have it apply the fixes a
               person approves, set executor.enabled=true and
               executor.namespaces.
 {{- end }}

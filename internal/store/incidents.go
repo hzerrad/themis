@@ -339,7 +339,8 @@ func (s *Store) SetObservedSpec(ctx context.Context, tx pgx.Tx, id, hash string)
 
 // NextReconcilable returns up to limit open incidents not yet executing
 // whose template is known, those waiting for a person's suggested fix
-// included: a person may fix the workload by hand instead. Those reconciled
+// included: a person may fix the workload by hand instead. So are those
+// whose fix Themis only recommends, which a person makes. Those reconciled
 // longest ago come first, never reconciled first, then the oldest, and each
 // is recorded as reconciled now: however many there are, every one comes up
 // in turn. An incident another transaction holds waits for the next run.
@@ -348,7 +349,7 @@ func (s *Store) NextReconcilable(ctx context.Context, limit int) ([]Incident, er
 	UPDATE incidents SET reconciled_at = now()
 	FROM (
 		SELECT id AS picked FROM incidents
-		WHERE state IN ('investigating', 'awaiting_suggestion', 'diagnosed', 'proposed', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
+		WHERE state IN ('investigating', 'awaiting_suggestion', 'diagnosed', 'proposed', 'recommended', 'awaiting_approval', 'authorized') AND observed_spec_hash <> ''
 		ORDER BY reconciled_at NULLS FIRST, created_at, id LIMIT $1
 		FOR UPDATE SKIP LOCKED
 	) next
