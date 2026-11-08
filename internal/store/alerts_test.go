@@ -97,11 +97,12 @@ func TestAlert_Lifecycle(t *testing.T) {
 		steps:     []alertStep{firing("a", episode2), resolving("a", episode1)},
 		incidents: 1, firing: 1, status: "firing",
 	}, {
-		// A firing notification that arrives after the resolution of the same
-		// episode does not revive it.
-		name:      "a late firing is ignored",
+		// A firing of an episode whose resolution was recorded means it goes
+		// on, as when Alertmanager let its end pass: the caller tells a late
+		// notification apart with Resolved before recording it.
+		name:      "an episode that goes on fires again",
 		steps:     []alertStep{firing("a", episode1), resolving("a", episode1), firing("a", episode1)},
-		incidents: 1, firing: 0, status: "resolved",
+		incidents: 1, firing: 0, status: "firing",
 	}, {
 		name:      "a new episode fires again",
 		steps:     []alertStep{firing("a", episode1), resolving("a", episode1), firing("a", episode2)},

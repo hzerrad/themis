@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -59,11 +60,11 @@ func TestKubernetes_HighestAmongThePodsAsked(t *testing.T) {
 		podMetrics("cart-a", map[string][2]string{"app": {"900Mi", "2"}}),
 	}}, nil))
 
-	memory, err := src.Memory(t.Context(), asked)
+	memory, err := src.Memory(t.Context(), asked, time.Hour)
 	if err != nil || !memory.Answered() || memory.Containers["app"] != 150<<20 || memory.Containers["proxy"] != 10<<20 || len(memory.Containers) != 2 {
 		t.Errorf("Memory = %+v, %v, want app 150Mi and proxy 10Mi", memory, err)
 	}
-	cpu, err := src.CPU(t.Context(), asked)
+	cpu, err := src.CPU(t.Context(), asked, time.Hour)
 	if err != nil || cpu.Containers["app"] != 0.2 {
 		t.Errorf("CPU = %+v, %v, want app 0.2 cores", cpu, err)
 	}
@@ -91,7 +92,7 @@ func TestKubernetes_CantAnswer(t *testing.T) {
 		"not allowed to read": {err: apierrors.NewForbidden(gr, "", errors.New("no")), forbidden: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r, err := metrics.NewKubernetes(metricsAPI(tc.list, tc.err)).Memory(t.Context(), asked)
+			r, err := metrics.NewKubernetes(metricsAPI(tc.list, tc.err)).Memory(t.Context(), asked, time.Hour)
 			if apierrors.IsForbidden(err) != tc.forbidden || (!tc.forbidden && (err != nil || !strings.Contains(r.Unavailable, tc.unavailable))) {
 				t.Errorf("Memory = %+v, %v, want unavailable %q or forbidden %v", r, err, tc.unavailable, tc.forbidden)
 			}

@@ -76,16 +76,16 @@ func TestPrometheus_Queries(t *testing.T) {
 		want []string
 	}{
 		"memory": {
-			func() (metrics.Reading, error) { return src.Memory(t.Context(), dotted) },
-			[]string{"max by (container) (container_memory_working_set_bytes{"},
+			func() (metrics.Reading, error) { return src.Memory(t.Context(), dotted, time.Hour) },
+			[]string{"max by (container) (max by (pod, container) (container_memory_working_set_bytes{"},
 		},
 		"peak memory": {
 			func() (metrics.Reading, error) { return src.PeakMemory(t.Context(), dotted, 2*time.Hour) },
 			[]string{"max_over_time(container_memory_working_set_bytes{", "[7200s]"},
 		},
 		"cpu": {
-			func() (metrics.Reading, error) { return src.CPU(t.Context(), dotted) },
-			[]string{"rate(container_cpu_usage_seconds_total{", "[5m]"},
+			func() (metrics.Reading, error) { return src.CPU(t.Context(), dotted, time.Hour) },
+			[]string{"avg_over_time((max by (pod, container) (deriv(container_cpu_usage_seconds_total{", "[2m])))[5m:])"},
 		},
 		"throttling": {
 			func() (metrics.Reading, error) { return src.Throttling(t.Context(), dotted, time.Hour) },
@@ -135,7 +135,7 @@ func TestPrometheus_CantAnswer(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(&promServer{reply: func(string) (int, string) { return tc.status, tc.body }})
 			defer srv.Close()
-			r, err := newPrometheus(t, srv, tc.edit).Memory(t.Context(), dotted)
+			r, err := newPrometheus(t, srv, tc.edit).Memory(t.Context(), dotted, time.Hour)
 			switch {
 			case tc.err != "" && (err == nil || !strings.Contains(err.Error(), tc.err) || strings.Contains(err.Error(), "hunter2")):
 				t.Errorf("err = %v, want one saying %q", err, tc.err)
@@ -143,6 +143,51 @@ func TestPrometheus_CantAnswer(t *testing.T) {
 				t.Errorf("reading = %+v, %v, want unavailable saying %q", r, err, tc.unavailable)
 			}
 		})
+	}
+}
+
+// Just after a gap in Prometheus's data, as when the cluster stopped running
+// for a few minutes, it has fewer than two samples of the last 5 minutes, or
+// none within the lookback, until its next scrapes, while the window still
+// holds its figures. The alerts held up by the gap arrive then. What each
+// container uses now is then the latest within the window, not none.
+func TestPrometheus_NowJustAfterAGap(t *testing.T) {
+	var queries []string
+	recent := true
+	fake := &promServer{reply: func(q string) (int, string) {
+		queries = append(queries, q)
+		if !recent && !strings.Contains(q, "last_over_time(") {
+			return http.StatusOK, vector()
+		}
+		return http.StatusOK, vector(sample("app", "0.19"))
+	}}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	src := newPrometheus(t, srv, nil)
+	reads := map[string]func() (metrics.Reading, error){
+		"memory": func() (metrics.Reading, error) { return src.Memory(t.Context(), dotted, time.Hour) },
+		"cpu":    func() (metrics.Reading, error) { return src.CPU(t.Context(), dotted, time.Hour) },
+	}
+	for name, read := range reads {
+		t.Run(name, func(t *testing.T) {
+			recent, queries = true, nil
+			if r, err := read(); err != nil || r.Containers["app"] != 0.19 || len(queries) != 1 {
+				t.Fatalf("reading = %+v, %v after %d queries, want app at 0.19 from the one now", r, err, len(queries))
+			}
+			recent, queries = false, nil
+			r, err := read()
+			if err != nil || !r.Answered() || r.Containers["app"] != 0.19 {
+				t.Fatalf("reading = %+v, %v, want app at 0.19, the latest within the window", r, err)
+			}
+			if len(queries) != 2 || !strings.Contains(queries[1], "[3600s:]") || !strings.Contains(queries[1], "max by (pod, container) (") {
+				t.Errorf("queries = %q, want now, then each pod's latest within the hour", queries)
+			}
+		})
+	}
+	// Without figures in the window either, Prometheus has none for the pods.
+	fake.reply = func(string) (int, string) { return http.StatusOK, vector() }
+	if r, err := src.CPU(t.Context(), dotted, time.Hour); err != nil || r.Unavailable != metrics.NoCPUFigures {
+		t.Errorf("reading = %+v, %v, want it unavailable, saying why", r, err)
 	}
 }
 
@@ -283,13 +328,17 @@ type stub struct {
 
 func (s stub) Name() string { return s.name }
 
-func (s stub) Memory(context.Context, metrics.Pods) (metrics.Reading, error) { return s.r, s.err }
+func (s stub) Memory(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
+	return s.r, s.err
+}
 
 func (s stub) PeakMemory(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return s.r, s.err
 }
 
-func (s stub) CPU(context.Context, metrics.Pods) (metrics.Reading, error) { return s.r, s.err }
+func (s stub) CPU(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
+	return s.r, s.err
+}
 
 func (s stub) Throttling(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return s.r, s.err

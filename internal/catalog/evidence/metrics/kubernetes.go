@@ -41,13 +41,14 @@ func NewKubernetes(c metricsclient.Interface) Source { return metricsAPI{client:
 
 func (metricsAPI) Name() string { return Kubernetes }
 
-func (k metricsAPI) Memory(ctx context.Context, pods Pods) (Reading, error) {
+// Memory is what the metrics API says now: it keeps nothing older.
+func (k metricsAPI) Memory(ctx context.Context, pods Pods, _ time.Duration) (Reading, error) {
 	return k.read(ctx, pods, func(c metricsv1beta1.ContainerMetrics) float64 {
 		return float64(c.Usage.Memory().Value())
 	})
 }
 
-func (k metricsAPI) CPU(ctx context.Context, pods Pods) (Reading, error) {
+func (k metricsAPI) CPU(ctx context.Context, pods Pods, _ time.Duration) (Reading, error) {
 	return k.read(ctx, pods, func(c metricsv1beta1.ContainerMetrics) float64 {
 		return float64(c.Usage.Cpu().MilliValue()) / 1000
 	})

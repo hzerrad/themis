@@ -110,6 +110,15 @@ func TestMessages_OneLinePerFinding(t *testing.T) {
 	if got := writer.Messages(checkout, noHistory); len(got) != 1 || got[0] != "Container memory and revision health: no history in the Kubernetes metrics API. Set metrics.prometheus.address." {
 		t.Errorf("got %q, want one line for both, with the remedy", got)
 	}
+	// Prometheus is set up and answered, without figures for the pods: that
+	// is what happened, though the metrics API asked after it isn't served.
+	empty := []store.EvidenceGap{
+		{Template: evidence.ContainerMemory, Cause: evidence.GapUnavailable, Detail: "collect container_memory: no figures: " + metrics.NoMemoryFigures + "; " + metrics.ErrNotServed.Error()},
+		{Template: evidence.ContainerCPU, Cause: evidence.GapUnavailable, Detail: "collect container_cpu: no figures: " + metrics.NoCPUFigures + "; " + metrics.ErrNotServed.Error() + "; " + metrics.NoThrottlingFigures},
+	}
+	if got := writer.Messages(checkout, empty); len(got) != 1 || got[0] != "Container memory and container CPU: Prometheus has no figures for the pods of checkout. Check that it scrapes the kubelet's cAdvisor metrics." {
+		t.Errorf("got %q, want one line saying Prometheus answered without figures", got)
+	}
 	budget := []store.EvidenceGap{{Template: evidence.PodStates, Cause: evidence.GapBudgetSpent}, {Template: evidence.TargetEvents, Cause: evidence.GapForbidden}, {Template: evidence.ContainerLogsTail, Cause: evidence.GapBudgetSpent}}
 	if got := writer.Messages(checkout, budget); len(got) != 2 || !strings.HasPrefix(got[0], "Pod states and container logs: not read. ") {
 		t.Errorf("got %q, want the budget once, for both", got)

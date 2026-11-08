@@ -108,12 +108,15 @@ const ThrottledShare = 0.25
 type Source interface {
 	// Name names the source in evidence, such as kubernetes or prometheus.
 	Name() string
-	// Memory is the memory each container uses now (its working set).
-	Memory(ctx context.Context, pods Pods) (Reading, error)
+	// Memory is the memory each container uses now (its working set). A
+	// source with history that has no figure that recent, as just after a
+	// gap in its data, gives the latest it has within the window.
+	Memory(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
 	// PeakMemory is the most memory each container used over the window.
 	PeakMemory(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
-	// CPU is the CPU each container uses now.
-	CPU(ctx context.Context, pods Pods) (Reading, error)
+	// CPU is the CPU each container uses now, or, as for Memory, the
+	// latest within the window.
+	CPU(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
 	// Throttling is the share of each container's CPU periods throttled
 	// over the window.
 	Throttling(ctx context.Context, pods Pods, window time.Duration) (Reading, error)
@@ -157,16 +160,16 @@ func (s Sources) Name() string {
 	return strings.Join(names, ", ")
 }
 
-func (s Sources) Memory(ctx context.Context, pods Pods) (Reading, error) {
-	return s.ask(func(src Source) (Reading, error) { return src.Memory(ctx, pods) })
+func (s Sources) Memory(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
+	return s.ask(func(src Source) (Reading, error) { return src.Memory(ctx, pods, window) })
 }
 
 func (s Sources) PeakMemory(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
 	return s.ask(func(src Source) (Reading, error) { return src.PeakMemory(ctx, pods, window) })
 }
 
-func (s Sources) CPU(ctx context.Context, pods Pods) (Reading, error) {
-	return s.ask(func(src Source) (Reading, error) { return src.CPU(ctx, pods) })
+func (s Sources) CPU(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
+	return s.ask(func(src Source) (Reading, error) { return src.CPU(ctx, pods, window) })
 }
 
 func (s Sources) Throttling(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {

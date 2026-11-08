@@ -22,15 +22,16 @@ type FiringAlertArgs struct {
 }
 
 // RecordFiringAlert records that an alert is firing for an incident, unless
-// the recorded notification is newer.
+// the recorded notification is of an earlier episode. The caller has checked
+// with Resolved that the notification isn't late: a firing of an episode
+// whose resolution was recorded means the episode goes on.
 func (s *Store) RecordFiringAlert(ctx context.Context, tx pgx.Tx, in FiringAlertArgs) error {
 	sql := `
 	INSERT INTO incident_alerts (incident_id, source, source_id, status, starts_at)
 	VALUES ($1, $2, $3, 'firing', $4)
 	ON CONFLICT (incident_id, source, source_id) DO UPDATE
 	SET status = 'firing', starts_at = EXCLUDED.starts_at, ends_at = NULL, updated_at = now()
-	WHERE EXCLUDED.starts_at > incident_alerts.starts_at
-	   OR (EXCLUDED.starts_at = incident_alerts.starts_at AND incident_alerts.status = 'firing')
+	WHERE EXCLUDED.starts_at >= incident_alerts.starts_at
 `
 	if _, err := tx.Exec(ctx, sql, in.IncidentID, in.Source, in.SourceID, in.StartsAt); err != nil {
 		return fmt.Errorf("record firing alert %s/%s: %w", in.Source, in.SourceID, err)
@@ -44,6 +45,9 @@ type ResolvedAlertArgs struct {
 	SourceID string
 	StartsAt time.Time
 	EndsAt   time.Time
+	// ReceivedAt is when Themis received the resolution: a firing
+	// notification of the episode received later means it goes on.
+	ReceivedAt time.Time
 }
 
 // AlertIncident is an open incident of a resolved alert.
@@ -109,28 +113,45 @@ func (s *Store) ResolveAlert(ctx context.Context, tx pgx.Tx, in ResolvedAlertArg
 // episode is recognised as stale.
 func (s *Store) RecordResolution(ctx context.Context, tx pgx.Tx, in ResolvedAlertArgs) error {
 	_, err := tx.Exec(ctx, `
-	INSERT INTO alert_resolutions (source, source_id, starts_at, ends_at) VALUES ($1, $2, $3, $4)
+	INSERT INTO alert_resolutions (source, source_id, starts_at, ends_at, received_at) VALUES ($1, $2, $3, $4, $5)
 	ON CONFLICT (source, source_id) DO UPDATE
-	SET starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, updated_at = now()
+	SET starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, received_at = EXCLUDED.received_at, updated_at = now()
 	WHERE EXCLUDED.starts_at >= alert_resolutions.starts_at
-`, in.Source, in.SourceID, in.StartsAt, in.EndsAt)
+`, in.Source, in.SourceID, in.StartsAt, in.EndsAt, in.ReceivedAt)
 	if err != nil {
 		return fmt.Errorf("record resolution of %s/%s: %w", in.Source, in.SourceID, err)
 	}
 	return nil
 }
 
-// Resolved reports whether the episode of an alert that started at startsAt
-// has already ended.
-func (s *Store) Resolved(ctx context.Context, tx pgx.Tx, source, sourceID string, startsAt time.Time) (bool, error) {
+// Resolved reports whether a firing notification, received at receivedAt, of
+// the episode of an alert that started at startsAt is late: a later episode
+// has ended, or this one's resolution was received after it. One received
+// after the resolution of its episode isn't: the episode goes on, as when
+// Alertmanager let the alert's end pass while Prometheus couldn't reach it,
+// then got the alert again.
+func (s *Store) Resolved(ctx context.Context, tx pgx.Tx, source, sourceID string, startsAt, receivedAt time.Time) (bool, error) {
 	var resolved bool
 	err := tx.QueryRow(ctx, `
-	SELECT EXISTS (SELECT 1 FROM alert_resolutions WHERE source = $1 AND source_id = $2 AND starts_at >= $3)
-`, source, sourceID, startsAt).Scan(&resolved)
+	SELECT EXISTS (
+		SELECT 1 FROM alert_resolutions WHERE source = $1 AND source_id = $2
+		AND (starts_at > $3 OR (starts_at = $3 AND received_at >= $4))
+	)
+`, source, sourceID, startsAt, receivedAt).Scan(&resolved)
 	if err != nil {
 		return false, fmt.Errorf("check resolution of %s/%s: %w", source, sourceID, err)
 	}
 	return resolved, nil
+}
+
+// FiringAlerts counts the alerts firing for an incident.
+func (s *Store) FiringAlerts(ctx context.Context, q Querier, incidentID string) (int, error) {
+	var n int
+	err := q.QueryRow(ctx, `SELECT count(*) FROM incident_alerts WHERE incident_id = $1 AND status = 'firing'`, incidentID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count firing alerts of incident %s: %w", incidentID, err)
+	}
+	return n, nil
 }
 
 // AlertsStarted returns when the first of an incident's alerts started to

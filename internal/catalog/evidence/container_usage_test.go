@@ -52,16 +52,16 @@ func (f *fakeSource) answer(pods metrics.Pods, window time.Duration, r metrics.R
 	return r, f.err
 }
 
-func (f *fakeSource) Memory(_ context.Context, p metrics.Pods) (metrics.Reading, error) {
-	return f.answer(p, 0, f.memory)
+func (f *fakeSource) Memory(_ context.Context, p metrics.Pods, w time.Duration) (metrics.Reading, error) {
+	return f.answer(p, w, f.memory)
 }
 
 func (f *fakeSource) PeakMemory(_ context.Context, p metrics.Pods, w time.Duration) (metrics.Reading, error) {
 	return f.answer(p, w, f.peak)
 }
 
-func (f *fakeSource) CPU(_ context.Context, p metrics.Pods) (metrics.Reading, error) {
-	return f.answer(p, 0, f.cpu)
+func (f *fakeSource) CPU(_ context.Context, p metrics.Pods, w time.Duration) (metrics.Reading, error) {
+	return f.answer(p, w, f.cpu)
 }
 
 func (f *fakeSource) Throttling(_ context.Context, p metrics.Pods, w time.Duration) (metrics.Reading, error) {
@@ -107,8 +107,8 @@ func TestContainerMemory_AgainstTheLimit(t *testing.T) {
 	var view evidence.ContainerMemoryView
 	collectUsage(t, evidence.NewContainerMemory(src), loadScenario1(t), nil, &view)
 
-	if !slices.Equal(src.asked.Names, []string{currentPod}) || !slices.Equal(src.windows, []time.Duration{time.Hour}) {
-		t.Errorf("asked about %v over %v, want only the current revision's pod over 1h", src.asked.Names, src.windows)
+	if !slices.Equal(src.asked.Names, []string{currentPod}) || !slices.Equal(src.windows, []time.Duration{time.Hour, time.Hour}) {
+		t.Errorf("asked about %v over %v, want only the current revision's pod, its usage and peak over 1h", src.asked.Names, src.windows)
 	}
 	if view.Window != "1h" || view.Usage.Source != "kubernetes" || view.Peak.Unavailable != "no history" {
 		t.Errorf("view = %+v, want the usage's source and why the peak is missing", view)
@@ -134,7 +134,7 @@ func TestContainerCPU_ThrottlingOverTheWindow(t *testing.T) {
 	var view evidence.ContainerCPUView
 	collectUsage(t, evidence.NewContainerCPU(src), loadScenario1(t), map[string]string{"window": "90m"}, &view)
 
-	if view.Window != "1h30m" || !slices.Equal(src.windows, []time.Duration{90 * time.Minute}) {
+	if view.Window != "1h30m" || !slices.Equal(src.windows, []time.Duration{90 * time.Minute, 90 * time.Minute}) {
 		t.Errorf("window %q, asked over %v, want 1h30m", view.Window, src.windows)
 	}
 	c := view.Containers[0]

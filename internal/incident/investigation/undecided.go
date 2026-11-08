@@ -120,10 +120,42 @@ func (w *CloseUndecidedWorker) recovered(ctx context.Context, cfg config.Config,
 	if err != nil {
 		return "", "", false, err
 	}
-	symptoms := cfg.Matched(in.Profiles()).Symptoms()
-	stored, err := w.Store.Predicates(ctx, in.ID)
-	if err != nil {
+	f, err := symptomsNow(ctx, w.Store, w.Reader, w.Checks, cfg, in, now)
+	if workload.Lost(err) {
+		// Watching the cluster ends an incident whose workload is gone.
+		return "", "", true, nil
+	}
+	switch {
+	case err != nil:
 		return "", "", false, err
+	case f.fails:
+		return "", "", true, nil
+	case !f.found:
+		return incident.ClosedNoAction, timedOut, false, nil
+	}
+	return incident.SelfResolved, "Recovered before a fix. The checks now find " + that(f.cleared, w.Words) + ".", false, nil
+}
+
+// failure is what an incident's symptoms, decided again, find.
+type failure struct {
+	// fails says Themis can't close the incident as recovered: a symptom is
+	// true, or one its checks found when it opened can't be told now.
+	fails bool
+	// found says its checks found its failure when it opened, and cleared
+	// are those symptoms, false now.
+	found   bool
+	cleared []check.Result
+}
+
+// symptomsNow decides the symptoms of the profiles in matched again, from
+// evidence read now. Without checks to decide them, the stored ones stand: an
+// incident whose failure they found still fails. A target that can't be read
+// is an error, which workload.Lost tells apart when it is gone.
+func symptomsNow(ctx context.Context, s *store.Store, r client.Reader, checks Rechecker, cfg config.Config, in store.Incident, now time.Time) (failure, error) {
+	symptoms := cfg.Matched(in.Profiles()).Symptoms()
+	stored, err := s.Predicates(ctx, in.ID)
+	if err != nil {
+		return failure{}, err
 	}
 	var failed []string
 	for _, r := range stored {
@@ -131,36 +163,27 @@ func (w *CloseUndecidedWorker) recovered(ctx context.Context, cfg config.Config,
 			failed = append(failed, r.Name)
 		}
 	}
-	if w.Checks == nil {
-		return incident.ClosedNoAction, timedOut, len(failed) > 0, nil
+	f := failure{found: len(failed) > 0}
+	if checks == nil {
+		f.fails = f.found
+		return f, nil
 	}
 	if len(symptoms) == 0 {
-		return incident.ClosedNoAction, timedOut, false, nil
+		return f, nil
 	}
-	target, err := workload.Read(ctx, w.Reader, in.Target)
-	if workload.Lost(err) {
-		// Watching the cluster ends an incident whose workload is gone.
-		return "", "", true, nil
-	}
+	target, err := workload.Read(ctx, r, in.Target)
 	if err != nil {
-		return "", "", false, err
+		return failure{}, err
 	}
-	results := w.Checks.Recheck(ctx, w.Reader, target, symptoms, 0, now)
-	var cleared []check.Result
-	for _, r := range results {
+	for _, res := range checks.Recheck(ctx, r, target, symptoms, 0, now) {
 		switch {
-		case r.Value == check.True:
-			return "", "", true, nil
-		case slices.Contains(failed, r.Name) && r.Value == check.Unknown:
-			return "", "", true, nil
-		case slices.Contains(failed, r.Name):
-			cleared = append(cleared, r)
+		case res.Value == check.True, slices.Contains(failed, res.Name) && res.Value == check.Unknown:
+			return failure{fails: true, found: f.found}, nil
+		case slices.Contains(failed, res.Name):
+			f.cleared = append(f.cleared, res)
 		}
 	}
-	if len(failed) == 0 {
-		return incident.ClosedNoAction, timedOut, false, nil
-	}
-	return incident.SelfResolved, "Recovered before a fix. The checks now find " + that(cleared, w.Words) + ".", false, nil
+	return f, nil
 }
 
 // that lists what results found, each as words.Found puts it.

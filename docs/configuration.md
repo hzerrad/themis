@@ -489,7 +489,7 @@ A fix policy allows that Themis can't apply to the workload is only recommended.
 
 The incident page shows the exact change and the reason, with no Approve button. For the executor's reasons it shows the kubectl commands that make exactly that change, such as `kubectl -n shop rollout undo deployment/checkout --to-revision=1`, `kubectl -n shop set env deployment/checkout -c app MODE=healthy` or `kubectl -n shop set resources deployment/catalog -c app --limits=memory=72Mi`. It shows none when kubectl can't make exactly that change, or the command would hold a value that looks secret. A fix policy forbids is refused as policy says, never recommended. A preview of a suggestion says the same: "Themis would recommend this raise."
 
-Themis watches the workload while the incident waits. Once a person makes the change, Themis judges it as any [change made outside Themis](#never-closed-while-it-still-fails): the incident closes as recovered, such as "Recovered after a change outside Themis, by kubectl-set.", or a new incident replaces it when the workload still fails. It also closes when every alert of the incident stops firing, or when an approver closes it with no change.
+Themis watches the workload while the incident waits. Once a person makes the change, Themis judges it as any [change made outside Themis](#never-closed-while-it-still-fails): the incident closes as recovered, such as "Recovered after a change outside Themis, by kubectl-set.", or a new incident replaces it when the workload still fails. It also closes when every alert of the incident stops firing and its checks no longer find the failure, as [below](#never-closed-while-it-still-fails), or when an approver closes it with no change.
 
 #### GitOps
 
@@ -522,7 +522,17 @@ The failure is found by the profiles' [symptoms](#profiles): checks that find th
 | Those its checks found are false | It closes as recovered: "Recovered before a fix. The checks now find that no container is throttled at its CPU limit (…)." |
 | Its checks never found its failure | It closes with no change, as before: "No fix was suggested within 15m." |
 
-So the window is how long Themis gives a person before it looks again, and it only closes an incident that it can see no longer fails. It also closes as recovered when every alert of the incident stops firing, and a change made outside Themis that fixes or replaces the workload closes or supersedes it, as below.
+So the window is how long Themis gives a person before it looks again, and it only closes an incident that it can see no longer fails. A change made outside Themis that fixes or replaces the workload closes or supersedes it, as below.
+
+**Alerts that stop don't close it while it fails.** Alerts stop for reasons other than a recovery: the pods they were about were replaced, or Alertmanager let their end time pass while Prometheus couldn't reach it. So when every alert of an incident stops firing before Themis acts, Themis decides its symptoms again, from evidence read then, as above:
+
+| The symptoms now | What happens |
+|---|---|
+| One is true, or one its checks found when it opened can't be told | It stays open, as it was, and Themis decides them again every minute while no alert fires |
+| Those its checks found are false | It closes as recovered: "All of its alerts stopped firing. The checks now find that no container of the current version was OOMKilled (…)." |
+| Its checks never found its failure | It closes as recovered: "All of its alerts stopped firing." |
+
+An alert that fires again joins the incident, and Themis waits for it to stop.
 
 **A change made outside Themis** is judged as verification judges Themis's own fix: ready pods aren't enough. Every 30 seconds, Themis compares the workload of each open incident it hasn't started applying a fix to with the template the incident was investigated against, up to 100 incidents a run, those it compared longest ago first. Once a change has stood for a minute:
 
@@ -621,7 +631,9 @@ Prometheus's history is what lets Themis tell a new version that needs more from
 
 Averages, not peaks: a version killed or throttled at its limit peaks at the limit, whatever it needs. Two averages of the same use differ by a few hundredths of the limit from where the samples fall, so a difference of 5% of the limit or less counts as the same. That is measurement noise, not a setting. Without those figures, how long each version ran without failing breaks the tie. Without Prometheus, or when it keeps none of the earlier revision's pods, nothing shows how it ran: after a rollout that changed what the pods run, Themis then neither rolls back nor raises a limit, and refers the incident to a person, saying what is missing.
 
-A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "No history. Peak memory, CPU throttling and how earlier versions ran are unknown." An incident's missing evidence says the same in one line, such as "Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address."
+**What a container uses now** is, from Prometheus, its latest working set, and the CPU it used over the last 5 minutes, from the stretches of them Prometheus has samples of. A gap in Prometheus's data, as when Prometheus or the whole cluster stopped running for a few minutes, counts for nothing: a rate over the 5 minutes would count it as idle, and read a container using all of its CPU limit as using a tenth of it. Just after a longer gap, Prometheus has no figures that recent until its next scrapes, and the alerts the gap held up arrive at that moment. Themis then reads the latest figures Prometheus has within the window the evidence covers, 1 hour by default.
+
+A figure no source can give is `null` in the evidence, with why, never a guess. When no source can say anything, the template's evidence is missing, with the reason, as for any evidence Themis couldn't read. The **Status** page says which source is in use and what Themis can't see, such as "No history. Peak memory, CPU throttling and how earlier versions ran are unknown." An incident's missing evidence says the same in one line, such as "Container memory and container CPU: no metrics source. Install metrics-server, or set metrics.prometheus.address." When Prometheus answered without figures for the workload's pods, as for pods it hasn't scraped yet, the line says so: "Container memory: Prometheus has no figures for the pods of catalog. Check that it scrapes the kubelet's cAdvisor metrics."
 
 ## Connecting your Alertmanager
 
@@ -664,7 +676,8 @@ A token, basic auth and TLS settings need the address set with them. Themis send
 | It keeps firing | Takes it again every 4 hours, as Alertmanager repeats a notification by default |
 | A silence or an inhibition covers an alert Themis took | Nothing changes. Its incident stays open: a silence only stops notifications. |
 | An alert is silenced from the start | Nothing, until the silence ends |
-| The alert leaves the list, or its end time passes | Takes it as resolved. When every alert of an incident has, before Themis acts, the incident closes as `self_resolved`. |
+| The alert leaves the list, or its end time passes | Takes it as resolved. When every alert of an incident has, before Themis acts, the incident closes as `self_resolved`, unless its checks still find the failure: see [alerts that stop](#never-closed-while-it-still-fails). |
+| An alert taken as resolved is listed again with the same start, as when Prometheus couldn't reach Alertmanager for longer than the alert's end time | Takes it as firing again: the same failure goes on. It joins the incident it belongs to, or opens a new one. |
 | Alertmanager restarted without storage and lost the alert | Waits for Prometheus to send it again. It takes the alert as resolved only once the end time Alertmanager last gave has passed. |
 | The address or the matchers change | Forgets the alerts it took before, without resolving them |
 | Push mode, then poll mode again | Keeps the alerts it took before. One that ended meanwhile is taken as resolved at the first read. That never resolves a later firing of the same alert. |
@@ -727,7 +740,7 @@ route:
 
 **Under GitOps**, with `tokens.existingSecret`, manage the token where Alertmanager reads it too, with your secrets tool: a Secret with a `token` key holding the same value as the `intake` key, in Alertmanager's namespace, and with `alertmanagerConfig`, in each enrolled namespace. Name it in `alerting.webhook.tokenSecret`. The chart then makes no Secret of its own, and the Setup page's steps use it instead of copying the token.
 
-`send_resolved: true` matters: when every alert of an incident resolves before Themis acts, the incident closes as `self_resolved`.
+`send_resolved: true` matters: when every alert of an incident resolves before Themis acts, the incident closes as `self_resolved`, unless its checks still find the failure.
 
 ## Escalation notices
 
