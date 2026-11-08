@@ -76,8 +76,19 @@ jobs:
             go.sum
             tools/go.sum
       - run: make deps
+      # The API server and etcd binaries come from GitHub release downloads,
+      # which fail at times: fetch them with retries, then test offline.
       # setup-envtest picks the newest patch release of the minor.
+      - name: Download the envtest binaries
+        run: |
+          for i in 1 2 3 4 5; do
+            make envtest ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}.x && exit 0
+            sleep $((i * 15))
+          done
+          exit 1
       - run: make test-go ENVTEST_K8S_VERSION=${{ matrix.kubernetes }}.x
+        env:
+          ENVTEST_INSTALLED_ONLY: "true"
       # The web UI, once: the page doesn't depend on the Kubernetes version,
       # and its fixtures reuse the build test-go just made.
       - if: strategy.job-index == 0

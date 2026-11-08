@@ -63,7 +63,7 @@ jobs:
           TRIVY_VERSION: 0.76.0
           TRIVY_SHA256: e24b1c51293c1b15e4ba8d45bbc7891ba053f90278ec2698f3562c993e145fe7
         run: |
-          curl -fsSLo trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 15 -o trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
           echo "${TRIVY_SHA256}  trivy.tar.gz" | sha256sum -c -
           tar -xzf trivy.tar.gz trivy
           sudo install trivy /usr/local/bin/trivy
