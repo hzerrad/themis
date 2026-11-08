@@ -16,7 +16,7 @@ Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
 > [!WARNING]
-> Themis is in alpha (`v0.1.0-alpha1`). Configuration and APIs may change between releases. It is not ready for production use.
+> Themis is in alpha (`v0.1.0-alpha2`). Configuration and APIs may change between releases. It is not ready for production use.
 
 Investigation and governance are separate:
 
@@ -51,7 +51,7 @@ The incident page at the approval step:
 
 ## Capabilities
 
-This section lists what `v0.1.0-alpha1` supports. More alert sources and workload kinds are planned.
+This section lists what `v0.1.0-alpha2` supports. More alert sources and workload kinds are planned.
 
 **Alert sources.** Alertmanager, read through its API or received by webhook.
 
@@ -141,7 +141,7 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
 ```sh
-helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
   --namespace themis --create-namespace
 ```
 
