@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -31,6 +33,7 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 	"github.com/hzerrad/themis/internal/testutil/metrictest"
 	"github.com/hzerrad/themis/internal/testutil/pgtest"
+	"github.com/hzerrad/themis/internal/workload"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 )
@@ -117,7 +120,11 @@ func approved(t *testing.T) (*env, store.Action) {
 }
 
 func (e *env) executor(c client.Client) *executor.Executor {
-	x := executor.New(e.store, c, catalog.Fixes(), nil)
+	return e.scoped(c, executor.Scope{Namespaces: []string{e.target.Namespace}})
+}
+
+func (e *env) scoped(c client.Client, scope executor.Scope) *executor.Executor {
+	x := executor.New(e.store, c, catalog.Fixes(), scope, nil)
 	x.Now = func() time.Time { return now.Add(time.Minute) }
 	return x
 }
@@ -156,6 +163,13 @@ func TestExecute_RestoresPriorTemplate(t *testing.T) {
 	}
 	if got := e.image(t); got != "example/checkout:2.3.1" {
 		t.Errorf("image = %s, want revision 1's", got)
+	}
+	// Themis's own write is told apart from anyone else's by its field manager.
+	managed := k8s.Deployment(t, e.target.Namespace, "checkout").ManagedFields
+	if !slices.ContainsFunc(managed, func(mf metav1.ManagedFieldsEntry) bool {
+		return mf.Manager == workload.FieldManager && strings.Contains(mf.FieldsV1.GetRawString(), `"f:template"`)
+	}) {
+		t.Errorf("no template field written as %s: %v", workload.FieldManager, managed)
 	}
 	if got := e.actionState(t, a.ID); got != store.ActionSucceeded {
 		t.Errorf("action = %s, want succeeded", got)
@@ -205,6 +219,46 @@ func TestExecute_DigestTampered_Refuses(t *testing.T) {
 	}
 	if got := e.incidentState(t, a.IncidentID); got != incident.Escalated {
 		t.Errorf("incident = %s, want escalated", got)
+	}
+}
+
+// The executor's own scope wins over an approval in the database: a fix it
+// may not apply, or a namespace it may not change, is refused unwritten,
+// saying why, and the incident goes to a person.
+func TestExecute_OutsideItsScope_Refuses(t *testing.T) {
+	for name, tt := range map[string]struct {
+		scope func(ns string) executor.Scope
+		want  string
+	}{
+		"fix not listed": {
+			func(ns string) executor.Scope {
+				return executor.Scope{Namespaces: []string{ns}, Fixes: []string{"deployment.set-resources"}}
+			},
+			"Not applied. executor.fixes doesn't list deployment.rollback-to-revision, so the executor may not apply it. Referred to a person.",
+		},
+		"namespace not listed": {
+			func(string) executor.Scope { return executor.Scope{Namespaces: []string{"payments"}} },
+			"Not applied. executor.namespaces doesn't list %s, so the executor may not change workloads there. Referred to a person.",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, a := approved(t)
+			res, err := e.scoped(k8s.Client, tt.scope(e.target.Namespace)).Execute(t.Context(), a.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Status != executor.Failed || e.image(t) != "example/checkout:2.4.0" {
+				t.Errorf("result = %+v, image = %s; want failed and untouched", res, e.image(t))
+			}
+			trail, err := e.store.Transitions(t.Context(), a.IncidentID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			last := trail[len(trail)-1]
+			if want := strings.Replace(tt.want, "%s", e.target.Namespace, 1); last.To != incident.Escalated || last.Reason != want {
+				t.Errorf("last transition = %s %q, want escalated %q", last.To, last.Reason, want)
+			}
+		})
 	}
 }
 

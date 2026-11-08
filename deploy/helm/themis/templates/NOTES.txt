@@ -59,7 +59,7 @@ Rules:    Not installed: this cluster serves no PrometheusRule. The Setup page
           shows the rules to add to Prometheus.
 {{- end }}
 {{- end }}
-Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
+Fixes:    {{ if .Values.executor.enabled }}On in {{ include "themis.executorNamespaces" . | fromJsonArray | join ", " }}{{ with .Values.executor.fixes }}, {{ join ", " . }} only{{ end }}. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
 {{- if (include "themis.modelEnabled" .) }}
 {{- $model := .Values.model }}
 {{- $anthropic := eq (include "themis.modelProvider" .) "anthropic" }}

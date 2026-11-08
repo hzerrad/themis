@@ -20,8 +20,8 @@ telemetry:
     # CIDR the investigator may reach the collector at, on 4317 and 4318.
     egressCIDR: 0.0.0.0/0
 
-# Namespaces Themis may read, and with the executor, write. Each gets its own
-# Role: Themis never creates RBAC at runtime.
+# Namespaces Themis watches. Each gets its own Role: Themis never creates RBAC
+# at runtime. The executor changes only those executor.namespaces lists.
 enrolledNamespaces:
   - shop
 
@@ -159,6 +159,14 @@ model:
 # default: Themis then diagnoses and proposes, and never acts.
 executor:
   enabled: false
+  # The namespaces the executor may change, each also in enrolledNamespaces,
+  # such as [shop]. Required with the executor: it gets a Role in each, and in
+  # no other.
+  namespaces: []
+  # The fixes the executor may apply, such as
+  # [deployment.rollback-to-revision]. The executor refuses any other, even
+  # one approved. Empty: every fix the scenario packs offer.
+  fixes: []
 
 # An escalation webhook: a JSON POST whenever Themis hands an incident to
 # humans. The URL is read from a Secret, since webhook URLs often embed a key.

@@ -8,6 +8,7 @@ image:
 enrolledNamespaces: [shop]
 executor:
   enabled: true
+  namespaces: [shop]
 model:
   baseURL: http://fake-model.themis.svc:8080/v1
   name: fake

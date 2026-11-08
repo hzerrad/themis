@@ -39,6 +39,7 @@ kubectl create namespace shop
 helm install themis deploy/helm/themis -n themis --create-namespace \
   --set enrolledNamespaces='{shop}' \
   --set executor.enabled=true \
+  --set executor.namespaces='{shop}' \
   --set model.baseURL=https://api.openai.com/v1 \
   --set model.name=gpt-4.1 \
   --set model.apiKeySecret=model-key \
@@ -52,6 +53,7 @@ For Claude, set the provider instead of an address. Anthropic's API has only one
 helm install themis deploy/helm/themis -n themis --create-namespace \
   --set enrolledNamespaces='{shop}' \
   --set executor.enabled=true \
+  --set executor.namespaces='{shop}' \
   --set model.provider=anthropic \
   --set model.name=claude-haiku-5-5 \
   --set model.apiKeySecret=model-key \
@@ -64,8 +66,9 @@ To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODE
 
 | Value | What it does |
 |---|---|
-| `enrolledNamespaces` | The namespaces Themis may read and, with the executor, change. It gets a Role in each, and nothing else. |
+| `enrolledNamespaces` | The namespaces Themis watches. It gets a read-only Role in each, and nothing else. |
 | `executor.enabled` | Installs the only part that can change workloads. Without it, Themis only diagnoses and suggests. |
+| `executor.namespaces` | The namespaces the executor may change, each also enrolled. Required with the executor: it gets a Role in each, and in no other. `executor.fixes` can also limit which fixes it applies. |
 | `model.provider` | `anthropic` for Claude through Anthropic's API, which needs no `model.baseURL`. Empty means an OpenAI-compatible endpoint. |
 | `model.baseURL`, `model.name` | Your model. Leave them out to set the model on the **Setup** page instead, where its key is kept encrypted. With `model.enabled=false`, Themis installs no investigator, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT. |
 | `model.apiKeySecret` | The Secret with an `apiKey` key, if the model needs one |
@@ -74,10 +77,11 @@ The bundled PostgreSQL is for trying Themis. For anything longer, set `database.
 
 ## 2. Enroll a namespace
 
-Themis only looks at enrolled namespaces. Both paths above enrolled `shop`. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and upgrade:
+Themis only looks at enrolled namespaces. Both paths above enrolled `shop`, and let the executor change it. To use another, create it if it doesn't exist yet, change `enrolledNamespaces` and `executor.namespaces`, and upgrade:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values --set enrolledNamespaces='{payments}'
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set enrolledNamespaces='{payments}' --set executor.namespaces='{payments}'
 ```
 
 Put a workload there that you can break. The sample one is a Deployment named `checkout` in `shop`, with a revision that runs out of memory on every start:
