@@ -6,18 +6,18 @@ None of it carries workload data. Logs, metric labels and spans never contain ev
 
 ## Status
 
-The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, check each part of an install when asked. Each part is **Operational**, **Action required** or **Failing** (or **Waiting** or **Off**), with a short finding and, where something must change, the remedy:
+The UI's **Status** page, and `GET /v1/status` for anyone with the viewer role, check each part of an install when asked. Each part is **Operational**, **Action required** or **Failing** (or **Waiting** or **Off**), with a short finding and, where something must change, the remedy. A part off by choice, the investigator or fixes, says the Helm value that turns it on:
 
 | Part | Operational when | Otherwise |
 |---|---|---|
 | Database | It answers | Nothing else can be checked |
-| Investigator | It asked for work in the last 2 minutes | It never has, or stopped |
-| Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident |
+| Investigator | It asked for work in the last 2 minutes | It never has, or stopped; or off, with `investigator.enabled=true` to turn it on |
+| Model | The last investigation got answers | Why the last one failed: unreachable, answers in the wrong format, too slow, or out of token budget; or "waiting" until the first incident. Not listed while the investigator is off |
 | Alerts | In poll mode, Themis reads Alertmanager, and when it last did: "Poll mode. Last read 12 s ago." In push mode, Alertmanager sends alerts, and when the last arrived: "Push mode. Last alert 3 min ago." | In poll mode, not read yet, why the last read failed (unreachable, credentials refused, not Alertmanager's answer) with the address, reads stopped, or no address. In push mode, no alert yet, the wrong intake token, or refused while no admin account existed. |
 | Alert rules | Prometheus has a rule for every alert the profiles answer: "All 7 alerts have rules in Prometheus." | Which are missing, with the rules to add on the Setup page; not checked, without a Prometheus to ask, with the alerts to check by hand; or Prometheus doesn't answer, with its address |
 | Namespaces | Themis may read pods, deployments and replica sets in each one it watches, and events and logs | What it can't read, and where |
 | Metrics | A metrics source answers: Prometheus, or the Kubernetes metrics API | No metrics source, or one failing; without Prometheus, no history of peak memory or CPU throttling |
-| Fixes | The executor is installed and reachable | Off, or unreachable |
+| Fixes | The executor is installed and reachable | Unreachable; or off, with `executor.enabled=true` to turn it on |
 | Sign-in | People sign in with accounts or an identity provider | The initial admin password is not retired, or only the break-glass token signs in |
 
 The investigator and Alertmanager's webhook are recorded as heard from at most every 30 seconds, and every read of Alertmanager as it happens, in the database, so every core replica sees the same.
@@ -107,7 +107,7 @@ The investigator reports its use of the model by `route`: the configured route, 
 | `themis_model_requests_total` | `route`, `outcome` | Model requests: `ok`, `validation_failed`, `truncated` (cut off at the output limit), `refused` (the model declined to answer), `budget_exceeded`, `ineligible`, `deadline_exceeded`, `unavailable` |
 | `themis_model_request_duration_seconds` (histogram) | `route` | Time to a request's result, repairs included |
 | `themis_model_tokens_total` | `route`, `kind` | Tokens the model reported, `input` and `output` |
-| `themis_model_cost_usd_total` | `route` | Cost at the route's price (`model.price` in the chart). Without a price nothing is reported: a guessed price would be wrong |
+| `themis_model_cost_usd_total` | `route` | Cost at the route's price (`investigator.model.price` in the chart). Without a price nothing is reported: a guessed price would be wrong |
 | `themis_model_validation_failures_total` | `route` | Replies that did not match the schema, repaired or not |
 | `themis_investigation_steps` (histogram) | | Model steps an investigation used before concluding |
 | `themis_budget_exhausted_total` | `kind` | Investigations out of `tokens`, `steps`, `evidence` or `deadline` |

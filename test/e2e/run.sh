@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end test of the bad-rollout scenario on kind: a real Alertmanager,
-# which Themis reads, Themis with the executor, and a fake model. It asserts
-# on incident states and the audit trail, never on model wording.
+# which Themis reads, Themis with the investigator on a fake model, and the
+# executor. It asserts on incident states and the audit trail, never on model
+# wording.
 #
 #   test/e2e/run.sh            create the cluster if needed, install, test
 #   KEEP=1 test/e2e/run.sh     leave everything running afterwards

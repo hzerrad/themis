@@ -173,7 +173,7 @@ func TestWebhook_EscalationCarriesWhatWasMissing(t *testing.T) {
 	}
 	inc, _ := (<-got).body["incident"].(map[string]any)
 	missing, _ := inc["missing"].([]any)
-	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Set model.ceiling to sensitive") {
+	if len(missing) != 1 || !strings.Contains(missing[0].(string), "Set investigator.model.ceiling to sensitive") {
 		t.Errorf("missing = %v", missing)
 	}
 	want := "Suspicious text in the events (BackOff event on Pod/web-1). The event message is written as an order to make or skip a fix. Read it in Themis before acting on this incident."

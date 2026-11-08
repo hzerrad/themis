@@ -116,7 +116,7 @@ class ModelSource:
             if not self.said_missing:
                 log.warning(
                     "no model is set, so no incident is investigated: set it on Themis's"
-                    " Setup page, or with the chart's model values"
+                    " Setup page, or with the chart's investigator.model values"
                 )
                 self.said_missing = True
             return False

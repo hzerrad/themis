@@ -402,6 +402,7 @@ table.list th { text-align: left; font-weight: 400; font-size: 13px; color: var(
 table.list td { padding: 12px 12px 12px 0; border-top: 1px solid var(--rule); vertical-align: top; }
 table.list .state { white-space: nowrap; }
 .fix { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--ochre); color: var(--ink); }
+.turn-on { margin-top: 6px; color: var(--ink-2); }
 ul.parts { list-style: none; margin: 0; padding: 0; }
 ul.parts li { display: grid; grid-template-columns: 120px 1fr; gap: 2px 16px; padding: 6px 0; border-top: 1px solid var(--rule); }
 ul.parts li:first-child { border-top: 0; }

@@ -64,12 +64,13 @@ data:
       {{- end }}
     investigators:
       bearerTokenFile: /var/run/secrets/themis/investigator
-      {{- if not (include "themis.modelEnabled" .) }}
+      {{- if not (include "themis.investigatorEnabled" .) }}
       disabled: true
       {{- end }}
     settings:
       keyFile: /var/run/secrets/themis/settings
-    {{- with .Values.model }}
+    {{- if include "themis.investigatorEnabled" . }}
+    {{- with .Values.investigator.model }}
     {{- if or .provider .baseURL .name .apiKeySecret .schemaDialect }}
     model:
       {{- if .provider }}
@@ -90,6 +91,7 @@ data:
       {{- with .schemaDialect }}
       schemaDialect: {{ . | quote }}
       {{- end }}
+    {{- end }}
     {{- end }}
     {{- end }}
     api:

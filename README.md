@@ -80,7 +80,7 @@ This section lists what `v0.1.0-alpha1` supports. More alert sources and workloa
 
 - Evidence from pod states, events, container logs, rollout history and memory and CPU use, from the Kubernetes metrics API or a Prometheus-compatible server. Evidence is redacted and size-bounded before it is stored.
 - An incident page that states the facts with their evidence, shows each piece of evidence, collects more on request, and previews whether a suggested fix would be accepted.
-- Operation without a model (`model.enabled=false`). Evidence and checks still run, and fixes come from engineers or agents.
+- A read-only default, with no model and no write access. Evidence and checks still run, and fixes come from engineers or agents.
 - A gRPC API for external AI SRE agents to submit proposals.
 - Escalation notices to a webhook.
 - Sign-in with local accounts or OIDC, with the roles viewer, responder, approver and admin.
@@ -145,8 +145,15 @@ helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
   --namespace themis --create-namespace
 ```
 
+A default install is read-only. The investigator and fixes are turned on separately:
+
+| Step | Helm values | Evidence sent outside the cluster | Changes to workloads |
+|---|---|---|---|
+| Read-only (default) | None | None | None |
+| Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
+
 - The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
-- Themis is read-only until the executor is enabled for the namespaces it may change (`executor.enabled=true`, `executor.namespaces`).
 - Until the first admin account is created, Themis serves only the page that creates it.
 - Images are signed and published for linux/amd64 and linux/arm64.
 - The [chart README](deploy/helm/themis/README.md) lists every value, including GitOps installs and an external database.

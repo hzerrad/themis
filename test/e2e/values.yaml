@@ -1,5 +1,5 @@
-# Themis for the end-to-end test: the executor on, the fake model, a webhook
-# receiver, and windows short enough to wait for.
+# Themis for the end-to-end test: the investigator on with the fake model,
+# the executor on, a webhook receiver, and windows short enough to wait for.
 # The images the test builds and loads into kind.
 image:
   repository: ""
@@ -9,9 +9,11 @@ enrolledNamespaces: [shop]
 executor:
   enabled: true
   namespaces: [shop]
-model:
-  baseURL: http://fake-model.themis.svc:8080/v1
-  name: fake
+investigator:
+  enabled: true
+  model:
+    baseURL: http://fake-model.themis.svc:8080/v1
+    name: fake
 notifications:
   webhookSecret: e2e-webhook
   webhookToken: true

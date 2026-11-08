@@ -49,11 +49,11 @@ func TestResult_Text(t *testing.T) {
 		},
 		{
 			with(ollama, func(r *modeltest.Result) { r.Outcome, r.Detail = modeltest.Unreachable, "Connection refused" }), none,
-			"Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that model.egressCIDR allows it.",
+			"Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that investigator.egressCIDR allows it.",
 		},
 		{
 			with(anthropic, func(r *modeltest.Result) { r.Outcome = modeltest.Unreachable }), none,
-			"Failed. Can't connect to Anthropic. Check that model.egressCIDR allows Anthropic's API.",
+			"Failed. Can't connect to Anthropic. Check that investigator.egressCIDR allows Anthropic's API.",
 		},
 		// OpenAI refuses the schema in strict mode unless it is in its own form.
 		{with(openai, func(r *modeltest.Result) {
@@ -61,7 +61,7 @@ func TestResult_Text(t *testing.T) {
 		}), none, "Failed. https://api.openai.com/v1 refused the request (400): Invalid schema for response_format 'reply': 'required' must include every key. Set the reply format to OpenAI's strict form."},
 		{
 			with(openai, func(r *modeltest.Result) { r.Outcome = modeltest.NotInFormat }), helmDialect,
-			"Failed. The model answered, but not in the reply format. Install with model.schemaDialect=openai-strict.",
+			"Failed. The model answered, but not in the reply format. Install with investigator.model.schemaDialect=openai-strict.",
 		},
 		{
 			with(ollama, func(r *modeltest.Result) { r.Outcome = modeltest.NotInFormat }), none,
@@ -73,7 +73,7 @@ func TestResult_Text(t *testing.T) {
 		},
 		{with(openai, func(r *modeltest.Result) {
 			r.Outcome, r.Status, r.Detail = modeltest.Refused, 400, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."
-		}), none, "Failed. https://api.openai.com/v1 refused the request (400): Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead. Install with model.outputLimitField=max_completion_tokens."},
+		}), none, "Failed. https://api.openai.com/v1 refused the request (400): Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead. Install with investigator.model.outputLimitField=max_completion_tokens."},
 		{
 			with(openai, func(r *modeltest.Result) {
 				r.Outcome, r.Status, r.Detail = modeltest.Refused, 429, "You exceeded your current quota"
@@ -82,7 +82,7 @@ func TestResult_Text(t *testing.T) {
 		},
 		{
 			with(ollama, func(r *modeltest.Result) { r.Outcome, r.OutputLimit = modeltest.CutOff, 512 }), none,
-			"Failed. The reply was cut off at 512 tokens. Raise model.maxOutputTokens for a model that reasons.",
+			"Failed. The reply was cut off at 512 tokens. Raise investigator.model.maxOutputTokens for a model that reasons.",
 		},
 		{modeltest.Result{Outcome: modeltest.NoInvestigator}, none, "No investigator is connected. Themis can't reach the model without it."},
 		{

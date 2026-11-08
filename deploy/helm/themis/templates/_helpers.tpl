@@ -46,13 +46,11 @@ helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 {{- end }}
 
 {{/*
-Whether the investigator and its model are installed. Values from before
-model.enabled existed, kept with --reuse-values, have no such key, so a
-missing key means on.
+Whether the investigator is installed: only when investigator.enabled is
+true.
 */}}
-{{- define "themis.modelEnabled" -}}
-{{- $model := .Values.model | default dict -}}
-{{- if not (and (hasKey $model "enabled") (eq (toString $model.enabled) "false")) }}true{{ end -}}
+{{- define "themis.investigatorEnabled" -}}
+{{- if eq (toString (.Values.investigator | default dict).enabled) "true" }}true{{ end -}}
 {{- end }}
 
 {{/*
@@ -77,16 +75,17 @@ The API the investigator speaks: openai, the default, or anthropic, which has
 its own address.
 */}}
 {{- define "themis.modelProvider" -}}
-{{- $provider := ((.Values.model | default dict).provider | default "openai" | toString | trim | lower) -}}
+{{- $provider := (((.Values.investigator | default dict).model | default dict).provider | default "openai" | toString | trim | lower) -}}
 {{- if not (has $provider (list "openai" "anthropic")) -}}
-{{- fail (printf "model.provider must be openai or anthropic, not %q" $provider) -}}
+{{- fail (printf "investigator.model.provider must be openai or anthropic, not %q." $provider) -}}
 {{- end -}}
 {{- $provider -}}
 {{- end }}
 
 {{/*
-Whether the core reads the Kubernetes metrics API. A missing key means on, as
-above.
+Whether the core reads the Kubernetes metrics API. Values from before
+metrics.kubernetes existed, kept with --reuse-values, have no such key, so a
+missing key means on.
 */}}
 {{- define "themis.metricsAPIEnabled" -}}
 {{- $api := (.Values.metrics | default dict).kubernetes | default dict -}}

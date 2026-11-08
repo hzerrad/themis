@@ -17,6 +17,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	authorizationv1 "k8s.io/api/authorization/v1"
 
 	themisv1 "github.com/hzerrad/themis/gen/go/themis/v1"
 	"github.com/hzerrad/themis/internal/catalog"
@@ -179,6 +180,11 @@ func buildUIFixtures(t *testing.T) uiFixtureSet {
 	f.Status = map[string]jsontext.Value{
 		"working": uiServed(t, (&API{Checks: uiStatus(uiChecks(true))}).status, "GET", "/v1/status", ""),
 		"mixed":   uiServed(t, (&API{Checks: uiStatus(uiChecks(false))}).status, "GET", "/v1/status", ""),
+		// A read-only install, as Themis checks it: the investigator and
+		// the executor off, by choice.
+		"readOnly": uiServed(t, (&API{Checks: &statuspage.Checker{
+			Config: cfg, Store: uiFreshInstall{}, Access: uiAllowed{}, NoInvestigator: true, InitialAdmin: true,
+		}}).status, "GET", "/v1/status", ""),
 	}
 
 	f.Models = map[string]jsontext.Value{}
@@ -1312,6 +1318,30 @@ func uiChecks(working bool) []statuspage.Check {
 type uiStatus []statuspage.Check
 
 func (c uiStatus) Checks(context.Context) []statuspage.Check { return c }
+
+// uiFreshInstall is the database of an install whose setup is finished, and
+// that no alert or investigator has reached yet.
+type uiFreshInstall struct{}
+
+func (uiFreshInstall) Ping(context.Context) error { return nil }
+
+func (uiFreshInstall) LastHeartbeat(context.Context, string) (store.Heartbeat, error) {
+	return store.Heartbeat{}, store.ErrNotFound
+}
+
+func (uiFreshInstall) LastInvestigationOutcome(context.Context) (store.InvestigationOutcome, error) {
+	return store.InvestigationOutcome{}, store.ErrNotFound
+}
+
+func (uiFreshInstall) HasAccounts(context.Context) (bool, error)   { return true, nil }
+func (uiFreshInstall) SetupFinished(context.Context) (bool, error) { return true, nil }
+
+// uiAllowed lets Themis read everything it needs.
+type uiAllowed struct{}
+
+func (uiAllowed) Can(context.Context, authorizationv1.ResourceAttributes) (bool, error) {
+	return true, nil
+}
 
 // uiNoSettings is a database with no setting made in setup.
 type uiNoSettings struct{}

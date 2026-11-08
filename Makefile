@@ -234,15 +234,15 @@ PROMETHEUS_CHART := 29.39.0
 PROMETHEUS_URL   := http://monitoring-prometheus-server.monitoring.svc
 
 .PHONY: themis-up themis-down
-themis-up: kind-load ## Install Themis on kind with the executor, reading monitoring-up's Prometheus, using MODEL_URL and MODEL_NAME, or MODEL_PROVIDER=anthropic and MODEL_NAME
+themis-up: kind-load ## Install Themis on kind with the investigator and the executor, reading monitoring-up's Prometheus, using MODEL_URL and MODEL_NAME, or MODEL_PROVIDER=anthropic and MODEL_NAME
 	@test -n "$(MODEL_URL)" || test "$(MODEL_PROVIDER)" = anthropic || { echo "Set MODEL_URL and MODEL_NAME for an OpenAI-compatible endpoint, or MODEL_PROVIDER=anthropic and MODEL_NAME for Claude."; exit 1; }
 	@# Themis gets its access in each enrolled namespace at install, so it must exist.
 	$(KUBECTL) create namespace shop --dry-run=client -o yaml | $(KUBECTL) apply -f - >/dev/null
 	helm --kube-context kind-$(KIND_CLUSTER) upgrade --install themis deploy/helm/themis -n themis --create-namespace \
 		--set image.repository= --set image.tag=$(IMAGE_TAG) --set image.pullPolicy=IfNotPresent \
-		--set executor.enabled=true --set executor.namespaces='{shop}' --set model.provider=$(MODEL_PROVIDER) \
-		$(if $(MODEL_URL),--set model.baseURL=$(MODEL_URL)) --set model.name=$(MODEL_NAME) \
-		$(if $(MODEL_KEY_SECRET),--set model.apiKeySecret=$(MODEL_KEY_SECRET)) \
+		--set executor.enabled=true --set executor.namespaces='{shop}' --set investigator.enabled=true --set investigator.model.provider=$(MODEL_PROVIDER) \
+		$(if $(MODEL_URL),--set investigator.model.baseURL=$(MODEL_URL)) --set investigator.model.name=$(MODEL_NAME) \
+		$(if $(MODEL_KEY_SECRET),--set investigator.model.apiKeySecret=$(MODEL_KEY_SECRET)) \
 		--set metrics.prometheus.address=$(PROMETHEUS_URL) --wait --timeout 5m
 
 themis-down: ## Uninstall Themis from kind
