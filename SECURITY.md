@@ -23,11 +23,13 @@ In scope, for example:
 - Secrets reaching the model, the web UI, the logs or the database without redaction.
 - Bypassing authentication or roles in the web UI, the HTTP API or the gRPC API.
 - A component using Kubernetes permissions beyond those [documented](docs/architecture.md#what-protects-what).
+- The executor applying a fix outside `executor.namespaces` or `executor.fixes`.
 
 Out of scope:
 
 - A wrong diagnosis or fix from the investigator that Themis's controls refuse. Report it as a [bug](https://github.com/hzerrad/themis/issues/new?template=bug.yml); it may become an evaluation case.
 - Attacks that already need cluster-admin rights, or write access to Themis's namespace, Secrets or database.
+- A change applied through an approval written straight into Themis's database, within `executor.namespaces`, `executor.fixes` and the checks against the live cluster. The executor trusts the approvals recorded there.
 - Vulnerabilities in dependencies with no impact specific to Themis. Report them upstream.
 
 ## Supported versions

@@ -328,13 +328,31 @@
           "type": "string",
           "minLength": 1,
           "description": "BearerTokenFile holds the token the executor requires."
+        },
+        "namespaces": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Namespaces are those the executor may change, each enrolled. The\nchart gives it a Role in each, and in no other."
+        },
+        "fixes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true,
+          "description": "Fixes are the fixes the executor may apply, by name, such as\ndeployment.rollback-to-revision. Empty: every fix Themis has."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
         "address",
-        "bearerTokenFile"
+        "bearerTokenFile",
+        "namespaces"
       ],
       "description": "Executor is where approved actions run; without it Themis never writes."
     },

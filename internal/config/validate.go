@@ -109,6 +109,23 @@ func (c Config) Validate() error {
 		if c.Executor.BearerTokenFile == "" {
 			add("executor.bearerTokenFile", "is required")
 		}
+		if len(c.Executor.Namespaces) == 0 {
+			add("executor.namespaces", "list the namespaces the executor may change, such as [shop]")
+		}
+		for i, ns := range c.Executor.Namespaces {
+			path := fmt.Sprintf("executor.namespaces[%d]", i)
+			switch {
+			case slices.Contains(c.Executor.Namespaces[:i], ns):
+				add(path, "duplicate namespace %q", ns)
+			case !seenNS[ns]:
+				add(path, "%q isn't in enrolledNamespaces. Add it there, or remove it here", ns)
+			}
+		}
+		for i, fix := range c.Executor.Fixes {
+			if slices.Contains(c.Executor.Fixes[:i], fix) {
+				add(fmt.Sprintf("executor.fixes[%d]", i), "duplicate fix %q", fix)
+			}
+		}
 	}
 
 	c.Metrics.validate(add)

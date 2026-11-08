@@ -29,6 +29,8 @@ Unknown keys are errors, and Themis reports every problem at once and refuses to
 | `api.access` | no | Roles for people who sign in, by username or group. |
 | `approvals.requireAnotherApprover` | no | `true` refuses the approval of a fix by the person who suggested it: someone else must approve it. Off by default: a person may approve their own suggestion, and the timeline says "Suggested and approved by <username>." See [People and roles](#people-and-roles). |
 | `executor.address`, `executor.bearerTokenFile` | no | Where `themis-executor` listens, and the token it requires. Without `executor`, approved actions are canceled, never executed. |
+| `executor.namespaces` | with `executor` | The namespaces the executor may change, each also in `enrolledNamespaces`. The chart renders the executor's Roles only there, and passes the list to the executor, which refuses an action in any other namespace. |
+| `executor.fixes` | no | The fixes the executor may apply, by name, such as `deployment.rollback-to-revision`. Empty: every fix Themis has. The executor gets the list too, and refuses any other fix before writing, even one approved. A name Themis has no fix for stops Themis and the executor from starting. |
 | `notifications.webhook.url` or `.urlFile` | no | Where escalations are POSTed. Use `urlFile` when the URL embeds a key. |
 | `notifications.webhook.bearerTokenFile` | no | A token sent with each notice. |
 | `notifications.externalURL` | no | Where people reach the UI, used for links in notices. |

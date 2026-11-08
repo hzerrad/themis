@@ -71,6 +71,10 @@ const (
 	hashLabel          = appsv1.DefaultDeploymentUniqueLabelKey
 )
 
+// FieldManager is the field manager Themis writes workloads as: a Writer
+// of this name is Themis.
+const FieldManager = "themis"
+
 // Replicas are the replica counts Kubernetes reports. Observed is whether
 // they describe the current generation yet.
 type Replicas struct {

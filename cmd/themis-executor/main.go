@@ -1,6 +1,7 @@
 // Command themis-executor executes approved actions. It is the only Themis
 // component with write access to workloads; it takes an action ID from the
-// core and trusts nothing else in the request.
+// core and trusts nothing else in the request. --namespaces and --fixes say
+// what it may change, whatever was approved.
 //
 // The database URL is read from DATABASE_URL.
 package main
@@ -14,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,6 +36,9 @@ import (
 func main() {
 	var grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string
 	var level slog.Level
+	var scope executor.Scope
+	flag.Func("namespaces", "namespaces the executor may change, comma-separated; required", list(&scope.Namespaces))
+	flag.Func("fixes", "fixes the executor may apply, comma-separated; empty for every fix", list(&scope.Fixes))
 	flag.StringVar(&grpcAddr, "grpc-addr", ":9091", "address of the ExecutorService")
 	flag.StringVar(&probeAddr, "probe-addr", ":8081", "address of /healthz and /readyz")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8082", `address of /metrics; "0" disables it`)
@@ -44,13 +49,29 @@ func main() {
 
 	log := telemetry.NewLogger(os.Stdout, "executor", level)
 	slog.SetDefault(log)
-	if err := run(ctrl.SetupSignalHandler(), log, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext); err != nil {
+	if err := run(ctrl.SetupSignalHandler(), log, scope, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext); err != nil {
 		log.Error("themis-executor stopped", telemetry.FieldError, err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string) error {
+// list sets *to from a comma-separated flag value, leaving out empty names.
+func list(to *[]string) func(string) error {
+	return func(v string) error {
+		*to = nil
+		for name := range strings.SplitSeq(v, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				*to = append(*to, name)
+			}
+		}
+		return nil
+	}
+}
+
+func run(ctx context.Context, log *slog.Logger, scope executor.Scope, grpcAddr, probeAddr, metricsAddr, tokenFile, kubeContext string) error {
+	if err := scope.Check(catalog.Fixes()); err != nil {
+		return err
+	}
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
 		return errors.New("no database URL: set DATABASE_URL")
@@ -80,7 +101,7 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	}
 
 	srv := grpc.NewServer(telemetry.GRPCServerTracing(), grpc.ChainUnaryInterceptor(token.RequireGRPC(tokenFile), telemetry.UnaryServerFields()))
-	(&executor.Server{Executor: newExecutor(s, c, log)}).Register(srv)
+	(&executor.Server{Executor: newExecutor(s, c, scope, log)}).Register(srv)
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", grpcAddr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", grpcAddr, err)
@@ -122,9 +143,9 @@ func run(ctx context.Context, log *slog.Logger, grpcAddr, probeAddr, metricsAddr
 	return probes.Shutdown(shutdownCtx)
 }
 
-// newExecutor carries out the fixes Themis ships with.
-func newExecutor(s *store.Store, c client.Client, log *slog.Logger) *executor.Executor {
-	return executor.New(s, c, catalog.Fixes(), log)
+// newExecutor carries out the fixes Themis ships with, within scope.
+func newExecutor(s *store.Store, c client.Client, scope executor.Scope, log *slog.Logger) *executor.Executor {
+	return executor.New(s, c, catalog.Fixes(), scope, log)
 }
 
 // metricsHandler serves the executor's metrics on /metrics.

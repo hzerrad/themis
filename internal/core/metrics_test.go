@@ -53,7 +53,7 @@ func TestMetrics_LabelsAreAllowlisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	executor.New(nil, nil, cat.Fixes, nil)
+	executor.New(nil, nil, cat.Fixes, executor.Scope{}, nil)
 	s, _ := pgtest.NewStore(t)
 	states := store.NewStateCollector(t.Context(), s)
 	metrics.Registry.MustRegister(states)

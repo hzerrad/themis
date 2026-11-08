@@ -117,7 +117,7 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 4. **Ownership.** Workloads managed by Argo CD or Flux receive a recommendation, never a change.
 5. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
 6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
-7. **Execution.** The executor rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in enrolled namespaces: today `get` and `patch` on Deployments, and reading ReplicaSets.
+7. **Execution.** The executor checks the fix against the namespaces and fixes the install lets it change, rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in the namespaces listed for it: today `get` and `patch` on Deployments, and reading ReplicaSets.
 8. **Verification.** Themis decides the fix's symptom checks again from the new pods. If the fix made things worse, Themis tries to restore the previous state, and escalates with its change in place when it can't. An incident whose symptoms persist is referred to a person.
 
 Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
@@ -146,7 +146,7 @@ helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
 ```
 
 - The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
-- Themis is read-only until the executor is enabled (`executor.enabled=true`).
+- Themis is read-only until the executor is enabled for the namespaces it may change (`executor.enabled=true`, `executor.namespaces`).
 - Until the first admin account is created, Themis serves only the page that creates it.
 - Images are signed and published for linux/amd64 and linux/arm64.
 - The [chart README](deploy/helm/themis/README.md) lists every value, including GitOps installs and an external database.

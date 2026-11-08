@@ -114,11 +114,16 @@ func (w *Worker) one(ctx context.Context, in store.Incident) error {
 		return nil
 	}
 
-	by := target.Writer
-	if by == "" {
-		by = "an unknown writer"
+	// Themis writes for an incident it is applying or checking a fix for,
+	// which this isn't: its write here is another incident's fix.
+	how := "outside Themis, by " + target.Writer
+	switch target.Writer {
+	case "":
+		how = "outside Themis, by an unknown writer"
+	case workload.FieldManager:
+		how = "by Themis, for another incident"
 	}
-	changed := "The workload was changed outside Themis, by " + by
+	changed := "The workload was changed " + how
 	state, err := target.State(ctx, target.WrittenAt)
 	if err != nil {
 		return err
@@ -136,7 +141,7 @@ func (w *Worker) one(ctx context.Context, in store.Incident) error {
 	case len(found.unknown) > 0:
 		return w.supersede(ctx, in, changed+". Unknown whether it recovered. "+since(found.unknown, w.Words))
 	}
-	reason := "Recovered after a change outside Themis, by " + by + "."
+	reason := "Recovered after a change " + how + "."
 	if len(found.cleared) > 0 {
 		reason += " " + since(found.cleared, w.Words)
 	}

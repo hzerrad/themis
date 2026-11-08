@@ -267,8 +267,8 @@ func (c Catalog) CheckSources(e config.ExternalProposals) error {
 	return errors.Join(errs...)
 }
 
-// CheckConfig checks every profile and outside agent in cfg, naming each
-// profile with a problem.
+// CheckConfig checks every profile, outside agent and fix the executor may
+// apply in cfg, naming each profile with a problem.
 func (c Catalog) CheckConfig(cfg config.Config) error {
 	var errs []error
 	for _, p := range cfg.Profiles {
@@ -278,6 +278,13 @@ func (c Catalog) CheckConfig(cfg config.Config) error {
 	}
 	if err := c.CheckSources(cfg.ExternalProposals); err != nil {
 		errs = append(errs, fmt.Errorf("externalProposals: %w", err))
+	}
+	if e := cfg.Executor; e != nil {
+		for i, name := range e.Fixes {
+			if _, ok := c.Fixes[name]; !ok {
+				errs = append(errs, fmt.Errorf("executor.fixes[%d]: unknown capability %q", i, name))
+			}
+		}
 	}
 	return errors.Join(errs...)
 }

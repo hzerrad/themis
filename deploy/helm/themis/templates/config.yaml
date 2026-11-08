@@ -136,6 +136,10 @@ data:
     executor:
       address: {{ .Release.Name }}-executor:9091
       bearerTokenFile: /var/run/secrets/themis/executor
+      namespaces: {{ include "themis.executorNamespaces" . }}
+      {{- with .Values.executor.fixes }}
+      fixes: {{ toJson . }}
+      {{- end }}
     {{- end }}
     {{- with .Values.notifications }}
     {{- if or .webhookSecret .externalURL }}

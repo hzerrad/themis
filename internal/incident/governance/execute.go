@@ -54,7 +54,7 @@ func (w *ExecuteWorker) Execute(ctx context.Context, actionID string) error {
 // executor reached by the last attempt. Nothing was written then.
 func (w *ExecuteWorker) execute(ctx context.Context, actionID string, last bool) error {
 	if w.Executor == nil {
-		return w.cancel(ctx, actionID, "The executor is turned off. Turn it on with executor.enabled=true in the Helm values.")
+		return w.cancel(ctx, actionID, "The executor is turned off. Turn it on with executor.enabled=true and executor.namespaces in the Helm values.")
 	}
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()

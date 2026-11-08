@@ -1,12 +1,15 @@
 // Package executor runs authorized actions. It trusts nothing it is handed
-// but an action ID: it recomputes the digest, claims the action once, rereads
-// the target and rechecks its identity before a dry run and the write.
+// but an action ID: it recomputes the digest, claims the action once, checks
+// that its scope allows the fix, rereads the target and rechecks its identity
+// before a dry run and the write.
 package executor
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,6 +23,7 @@ import (
 	"github.com/hzerrad/themis/internal/incident/verification"
 	"github.com/hzerrad/themis/internal/platform/telemetry"
 	"github.com/hzerrad/themis/internal/store"
+	"github.com/hzerrad/themis/internal/workload"
 )
 
 const actor = "executor"
@@ -52,12 +56,51 @@ type Executor struct {
 	Now    func() time.Time
 	// Fixes are the fixes it can carry out.
 	Fixes capability.Registry
+	// Scope is what the install lets it change.
+	Scope Scope
 }
 
-// New returns an executor of fixes, with their metrics started at zero.
-func New(s *store.Store, c client.Client, fixes capability.Registry, log *slog.Logger) *Executor {
+// Scope is what the install lets the executor change, from its own flags,
+// whatever the database says was approved.
+type Scope struct {
+	// Namespaces are those its Roles cover.
+	Namespaces []string
+	// Fixes are those it may apply, by name. Empty: all it can carry out.
+	Fixes []string
+}
+
+// Check says what in s the executor can't honour: no namespace, or a fix
+// it doesn't have.
+func (s Scope) Check(fixes capability.Registry) error {
+	var errs []error
+	if len(s.Namespaces) == 0 {
+		errs = append(errs, errors.New("--namespaces is empty. List the namespaces the executor may change, such as --namespaces=shop"))
+	}
+	for _, name := range s.Fixes {
+		if _, ok := fixes[name]; !ok {
+			errs = append(errs, fmt.Errorf("--fixes names %s, which isn't a fix Themis has. Fixes: %s", name, strings.Join(fixes.Names(), ", ")))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// refusal says why s doesn't let the executor apply fix in namespace, or is
+// empty when it does.
+func (s Scope) refusal(namespace, fix string) string {
+	if !slices.Contains(s.Namespaces, namespace) {
+		return "Not applied. executor.namespaces doesn't list " + namespace + ", so the executor may not change workloads there."
+	}
+	if len(s.Fixes) > 0 && !slices.Contains(s.Fixes, fix) {
+		return "Not applied. executor.fixes doesn't list " + fix + ", so the executor may not apply it."
+	}
+	return ""
+}
+
+// New returns an executor of fixes within scope, with their metrics started
+// at zero. Everything it writes, it writes as workload.FieldManager.
+func New(s *store.Store, c client.Client, fixes capability.Registry, scope Scope, log *slog.Logger) *Executor {
 	initMetrics(fixes)
-	return &Executor{Store: s, Client: c, Fixes: fixes, Logger: log}
+	return &Executor{Store: s, Client: client.WithFieldOwner(c, workload.FieldManager), Fixes: fixes, Scope: scope, Logger: log}
 }
 
 // Execute runs an action once. The execution record is committed before it
@@ -107,6 +150,9 @@ func (e *Executor) run(ctx context.Context, a store.Action) Result {
 	recomputed, err := digest.Compute(a.Fields())
 	if err != nil || recomputed != a.Digest {
 		return Result{Status: Stale, Message: "Not applied. The stored fix was altered after it was approved."}
+	}
+	if refusal := e.Scope.refusal(a.Target.Namespace, a.Capability); refusal != "" {
+		return Result{Status: Failed, Message: refusal}
 	}
 	f, ok := e.Fixes[a.Capability]
 	if !ok {

@@ -258,8 +258,8 @@ api:
     clientID: themis
     clientSecretFile: %s
     redirectURL: https://themis.example/auth/callback
-`, writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("alerting:\n  mode: push\nexecutor:\n  address: %s\n  bearerTokenFile: %s\nsettings:\n  keyFile: %s\n",
-		executorAddr, writeFile(t, "executor-token", "executor-secret\n"), writeFile(t, "settings-key", "settings-key\n")))
+`, writeFile(t, "oidc-secret", "oidc-secret\n")), 1)+fmt.Sprintf("alerting:\n  mode: push\nexecutor:\n  address: %s\n  bearerTokenFile: %s\n  namespaces: [%s]\nsettings:\n  keyFile: %s\n",
+		executorAddr, writeFile(t, "executor-token", "executor-secret\n"), ns, writeFile(t, "settings-key", "settings-key\n")))
 	o, exited, cancel := start(t, func() core.Options {
 		return core.Options{
 			ConfigPath:  configPath,
@@ -552,7 +552,7 @@ func TestRun_RefusesToStart(t *testing.T) {
 		}, "api.adminAccount.passwordHashFile:"},
 		"unreadable executor token": {func(t *testing.T, o *core.Options) {
 			o.DatabaseURL = pgtest.NewDatabase(t)
-			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n")
+			o.ConfigPath = writeFile(t, "executor.yaml", readFile(t, o.ConfigPath)+"executor:\n  address: 127.0.0.1:1\n  bearerTokenFile: /nonexistent/executor-token\n  namespaces: ["+ns+"]\n")
 		}, "executor token"},
 		"unreachable database": {func(t *testing.T, o *core.Options) {
 			o.DatabaseURL = "postgres://themis:themis@" + freeAddr(t) + "/themis?sslmode=disable&connect_timeout=2"

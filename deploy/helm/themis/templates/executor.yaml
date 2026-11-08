@@ -1,4 +1,5 @@
 {{- if .Values.executor.enabled }}
+{{- $namespaces := include "themis.executorNamespaces" . | fromJsonArray }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -37,7 +38,13 @@ spec:
         - name: executor
           image: {{ include "themis.image" (dict "root" . "component" "executor") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          args: [--token-file=/var/run/secrets/themis/executor, --log-level={{ .Values.logLevel }}]
+          args:
+            - --token-file=/var/run/secrets/themis/executor
+            - --log-level={{ .Values.logLevel }}
+            - --namespaces={{ join "," $namespaces }}
+            {{- with .Values.executor.fixes }}
+            - --fixes={{ join "," . }}
+            {{- end }}
           env:
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ include "themis.databaseSecret" . }}, key: DATABASE_URL}}
@@ -57,9 +64,10 @@ spec:
           secret:
             secretName: {{ include "themis.tokensSecret" . }}
             items: [{key: executor, path: executor}]
-{{- range .Values.enrolledNamespaces }}
+{{- range $namespaces }}
 ---
-# The only write access Themis has: patching Deployments to roll them back.
+# The only write access Themis has: patching Deployments, in the namespaces
+# executor.namespaces lists.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
