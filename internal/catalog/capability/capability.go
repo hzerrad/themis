@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -80,6 +82,35 @@ type Capability interface {
 type Feasibility interface {
 	// Feasible returns a *Refusal saying why p can't work.
 	Feasible(ctx context.Context, r client.Reader, p Plan) error
+}
+
+// Commanding is a fix that says how a person makes its change with kubectl,
+// for one Themis only recommends.
+type Commanding interface {
+	// Commands are kubectl commands that make the change params ask for,
+	// writing after over before, to the workload t: that change exactly,
+	// printing no value Changes withholds. None when kubectl can't.
+	Commands(t incident.TargetRef, params map[string]any, before, after json.RawMessage) []string
+}
+
+// Kubectl is a kubectl command on the workload t, such as
+// "kubectl -n shop rollout undo deployment/checkout --to-revision=1" for
+// Kubectl(t, "rollout undo", "--to-revision=1"). Every argument must
+// already be one shell word: see Quote.
+func Kubectl(t incident.TargetRef, verb string, args ...string) string {
+	return strings.Join(append([]string{"kubectl", "-n", t.Namespace, verb, strings.ToLower(t.Kind) + "/" + t.Name}, args...), " ")
+}
+
+// plainWord matches what a shell reads as one word, as it is.
+var plainWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
+
+// Quote is s as one shell word: as it is when a shell reads it so, else in
+// single quotes.
+func Quote(s string) string {
+	if plainWord.MatchString(s) {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Describing is a fix that tells the approver more of its change than the

@@ -86,7 +86,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	}
 	d, err := w.decider.Decide(ctx, w.Reader, Fix{
 		Incident: in.ID, Target: in.Target, Profiles: matched, Checks: checks,
-		Capability: undo, Params: params, Restores: applied.ID, Undoes: applied.Capability,
+		Capability: undo, Params: params, Restores: applied.ID, Undoes: applied.Capability, Reach: w.Reach,
 	})
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		if refusal.NoOp {

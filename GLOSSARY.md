@@ -88,7 +88,7 @@ _Avoid_: agent, AI, model
 
 **Suggestion**:
 A fix put forward for an incident, by an investigator or a person, citing the evidence it rests on. Themis judges it before anything happens.
-_Avoid_: recommendation, proposal
+_Avoid_: recommendation (a fix Themis can't apply), proposal
 
 ## Fixing
 
@@ -113,8 +113,12 @@ A check a profile names for one of its fixes: Themis refuses the fix unless one 
 _Avoid_: precondition, guard
 
 **Core protection**:
-A rule Themis applies to every action before any policy, whichever profile offers the fix and whoever suggested it, and that no policy can loosen: Themis refuses a fix none of its justifying checks supports, and never changes a workload GitOps manages, or may manage, only recommending the fix, for a person to apply in Git.
+A rule Themis applies to every action, whichever profile offers the fix and whoever suggested it, and that no policy can loosen: before any policy, Themis refuses a fix none of its justifying checks supports; after it, Themis only recommends a fix it can't apply.
 _Avoid_: default policy, built-in rule
+
+**Recommendation**:
+A fix policy allows that Themis can't apply to this workload: the executor is off, may not change the workload's namespace or apply that fix, or Argo CD or Flux manages the workload. A person makes the change, with kubectl or in Git, and Themis judges it as any change made outside it.
+_Avoid_: suggestion, advice
 
 **Approval**:
 A person's yes to one action, valid only for that action as it was when approved and only for a while.

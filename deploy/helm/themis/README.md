@@ -2,7 +2,7 @@
 
 Installs `themis-core` and, when you turn them on, `themis-intelligence` and `themis-executor`, with a bundled PostgreSQL for trying it out.
 
-By default Themis is **read-only**: it collects evidence and runs its checks, sends no evidence to a model and changes no workload. Each incident waits for a fix suggested by a person or a tool such as HolmesGPT. The investigator and fixes are turned on separately:
+By default Themis is **read-only**: it collects evidence and runs its checks, sends no evidence to a model and changes no workload. Each incident waits for a fix suggested by a person or a tool such as HolmesGPT, and a fix Themis accepts is only recommended, with the kubectl commands that make it. The investigator and fixes are turned on separately:
 
 | Step | Values | Evidence sent outside the cluster | Changes to workloads |
 |---|---|---|---|
@@ -60,7 +60,7 @@ helm upgrade themis deploy/helm/themis -n themis --reuse-values \
 
 This installs `themis-executor` with a Role in each namespace `executor.namespaces` lists: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. Each must also be in `enrolledNamespaces`, and the chart refuses the executor with none listed. In the default `guarded` mode every action still needs a person to approve its digest in the UI.
 
-To limit which fixes it applies, list them in `executor.fixes`, such as `--set executor.fixes='{deployment.rollback-to-revision}'`. The executor checks the list itself before every write, and refuses any other fix, even one approved. Empty, it applies every fix the scenario packs offer.
+To limit which fixes it applies, list them in `executor.fixes`, such as `--set executor.fixes='{deployment.rollback-to-revision}'`. The executor checks the list itself before every write, and refuses any other fix, even one approved. Empty, it applies every fix the scenario packs offer. Themis reads both lists too: a fix outside them is only recommended, never put to a person to approve, as [recommendations](../../../docs/configuration.md#recommendations) say.
 
 ## Upgrade
 

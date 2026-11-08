@@ -122,6 +122,7 @@ func TestDecide(t *testing.T) {
 		by       governance.Suggester
 		restores string
 		gitOps   bool
+		reach    *governance.Reach
 
 		want    policy.Outcome
 		rule    string
@@ -151,17 +152,26 @@ func TestDecide(t *testing.T) {
 		// Nothing shows how the version before it ran, as with its pods gone
 		// and no metrics history: no rollback, however recent the rollout.
 		{name: "whether the rollout brought them is unknown", checks: set(facts(check.True), 4, check.Unknown), want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
-		// Themis never changes a workload GitOps manages, or may manage, before
-		// any profile's policy, which here would ask for approval: it only
-		// recommends the fix. Ownership is read live too, so a stale check
-		// doesn't hide it.
+		// Themis never changes a workload GitOps manages, or may manage: a fix
+		// policy would put to a person, it only recommends. Ownership is read
+		// live too, so a stale check doesn't hide it.
 		{name: "GitOps owns the target", checks: facts(check.True), gitOps: true, want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD manages this workload. Apply the change in Git."},
 		{name: "the check says GitOps owns it", checks: set(facts(check.True), 1, check.True), want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD or Flux manages this workload. Apply the change in Git."},
 		{name: "GitOps may own it", checks: set(facts(check.True), 1, check.Unknown), want: policy.Deny, rule: governance.GitOpsRule, reason: "Themis couldn't tell whether Argo CD or Flux manages this workload. Apply the change in Git."},
+		// A fix policy forbids is never recommended, whatever keeps Themis
+		// from applying it.
+		{name: "GitOps owns it, and policy forbids the fix", checks: set(facts(check.True), 3, check.True), gitOps: true, want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
+		{name: "the executor is off, and policy forbids the fix", checks: set(facts(check.True), 3, check.True), reach: &governance.Reach{}, want: policy.Deny, rule: "rollback-needs-a-bad-rollout"},
 		// Putting a fix back needs no approval, whatever the checks say of a fix,
-		// unless GitOps owns the workload: then Themis changes nothing.
+		// unless GitOps owns the workload or the executor may not apply it:
+		// then Themis changes nothing, and says why without telling a person
+		// to make the change.
 		{name: "putting a fix back", checks: facts(check.False), restores: "the-fix", want: policy.Allow},
-		{name: "putting a fix back GitOps owns", checks: facts(check.False), restores: "the-fix", gitOps: true, want: policy.Deny, rule: governance.GitOpsRule},
+		{name: "putting a fix back GitOps owns", checks: facts(check.False), restores: "the-fix", gitOps: true, want: policy.Deny, rule: governance.GitOpsRule, reason: "Argo CD manages this workload."},
+		{
+			name: "putting a fix back the executor may not apply", checks: facts(check.False), restores: "the-fix", reach: &governance.Reach{Executor: &config.Executor{Namespaces: []string{"x"}}},
+			want: policy.Deny, rule: governance.ExecutorRule, reason: "The executor may not change workloads in %s, as executor.namespaces doesn't list it.",
+		},
 		// Rules see who suggested the fix.
 		{name: "unproven outsider", profile: outsiders, checks: facts(check.True), by: governance.Suggester{Source: "serviceaccount:agents/triage", External: true}, want: policy.Deny, rule: "no-unproven-outsiders"},
 		// Another profile's rules govern only its own fixes.
@@ -193,7 +203,7 @@ func TestDecide(t *testing.T) {
 			d, err := decider.Decide(t.Context(), k8s, governance.Fix{
 				Incident: "incident-1", Target: target, Profiles: append(config.Matched{p}, tt.also...), Checks: tt.checks, Words: words,
 				Capability: rollback.Capability{}, Params: map[string]any{"revision": revision},
-				By: by, Restores: tt.restores,
+				By: by, Restores: tt.restores, Reach: tt.reach,
 			})
 			if tt.refusal != "" {
 				if refusal, ok := errors.AsType[*capability.Refusal](err); !ok || refusal.Reason != tt.refusal {
@@ -207,13 +217,13 @@ func TestDecide(t *testing.T) {
 			if d.Decision.Outcome != tt.want || d.Decision.PolicyID != tt.rule {
 				t.Errorf("decision = %s by %q (%s), want %s by %q", d.Decision.Outcome, d.Decision.PolicyID, d.Decision.Reason, tt.want, tt.rule)
 			}
-			if tt.reason != "" && d.Decision.Reason != tt.reason {
-				t.Errorf("reason = %q, want %q", d.Decision.Reason, tt.reason)
+			if want := strings.ReplaceAll(tt.reason, "%s", target.Namespace); want != "" && d.Decision.Reason != want {
+				t.Errorf("reason = %q, want %q", d.Decision.Reason, want)
 			}
 			// However many profiles matched, a profile's decision says which
 			// profile it was: only GitOps, and a fix none offers, are no
 			// profile's.
-			byProfile := d.Decision.PolicyID != governance.GitOpsRule && !strings.HasPrefix(d.Decision.Reason, "Refused. None of the incident's profiles")
+			byProfile := !governance.Recommends(d.Decision) && !strings.HasPrefix(d.Decision.Reason, "Refused. None of the incident's profiles")
 			if byProfile && !regexp.MustCompile(` of the [a-z-]+ profile |[Tt]he [a-z-]+ profile('s| allows) `).MatchString(d.Decision.Reason) {
 				t.Errorf("reason %q doesn't say which profile's policy decided", d.Decision.Reason)
 			}

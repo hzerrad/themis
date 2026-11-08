@@ -85,6 +85,27 @@ const SAYS = {
       "Asks for approval of the same raise again, if the checks still support it on evidence read now.", "Investigate again"],
   },
   33: { has: ["Investigate again"], not: ["Ask for approval again"] },
+  13: {
+    has: ["Roll checkout back to revision 1 in Git.", "Argo CD manages this workload. Apply the change in Git.", "The recommended change",
+      "Apply this change in Git.", "Themis checks the change once it is made.", "Reason for closing (optional)"],
+    not: ["Approve the rollback", "Run this command", "rollout undo"],
+  },
+  35: {
+    has: ["Roll checkout back to revision 1.", "The executor is off. Apply the change yourself.", "The recommended change", "Restarts 3 pods, one at a time.",
+      "Run this command:", "kubectl -n shop rollout undo deployment/checkout --to-revision=1", "Themis checks the change once it is made.",
+      "Otherwise Themis closes it once the change is made and the workload recovers, or its alerts stop."],
+    not: ["Approve the rollback", "Apply this change in Git."],
+  },
+  36: {
+    has: ["The executor may not apply a memory or CPU change, as executor.fixes doesn't list deployment.set-resources. Apply the change yourself.",
+      "kubectl -n shop set resources deployment/catalog -c app --limits=memory=72Mi"],
+    not: ["Approve the raise"],
+  },
+  37: {
+    has: ["The executor may not change workloads in shop, as executor.namespaces doesn't list it. Apply the change yourself.",
+      "kubectl -n shop set env deployment/checkout -c app MODE=healthy", "Apply the same change where checkout's manifest lives, or the next deploy undoes it."],
+    not: ["Approve the partial rollback"],
+  },
   27: {
     has: ["Recovered after a change outside Themis, by kubectl-edit.",
       "Since the change, the checks found that no container is throttled at its CPU limit (app was throttled in 2% of its CPU periods over 7m"],
@@ -107,7 +128,8 @@ const RENEW_REFUSED = "Refused. catalog changed since the fix was planned. Inves
 
 // LISTED are lines the incidents list shows, worked out from each change.
 const LISTED = ["Raise checkout's CPU limit from 200m to 300m?", "Lower the CPU request of checkout's app container from 100m to 50m?",
-  "Change checkout's liveness probe?", "Roll checkout back to revision 1?",
+  "Change checkout's liveness probe?", "Roll checkout back to revision 1?", "Roll checkout back to revision 1. Apply it yourself.",
+  "Roll checkout back to revision 1. Apply it in Git.",
   "Changed outside Themis and still failing.", "Changed outside Themis. Unknown whether it recovered."];
 
 // Problems are what went wrong since the last check, wherever the page was:
@@ -151,7 +173,9 @@ function api(o) {
       state.previewed = params;
       if (params.changes) return F.previews.partial;
       const app = (params.containers || {}).app || {};
-      return (app.limits || {}).memory === "72Mi" ? F.previews.accept : F.previews.refuse;
+      const limit = (app.limits || {}).memory;
+      if (limit === "80Mi") return F.previews.recommend;
+      return limit === "72Mi" ? F.previews.accept : F.previews.refuse;
     }],
     ["POST", /^\/v1\/incidents\/([\w-]+)\/evidence$/, (_h, _id, body) => {
       state.asked = JSON.parse(body);
@@ -546,6 +570,11 @@ await visit("approver: the preview of a suggested fix", { who: "approver", hash:
   expect("the decrease refused", preview().classList.contains("no") && preview().querySelector(".verdict").textContent === "Themis would refuse this decrease.");
   says(page, { has: ["Policy rule raise-a-memory-limit-only of the oom-limit-too-low profile forbids this fix."] });
   ok("previewed the decrease");
+  await act.type(page, field(page, "Memory limit", form()), "80Mi");
+  await act.wait(page, 450);
+  expect("the raise only recommended", preview().classList.contains("ok") && preview().querySelector(".verdict").textContent === "Themis would recommend this raise.");
+  says(page, { has: ["The executor is off. Apply the change yourself."] });
+  ok("previewed a raise Themis can't apply");
   await act.type(page, field(page, "Memory limit", form()), "lots");
   await act.wait(page, 450);
   expect("what to correct", preview().textContent.includes("isn't a Kubernetes quantity"));
@@ -655,6 +684,11 @@ await visit("approver: the suggest form after a raise expired", { who: "approver
   ok("previewed the raise");
 });
 
+await visit("approver: close an incident whose fix Themis only recommends", { who: "approver", hash: "#/incidents/" + id(35) }, async (page, ok) => {
+  expect("no approval of a fix Themis can't apply", ![...page.document.querySelectorAll("button")].some((b) => b.textContent.startsWith("Approve")));
+  await act.click(page, "button", "Close");
+  ok("closed");
+});
 await visit("approver: close an incident that waits for a fix", { who: "approver", hash: "#/incidents/" + id(5) }, async (page, ok) => {
   await act.type(page, field(page, "Reason for closing (optional)"), "Handled by the vendor.");
   await act.click(page, "button", "Close");

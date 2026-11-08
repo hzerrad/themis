@@ -58,6 +58,10 @@ type API struct {
 	// Renewals ask again for approval of a fix whose approval expired.
 	// Without it, nobody can.
 	Renewals Renewals
+	// Reach is what the install lets Themis change: a fix it can't apply,
+	// approved before the install changed, isn't approved now. Nil lets it
+	// apply any.
+	Reach *governance.Reach
 	// Fixes are the fixes Themis can carry out, which show what an action
 	// changes and how a person suggests one.
 	Fixes capability.Registry

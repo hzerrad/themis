@@ -9,6 +9,8 @@ import (
 	"github.com/hzerrad/themis/internal/catalog/check"
 	"github.com/hzerrad/themis/internal/catalog/evidence"
 	"github.com/hzerrad/themis/internal/digest"
+	"github.com/hzerrad/themis/internal/incident"
+	"github.com/hzerrad/themis/internal/incident/governance"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -36,7 +38,8 @@ type summaryView struct {
 	// Fix is the latest fix for the incident.
 	Fix *fixView `json:"fix,omitempty"`
 	// Rule is the policy rule that decided the latest change, such as
-	// gitops-owns-the-target for one Themis only recommends.
+	// gitops-owns-the-target or executor-may-not-apply for one Themis only
+	// recommends.
 	Rule string `json:"rule,omitempty"`
 	// Reason is why the incident last changed state, and From the state it
 	// left.
@@ -134,8 +137,12 @@ type actionView struct {
 	ExpiresAt         *time.Time
 	CreatedAt         time.Time
 	Changes           []capability.Change `json:",omitempty"`
-	Execution         *store.Execution    `json:",omitempty"`
-	Verification      *verificationView   `json:",omitempty"`
+	// Commands are kubectl commands that make the change, for a fix Themis
+	// only recommends because the executor may not apply it. None when
+	// kubectl can't make it exactly.
+	Commands     []string          `json:",omitempty"`
+	Execution    *store.Execution  `json:",omitempty"`
+	Verification *verificationView `json:",omitempty"`
 	// Words name the change, as its fix words it.
 	Words capability.Words
 	// Renewable is set on the incident's latest fix while a person can ask
@@ -263,6 +270,17 @@ func viewAction(a store.Action, fixes capability.Registry) actionView {
 		Target: a.Target, Params: a.Params, BlastRadius: a.BlastRadius, Risk: a.Risk,
 		Decision: a.Decision, DecisionReason: a.DecisionReason, PolicyID: a.PolicyID, PolicyDigest: a.PolicyDigest,
 		Digest: a.Digest, State: a.State, ExpiresAt: a.ExpiresAt, CreatedAt: a.CreatedAt,
-		Changes: changes(a, fixes), Words: fixes.Words(a.Capability, a.Target.Name, a.Params, a.PreState, a.Desired),
+		Changes: changes(a, fixes), Commands: commands(a, fixes), Words: fixes.Words(a.Capability, a.Target.Name, a.Params, a.PreState, a.Desired),
 	}
+}
+
+// commands are how a person makes the change Themis only recommends because
+// the executor may not apply it. Under GitOps the change belongs in Git.
+func commands(a store.Action, fixes capability.Registry) []string {
+	f, ok := fixes[a.Capability].(capability.Commanding)
+	if !ok || a.PolicyID != governance.ExecutorRule {
+		return nil
+	}
+	t := incident.TargetRef{Group: a.Target.Group, Kind: a.Target.Kind, Namespace: a.Target.Namespace, Name: a.Target.Name, UID: a.Target.UID}
+	return f.Commands(t, a.Params, a.PreState, a.Desired)
 }

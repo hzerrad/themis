@@ -188,34 +188,36 @@ func TestReconcile_ThemisFixForAnotherIncident(t *testing.T) {
 	}
 }
 
-// An incident handed to a person, waiting for the fix they suggest, is
-// watched too: fixed by hand, it closes as recovered; changed and still
-// failing, a new incident replaces it, so the next alert isn't lost in it.
-func TestReconcile_WaitingForAPersonsFix(t *testing.T) {
-	for name, fixed := range map[string]bool{"fixed by hand": true, "changed and still failing": false} {
-		t.Run(name, func(t *testing.T) {
-			e := newEnv(t)
-			id := e.open(t, incident.Investigating)
-			err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
-				return e.store.Transition(t.Context(), tx, store.TransitionArgs{
-					ID: id, From: incident.Investigating, To: incident.AwaitingSuggestion,
-					Reason: "No fix proposed. Referred to a person.", Actor: "test", Refer: true,
+// An incident handed to a person is watched too, whether it waits for the
+// fix they suggest or for them to make the change Themis recommends: fixed
+// by hand, it closes as recovered; changed and still failing, a new incident
+// replaces it, so the next alert isn't lost in it.
+func TestReconcile_WaitingForAPerson(t *testing.T) {
+	for _, waits := range [][2]incident.State{{incident.Investigating, incident.AwaitingSuggestion}, {incident.Proposed, incident.Recommended}} {
+		for name, fixed := range map[string]bool{"fixed by hand": true, "changed and still failing": false} {
+			t.Run(string(waits[1])+", "+name, func(t *testing.T) {
+				e := newEnv(t)
+				id := e.open(t, waits[0])
+				err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+					return e.store.Transition(t.Context(), tx, store.TransitionArgs{
+						ID: id, From: waits[0], To: waits[1], Reason: "Referred to a person.", Actor: "test", Refer: true,
+					})
 				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				e.edit(t)
+				want := incident.Canceled
+				if fixed {
+					e.heal(t)
+					want = incident.SelfResolved
+				}
+				e.reconcile(t)
+				if got := e.incident(t, id).State; got != want {
+					t.Errorf("state = %s, want %s", got, want)
+				}
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			e.edit(t)
-			want := incident.Canceled
-			if fixed {
-				e.heal(t)
-				want = incident.SelfResolved
-			}
-			e.reconcile(t)
-			if got := e.incident(t, id).State; got != want {
-				t.Errorf("state = %s, want %s", got, want)
-			}
-		})
+		}
 	}
 }
 

@@ -123,22 +123,35 @@ func TestCloseUndecided_EveryWaitingIncidentTakesItsTurn(t *testing.T) {
 	}
 }
 
-// A person closes an incident waiting for a suggested fix, with their
-// reason; one that isn't waiting can't be closed this way.
+// A person closes an incident waiting for a suggested fix, or for a person to
+// make the change Themis recommends, with their reason; one that isn't
+// waiting can't be closed this way.
 func TestClose_ByAPerson(t *testing.T) {
-	e := newEnv(t)
-	id := e.waiting(t)
-	if err := investigation.Close(t.Context(), e.store, id, "alice", "handled by the vendor"); err != nil {
-		t.Fatal(err)
-	}
-	if got := e.state(t, id); got != incident.ClosedNoAction {
-		t.Errorf("state = %s, want closed", got)
-	}
-	if _, reason := e.path(t, id); reason != "Closed by alice. Reason: handled by the vendor." {
-		t.Errorf("reason = %q", reason)
-	}
-	var refused *investigation.Refusal
-	if err := investigation.Close(t.Context(), e.store, id, "alice", ""); !errors.As(err, &refused) {
-		t.Errorf("closing a closed incident: %v, want a refusal", err)
+	for name, path := range map[string][]incident.State{
+		"waiting for a suggested fix": {incident.Received, incident.AwaitingSuggestion},
+		"recommended":                 {incident.Received, incident.Investigating, incident.Diagnosed, incident.Proposed, incident.Recommended},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t)
+			id := e.newIncident(t, "p", e.target)
+			if err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
+				return e.store.TransitionPath(t.Context(), tx, id, "x", "test", path...)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := investigation.Close(t.Context(), e.store, id, "alice", "handled by the vendor"); err != nil {
+				t.Fatal(err)
+			}
+			if got := e.state(t, id); got != incident.ClosedNoAction {
+				t.Errorf("state = %s, want closed", got)
+			}
+			if _, reason := e.path(t, id); reason != "Closed by alice. Reason: handled by the vendor." {
+				t.Errorf("reason = %q", reason)
+			}
+			var refused *investigation.Refusal
+			if err := investigation.Close(t.Context(), e.store, id, "alice", ""); !errors.As(err, &refused) {
+				t.Errorf("closing a closed incident: %v, want a refusal", err)
+			}
+		})
 	}
 }

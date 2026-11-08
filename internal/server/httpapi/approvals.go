@@ -20,6 +20,17 @@ func (a *API) approve(w http.ResponseWriter, r *http.Request) {
 	if !a.decode(w, r, &req) {
 		return
 	}
+	// A fix put to a person before the install stopped the executor applying
+	// it, such as by turning the executor off, isn't approved: nothing would
+	// apply it.
+	if pending, err := a.Store.Action(r.Context(), a.Store.DB(), r.PathValue("id")); err == nil {
+		if f, ok := a.Fixes[pending.Capability]; ok {
+			if why := a.Reach.Why(pending.Target.Namespace, f); why != "" {
+				http.Error(w, "Refused. "+why, http.StatusConflict)
+				return
+			}
+		}
+	}
 	act, err := governance.Approve(r.Context(), a.Store, r.PathValue("id"), req.Digest, actor(r), a.now(), a.anotherApprover())
 	if err != nil {
 		a.fail(w, r, err)

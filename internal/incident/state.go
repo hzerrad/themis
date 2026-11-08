@@ -19,12 +19,15 @@ const (
 	AwaitingSuggestion State = "awaiting_suggestion"
 	Diagnosed          State = "diagnosed"
 	Inconclusive       State = "inconclusive"
-	Recommended        State = "recommended"
-	Proposed           State = "proposed"
-	AwaitingApproval   State = "awaiting_approval"
-	Authorized         State = "authorized"
-	Executing          State = "executing"
-	Verifying          State = "verifying"
+	// Recommended means Themis can't apply the fix policy allows: Argo CD or
+	// Flux manages the workload, or the executor may not apply it there. A
+	// person makes the change, and Themis watches the workload for it.
+	Recommended      State = "recommended"
+	Proposed         State = "proposed"
+	AwaitingApproval State = "awaiting_approval"
+	Authorized       State = "authorized"
+	Executing        State = "executing"
+	Verifying        State = "verifying"
 	// Restoring puts back what Themis changed, after a fix that didn't help.
 	Restoring State = "restoring"
 
@@ -42,11 +45,11 @@ var transitions = map[State][]State{
 	Received:           {Investigating, AwaitingSuggestion, Rejected, SelfResolved, Canceled},
 	AwaitingSuggestion: {Diagnosed, Investigating, ClosedNoAction, SelfResolved, Canceled},
 	Investigating:      {Diagnosed, Inconclusive, AwaitingSuggestion, Escalated, SelfResolved, Canceled},
-	Diagnosed:          {Proposed, Recommended, AwaitingSuggestion, ClosedNoAction, SelfResolved, Canceled},
+	Diagnosed:          {Proposed, AwaitingSuggestion, ClosedNoAction, SelfResolved, Canceled},
 	Inconclusive:       {Diagnosed, ClosedNoAction, SelfResolved, Canceled},
 	Recommended:        {ClosedNoAction, SelfResolved, Canceled},
-	Proposed:           {AwaitingApproval, Authorized, Recommended, AwaitingSuggestion, SelfResolved, Canceled},
-	AwaitingApproval:   {Authorized, AwaitingSuggestion, Recommended, SelfResolved, Canceled},
+	Proposed:           {AwaitingApproval, Authorized, Recommended, AwaitingSuggestion, ClosedNoAction, SelfResolved, Canceled},
+	AwaitingApproval:   {Authorized, AwaitingSuggestion, ClosedNoAction, SelfResolved, Canceled},
 	Authorized:         {Executing, Canceled},
 	Executing:          {Verifying, Escalated},
 	Verifying:          {Resolved, ContainedEscalated, Escalated, Restoring},

@@ -182,31 +182,23 @@ func TestGovern_AwaitsApproval(t *testing.T) {
 }
 
 // A fix policy forbids closes the incident without acting when its checks
-// find nothing wrong, or GitOps owns the target. While they find the failure,
-// a person takes it over instead. A denial is counted as a GitOps refusal
-// only when GitOps owns the target.
+// find nothing wrong. While they find the failure, a person takes it over
+// instead.
 func TestGovern_Denied(t *testing.T) {
 	for _, tt := range []struct {
-		name     string
-		checks   []check.Result
-		gitOps   bool
-		flagged  bool
-		refusals float64
-		want     incident.State
+		name    string
+		checks  []check.Result
+		flagged bool
+		want    incident.State
 	}{
-		{"GitOps owns the target", predicates, true, false, 1, incident.ClosedNoAction},
-		{"forbidden by a rule", notJustified, false, false, 0, incident.ClosedNoAction},
+		{"forbidden by a rule", notJustified, false, incident.ClosedNoAction},
 		// The check is decided again over evidence the investigator asked for
 		// after it first ran. The new version still runs out of memory.
-		{"evidence holds instructions", append(slices.Clone(predicates), check.Result{Name: check.EvidenceHasInstructions, Version: "1", Value: check.False, Reason: "x"}), false, true, 0, incident.AwaitingSuggestion},
+		{"evidence holds instructions", append(slices.Clone(predicates), check.Result{Name: check.EvidenceHasInstructions, Version: "1", Value: check.False, Reason: "x"}), true, incident.AwaitingSuggestion},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t)
-			if tt.gitOps {
-				argoManaged(t, e.target)
-			}
 			deny := decisions(t, "deny")
-			refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
 			id, p := e.diagnosed(t, "rollout-regression", 1, tt.checks)
 			if tt.flagged {
 				e.collectedLater(t, id, evidence.Item{
@@ -233,6 +225,61 @@ func TestGovern_Denied(t *testing.T) {
 			}
 			if got := deny(); got != 1 {
 				t.Errorf("counted %v denials, want 1", got)
+			}
+		})
+	}
+}
+
+// A fix policy allows that Themis can't apply is only recommended, for the
+// same reasons a person reads: Argo CD manages the workload, or the executor
+// may not apply it. The incident waits for a person to make the change, and
+// they are told. Only GitOps counts as a GitOps refusal.
+func TestGovern_OnlyRecommends(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		gitOps   bool
+		reach    *governance.Reach
+		rule     string
+		reason   string
+		refusals float64
+	}{
+		{"GitOps owns the target", true, &governance.Reach{}, governance.GitOpsRule, "Argo CD manages this workload. Apply the change in Git.", 1},
+		{"the executor is off", false, &governance.Reach{}, governance.ExecutorRule, "The executor is off. Apply the change yourself.", 0},
+		{
+			"the executor may not change the namespace", false, &governance.Reach{Executor: &config.Executor{Namespaces: []string{"payments"}}}, governance.ExecutorRule,
+			"The executor may not change workloads in %s, as executor.namespaces doesn't list it. Apply the change yourself.", 0,
+		},
+		{
+			"the executor may not apply the fix", false, &governance.Reach{Executor: &config.Executor{Namespaces: []string{"%s"}, Fixes: []string{"deployment.set-resources"}}}, governance.ExecutorRule,
+			"The executor may not apply a rollback, as executor.fixes doesn't list deployment.rollback-to-revision. Apply the change yourself.", 0,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newEnv(t)
+			if tt.gitOps {
+				argoManaged(t, e.target)
+			}
+			if x := tt.reach.Executor; x != nil {
+				x.Namespaces = slices.Clone(x.Namespaces)
+				for i := range x.Namespaces {
+					x.Namespaces[i] = strings.ReplaceAll(x.Namespaces[i], "%s", e.target.Namespace)
+				}
+			}
+			e.worker.Reach = tt.reach
+			refusals := metrictest.Delta(t, "themis_gitops_refusals_total", nil)
+			id, p := e.diagnosed(t, "rollout-regression", 1, predicates)
+			e.govern(t, p)
+
+			a := e.action(t, id)
+			want := strings.ReplaceAll(tt.reason, "%s", e.target.Namespace)
+			if a.State != store.ActionDenied || a.PolicyID != tt.rule || a.DecisionReason != want || a.ExpiresAt != nil {
+				t.Errorf("action = %s by %q (%s), want denied by %q (%s)", a.State, a.PolicyID, a.DecisionReason, tt.rule, want)
+			}
+			if got := e.state(t, id); got != incident.Recommended {
+				t.Errorf("state = %s, want recommended", got)
+			}
+			if got := e.notices(t, id); got != 1 {
+				t.Errorf("%d notices, want one: a person makes the change", got)
 			}
 			if got := refusals(); got != tt.refusals {
 				t.Errorf("counted %v GitOps refusals, want %v", got, tt.refusals)
@@ -338,8 +385,8 @@ func TestGovern_RefusedFixWhileItStillFails(t *testing.T) {
 // A fix a person suggested that Themis refuses leaves the incident waiting
 // for another, with the refusal on its timeline and the suggestion kept as
 // refused, so it never goes again. So does the investigator's once a person
-// denied a fix for the incident. Only recommending it, as GitOps owns the
-// workload, closes it as before.
+// denied a fix for the incident. A fix Themis only recommends, as GitOps owns
+// the workload, waits for a person to make the change instead.
 func TestGovern_RefusedWhileAPersonWorksOnIt(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
@@ -354,7 +401,7 @@ func TestGovern_RefusedWhileAPersonWorksOnIt(t *testing.T) {
 		{name: "forbidden by a rule", revision: 1, checks: notJustified, by: "person", want: incident.AwaitingSuggestion},
 		{name: "revision missing", revision: 9, checks: predicates, by: "person", want: incident.AwaitingSuggestion, refused: "Revision 9 no longer exists, so Themis can't roll back to it."},
 		{name: "the investigator's, after a denial", revision: 1, checks: notJustified, by: "denied", want: incident.AwaitingSuggestion},
-		{name: "GitOps owns the target", revision: 1, checks: predicates, gitOps: true, by: "person", want: incident.ClosedNoAction},
+		{name: "GitOps owns the target", revision: 1, checks: predicates, gitOps: true, by: "person", want: incident.Recommended},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t)

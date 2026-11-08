@@ -100,9 +100,12 @@ func (a *API) viewPreview(pv suggestion.Preview) previewView {
 		noun = "fix"
 	}
 	v := previewView{Accepted: pv.Refused == "", Note: words.Note}
-	if v.Accepted {
+	switch {
+	case pv.Recommended != "":
+		v.Verdict = "Themis would recommend this " + noun + "."
+	case v.Accepted:
 		v.Verdict = "Themis would accept this " + noun + "."
-	} else {
+	default:
 		v.Verdict = "Themis would refuse this " + noun + "."
 		reason := strings.TrimPrefix(strings.TrimPrefix(pv.Refused, "Refused: "), "Refused. ")
 		v.Reason = upper(reason)
@@ -147,12 +150,13 @@ func (a *API) viewPreview(pv suggestion.Preview) previewView {
 		}
 	}
 	d := j.Decided.Decision
-	switch d.Outcome {
-	case policy.Allow:
+	switch {
+	case pv.Recommended != "":
+		v.Then = pv.Recommended
+	case d.Outcome == policy.Allow:
 		v.Then = "Then " + lower(strings.TrimSuffix(d.Reason, ".")) + ", and a person approves it."
-	case policy.RequireApproval:
+	case d.Outcome == policy.RequireApproval:
 		v.Then = "Then " + lower(d.Reason)
-	case policy.Deny:
 	}
 	return v
 }
