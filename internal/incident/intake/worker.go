@@ -19,9 +19,6 @@ import (
 	"github.com/hzerrad/themis/internal/store"
 )
 
-// actor is recorded on the lifecycle transitions intake makes.
-const actor = "intake"
-
 // ProcessAlertWorker turns a received alert into an incident occurrence, the
 // end of an incident, or a rejection. Each outcome commits with the job's
 // completion; transient errors are retried, then rejected as processing_failed.
@@ -144,8 +141,9 @@ func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAle
 			id  string
 			err error
 		)
-		// The resolution of this episode was processed first.
-		if stale, err = w.Store.Resolved(ctx, tx, a.Source, a.SourceID, a.StartsAt); err != nil || stale {
+		// The resolution of this episode, received after this, was
+		// processed first.
+		if stale, err = w.Store.Resolved(ctx, tx, a.Source, a.SourceID, a.StartsAt, a.ReceivedAt); err != nil || stale {
 			if err != nil {
 				return err
 			}
@@ -183,12 +181,14 @@ func (w *ProcessAlertWorker) fire(ctx context.Context, job *river.Job[ProcessAle
 	return nil
 }
 
-// resolve marks the alert resolved and closes incidents with no firing alert
-// left and no fix in flight.
+// resolve marks the alert resolved. An incident with no firing alert left
+// and no fix in flight is then decided: it closes as recovered unless its
+// checks still find its failure, as investigation.AlertsStoppedWorker says.
+// Deciding reads the cluster and the metrics source, so it runs apart.
 func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[ProcessAlertArgs]) error {
 	a := job.Args.Alert
 	err := w.Store.InTx(ctx, func(tx pgx.Tx) error {
-		resolved := store.ResolvedAlertArgs{Source: a.Source, SourceID: a.SourceID, StartsAt: a.StartsAt, EndsAt: a.EndsAt}
+		resolved := store.ResolvedAlertArgs{Source: a.Source, SourceID: a.SourceID, StartsAt: a.StartsAt, EndsAt: a.EndsAt, ReceivedAt: a.ReceivedAt}
 		if err := w.Store.RecordResolution(ctx, tx, resolved); err != nil {
 			return err
 		}
@@ -200,14 +200,7 @@ func (w *ProcessAlertWorker) resolve(ctx context.Context, job *river.Job[Process
 			if inc.Firing > 0 || !incident.CanTransition(inc.State, incident.SelfResolved) {
 				continue
 			}
-			err := w.Store.Transition(ctx, tx, store.TransitionArgs{
-				ID: inc.IncidentID, From: inc.State, To: incident.SelfResolved,
-				Reason: "All of its alerts stopped firing.", Actor: actor,
-			})
-			if err != nil {
-				return err
-			}
-			if err := w.Store.CancelPendingActions(ctx, tx, inc.IncidentID); err != nil {
+			if err := w.Store.EnqueueTx(ctx, tx, investigation.AlertsStoppedArgs{IncidentID: inc.IncidentID}); err != nil {
 				return err
 			}
 		}

@@ -40,7 +40,7 @@ func (s *throttling) Throttling(_ context.Context, _ metrics.Pods, w time.Durati
 	return metrics.Reading{Containers: map[string]float64{"app": s.ratio}}, nil
 }
 
-func (*throttling) Memory(context.Context, metrics.Pods) (metrics.Reading, error) {
+func (*throttling) Memory(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return metrics.Reading{Unavailable: "none"}, nil
 }
 
@@ -56,7 +56,7 @@ func (*throttling) Use(context.Context, metrics.ReplicaSet, time.Time, time.Time
 	return metrics.Use{Unavailable: "none"}, nil
 }
 
-func (*throttling) CPU(context.Context, metrics.Pods) (metrics.Reading, error) {
+func (*throttling) CPU(context.Context, metrics.Pods, time.Duration) (metrics.Reading, error) {
 	return metrics.Reading{Unavailable: "none"}, nil
 }
 

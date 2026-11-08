@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/hzerrad/themis/internal/config"
-	"github.com/hzerrad/themis/internal/digest"
 	"github.com/hzerrad/themis/internal/incident"
 	"github.com/hzerrad/themis/internal/incident/intake"
 	"github.com/hzerrad/themis/internal/incident/investigation"
@@ -314,8 +313,9 @@ func TestWorker_TransientErrorRetriedThenRecorded(t *testing.T) {
 	wantDelta(t, "rejected{processing_failed}", failed, 1)
 }
 
-// The incident closes only when its last alert resolves.
-func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
+// Whether the incident recovered is decided only once its last alert
+// resolves.
+func TestWorker_DecidesOnceAllAlertsResolve(t *testing.T) {
 	e := newWorkerEnv(t, nil)
 	_, pod1 := k8s.NewRollout(t, e.ns, "checkout")
 	pod2 := k8s.NewPod(t, e.ns, "checkout-2", pod1.OwnerReferences[0])
@@ -344,9 +344,18 @@ func TestWorker_SelfResolvesWhenAllAlertsResolve(t *testing.T) {
 		t.Fatalf("state after one of two alerts resolved = %s, want received", state)
 	}
 
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'alerts_stopped'`); n != 0 {
+		t.Errorf("decisions queued with an alert still firing = %d, want none", n)
+	}
+
+	// Alerts stop for reasons other than a recovery: whether it recovered is
+	// decided apart, from its checks.
 	wantCompleted(t, e.process(t, alertFor(e.ns, pod2.Name, "fp-b", intake.AlertResolved), nil))
-	if _, state, _ := e.onlyIncident(t); state != incident.SelfResolved {
-		t.Errorf("state after both alerts resolved = %s, want self_resolved", state)
+	if _, state, _ := e.onlyIncident(t); state != incident.Received {
+		t.Errorf("state after both alerts resolved = %s, want it still received", state)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM river_job WHERE kind = 'alerts_stopped'`); n != 1 {
+		t.Errorf("decisions queued = %d, want 1", n)
 	}
 	wantDelta(t, "resolved", resolved, 2)
 }
@@ -391,44 +400,6 @@ func TestWorker_ResolvedNeedsNoCluster(t *testing.T) {
 	}
 }
 
-// Self-resolving while a fix awaits approval cancels the fix: nobody should
-// approve it any more, and it must not block the next action on the target.
-func TestWorker_SelfResolveCancelsPendingAction(t *testing.T) {
-	e := newWorkerEnv(t, nil)
-	_, pod := k8s.NewRollout(t, e.ns, "checkout")
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), nil))
-	id, _, _ := e.onlyIncident(t)
-	err := e.store.InTx(t.Context(), func(tx pgx.Tx) error {
-		path := []incident.State{incident.Received, incident.Investigating, incident.Diagnosed, incident.Proposed, incident.AwaitingApproval}
-		for i := 1; i < len(path); i++ {
-			if err := e.store.Transition(t.Context(), tx, store.TransitionArgs{ID: id, From: path[i-1], To: path[i], Reason: "test", Actor: "test"}); err != nil {
-				return err
-			}
-		}
-		p, _, err := e.store.InsertProposal(t.Context(), tx, store.Proposal{IncidentID: id, LeaseID: "0192f0c1-0000-7000-8000-000000000001", ClientProposalID: "p", Capability: "c", CapabilityVersion: "1", Params: map[string]any{}, Status: store.ProposalAccepted})
-		if err != nil {
-			return err
-		}
-		_, err = e.store.InsertAction(t.Context(), tx, store.Action{
-			IncidentID: id, ProposalID: p.ID, Capability: "c", Target: digest.TargetIdentity{UID: "u"},
-			Params: map[string]any{}, BlastRadius: map[string]any{}, Constraints: map[string]any{}, State: store.ActionAwaitingApproval, Digest: "d",
-		})
-		return err
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertResolved), nil))
-
-	if _, state, _ := e.onlyIncident(t); state != incident.SelfResolved {
-		t.Errorf("state = %s, want self_resolved", state)
-	}
-	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM actions WHERE incident_id = $1 AND state = 'canceled'`, id); n != 1 {
-		t.Error("the pending action was not canceled")
-	}
-}
-
 // A resolution processed before its firing notification must not leave an
 // incident open for an alert that already healed.
 func TestWorker_ResolvedBeforeFiring_IsStale(t *testing.T) {
@@ -446,5 +417,30 @@ func TestWorker_ResolvedBeforeFiring_IsStale(t *testing.T) {
 	wantCompleted(t, e.process(t, next, nil))
 	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incidents`); n != 1 {
 		t.Errorf("%d incidents after a new episode, want 1", n)
+	}
+}
+
+// An alert Themis took as resolved that fires again with the same start, as
+// when Alertmanager let its end pass while Prometheus couldn't reach it, then
+// got it again, goes on: it fires again in the incident it belongs to, or
+// opens one.
+func TestWorker_EpisodeThatGoesOnFiresAgain(t *testing.T) {
+	e := newWorkerEnv(t, nil)
+	_, pod := k8s.NewRollout(t, e.ns, "checkout")
+	later := func(a intake.Alert, d time.Duration) intake.Alert {
+		a.ReceivedAt = a.ReceivedAt.Add(d)
+		return a
+	}
+	wantCompleted(t, e.process(t, alertFor(e.ns, pod.Name, "fp-a", intake.AlertResolved), nil))
+	wantCompleted(t, e.process(t, later(alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), time.Minute), nil))
+	id, _, _ := e.onlyIncident(t)
+
+	wantCompleted(t, e.process(t, later(alertFor(e.ns, pod.Name, "fp-a", intake.AlertResolved), 2*time.Minute), nil))
+	wantCompleted(t, e.process(t, later(alertFor(e.ns, pod.Name, "fp-a", intake.AlertFiring), 3*time.Minute), nil))
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incident_alerts WHERE incident_id = $1 AND status = 'firing'`, id); n != 1 {
+		t.Errorf("firing alerts of the incident = %d, want the alert firing again", n)
+	}
+	if n := pgtest.Count(t, e.pool, `SELECT count(*) FROM incidents`); n != 1 {
+		t.Errorf("incidents = %d, want 1", n)
 	}
 }

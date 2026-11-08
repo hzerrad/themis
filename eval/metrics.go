@@ -152,7 +152,7 @@ type promFigures caseMetrics
 
 func (promFigures) Name() string { return metrics.Prometheus }
 
-func (p promFigures) Memory(_ context.Context, pods metrics.Pods) (metrics.Reading, error) {
+func (p promFigures) Memory(_ context.Context, pods metrics.Pods, _ time.Duration) (metrics.Reading, error) {
 	return p.read(pods, func(f containerFigures) (float64, bool, error) { return bytesIn(f.Memory) })
 }
 
@@ -160,7 +160,7 @@ func (p promFigures) PeakMemory(_ context.Context, pods metrics.Pods, _ time.Dur
 	return p.read(pods, func(f containerFigures) (float64, bool, error) { return bytesIn(f.PeakMemory) })
 }
 
-func (p promFigures) CPU(_ context.Context, pods metrics.Pods) (metrics.Reading, error) {
+func (p promFigures) CPU(_ context.Context, pods metrics.Pods, _ time.Duration) (metrics.Reading, error) {
 	return p.read(pods, func(f containerFigures) (float64, bool, error) { return coresIn(f.CPU) })
 }
 

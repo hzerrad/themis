@@ -112,7 +112,7 @@ func (m containerMemory) Collect(ctx context.Context, _ client.Reader, w *worklo
 	if err != nil {
 		return Item{}, err
 	}
-	usage, uerr := m.source.Memory(ctx, pods)
+	usage, uerr := m.source.Memory(ctx, pods, window)
 	peak, perr := m.source.PeakMemory(ctx, pods, window)
 	if err := neither(usage, uerr, peak, perr); err != nil {
 		return Item{}, err
@@ -164,7 +164,7 @@ func (m containerCPU) Collect(ctx context.Context, _ client.Reader, w *workload.
 	if err != nil {
 		return Item{}, err
 	}
-	usage, uerr := m.source.CPU(ctx, pods)
+	usage, uerr := m.source.CPU(ctx, pods, window)
 	throttling, terr := m.source.Throttling(ctx, pods, window)
 	if err := neither(usage, uerr, throttling, terr); err != nil {
 		return Item{}, err

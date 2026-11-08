@@ -23,10 +23,10 @@ import (
 // Prometheus queries.
 const Prometheus = "prometheus"
 
-// RateWindow is what "now" means for a rate, such as CPU use: the rate over
-// the last 5 minutes, as kube-prometheus-stack's rules read CPU use and
-// throttling. A rate over less says little, so a share of CPU periods
-// throttled is never read over less either.
+// RateWindow is what "now" means for CPU use: the last 5 minutes, as
+// kube-prometheus-stack's rules read CPU use and throttling. A rate over
+// less says little, so a share of CPU periods throttled is never read over
+// less either.
 const RateWindow = 5 * time.Minute
 
 const (
@@ -88,25 +88,63 @@ func promDuration(d time.Duration) string { return strconv.FormatInt(int64(d.Min
 
 const notScraped = ": check that it scrapes the kubelet's cAdvisor metrics"
 
-func (p promQL) Memory(ctx context.Context, pods Pods) (Reading, error) {
-	q := fmt.Sprintf("max by (container) (container_memory_working_set_bytes{%s})", selector(pods))
-	return p.read(ctx, q, "Prometheus has no memory figures for these pods"+notScraped)
+// Why Prometheus has no figures for the pods asked about.
+const (
+	NoMemoryFigures     = "Prometheus has no memory figures for these pods" + notScraped
+	NoCPUFigures        = "Prometheus has no CPU figures for these pods" + notScraped
+	NoThrottlingFigures = "Prometheus has no CPU throttling figures for these pods: only containers with a CPU limit have them"
+)
+
+// Memory is each container's working set now: the latest within the
+// lookback, as an instant query reads a gauge.
+func (p promQL) Memory(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
+	now := fmt.Sprintf("max by (pod, container) (container_memory_working_set_bytes{%s})", selector(pods))
+	return p.latest(ctx, now, window, NoMemoryFigures)
 }
 
 func (p promQL) PeakMemory(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
 	q := fmt.Sprintf("max by (container) (max_over_time(container_memory_working_set_bytes{%s}[%s]))", selector(pods), seconds(window))
-	return p.read(ctx, q, "Prometheus has no memory figures for these pods"+notScraped)
+	return p.read(ctx, q, NoMemoryFigures)
 }
 
-func (p promQL) CPU(ctx context.Context, pods Pods) (Reading, error) {
-	q := fmt.Sprintf("max by (container) (rate(container_cpu_usage_seconds_total{%s}[%s]))", selector(pods), promDuration(RateWindow))
-	return p.read(ctx, q, "Prometheus has no CPU figures for these pods"+notScraped)
+// slopeWindow is the stretch CPU use is read over within RateWindow: long
+// enough to hold two scrapes a minute apart, the most scrapes of the kubelet
+// usually are.
+const slopeWindow = 2 * time.Minute
+
+// CPU is the CPU each container used over the last RateWindow, from the
+// stretches of it Prometheus has samples of: the average, over the window,
+// of the slope of its CPU time over each slopeWindow. A gap in Prometheus's
+// data, as when Prometheus or the whole cluster stopped running for a few
+// minutes, has no samples, so it counts for nothing. A rate over the window
+// would count it as idle: a container using all of its limit read as using a
+// tenth of it, until the window passed the gap. cAdvisor's CPU time is a
+// series per run of a container, so it never goes down, and its slope is
+// what the container used.
+func (p promQL) CPU(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
+	slope := fmt.Sprintf("max by (pod, container) (deriv(container_cpu_usage_seconds_total{%s}[%s]))", selector(pods), promDuration(slopeWindow))
+	now := fmt.Sprintf("avg_over_time((%s)[%s:])", slope, promDuration(RateWindow))
+	return p.latest(ctx, now, window, NoCPUFigures)
+}
+
+// latest reads now, a query of each pod's containers, as of now. Just after a
+// gap in Prometheus's data longer than the lookback, it has no figure that
+// recent until its next scrapes. Alerts held up by the gap arrive then, and
+// with them the incidents that read these figures. So without a figure now,
+// the reading is the latest Prometheus has within the window the evidence
+// covers. A source that has none there either has none for these pods.
+func (p promQL) latest(ctx context.Context, now string, window time.Duration, empty string) (Reading, error) {
+	r, err := p.read(ctx, "max by (container) ("+now+")", empty)
+	if err != nil || r.Answered() || window <= 0 {
+		return r, err
+	}
+	return p.read(ctx, fmt.Sprintf("max by (container) (last_over_time((%s)[%s:]))", now, seconds(window)), empty)
 }
 
 func (p promQL) Throttling(ctx context.Context, pods Pods, window time.Duration) (Reading, error) {
 	sel, w := selector(pods), seconds(window)
 	q := fmt.Sprintf("max by (container) (sum by (pod, container) (rate(container_cpu_cfs_throttled_periods_total{%s}[%s])) / sum by (pod, container) (rate(container_cpu_cfs_periods_total{%s}[%s])))", sel, w, sel, w)
-	return p.read(ctx, q, "Prometheus has no CPU throttling figures for these pods: only containers with a CPU limit have them")
+	return p.read(ctx, q, NoThrottlingFigures)
 }
 
 // How far back, and how finely, History reads. Each bounds a query's cost,

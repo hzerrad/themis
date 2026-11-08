@@ -56,6 +56,8 @@ func nameOf(template string) string {
 const (
 	installMetrics = "Install metrics-server, or set metrics.prometheus.address."
 	enableMetrics  = "Set metrics.prometheus.address, or turn the Kubernetes metrics API back on with metrics.kubernetes."
+	// scrapeCAdvisor is the remedy when Prometheus answered without figures.
+	scrapeCAdvisor = "Check that it scrapes the kubelet's cAdvisor metrics."
 )
 
 // missing is what one gap kept from Themis: the finding, and the change that
@@ -102,19 +104,23 @@ func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 	case evidence.GapAbsent:
 		return missing{"nothing to read", ""}
 	case evidence.GapUnavailable:
-		return unavailable(g)
+		return unavailable(in, g)
 	default:
 		return missing{"not read", ""}
 	}
 }
 
 // unavailable says what a reading that failed for another reason kept from
-// Themis. Metrics read without a source, or without history, say which.
-func unavailable(g store.EvidenceGap) missing {
+// Themis. Metrics read without a source, or without history, say which. When
+// Prometheus answered without figures for the pods, that is what happened,
+// whatever the metrics API, asked after it, said.
+func unavailable(in store.Incident, g store.EvidenceGap) missing {
 	detail := g.Detail
 	switch {
 	case strings.Contains(detail, metrics.NoSource):
 		return missing{"no metrics source", enableMetrics}
+	case strings.Contains(detail, metrics.NoMemoryFigures), strings.Contains(detail, metrics.NoCPUFigures):
+		return missing{"Prometheus has no figures for the pods of " + in.Target.Name, scrapeCAdvisor}
 	case strings.Contains(detail, metrics.ErrNotServed.Error()):
 		return missing{"no metrics source", installMetrics}
 	case strings.Contains(detail, metrics.NoHistory), strings.Contains(detail, metrics.NoRevisionHistory):
