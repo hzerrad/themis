@@ -93,7 +93,11 @@ func byName(t *testing.T, c *statuspage.Checker) map[string]statuspage.Check {
 	out := map[string]statuspage.Check{}
 	for _, ch := range c.Checks(t.Context()) {
 		out[ch.Name] = ch
-		if ch.State != statuspage.OK && ch.Fix == "" && ch.State != statuspage.Waiting {
+		switch {
+		case ch.State == statuspage.Off && (ch.Fix != "" || !strings.Contains(ch.TurnOn, ".enabled=true")):
+			// Off is a choice: nothing to fix, and the Helm value that turns it on.
+			t.Errorf("%s is off with fix %q and turn-on %q", ch.Name, ch.Fix, ch.TurnOn)
+		case ch.State != statuspage.OK && ch.State != statuspage.Waiting && ch.State != statuspage.Off && ch.Fix == "":
 			t.Errorf("%s is %s but says no fix", ch.Name, ch.State)
 		}
 		// A model's name opens its finding as it is written, in any case, and
@@ -122,6 +126,15 @@ func TestChecks_Healthy(t *testing.T) {
 	}
 	if s := got["Metrics"].Summary; s != "Read from Prometheus at http://prometheus:9090 and the Kubernetes metrics API." {
 		t.Errorf("metrics summary = %q", s)
+	}
+}
+
+// Without an investigator, no model is used, so no line is about one.
+func TestChecks_NoInvestigatorNoModel(t *testing.T) {
+	c, _ := healthy()
+	c.NoInvestigator = true
+	if m, ok := byName(t, c)["Model"]; ok {
+		t.Errorf("model part shown without an investigator: %+v", m)
 	}
 }
 
@@ -198,8 +211,7 @@ func TestChecks_Problems(t *testing.T) {
 			c.Dial = func(context.Context, string) error { return errors.New("refused") }
 		}, "Fixes", statuspage.Problem, "Executor unreachable"},
 		"no model set":    {func(c *statuspage.Checker, _ *fakeStore) { c.Model = fixedView{} }, "Model", statuspage.Problem, "Not set"},
-		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "Not installed"},
-		"no model":        {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Model", statuspage.Off, "No investigator"},
+		"no investigator": {func(c *statuspage.Checker, _ *fakeStore) { c.NoInvestigator = true }, "Investigator", statuspage.Off, "suggested by a person"},
 		"setup open":      {func(_ *statuspage.Checker, s *fakeStore) { s.finished = false }, "Sign-in", statuspage.Warn, "The initial admin password is not retired."},
 		"setup finished":  {func(*statuspage.Checker, *fakeStore) {}, "Sign-in", statuspage.OK, "Through Themis accounts. The initial admin password is retired."},
 		"token only":      {func(_ *statuspage.Checker, s *fakeStore) { s.accounts = false }, "Sign-in", statuspage.Warn, "break-glass token"},

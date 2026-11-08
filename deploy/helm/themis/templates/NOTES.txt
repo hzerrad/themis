@@ -21,54 +21,60 @@ Then create the admin account with a password of your own. Creating it
 signs you in, and the initial admin password stops working.
 {{- end }}
 
-Watching: {{ join ", " .Values.enrolledNamespaces }}
+Watching:     {{ join ", " .Values.enrolledNamespaces }}
 {{- $am := include "themis.alertmanagerValues" . | fromJson }}
 {{- if not (include "themis.alertmanagerEnabled" .) }}
-Alerts:   Push mode, to http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager.
+Alerts:       Push mode, to http://{{ .Release.Name }}-core.{{ .Release.Namespace }}.svc:8080/v1/intake/alertmanager.
 {{- if not (include "themis.alertmanagerConfigs" .) }}
-          The Setup page shows how to have Alertmanager send them.
+              The Setup page shows how to have Alertmanager send them.
 {{- end }}
 {{- else if $am.address }}
-Alerts:   Poll mode, from {{ $am.address }} every {{ $am.interval | default "15s" }}.
+Alerts:       Poll mode, from {{ $am.address }} every {{ $am.interval | default "15s" }}.
 {{- else }}
 {{- with include "themis.alertmanagerFound" . }}
-Alerts:   Poll mode, from {{ . }} every {{ $am.interval | default "15s" }}.
-          Found in the cluster at install.
+Alerts:       Poll mode, from {{ . }} every {{ $am.interval | default "15s" }}.
+              Found in the cluster at install.
 {{- else }}
-Alerts:   Poll mode. No Alertmanager found in the cluster. Set its address on
-          the Setup page.
+Alerts:       Poll mode. No Alertmanager found in the cluster. Set its address
+              on the Setup page.
 {{- end }}
 {{- end }}
 {{- if (((.Values.alerting | default dict).webhook | default dict).alertmanagerConfig | default dict).enabled }}
 {{- if include "themis.alertmanagerConfigs" . }}
-Webhook:  AlertmanagerConfig {{ .Release.Name }} in each enrolled namespace sends its
-          alerts to Themis.
+Webhook:      AlertmanagerConfig {{ .Release.Name }} in each enrolled namespace sends
+              its alerts to Themis.
 {{- else }}
-Webhook:  No AlertmanagerConfig made: this cluster serves none. The Setup page
-          shows how to send alerts to Themis.
+Webhook:      No AlertmanagerConfig made: this cluster serves none. The Setup
+              page shows how to send alerts to Themis.
 {{- end }}
 {{- end }}
 {{- $rules := include "themis.rulesValues" . | fromJson }}
 {{- if $rules.install }}
 {{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule" }}
-Rules:    Installed as PrometheusRule {{ .Release.Name }}-alert-rules
-          {{- with include "themis.ruleLabels" . | fromJson }}, labelled
-          {{- range $k, $v := . }} {{ $k }}={{ $v }}{{ end }}{{ end }}.
+Rules:        Installed as PrometheusRule {{ .Release.Name }}-alert-rules
+              {{- with include "themis.ruleLabels" . | fromJson }}, labelled
+              {{- range $k, $v := . }} {{ $k }}={{ $v }}{{ end }}{{ end }}.
 {{- else }}
-Rules:    Not installed: this cluster serves no PrometheusRule. The Setup page
-          shows the rules to add to Prometheus.
+Rules:        Not installed: this cluster serves no PrometheusRule. The Setup
+              page shows the rules to add to Prometheus.
 {{- end }}
 {{- end }}
-Fixes:    {{ if .Values.executor.enabled }}On. A person approves each one.{{ else }}Off. Themis never applies a fix.{{ end }}
-{{- if (include "themis.modelEnabled" .) }}
-{{- $model := .Values.model }}
+{{- if (include "themis.investigatorEnabled" .) }}
+{{- $model := .Values.investigator.model | default dict }}
 {{- $anthropic := eq (include "themis.modelProvider" .) "anthropic" }}
 {{- if and $model.name (or $model.baseURL $anthropic) }}
-Model:    {{ $model.name }}{{ with $model.baseURL }} at {{ . }}{{ end }}{{ if $anthropic }} (Anthropic){{ end }}
+Investigator: On, with {{ $model.name }}{{ with $model.baseURL }} at {{ . }}{{ end }}{{ if $anthropic }} (Anthropic){{ end }}.
 {{- else }}
-Model:    Not set. Set it on the Setup page.
+Investigator: On. Set its model on the Setup page.
 {{- end }}
 {{- else }}
-Model:    None. Each incident waits for a fix suggested by a person or a
-          tool outside Themis.
+Investigator: Off. Each incident waits for a fix suggested by a person or a
+              tool such as HolmesGPT. To have Themis investigate, set
+              investigator.enabled=true and a model in investigator.model.
+{{- end }}
+{{- if .Values.executor.enabled }}
+Fixes:        On. A person approves each one.
+{{- else }}
+Fixes:        Off. Themis never applies a fix. To have it apply the fixes a
+              person approves, set executor.enabled=true.
 {{- end }}

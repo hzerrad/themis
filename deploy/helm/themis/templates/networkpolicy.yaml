@@ -1,5 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
-{{- if (include "themis.modelEnabled" .) }}
+{{- if (include "themis.investigatorEnabled" .) }}
 # The investigator may reach only the core's gRPC API, the model and DNS.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -18,7 +18,7 @@ spec:
         - podSelector:
             matchLabels: {{- include "themis.selector" (dict "root" . "component" "core") | nindent 14 }}
       ports: [{port: 9090, protocol: TCP}]
-    - to: [{ipBlock: {cidr: {{ .Values.model.egressCIDR }}}}]
+    - to: [{ipBlock: {cidr: {{ .Values.investigator.egressCIDR }}}}]
     {{- if .Values.telemetry.otlp.endpoint }}
     - to: [{ipBlock: {cidr: {{ .Values.telemetry.otlp.egressCIDR }}}}]
       ports: [{port: 4317, protocol: TCP}, {port: 4318, protocol: TCP}]

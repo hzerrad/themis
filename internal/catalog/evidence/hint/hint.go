@@ -96,7 +96,7 @@ func (w Writer) missed(in store.Incident, g store.EvidenceGap) missing {
 			"Raise investigation.maxEvidenceRequests in " + where + ".",
 		}
 	case evidence.GapDataCeiling:
-		return missing{"not sent to the model, which may not see sensitive data", "Set model.ceiling to sensitive, or use a self-hosted model."}
+		return missing{"not sent to the model, which may not see sensitive data", "Set investigator.model.ceiling to sensitive, or use a self-hosted model."}
 	case evidence.GapTimeout:
 		return missing{"Kubernetes didn't answer in time", ""}
 	case evidence.GapAbsent:

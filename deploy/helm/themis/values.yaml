@@ -103,57 +103,65 @@ postgres:
   image: postgres:17-alpine
   storage: 1Gi
 
-# Bring your own model: any OpenAI-compatible endpoint, hosted or local, or
-# Claude through Anthropic's API.
-model:
-  # Off installs no investigator: Themis collects evidence and runs its
-  # checks, then each incident waits for a fix suggested by a person or a
-  # tool outside Themis, such as HolmesGPT.
-  enabled: true
-  # openai: an OpenAI-compatible API, such as OpenAI's, Ollama's or vLLM's.
-  # anthropic: Anthropic's Messages API, for Claude models; baseURL can stay
-  # empty, and the Setup page's address doesn't apply. Left empty with no
-  # baseURL, it's chosen on the Setup page; otherwise empty means openai.
-  provider: ""
-  # For example https://api.openai.com/v1 or http://ollama:11434/v1. Left
-  # empty, it's set on Themis's Setup page instead.
-  baseURL: ""
-  # The model name the endpoint serves. Left empty, it's set on the Setup page.
-  name: ""
-  # The most sensitive evidence the endpoint may receive. sensitive includes
-  # (redacted) container logs; set internal to keep logs from the endpoint.
-  ceiling: sensitive
-  # A Secret in the release namespace with an apiKey key, if the endpoint
-  # needs one.
-  apiKeySecret: ""
+# Themis's own investigator, themis-intelligence, which asks a model for a
+# diagnosis and a fix. Off by default: each incident then waits for a fix
+# suggested by a person or a tool such as HolmesGPT. On, the evidence Themis
+# collects goes to the model below; a model in the cluster, such as Ollama,
+# keeps it there.
+investigator:
+  enabled: false
+  # Tokens per incident, shared by its investigations when a person has it
+  # investigated again.
+  tokenBudget: 200000
   # CIDR the investigator may reach the model at, for the NetworkPolicy.
   egressCIDR: 0.0.0.0/0
-  tokenBudget: 200000
-  # How hard a reasoning model thinks before answering, for example none or
-  # low. Empty leaves the provider's default.
-  reasoningEffort: ""
-  # Each reply's output limit. Empty: 4096. A model that reasons needs more,
-  # or its replies are cut off.
-  maxOutputTokens: ""
-  # Ask the provider to follow the reply schema exactly. Replies are still
-  # checked either way. Without a baseURL, the Setup page's reply format
-  # sets it instead.
-  strictOutput: true
-  # How the reply schema is sent: as-is, or openai-strict, the form OpenAI's
-  # strict mode accepts. Empty: as-is, as Ollama and vLLM take it, or the
-  # Setup page's reply format when baseURL is empty too.
-  schemaDialect: ""
-  # The field the output limit is sent in: max_tokens or max_completion_tokens.
-  # Empty: max_tokens, as Ollama and vLLM read it. OpenAI's newer models need
-  # max_completion_tokens.
-  outputLimitField: ""
-  # The temperature sent: a number, or default to send none and leave the
-  # model's own, as OpenAI's newer models require. Empty: 0.
-  temperature: ""
-  # The endpoint's price in US dollars per million tokens, so the investigator
-  # reports themis_model_cost_usd_total; for example
-  # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is reported.
-  price: {}
+  resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
+  # Bring your own model: any OpenAI-compatible endpoint, hosted or local, or
+  # Claude through Anthropic's API.
+  model:
+    # openai: an OpenAI-compatible API, such as OpenAI's, Ollama's or vLLM's.
+    # anthropic: Anthropic's Messages API, for Claude models; baseURL can stay
+    # empty, and the Setup page's address doesn't apply. Left empty with no
+    # baseURL, it's chosen on the Setup page; otherwise empty means openai.
+    provider: ""
+    # For example https://api.openai.com/v1 or http://ollama:11434/v1. Left
+    # empty, it's set on Themis's Setup page instead.
+    baseURL: ""
+    # The model name the endpoint serves. Left empty, it's set on the Setup
+    # page.
+    name: ""
+    # A Secret in the release namespace with an apiKey key, if the endpoint
+    # needs one.
+    apiKeySecret: ""
+    # The most sensitive evidence the endpoint may receive. sensitive includes
+    # (redacted) container logs; set internal to keep logs from the endpoint.
+    ceiling: sensitive
+    # How hard a reasoning model thinks before answering, for example none or
+    # low. Empty leaves the provider's default.
+    reasoningEffort: ""
+    # Each reply's output limit. Empty: 4096. A model that reasons needs more,
+    # or its replies are cut off.
+    maxOutputTokens: ""
+    # Ask the provider to follow the reply schema exactly. Replies are still
+    # checked either way. Without a baseURL, the Setup page's reply format
+    # sets it instead.
+    strictOutput: true
+    # How the reply schema is sent: as-is, or openai-strict, the form OpenAI's
+    # strict mode accepts. Empty: as-is, as Ollama and vLLM take it, or the
+    # Setup page's reply format when baseURL is empty too.
+    schemaDialect: ""
+    # The field the output limit is sent in: max_tokens or
+    # max_completion_tokens. Empty: max_tokens, as Ollama and vLLM read it.
+    # OpenAI's newer models need max_completion_tokens.
+    outputLimitField: ""
+    # The temperature sent: a number, or default to send none and leave the
+    # model's own, as OpenAI's newer models require. Empty: 0.
+    temperature: ""
+    # The endpoint's price in US dollars per million tokens, so the
+    # investigator reports themis_model_cost_usd_total; for example
+    # {inputUSDPerMTok: 3, outputUSDPerMTok: 15}. Without one, no cost is
+    # reported.
+    price: {}
 
 # The executor is the only component that writes to workloads. Off by
 # default: Themis then diagnoses and proposes, and never acts.
@@ -312,5 +320,4 @@ profiles: []
 resources:
   core: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
   executor: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 256Mi}}
-  intelligence: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
   holmesgpt: {requests: {cpu: 10m, memory: 64Mi}, limits: {memory: 256Mi}}

@@ -31,7 +31,7 @@ const (
 	Problem State = "problem"
 	// Waiting means nothing has happened yet that would tell.
 	Waiting State = "waiting"
-	// Off means the part isn't installed or turned on.
+	// Off means the part is off by choice, and how to turn it on is TurnOn.
 	Off State = "off"
 )
 
@@ -42,6 +42,9 @@ type Check struct {
 	Summary string `json:"summary"`
 	// Fix is the remedy, as an instruction; empty when there is nothing to do.
 	Fix string `json:"fix,omitempty"`
+	// TurnOn says how to turn on a part that is off by choice, as an
+	// instruction naming its Helm value.
+	TurnOn string `json:"turnOn,omitempty"`
 	// At is when the part was last heard from, if that's what it rests on,
 	// and Since names that moment, such as "Last request".
 	At    *time.Time `json:"at,omitempty"`
@@ -124,24 +127,26 @@ func (c *Checker) Checks(ctx context.Context) []Check {
 			Fix: "Check that the database is running and that DATABASE_URL points at it.",
 		}}
 	}
-	return []Check{
-		{Name: "Database", State: OK, Summary: "Reachable."},
-		c.investigator(ctx),
-		c.model(ctx),
+	checks := []Check{{Name: "Database", State: OK, Summary: "Reachable."}, c.investigator(ctx)}
+	// Without an investigator, no model is used, so no line is about one.
+	if !c.NoInvestigator {
+		checks = append(checks, c.model(ctx))
+	}
+	return append(checks,
 		c.alerts(ctx),
 		c.alertRules(ctx),
 		c.namespaces(ctx),
 		c.metrics(ctx),
 		c.executor(ctx),
 		c.signIn(ctx),
-	}
+	)
 }
 
 func (c *Checker) investigator(ctx context.Context) Check {
 	ch := Check{Name: "Investigator"}
 	if c.NoInvestigator {
-		ch.State, ch.Summary = Off, "Not installed. Incidents wait for a fix suggested by a person or an outside tool, such as HolmesGPT."
-		ch.Fix = installInvestigator
+		ch.State, ch.Summary = Off, "Each incident waits for a fix suggested by a person or a tool such as HolmesGPT."
+		ch.TurnOn = "To have Themis investigate, set investigator.enabled=true. Its model is then set on the Setup page or in investigator.model."
 		return ch
 	}
 	h, err := c.Store.LastHeartbeat(ctx, store.HeartbeatInvestigator)
@@ -160,18 +165,15 @@ func (c *Checker) investigator(ctx context.Context) Check {
 	return ch
 }
 
-// installInvestigator is the remedy when no investigator is installed.
-const installInvestigator = "Set model.enabled=true and a model to have Themis investigate."
-
 // modelFixes say what to do about each way the model can fail.
 var modelFixes = map[string]struct{ summary, fix string }{
 	"model_unavailable": {
 		"Unreachable in the last investigation.",
-		"Check model.baseURL and the API key, and that model.egressCIDR includes the model's address.",
+		"Check investigator.model.baseURL and the API key, and that investigator.egressCIDR includes the model's address.",
 	},
 	"invalid_model_output": {
 		"Answers in the last investigation didn't follow Themis's reply format.",
-		"For OpenAI models, set model.schemaDialect=openai-strict. For others, use a larger model.",
+		"For OpenAI models, set investigator.model.schemaDialect=openai-strict. For others, use a larger model.",
 	},
 	"deadline_exceeded": {
 		"Too slow. The last investigation ran out of time.",
@@ -185,11 +187,6 @@ var modelFixes = map[string]struct{ summary, fix string }{
 
 func (c *Checker) model(ctx context.Context) Check {
 	ch := Check{Name: "Model"}
-	if c.NoInvestigator {
-		ch.State, ch.Summary = Off, "Not used. No investigator is installed."
-		ch.Fix = installInvestigator
-		return ch
-	}
 	if c.Model != nil {
 		v, err := c.Model.View(ctx)
 		if err != nil {
@@ -197,9 +194,9 @@ func (c *Checker) model(ctx context.Context) Check {
 		}
 		if !v.Complete {
 			ch.State, ch.Summary = Problem, "Not set. Incidents are not investigated."
-			ch.Fix = "Set the model's address and name in Setup, or in the chart's model values."
+			ch.Fix = "Set the model's address and name in Setup, or in the chart's investigator.model values."
 			if v.Provider == "anthropic" {
-				ch.Fix = "Set the model's name in Setup, or model.name in the chart."
+				ch.Fix = "Set the model's name in Setup, or investigator.model.name in the chart."
 			}
 			return ch
 		}
@@ -495,8 +492,8 @@ func (c *Checker) sourceText(name string) string {
 func (c *Checker) executor(ctx context.Context) Check {
 	ch := Check{Name: "Fixes"}
 	if c.Executor == "" {
-		ch.State, ch.Summary = Off, "Off. Fixes are proposed, never applied."
-		ch.Fix = "Set executor.enabled=true to apply fixes a person approves."
+		ch.State, ch.Summary = Off, "Fixes are proposed, never applied."
+		ch.TurnOn = "To have Themis apply the fixes a person approves, set executor.enabled=true."
 		return ch
 	}
 	dctx, cancel := context.WithTimeout(ctx, checkTimeout)

@@ -571,6 +571,12 @@ function partFinding(c) {
   return [c.summary, c.at ? " " + (c.since || "Last heard") + " " + ago(c.at) + "." : ""];
 }
 
+// partChoice says how to turn on a part that is off by choice: a choice to
+// make, not a remedy.
+function partChoice(c) {
+  return c.turnOn ? h("div", { class: "turn-on" }, c.turnOn) : null;
+}
+
 // partState is a part's state word, in its tone.
 function partState(c) {
   const [word, tone] = CHECK_STATE[c.state] || [humanize(c.state), ""];
@@ -858,7 +864,6 @@ async function setup() {
   try { model = await api("/v1/settings/model"); } catch {}
   let alertmanager = { mode: "push", modeByInstall: true };
   try { alertmanager = await api("/v1/settings/alertmanager"); } catch {}
-  const investigatorOff = check("Investigator").state === "off";
   const signIn = check("Sign-in");
   const acting = checks.filter(needsAction).length;
   const steps = [
@@ -867,9 +872,9 @@ async function setup() {
       h("ul", { class: "remedies" },
         h("li", {}, h("a", { href: "#/accounts" }, "Create accounts")),
         h("li", {}, h("a", { href: OIDC_DOCS, target: "_blank", rel: "noopener" }, "Configure the identity provider (Helm: oidc values)")))] },
-    investigatorOff
-      ? { title: "The model", status: "Not used", body: [h("p", {}, check("Investigator").summary)] }
-      : model ? { title: "The model", status: model.complete ? "Done" : "Not done", body: modelStep(model) } : null,
+    // Without the investigator, no model is used: Check says how to turn it on.
+    check("Investigator").state !== "off" && model
+      ? { title: "The model", status: model.complete ? "Done" : "Not done", body: modelStep(model) } : null,
     { title: "Alerts", status: done("Alerts") ? "Done" : "Not done", body: alertsStep(alertmanager, check("Alerts")) },
     { title: "Check", status: acting ? "Action required" : "Done", body: [digest(checks), h("p", { class: "sub" }, h("a", { href: "#/status" }, "Full status"))] },
   ].filter(Boolean);
@@ -888,12 +893,14 @@ async function setup() {
 const OIDC_DOCS = "https://github.com/hzerrad/themis/blob/main/docs/configuration.md#apioidc";
 
 // digest is every part's state in a few lines, what requires action first,
-// each with its finding and remedy.
+// each with its finding and remedy, and each part off by choice with how to
+// turn it on.
 function digest(checks) {
   const parts = [...checks].sort((a, b) => (URGENCY[a.state] ?? 2) - (URGENCY[b.state] ?? 2));
   return h("ul", { class: "parts" }, parts.map((c) => h("li", {},
     h("b", {}, c.name), partState(c),
-    needsAction(c) ? h("div", { class: "says" }, partFinding(c), c.fix ? h("div", { class: "fix" }, c.fix) : null) : null)));
+    needsAction(c) || c.state === "off"
+      ? h("div", { class: "says" }, partFinding(c), c.fix ? h("div", { class: "fix" }, c.fix) : null, partChoice(c)) : null)));
 }
 
 // status is each part of the install: its state, its finding, and the remedy once.
@@ -911,6 +918,7 @@ async function status() {
         h("td", {}, partState(c)),
         h("td", {}, partFinding(c),
           c.fix ? h("div", { class: "fix" }, c.fix) : null,
+          partChoice(c),
           c.name === "Alerts" && c.state !== "ok" && can("admin") ? h("p", { class: "sub" }, h("a", { href: "#/setup" }, "Connect Alertmanager on the Setup page")) : null)))))),
     h("p", { class: "sub" }, h("button", { class: "btn", type: "button", onclick: route }, "Check again")));
 }

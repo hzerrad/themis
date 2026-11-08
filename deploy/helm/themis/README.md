@@ -1,44 +1,57 @@
 # Themis Helm chart
 
-Installs `themis-core`, `themis-intelligence` and, if you enable it, `themis-executor`, with a bundled PostgreSQL for trying it out.
+Installs `themis-core` and, when you turn them on, `themis-intelligence` and `themis-executor`, with a bundled PostgreSQL for trying it out.
 
-By default Themis is **read-only**: it investigates and proposes, and nothing it proposes can run. Enabling the executor adds the only component with write access to your workloads.
+By default Themis is **read-only**: it collects evidence and runs its checks, sends no evidence to a model and changes no workload. Each incident waits for a fix suggested by a person or a tool such as HolmesGPT. The investigator and fixes are turned on separately:
+
+| Step | Values | Evidence sent outside the cluster | Changes to workloads |
+|---|---|---|---|
+| Read-only (default) | None | None | None |
+| Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
+| Fixes | `executor.enabled=true` | None, unless the investigator is on | Each one after a person approves it |
 
 ## Install
 
-Themis brings no model. Point it at any OpenAI-compatible chat completions endpoint that supports JSON-schema structured output:
-
 ```bash
 helm install themis deploy/helm/themis -n themis --create-namespace \
-  --set enrolledNamespaces='{shop}' \
-  --set model.baseURL=https://api.openai.com/v1 \
-  --set model.name=gpt-4.1 \
-  --set model.apiKeySecret=model-key
+  --set enrolledNamespaces='{shop}'
 ```
-
-`model.baseURL` and `model.name` can also be left out and set on the **Setup** page after install. With `model.enabled=false`, no investigator is installed, and each incident waits for a fix suggested by a person or a tool such as HolmesGPT.
-
-### Model examples
-
-| Endpoint | `model.baseURL` | `model.apiKeySecret` |
-|---|---|---|
-| OpenAI | `https://api.openai.com/v1` | a Secret with an `apiKey` key |
-| OpenRouter | `https://openrouter.ai/api/v1` | a Secret with an `apiKey` key |
-| Ollama in the cluster | `http://ollama.ollama.svc:11434/v1` | none |
-| vLLM | `http://vllm.<namespace>.svc:8000/v1` | none, or a Secret if you set `--api-key` |
-| Anthropic, with `model.provider=anthropic` | none | a Secret with an `apiKey` key |
-
-```bash
-kubectl -n themis create secret generic model-key --from-literal=apiKey=sk-...
-```
-
-Container logs are classified `sensitive`, and with the default `model.ceiling: sensitive` they reach the model after redaction. To keep them from the endpoint, set `model.ceiling: internal`; investigations that need logs then fail rather than send them.
 
 ### Images
 
 Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. By default they come from `ghcr.io/hzerrad`, published for linux/amd64 and linux/arm64 on every merge to main, and signed: `main` is the latest, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
 
-## Let Themis act
+## Turn on the investigator
+
+Themis brings no model. Point the investigator at any OpenAI-compatible chat completions endpoint that supports JSON-schema structured output, or at Claude through Anthropic's API:
+
+```bash
+helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+  --set investigator.enabled=true \
+  --set investigator.model.baseURL=https://api.openai.com/v1 \
+  --set investigator.model.name=gpt-4.1 \
+  --set investigator.model.apiKeySecret=model-key
+```
+
+`investigator.model.baseURL` and `investigator.model.name` can also be left out and set on the **Setup** page.
+
+### Model examples
+
+| Endpoint | `investigator.model.baseURL` | `investigator.model.apiKeySecret` |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | a Secret with an `apiKey` key |
+| OpenRouter | `https://openrouter.ai/api/v1` | a Secret with an `apiKey` key |
+| Ollama in the cluster | `http://ollama.ollama.svc:11434/v1` | none |
+| vLLM | `http://vllm.<namespace>.svc:8000/v1` | none, or a Secret if you set `--api-key` |
+| Anthropic, with `investigator.model.provider=anthropic` | none | a Secret with an `apiKey` key |
+
+```bash
+kubectl -n themis create secret generic model-key --from-literal=apiKey=sk-...
+```
+
+Container logs are classified `sensitive`, and with the default `investigator.model.ceiling: sensitive` they reach the model after redaction. To keep them from the endpoint, set `investigator.model.ceiling: internal`; investigations that need logs then fail rather than send them.
+
+## Turn on fixes
 
 ```bash
 helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.enabled=true
@@ -184,21 +197,22 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |
-| `model.enabled` | `true` | Install the investigator. Off, incidents wait for a suggested fix |
-| `model.provider` | `""` (`openai`) | `openai` for an OpenAI-compatible endpoint, or `anthropic` for Claude models through Anthropic's API, which needs no `baseURL`. Empty with no `baseURL`, it's chosen on the Setup page |
-| `model.baseURL` | `""` | An OpenAI-compatible endpoint. Empty, it's set on the Setup page |
-| `model.name` | `""` | The model the endpoint serves. Empty, it's set on the Setup page |
-| `model.apiKeySecret` | `""` | A Secret with an `apiKey` key, if the endpoint needs one |
-| `model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
-| `model.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
-| `model.tokenBudget` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
-| `model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`; for `anthropic`, `low`, `medium`, `high`, `xhigh` or `max`. Empty leaves the provider's default |
-| `model.maxOutputTokens` | `""` (`4096`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
-| `model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way. Without `baseURL`, the Setup page's reply format sets it |
-| `model.schemaDialect` | `""` (`as-is`) | How the reply schema is sent: `as-is`, as Ollama and vLLM take it, or `openai-strict`, the form OpenAI's strict mode accepts. Empty with no `baseURL`, the Setup page's reply format sets it. OpenAI needs `openai-strict` |
-| `model.outputLimitField` | `""` (`max_tokens`) | The field the output limit is sent in, `max_tokens` or `max_completion_tokens`. OpenAI's newer models need `max_completion_tokens` |
-| `model.temperature` | `""` (`0`) | The temperature sent: a number, or `default` to send none and leave the model's own, as OpenAI's newer models require |
-| `model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |
+| `investigator.enabled` | `false` | Install the investigator. Off, each incident waits for a suggested fix |
+| `investigator.tokenBudget` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
+| `investigator.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
+| `investigator.resources` | small | The investigator's container resources |
+| `investigator.model.provider` | `""` (`openai`) | `openai` for an OpenAI-compatible endpoint, or `anthropic` for Claude models through Anthropic's API, which needs no `baseURL`. Empty with no `baseURL`, it's chosen on the Setup page |
+| `investigator.model.baseURL` | `""` | An OpenAI-compatible endpoint. Empty, it's set on the Setup page |
+| `investigator.model.name` | `""` | The model the endpoint serves. Empty, it's set on the Setup page |
+| `investigator.model.apiKeySecret` | `""` | A Secret with an `apiKey` key, if the endpoint needs one |
+| `investigator.model.ceiling` | `sensitive` | The most sensitive evidence the endpoint may receive: `public`, `internal` or `sensitive` |
+| `investigator.model.reasoningEffort` | `""` | How hard a reasoning model thinks, for example `none` or `low`; for `anthropic`, `low`, `medium`, `high`, `xhigh` or `max`. Empty leaves the provider's default |
+| `investigator.model.maxOutputTokens` | `""` (`4096`) | Each reply's output limit. Raise it for a model that reasons, or its replies are cut off |
+| `investigator.model.strictOutput` | `true` | Ask the provider to follow the reply schema exactly. Replies are still checked either way. Without `baseURL`, the Setup page's reply format sets it |
+| `investigator.model.schemaDialect` | `""` (`as-is`) | How the reply schema is sent: `as-is`, as Ollama and vLLM take it, or `openai-strict`, the form OpenAI's strict mode accepts. Empty with no `baseURL`, the Setup page's reply format sets it. OpenAI needs `openai-strict` |
+| `investigator.model.outputLimitField` | `""` (`max_tokens`) | The field the output limit is sent in, `max_tokens` or `max_completion_tokens`. OpenAI's newer models need `max_completion_tokens` |
+| `investigator.model.temperature` | `""` (`0`) | The temperature sent: a number, or `default` to send none and leave the model's own, as OpenAI's newer models require |
+| `investigator.model.price` | `{}` | The endpoint's price in US dollars per million tokens, `inputUSDPerMTok` and `outputUSDPerMTok`, to report the cost of model requests |
 | `executor.enabled` | `false` | Install the executor and its write Roles |
 | `notifications.webhookSecret` | `""` | A Secret with a `url` key for escalation notices |
 | `notifications.webhookToken` | `false` | Whether that Secret also has a `token` key, sent as a bearer token |
@@ -225,7 +239,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `profiles` | `[]` | Incident classes of your own, installed as `IncidentProfile` resources. One named like a scenario pack's profile replaces it; see [Configuration](../../../docs/configuration.md#configuration-resources) |
 | `themisConfig` | `{}` | Global settings, installed as the `ThemisConfig` resource when set |
 | `networkPolicy.agentNamespaces` | `[]` | Namespaces whose pods may reach the core's gRPC API, for [agents that suggest fixes](../../../docs/configuration.md#fixes-suggested-from-outside) |
-| `resources.{core,executor,intelligence}` | small | Container resources |
+| `resources.{core,executor,holmesgpt}` | small | Container resources |
 | `crds.upgrade` | `true` | Update the CRDs before each upgrade, with a Job |
 | `crds.image` | `registry.k8s.io/kubectl:v1.37.2` | The image that Job runs |
 

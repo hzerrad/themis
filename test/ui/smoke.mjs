@@ -705,6 +705,19 @@ for (const s of setups) {
   });
 }
 
+// A read-only install: the investigator and the executor are off by choice,
+// each with the Helm value that turns it on, and Setup asks for no model.
+const READ_ONLY = {
+  has: ["To have Themis investigate, set investigator.enabled=true.", "To have Themis apply the fixes a person approves, set executor.enabled=true."],
+  not: ["Failing", "Not set", "Not installed", "Test the connection"],
+};
+for (const hash of ["#/status", "#/setup"]) {
+  await visit("read-only install: " + hash.slice(2), { status: "readOnly", alerting: "push", hash }, async (page, ok) => {
+    says(page, READ_ONLY);
+    ok("the investigator and fixes off by choice");
+  });
+}
+
 await visit("accounts", { hash: "#/accounts" }, async (page, ok) => {
   await act.choose(page, "select[aria-label='Role of alice']", "responder");
   ok("changed a role");

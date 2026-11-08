@@ -88,9 +88,9 @@ func (r Result) Text(byInstall func(name string) bool) string {
 			s += " (" + lowerFirst(d) + ")"
 		}
 		if r.Address == "" {
-			return s + ". Check that model.egressCIDR allows Anthropic's API."
+			return s + ". Check that investigator.egressCIDR allows Anthropic's API."
 		}
-		return s + ". Check the address, and that model.egressCIDR allows it."
+		return s + ". Check the address, and that investigator.egressCIDR allows it."
 	case NoAnswer:
 		return fmt.Sprintf("Failed. No answer from %s within %s.", where, seconds(r.Latency))
 	case Refused:
@@ -98,7 +98,7 @@ func (r Result) Text(byInstall func(name string) bool) string {
 	case NotInFormat:
 		return "Failed. The model answered, but not in the reply format. " + r.formatRemedy(byInstall)
 	case CutOff:
-		return fmt.Sprintf("Failed. The reply was cut off at %d tokens. Raise model.maxOutputTokens for a model that reasons.", r.OutputLimit)
+		return fmt.Sprintf("Failed. The reply was cut off at %d tokens. Raise investigator.model.maxOutputTokens for a model that reasons.", r.OutputLimit)
 	case Declined:
 		return "Failed. The model declined to answer."
 	case Errored:
@@ -150,9 +150,9 @@ func (r Result) requestRemedy(byInstall func(string) bool) string {
 	case r.ownAddress():
 		return ""
 	case strings.Contains(text, "max_completion_tokens"):
-		return "Install with model.outputLimitField=max_completion_tokens."
+		return "Install with investigator.model.outputLimitField=max_completion_tokens."
 	case strings.Contains(text, "temperature"):
-		return "Install with model.temperature=default."
+		return "Install with investigator.model.temperature=default."
 	case r.StrictOutput && (strings.Contains(text, "schema") || strings.Contains(text, "response_format")):
 		return r.formatRemedy(byInstall)
 	}
@@ -167,11 +167,11 @@ func (r Result) formatRemedy(byInstall func(string) bool) string {
 		return "Use a larger model."
 	case r.SchemaDialect != "openai-strict" && isOpenAI(r.Address):
 		if byInstall(settings.ModelSchemaDialect) {
-			return "Install with model.schemaDialect=openai-strict."
+			return "Install with investigator.model.schemaDialect=openai-strict."
 		}
 		return "Set the reply format to OpenAI's strict form."
 	case byInstall(settings.ModelStrictOutput):
-		return "Install with model.strictOutput=false."
+		return "Install with investigator.model.strictOutput=false."
 	}
 	return "Set the reply format to Not strict."
 }

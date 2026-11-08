@@ -45,11 +45,11 @@ Small local models work, but make more mistakes: a wrong target, or giving up ea
 
 ```bash
 make monitoring-up                            # Prometheus, kube-state-metrics and Alertmanager, first, so the chart finds Alertmanager
-make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the executor
+make themis-up MODEL_URL=... MODEL_NAME=...   # builds the images, loads them into kind, installs the chart with the investigator and the executor
 make demo-up                                  # the healthy checkout, catalog and search workloads in namespace shop
 ```
 
-`monitoring-up` installs the alert rules every scenario pack answers, the ones Themis ships, but faster, as [`scripts/dev/monitoring/fast.yaml`](../scripts/dev/monitoring/fast.yaml) says: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace. `themis-up` points Themis at its Prometheus, for the containers' memory and CPU figures.
+`monitoring-up` installs the alert rules every scenario pack answers, the ones Themis ships, but faster, as [`scripts/dev/monitoring/fast.yaml`](../scripts/dev/monitoring/fast.yaml) says: `KubePodCrashLooping` fires after 30 seconds instead of the usual 15 minutes, so the demo moves at a watchable pace. `themis-up` turns on the investigator, with your model, and the executor, both off in a default install. It points Themis at that Prometheus, for the containers' memory and CPU figures.
 
 ## 4. Open the UI
 
