@@ -142,7 +142,6 @@ $K -n themis create secret generic e2e-webhook --from-literal=url=http://webhook
   --dry-run=client -o yaml | $K apply -f - >/dev/null
 $K -n themis apply -f test/e2e/manifests.yaml >/dev/null
 # Monitoring first: the chart finds its Alertmanager at install.
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts >/dev/null 2>&1 || true
 make -s monitoring-up KIND_CLUSTER="$CLUSTER" >/dev/null
 helm --kube-context "$CTX" upgrade --install themis deploy/helm/themis -n themis -f test/e2e/values.yaml --wait --timeout 5m >/dev/null
 $K -n themis rollout status deploy/fake-model deploy/webhook-sink --timeout=180s >/dev/null
