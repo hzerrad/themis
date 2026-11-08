@@ -90,7 +90,7 @@ func (r Result) Text(byInstall func(name string) bool) string {
 		if r.Address == "" {
 			return s + ". Check that investigator.egressCIDR allows Anthropic's API."
 		}
-		return s + ". Check the address, and that investigator.egressCIDR allows it."
+		return s + ". Check the address, and that investigator.egressCIDR and investigator.egressPorts allow it."
 	case NoAnswer:
 		return fmt.Sprintf("Failed. No answer from %s within %s.", where, seconds(r.Latency))
 	case Refused:
