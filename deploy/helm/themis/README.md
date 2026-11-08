@@ -8,29 +8,34 @@ By default Themis is **read-only**: it collects evidence and runs its checks, se
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each fix after a person approves it, only in those namespaces. Putting back one that made things worse needs no approval by default |
 
 ## Install
 
 ```bash
-helm install themis deploy/helm/themis -n themis --create-namespace \
+kubectl create namespace shop
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  -n themis --create-namespace \
   --set enrolledNamespaces='{shop}'
 ```
 
+Themis watches only the namespaces in `enrolledNamespaces`. Each must exist before the install: Themis gets its Roles there then. The commands below upgrade the same published chart. From a checkout, use `deploy/helm/themis` in place of the chart and its version.
+
 ### Images
 
-Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. By default they come from `ghcr.io/hzerrad`, published for linux/amd64 and linux/arm64 on every merge to main, and signed: `main` is the latest, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
+Images are named `<image.repository>/themis-{core,executor,intelligence}:<image.tag>`. They come from `ghcr.io/hzerrad`, published for linux/amd64 and linux/arm64, and signed. A published chart pins the images of its own version, such as `v0.1.0-alpha2`. The chart in the repository uses `main`, the build of every merge to main, and `sha-<commit>` pins an exact build. To build your own, run `make images`, or `make kind-load` for a kind cluster, then set `image.repository` and `image.tag`.
 
 ## Turn on the investigator
 
 Themis brings no model. Point the investigator at any OpenAI-compatible chat completions endpoint that supports JSON-schema structured output, or at Claude through Anthropic's API:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set investigator.enabled=true \
   --set investigator.model.baseURL=https://api.openai.com/v1 \
   --set investigator.model.name=gpt-4.1 \
-  --set investigator.model.apiKeySecret=model-key
+  --set investigator.model.apiKeySecret=model-key \
+  --set investigator.model.schemaDialect=openai-strict
 ```
 
 `investigator.model.baseURL` and `investigator.model.name` can also be left out and set on the **Setup** page.
@@ -51,14 +56,20 @@ kubectl -n themis create secret generic model-key --from-literal=apiKey=sk-...
 
 Container logs are classified `sensitive`, and with the default `investigator.model.ceiling: sensitive` they reach the model after redaction. To keep them from the endpoint, set `investigator.model.ceiling: internal`; investigations that need logs then fail rather than send them.
 
+### What the investigator may reach
+
+Its NetworkPolicy lets it reach the core, DNS and the model: any address in `investigator.egressCIDR`, every address by default, only on the model's port. That port is the one in `investigator.model.baseURL`, 80 for `http://` without one, and 443 otherwise, as for Anthropic's API or an address set on the Setup page. Set `investigator.egressCIDR` to the model's addresses where you can.
+
+Set `investigator.egressPorts`, such as `[11434]`, for a model set on the Setup page at another port, or behind a Service whose port differs from its pods': the NetworkPolicy matches the pods' port. A model in the cluster is matched by its pods' IPs, which some network plugins, such as Cilium, never match to a CIDR. There, add a NetworkPolicy that lets the investigator's pods reach the model's.
+
 ## Turn on fixes
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set executor.enabled=true --set executor.namespaces='{shop}'
 ```
 
-This installs `themis-executor` with a Role in each namespace `executor.namespaces` lists: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. Each must also be in `enrolledNamespaces`, and the chart refuses the executor with none listed. In the default `guarded` mode every action still needs a person to approve its digest in the UI.
+This installs `themis-executor` with a Role in each namespace `executor.namespaces` lists: `get` and `patch` on Deployments, and `get`/`list` on ReplicaSets. That is all it may do. Each must also be in `enrolledNamespaces`, and the chart refuses the executor with none listed. In the default `guarded` mode every fix still needs a person to approve its digest in the UI. Putting back what Themis changed, after a fix that made things worse, needs no approval unless a policy rule asks for one.
 
 To limit which fixes it applies, list them in `executor.fixes`, such as `--set executor.fixes='{deployment.rollback-to-revision}'`. The executor checks the list itself before every write, and refuses any other fix, even one approved. Empty, it applies every fix the scenario packs offer. Themis reads both lists too: a fix outside them is only recommended, never put to a person to approve, as [recommendations](../../../docs/configuration.md#recommendations) say.
 
@@ -102,7 +113,7 @@ kubectl -n themis create secret generic themis-initial-admin-gitops --from-liter
 Themis starts in poll mode: it reads the active alerts from Alertmanager's API every 15 seconds. When Alertmanager runs in the cluster, set nothing: at install, the chart finds its Service with Helm's `lookup`, as prometheus-community's prometheus chart and kube-prometheus-stack install it, and `helm install` prints the address it reads. The lookup uses your access, and Themis gets no permission to list Services. Argo CD and Flux don't run `lookup`: set `alerting.alertmanager.address`, or the address on the **Setup** page.
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set alerting.alertmanager.address=http://alertmanager-operated.monitoring:9093 \
   --set 'alerting.alertmanager.matchers={cluster="prod-eu"}'   # for an Alertmanager several clusters share
 ```
@@ -135,7 +146,7 @@ Register Themis with the provider as a web app. Its redirect URL is Themis's `/a
 
 ```bash
 kubectl -n themis create secret generic themis-oidc --from-literal=clientSecret=...
-helm upgrade themis deploy/helm/themis -n themis --reuse-values -f oidc.yaml
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values -f oidc.yaml
 ```
 
 ```yaml
@@ -157,7 +168,7 @@ Someone who signs in but matches no entry in `access` sees nothing until an admi
 
 ```bash
 kubectl -n themis create secret generic themis-webhook --from-literal=url=https://hooks.example.com/... --from-literal=token=...
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set notifications.webhookSecret=themis-webhook \
   --set notifications.webhookToken=true \
   --set notifications.externalURL=https://themis.example.com
@@ -170,8 +181,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | Value | Default | Meaning |
 |---|---|---|
 | `image.repository` | `ghcr.io/hzerrad` | Registry and path of the images |
-| `image.tag` | `main` | Image tag: `main`, or `sha-<commit>` to pin a build |
-| `image.pullPolicy` | `Always` | `main` moves, so it's pulled every time; use `IfNotPresent` with a pinned tag |
+| `image.tag` | `main`, or a published chart's own version | Image tag: `main`, or `sha-<commit>` to pin a build |
+| `image.pullPolicy` | `Always`, or `IfNotPresent` in a published chart | `main` moves, so it's pulled every time; use `IfNotPresent` with a pinned tag |
 | `initialAdmin.existingSecret` | `""` | A Secret with a `password` key, the initial admin password, for GitOps (see above). Empty, the chart generates `<release>-initial-admin` |
 | `initialAdmin.account.username` | `""` | An admin account Themis creates at startup while it has none. Set, no initial admin password exists |
 | `initialAdmin.account.existingSecret` | `""` | Required with the username. A Secret with the password's hash or the password itself (see above) |
@@ -202,7 +213,8 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |
 | `investigator.enabled` | `false` | Install the investigator. Off, each incident waits for a suggested fix |
 | `investigator.tokenBudget` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
-| `investigator.egressCIDR` | `0.0.0.0/0` | Where the investigator may connect, for the NetworkPolicy |
+| `investigator.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the model, for the NetworkPolicy |
+| `investigator.egressPorts` | `[]` | The ports it may reach the model on, such as `[11434]`. Empty: the port in `investigator.model.baseURL`, 80 for `http://` without one, and 443 otherwise. See [What the investigator may reach](#what-the-investigator-may-reach) |
 | `investigator.resources` | small | The investigator's container resources |
 | `investigator.model.provider` | `""` (`openai`) | `openai` for an OpenAI-compatible endpoint, or `anthropic` for Claude models through Anthropic's API, which needs no `baseURL`. Empty with no `baseURL`, it's chosen on the Setup page |
 | `investigator.model.baseURL` | `""` | An OpenAI-compatible endpoint. Empty, it's set on the Setup page |
@@ -233,7 +245,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `approvals.requireAnotherApprover` | `false` | Refuse the approval of a fix by the person who suggested it: someone else must approve it |
-| `networkPolicy.enabled` | `true` | Limit the investigator to the core and the model, and the executor to the core |
+| `networkPolicy.enabled` | `true` | Limit the investigator to the core, DNS and the model's port, and the executor to the core |
 | `metrics.kubernetes.enabled` | `true` | Read containers' current memory and CPU use from the Kubernetes metrics API (metrics-server), and let the core read it in each enrolled namespace |
 | `metrics.prometheus.address` | `""` | A server answering Prometheus queries, for peak memory and CPU throttling too; see [Metrics](../../../docs/configuration.md#metrics). Empty: not used |
 | `metrics.prometheus.tokenSecret` | `""` | A Secret with a `token` key, sent as a bearer token |

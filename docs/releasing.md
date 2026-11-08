@@ -15,7 +15,7 @@ Versions follow [semantic versioning](https://semver.org). Below 1.0, a minor ve
 
 ## Cutting a release
 
-From an up-to-date `main` whose checks, including the end-to-end run, are green:
+From an up-to-date `main` whose checks, including the end-to-end run, are green, and that names the new version where the docs install it (the README, `docs/quickstart.md` and the chart README):
 
 ```sh
 git tag -s v0.2.0 -m "Themis v0.2.0"
@@ -30,14 +30,19 @@ A tag with a pre-release part, such as `v0.1.0-alpha1`, publishes the same way: 
 
 ```sh
 helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha1 \
-  --namespace themis --create-namespace
+  --namespace themis --create-namespace \
+  --set enrolledNamespaces='{shop}'
 ```
 
 ## Installing a release
 
+Each namespace in `enrolledNamespaces` must exist before the install.
+
 ```sh
+kubectl create namespace shop
 helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.2.0 \
-  --namespace themis --create-namespace
+  --namespace themis --create-namespace \
+  --set enrolledNamespaces='{shop}'
 ```
 
 To check an image's signature:

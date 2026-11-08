@@ -8,16 +8,16 @@ Themis is turned on in steps, each with its own Helm values:
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each fix after a person approves it, only in those namespaces. Putting back one that made things worse needs no approval by default |
 
-Each numbered step below has a **kind** path and a **your cluster** path. On kind, Themis is installed with the investigator and fixes on, so you see the whole loop. The kind path uses the repository's `make` targets; for more detail on it, see [the demo](demo.md). On your cluster, Themis starts read-only, and steps 5 and 6 add the investigator, then fixes.
+Each numbered step below has a **kind** path and a **your cluster** path. Both install the published chart, `oci://ghcr.io/hzerrad/charts/themis` version `0.1.0-alpha2`. On kind, Themis is installed with the investigator and fixes on, so you see the whole loop. The kind path uses the repository's `make` targets; for more detail on it, see [the demo](demo.md). On your cluster, Themis starts read-only, and steps 5 and 6 add the investigator, then fixes.
 
-Themis runs in **guarded** mode: it never changes anything until a person approves the exact change.
+Themis runs in **guarded** mode: it applies no fix until a person approves the exact change. Putting back what Themis changed, after a fix that made things worse, needs no approval unless a policy rule asks for one.
 
 ## What you need
 
-- Docker, Helm and kubectl. The kind path also needs Go: kind runs through `go tool`.
-- A clone of this repository, for the chart and the sample workload. The images are published for amd64 and arm64, so there's nothing to build.
+- Helm and kubectl. The kind path also needs Docker and Go: kind runs through `go tool`.
+- A clone of this repository at the release, for the sample workload and the kind path's `make` targets: `git clone --branch v0.1.0-alpha2 https://github.com/hzerrad/themis`. The chart and its images are published, for amd64 and arm64, so there's nothing to build.
 - For the investigator, a model: any OpenAI-compatible chat completions endpoint with JSON-schema structured output, such as OpenAI, OpenRouter, Ollama or vLLM, or Claude through Anthropic's API. You can also set it on the Setup page once the investigator is on. Without one, you suggest fixes yourself or through HolmesGPT.
 - For your cluster: Kubernetes 1.35 or later, able to pull from `ghcr.io`, and Prometheus with Alertmanager.
 
@@ -41,7 +41,8 @@ Create the namespace you'll enroll, then install the chart with the investigator
 
 ```bash
 kubectl --context kind-themis-dev create namespace shop
-helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis --create-namespace \
+helm --kube-context kind-themis-dev install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  -n themis --create-namespace \
   --set enrolledNamespaces='{shop}' \
   --set metrics.prometheus.address=http://monitoring-prometheus-server.monitoring.svc \
   --set investigator.enabled=true \
@@ -57,7 +58,8 @@ helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis 
 For Claude, set the provider instead of an address. Anthropic's API has only one:
 
 ```bash
-helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis --create-namespace \
+helm --kube-context kind-themis-dev install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  -n themis --create-namespace \
   --set enrolledNamespaces='{shop}' \
   --set metrics.prometheus.address=http://monitoring-prometheus-server.monitoring.svc \
   --set investigator.enabled=true \
@@ -69,13 +71,14 @@ helm --kube-context kind-themis-dev install themis deploy/helm/themis -n themis 
   --wait
 ```
 
-The model values are explained in [step 5](#5-add-the-investigator). To run Themis from your own checkout instead, `make themis-up MODEL_URL=... MODEL_NAME=... MODEL_KEY_SECRET=model-key` builds the images, loads them into kind, and installs the chart with the same values. For Claude, give `MODEL_PROVIDER=anthropic` instead of `MODEL_URL`.
+The model values are explained in [step 5](#5-add-the-investigator).
 
 **Your cluster:** create the namespace you'll enroll, then install the chart. It installs read-only:
 
 ```bash
 kubectl create namespace shop
-helm install themis deploy/helm/themis -n themis --create-namespace \
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  -n themis --create-namespace \
   --set enrolledNamespaces='{shop}' \
   --wait
 ```
@@ -87,14 +90,14 @@ helm install themis deploy/helm/themis -n themis --create-namespace \
 | `executor.enabled` | Installs the only part that can change workloads. Off, Themis applies no fix. |
 | `executor.namespaces` | The namespaces the executor may change, each also enrolled. Required with the executor: it gets a Role in each, and in no other. `executor.fixes` can also limit which fixes it applies. |
 
-The images come from `ghcr.io/hzerrad`, signed: `main` is the latest build, and `--set image.tag=sha-<commit>` pins one. The bundled PostgreSQL is for trying Themis. For anything longer, set `database.existingSecret` to a Secret with a `DATABASE_URL` key. All values are in the [chart README](../deploy/helm/themis/README.md#values).
+The chart installs the images of its own version, `v0.1.0-alpha2`, from `ghcr.io/hzerrad`, signed. The bundled PostgreSQL is for trying Themis. For anything longer, set `database.existingSecret` to a Secret with a `DATABASE_URL` key. All values are in the [chart README](../deploy/helm/themis/README.md#values).
 
 ## 2. Enroll a namespace
 
-Themis only looks at enrolled namespaces. Both paths above enrolled `shop`, and on kind let the executor change it. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and `executor.namespaces` where the executor is on, and upgrade:
+Themis only looks at enrolled namespaces. Both paths above enrolled `shop`, and on kind let the executor change it. To use another, create it if it doesn't exist yet, change `enrolledNamespaces`, and `executor.namespaces` where the executor is on, and upgrade. On kind, add `--kube-context kind-themis-dev`:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set enrolledNamespaces='{payments}' --set executor.namespaces='{payments}'
 ```
 
@@ -113,7 +116,7 @@ kubectl apply -f scripts/dev/demo/checkout.yaml
 kubectl -n shop rollout status deployment/checkout
 ```
 
-The chart's built-in profile handles this kind of incident: a Deployment whose new pods crash or run out of memory after a rollout, fixed by rolling back. It needs approval for every rollback.
+The chart's built-in profile handles this kind of incident: a Deployment whose new pods crash or run out of memory after a rollout, fixed by rolling back. Its policy requires a person's approval for every rollback Themis proposes.
 
 ## 3. Connect Alertmanager
 
@@ -177,7 +180,7 @@ On your cluster, if the model needs a key, put it in a Secret, then upgrade with
 
 ```bash
 kubectl -n themis create secret generic model-key --from-literal=apiKey=sk-...
-helm upgrade themis deploy/helm/themis -n themis --reuse-values \
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set investigator.enabled=true \
   --set investigator.model.baseURL=https://api.openai.com/v1 \
   --set investigator.model.name=gpt-4.1 \
@@ -212,7 +215,8 @@ On kind, fixes are on already.
 On your cluster, upgrade with the executor, the only part that can change workloads, then roll checkout back and break it again, as in step 5:
 
 ```bash
-helm upgrade themis deploy/helm/themis -n themis --reuse-values --set executor.enabled=true --set executor.namespaces='{shop}' --wait
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set executor.enabled=true --set executor.namespaces='{shop}' --wait
 ```
 
 Click **Approve the rollback**. You approve exactly what you were shown: if the workload changes first, the approval no longer applies.
@@ -252,7 +256,7 @@ Themis accounts, on the **Accounts** page, are enough for a small team. With an 
 4. Upgrade, and restart the port-forward once the core is back:
 
    ```bash
-   helm upgrade themis deploy/helm/themis -n themis --reuse-values -f oidc.yaml --wait
+   helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values -f oidc.yaml --wait
    ```
 
    On kind, add `--kube-context kind-themis-dev`.
@@ -265,6 +269,16 @@ Themis accounts, on the **Accounts** page, are enough for a small team. With an 
 | `admin` | Everything |
 
 The admin account stays: Themis always needs one of its own, and the last can't be deleted. Someone who signs in but has no role sees nothing, and is told to ask a Themis admin. The break-glass token, in the `themis-tokens` Secret, still works for scripts and as a way in if the provider is down. The username is the `email` claim by default; set `oidc.usernameClaim` and `oidc.groupsClaim` if your provider uses others. For Dex or Okta, add `groups` to `oidc.scopes` to receive groups. More in [People and roles](configuration.md#people-and-roles).
+
+## From a checkout, for contributors
+
+To run Themis built from your checkout on kind, in place of the published release, install it with `make themis-up` instead of `helm install` in step 1:
+
+```bash
+make themis-up MODEL_URL=... MODEL_NAME=... MODEL_KEY_SECRET=model-key
+```
+
+It creates namespace `shop`, builds the images, loads them into kind, and installs the chart from `deploy/helm/themis` with the investigator, the executor and the Prometheus from `make monitoring-up`. For Claude, give `MODEL_PROVIDER=anthropic` instead of `MODEL_URL`. In later steps, upgrade with `deploy/helm/themis` in place of the published chart and its version.
 
 ## Clean up
 

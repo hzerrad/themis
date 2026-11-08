@@ -114,7 +114,7 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 1. **Validation.** The proposal must name the incident's exact target, UID included, use a fix the incident's profiles offer, and cite evidence Themis collected. Anything else is rejected. A wrong target is recorded as a safety event.
 2. **Justification.** A fix is accepted only when one of its justifying checks is true. Checks are CEL expressions over the collected evidence. Text in logs or events alone never justifies a fix.
 3. **Feasibility.** The change is derived from the live object. It is refused when no node can fit it, or when a ResourceQuota or LimitRange forbids it.
-4. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every action needs approval. `observe` mode denies every action.
+4. **Policy.** CEL rules decide `allow`, `require_approval` or `deny`. In the default `guarded` mode every fix needs approval. Putting back what Themis changed, after a fix that made things worse, needs no approval unless a policy rule asks for one. `observe` mode denies every action.
 5. **Recommendation.** A fix policy allows that Themis can't apply is recommended, never put to a person to approve: the executor is off, may not change the namespace or apply that fix, or Argo CD or Flux manages the workload. The incident page shows the exact change, with the kubectl commands that make it when kubectl can, or says to apply it in Git. Themis judges the change once a person makes it.
 6. **Approval.** A person approves the exact change shown, bound to a digest. The approval is void if the workload changes first, and it expires.
 7. **Execution.** The executor checks the fix against the namespaces and fixes the install lets it change, rechecks the digest and the live object, dry-runs the change, then applies it. Its Role grants only what the installed fixes need, in the namespaces listed for it: today `get` and `patch` on Deployments, and reading ReplicaSets.
@@ -141,9 +141,13 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
 ```sh
+kubectl create namespace shop
 helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
-  --namespace themis --create-namespace
+  --namespace themis --create-namespace \
+  --set enrolledNamespaces='{shop}'
 ```
+
+Themis watches only the namespaces in `enrolledNamespaces`, here `shop`. Each must exist before the install.
 
 A default install is read-only. The investigator and fixes are turned on separately:
 
@@ -151,7 +155,7 @@ A default install is read-only. The investigator and fixes are turned on separat
 |---|---|---|---|
 | Read-only (default) | None | None | None |
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
-| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each one after a person approves it, only in those namespaces |
+| Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each fix after a person approves it, only in those namespaces. Putting back one that made things worse needs no approval by default |
 
 - The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
 - Until the first admin account is created, Themis serves only the page that creates it.
@@ -163,7 +167,10 @@ A default install is read-only. The investigator and fixes are turned on separat
 - Deployments are the only supported workload kind. StatefulSets, DaemonSets and others are not supported yet.
 - Alertmanager is the only supported alert source.
 - Five incident types, listed under [Capabilities](#capabilities).
-- Every change needs a person's approval. There is no autonomous mode.
+- Every fix needs a person's approval. There is no autonomous mode. Putting back what Themis changed, after a fix that made things worse, needs no approval unless a policy rule asks for one.
+- Traffic between Themis's components (gRPC) is not encrypted inside the cluster. A NetworkPolicy limits who can reach it. mTLS is planned.
+- The executor trusts the approvals recorded in Themis's database. Anyone who can write to the database can have it apply a fix within `executor.namespaces` and `executor.fixes`.
+- The investigator may reach the model's port on every address by default. Set `investigator.egressCIDR` to the model's addresses to narrow it.
 - Without a Prometheus-compatible server, Themis can't measure CPU throttling, peak memory or an earlier revision's history. Checks that need them answer unknown, and an unknown check never justifies a fix.
 - A partial rollback restores earlier values only. Setting new values is not supported.
 - Investigator accuracy depends on the model. See the evaluation under [Governance](#governance).

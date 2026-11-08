@@ -2,7 +2,7 @@
 
 This walks through Themis's first incident class on a local kind cluster, with real Prometheus and Alertmanager. A `checkout` Deployment rolls out a revision whose container fills its memory and is OOMKilled on every start; the rollout gets stuck with the old pods still serving. Themis notices, investigates, proposes rolling back, and, once you approve, rolls back and checks that it worked.
 
-It takes about 15 minutes, most of it waiting for images and the model.
+It takes about 15 minutes, most of it waiting for images and the model. It runs Themis built from your checkout. To try the published release instead, follow the [quickstart](quickstart.md).
 
 ## What you need
 
