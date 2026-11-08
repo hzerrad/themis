@@ -35,6 +35,7 @@ type Partial struct{}
 var (
 	_ capability.Capability = Partial{}
 	_ capability.Describing = Partial{}
+	_ capability.Templating = Partial{}
 )
 
 func (Partial) Name() string    { return PartialName }
@@ -98,8 +99,9 @@ func changesParam(params map[string]any) ([]any, bool) {
 	return out, len(out) > 0 && len(out) <= maxSelected
 }
 
-// partialBefore is a partial rollback's Before: the template it replaces,
-// and the earlier revision's, which the changes go back to.
+// partialBefore is how an earlier version of Themis stored the state a
+// partial rollback replaced: the template it replaces, and the earlier
+// revision's, which the changes go back to.
 type partialBefore struct {
 	Template corev1.PodTemplateSpec `json:"template"`
 	Earlier  corev1.PodTemplateSpec `json:"earlier"`
@@ -147,11 +149,18 @@ func (Partial) Plan(ctx context.Context, r client.Reader, t incident.TargetRef, 
 	if err != nil {
 		return capability.Plan{}, err
 	}
-	before, err := json.Marshal(partialBefore{Template: w.Template, Earlier: earlier.Template})
+	earlierHash, err := TemplateHash(earlier.Template)
 	if err != nil {
 		return capability.Plan{}, err
 	}
-	after, err := json.Marshal(desired)
+	from, err := current(ctx, w)
+	if err != nil {
+		return capability.Plan{}, err
+	}
+	picked := func(u workload.Change) bool {
+		return slices.ContainsFunc(chosen, func(c workload.Change) bool { return c.Key == u.Key })
+	}
+	rec, err := json.Marshal(newPartialRecord(from, refOf(earlier, earlierHash), w.Template, desired, units, picked))
 	if err != nil {
 		return capability.Plan{}, err
 	}
@@ -160,9 +169,9 @@ func (Partial) Plan(ctx context.Context, r client.Reader, t incident.TargetRef, 
 		changes = append(changes, c.Says)
 	}
 	p := capability.Plan{
-		Target: w.Identity(),
-		Params: map[string]any{"revision": revision, "changes": changes, "templateHash": desiredHash},
-		Before: before, After: after,
+		Target:      w.Identity(),
+		Params:      map[string]any{"revision": revision, "changes": changes, "templateHash": desiredHash},
+		Record:      rec,
 		ManagedBy:   w.ManagedBy,
 		Risk:        "medium",
 		BlastRadius: capability.Rollout(w),
@@ -170,7 +179,7 @@ func (Partial) Plan(ctx context.Context, r client.Reader, t incident.TargetRef, 
 		Mark:        desiredHash,
 		State:       partialLive{Workload: w, Desired: desired},
 	}
-	p.Done = Partial{}.Words(t.Name, p.Params, before, after).Done
+	p.Done = Partial{}.Words(t.Name, p.Params, rec).Done
 	return p, nil
 }
 
@@ -312,39 +321,56 @@ func (Partial) Apply(ctx context.Context, c client.Client, p capability.Plan, dr
 	return live.Workload.SetTemplate(ctx, c, live.Desired, dryRun)
 }
 
-// Undo is a rollback to the revision whose template was there before, as a
-// rollback's is.
-func (Partial) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, before json.RawMessage) (string, map[string]any, error) {
-	var b partialBefore
-	if err := json.Unmarshal(before, &b); err != nil {
-		return "", nil, fmt.Errorf("template before the fix: %w", err)
-	}
-	template, err := json.Marshal(b.Template)
-	if err != nil {
-		return "", nil, err
-	}
-	return Capability{}.Undo(ctx, r, t, template)
+// Undo is a rollback to the revision the partial rollback replaced, by the
+// hash of its template, as a rollback's is.
+func (Partial) Undo(ctx context.Context, r client.Reader, t incident.TargetRef, raw json.RawMessage) (string, map[string]any, error) {
+	rec, _ := readPartial(raw)
+	return undo(ctx, r, t, rec.From)
 }
 
 // Changes lists what the partial rollback changes in the pod template, as a
-// rollback's are listed.
-func (Partial) Changes(before, after json.RawMessage) ([]capability.Change, error) {
+// rollback's are listed, from its record.
+func (Partial) Changes(raw json.RawMessage) ([]capability.Change, error) {
+	rec, err := readPartial(raw)
+	if err != nil {
+		return nil, err
+	}
+	return rec.Changes, nil
+}
+
+// Record is the record of a partial rollback from the template before, as
+// an earlier version of Themis stored it with the earlier revision's, to
+// the template after, rolling back the changes params name to the revision
+// they name.
+func (Partial) Record(params map[string]any, before, after json.RawMessage) (json.RawMessage, error) {
 	var b partialBefore
-	var desired corev1.PodTemplateSpec
 	if err := json.Unmarshal(before, &b); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("templates before the fix: %w", err)
 	}
+	var desired corev1.PodTemplateSpec
 	if err := json.Unmarshal(after, &desired); err != nil {
+		return nil, fmt.Errorf("template the fix writes: %w", err)
+	}
+	from, err := hashWithout(b.Template)
+	if err != nil {
 		return nil, err
 	}
-	return Changes(b.Template, desired), nil
+	earlier, err := hashWithout(b.Earlier)
+	if err != nil {
+		return nil, err
+	}
+	revision, _ := RevisionParam(params)
+	named, _ := changesParam(params)
+	units, _ := workload.Changes(b.Earlier, b.Template)
+	rec := newPartialRecord(revisionRef{TemplateHash: from}, revisionRef{Number: revision, TemplateHash: earlier}, b.Template, desired, units, chosenBy(named))
+	return json.Marshal(rec)
 }
 
 // Words name a partial rollback by the changes it rolls back and the
 // revision they go back to: "Roll back checkout's environment variable MODE
 // to revision 1". Worked out against the cluster, they also say what it
 // keeps: "Keeps the rollout's new image."
-func (Partial) Words(target string, params map[string]any, before, after json.RawMessage) capability.Words {
+func (Partial) Words(target string, params map[string]any, raw json.RawMessage) capability.Words {
 	to := "an earlier revision"
 	if revision, ok := RevisionParam(params); ok {
 		to = fmt.Sprintf("revision %d", revision)
@@ -354,21 +380,18 @@ func (Partial) Words(target string, params map[string]any, before, after json.Ra
 	if len(named) == 1 {
 		what = "one of " + possessive(target) + " changes"
 	}
-	var b partialBefore
-	var desired corev1.PodTemplateSpec
 	note := ""
-	if json.Unmarshal(before, &b) == nil && json.Unmarshal(after, &desired) == nil && before != nil && after != nil {
-		units, _ := workload.Changes(b.Earlier, b.Template)
-		var chosen, kept []workload.Change
-		for _, u := range units {
-			if slices.ContainsFunc(named, func(n any) bool { s, _ := n.(string); return matches(u, s) }) {
+	if rec, err := readPartial(raw); err == nil {
+		var chosen, kept []rolledOut
+		for _, u := range rec.Rollout {
+			if u.Chosen {
 				chosen = append(chosen, u)
 			} else {
 				kept = append(kept, u)
 			}
 		}
 		if len(chosen) > 0 {
-			what = phrase(target, chosen, len(b.Template.Spec.Containers) == 1)
+			what = phrase(target, chosen, rec.Only)
 			note = keeps(kept, to)
 		}
 	}
@@ -381,7 +404,7 @@ func (Partial) Words(target string, params map[string]any, before, after json.Ra
 // phrase names the changes chosen in a sentence: up to three by what they
 // are about, "checkout's environment variable MODE and image", and more by
 // their number. only says the template has one container.
-func phrase(target string, chosen []workload.Change, only bool) string {
+func phrase(target string, chosen []rolledOut, only bool) string {
 	if len(chosen) > 3 {
 		return fmt.Sprintf("%d of %s changes", len(chosen), possessive(target))
 	}
@@ -410,7 +433,7 @@ func phrase(target string, chosen []workload.Change, only bool) string {
 
 // keeps says what a partial rollback keeps of the rollout, or that it keeps
 // nothing, which a rollback to the revision named to does too.
-func keeps(kept []workload.Change, to string) string {
+func keeps(kept []rolledOut, to string) string {
 	images := 0
 	for _, k := range kept {
 		if k.Image {

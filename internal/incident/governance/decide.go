@@ -194,7 +194,7 @@ func (d *Decider) Decide(ctx context.Context, r client.Reader, fix Fix) (Decided
 			IncidentID: fix.Incident,
 			Capability: fields.Capability, CapabilityVersion: fields.CapabilityVersion,
 			Target: fields.Target, Params: fields.Params, Constraints: fields.Constraints,
-			PreState: plan.Before, Desired: plan.After,
+			Record:      plan.Record,
 			BlastRadius: plan.BlastRadius,
 			Risk:        plan.Risk,
 			Decision:    string(decision.Outcome), DecisionReason: decision.Reason,

@@ -48,16 +48,18 @@ type Action struct {
 	CapabilityVersion string
 	Target            digest.TargetIdentity
 	Params            map[string]any
-	PreState          json.RawMessage
-	Desired           json.RawMessage
-	BlastRadius       map[string]any
-	Risk              string
-	Decision          string
-	DecisionReason    string
-	PolicyID          string
-	PolicyDigest      string
-	Constraints       map[string]any
-	Digest            string
+	// Record is what the fix keeps of its change, as it works it out: what
+	// the approver is shown and what putting it back needs. It never holds
+	// the pod template, whose environment can hold secrets.
+	Record         json.RawMessage
+	BlastRadius    map[string]any
+	Risk           string
+	Decision       string
+	DecisionReason string
+	PolicyID       string
+	PolicyDigest   string
+	Constraints    map[string]any
+	Digest         string
 	// Mark identifies the state the fix leaves the target in.
 	Mark      string
 	State     ActionState
@@ -100,14 +102,14 @@ func (s *Store) InsertAction(ctx context.Context, tx pgx.Tx, a Action) (string, 
 	INSERT INTO actions (id, incident_id, proposal_id, capability, capability_version,
 	                     target_group, target_kind, target_namespace, target_name, target_uid,
 	                     target_generation, target_spec_hash, target_manager,
-	                     params, pre_state, desired_state, blast_radius, risk,
+	                     params, record, blast_radius, risk,
 	                     decision, decision_reason, policy_id, policy_digest, constraints,
 	                     digest, state, expires_at, mark)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 	ON CONFLICT (target_uid) WHERE state IN ('awaiting_approval', 'authorized', 'executing') DO NOTHING
 `, id, a.IncidentID, a.ProposalID, a.Capability, a.CapabilityVersion,
 		t.Group, t.Kind, t.Namespace, t.Name, t.UID, t.Generation, t.SpecHash, t.Manager,
-		encoded[0], jsonOr(a.PreState, "{}"), jsonOr(a.Desired, "{}"), encoded[1], a.Risk,
+		encoded[0], jsonOr(a.Record, "{}"), encoded[1], a.Risk,
 		a.Decision, a.DecisionReason, a.PolicyID, a.PolicyDigest, encoded[2],
 		a.Digest, a.State, a.ExpiresAt, a.Mark)
 	if err != nil {
@@ -122,7 +124,7 @@ func (s *Store) InsertAction(ctx context.Context, tx pgx.Tx, a Action) (string, 
 const actionColumns = `id::text, incident_id::text, proposal_id::text, capability, capability_version,
 	target_group, target_kind, target_namespace, target_name, target_uid,
 	target_generation, target_spec_hash, target_manager,
-	params, pre_state, desired_state, blast_radius, risk,
+	params, record, blast_radius, risk,
 	decision, decision_reason, policy_id, policy_digest, constraints,
 	digest, state, expires_at, created_at, mark`
 
@@ -130,18 +132,18 @@ func scanAction(row pgx.Row) (Action, error) {
 	var (
 		a                                Action
 		params, blastRadius, constraints []byte
-		preState, desired                []byte
+		record                           []byte
 	)
 	t := &a.Target
 	err := row.Scan(&a.ID, &a.IncidentID, &a.ProposalID, &a.Capability, &a.CapabilityVersion,
 		&t.Group, &t.Kind, &t.Namespace, &t.Name, &t.UID, &t.Generation, &t.SpecHash, &t.Manager,
-		&params, &preState, &desired, &blastRadius, &a.Risk,
+		&params, &record, &blastRadius, &a.Risk,
 		&a.Decision, &a.DecisionReason, &a.PolicyID, &a.PolicyDigest, &constraints,
 		&a.Digest, &a.State, &a.ExpiresAt, &a.CreatedAt, &a.Mark)
 	if err != nil {
 		return Action{}, err
 	}
-	a.PreState, a.Desired = preState, desired
+	a.Record = record
 	for _, f := range []struct {
 		data []byte
 		into *map[string]any

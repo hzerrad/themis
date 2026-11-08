@@ -88,7 +88,7 @@ func newTestDB(t *testing.T) *pgxpool.Pool {
 func newStore(t *testing.T) (*store.Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := newTestDB(t)
-	if err := store.Migrate(t.Context(), pool); err != nil {
+	if err := store.Migrate(t.Context(), pool, nil); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
 	s, err := store.New(pool)

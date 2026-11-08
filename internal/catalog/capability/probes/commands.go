@@ -11,7 +11,7 @@ var _ capability.Commanding = Capability{}
 
 // Commands patch the probe settings the fix changes, by container name,
 // which leaves the rest of each probe as it is.
-func (Capability) Commands(t incident.TargetRef, params map[string]any, _, _ json.RawMessage) []string {
+func (Capability) Commands(t incident.TargetRef, params map[string]any, _ json.RawMessage) []string {
 	req, err := parse(params, false)
 	if err != nil {
 		return nil

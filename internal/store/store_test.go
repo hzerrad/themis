@@ -3,13 +3,10 @@ package store_test
 import (
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/riverqueue/river"
 
 	"github.com/hzerrad/themis/internal/catalog/evidence"
@@ -27,7 +24,7 @@ func TestMigrate_Idempotent(t *testing.T) {
 	pool := newTestDB(t)
 
 	for i := range 2 {
-		if err := store.Migrate(t.Context(), pool); err != nil {
+		if err := store.Migrate(t.Context(), pool, nil); err != nil {
 			t.Fatalf("Migrate run %d: %v", i+1, err)
 		}
 	}
@@ -221,14 +218,10 @@ func TestMigrate_MovesMarksAndStarts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	migrations, err := goose.NewProvider(goose.DialectPostgres, stdlib.OpenDBFromPool(pool), os.DirFS("migrations"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migrations.DownTo(ctx, 25); err != nil {
+	if err := store.MigrateDownTo(ctx, pool, 25); err != nil {
 		t.Fatalf("down to 25: %v", err)
 	}
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := store.Migrate(ctx, pool, nil); err != nil {
 		t.Fatalf("up again: %v", err)
 	}
 

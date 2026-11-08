@@ -69,7 +69,7 @@ func (w *Worker) Restore(ctx context.Context, actionID string) error {
 	if !ok {
 		return w.escalate(ctx, in.ID, "Not restored. Themis has no way to undo this fix. The fix stays in place.")
 	}
-	name, params, err := done.Undo(ctx, w.Reader, in.Target, applied.PreState)
+	name, params, err := done.Undo(ctx, w.Reader, in.Target, applied.Record)
 	if refusal, ok := errors.AsType[*capability.Refusal](err); ok {
 		return w.escalate(ctx, in.ID, refusal.Reason)
 	}

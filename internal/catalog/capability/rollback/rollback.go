@@ -1,7 +1,10 @@
 // Package rollback is the deployment.rollback-to-revision capability: it
 // restores the pod template of a prior ReplicaSet, as kubectl rollout undo
 // does. Governance and the executor both read live state through it, so they
-// bind and check the same identity.
+// bind and check the same identity. What Themis keeps of a rollback names
+// its revisions by ReplicaSet and template hash: the executor reads the
+// template from the ReplicaSet again, and writes it only when its hash is
+// the one approved.
 package rollback
 
 import (
@@ -9,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -56,12 +58,16 @@ type Live struct {
 	Target   digest.TargetIdentity
 
 	// Desired is the template to restore; PreState is the current one.
+	// Both stay in memory: the record names their revisions instead.
 	Desired     corev1.PodTemplateSpec
 	DesiredHash string
 	PreState    corev1.PodTemplateSpec
 
 	ManagedBy string
 	Replicas  int32
+
+	// from is the revision the rollback replaces, and to the one it restores.
+	from, to revisionRef
 }
 
 // read reads the target, marking a lost one stale.
@@ -93,6 +99,10 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision i
 	if err != nil {
 		return Live{}, err
 	}
+	from, err := current(ctx, w)
+	if err != nil {
+		return Live{}, err
+	}
 	return Live{
 		Workload:    w,
 		Target:      w.Identity(),
@@ -101,6 +111,8 @@ func Read(ctx context.Context, c client.Reader, t incident.TargetRef, revision i
 		PreState:    *w.Template.DeepCopy(),
 		ManagedBy:   w.ManagedBy,
 		Replicas:    w.Replicas.Desired,
+		from:        from,
+		to:          refOf(r, desiredHash),
 	}, nil
 }
 
@@ -136,39 +148,6 @@ func Params(revision int64, desiredHash string) map[string]any {
 // write since the read conflicts. It returns the resulting generation.
 func Apply(ctx context.Context, c client.Client, live Live, dryRun bool) (int64, error) {
 	return live.Workload.SetTemplate(ctx, c, live.Desired, dryRun)
-}
-
-// RevisionOf returns the revision of the target's ReplicaSet with template,
-// such as the template a rollback replaced: rolling back to it puts the
-// workload back as it was.
-func RevisionOf(ctx context.Context, c client.Reader, t incident.TargetRef, template corev1.PodTemplateSpec) (int64, error) {
-	w, err := read(ctx, c, t)
-	if err != nil {
-		return 0, err
-	}
-	template = *template.DeepCopy()
-	delete(template.Labels, appsv1.DefaultDeploymentUniqueLabelKey)
-	want, err := TemplateHash(template)
-	if err != nil {
-		return 0, err
-	}
-	revisions, err := w.Revisions(ctx)
-	if err != nil {
-		return 0, err
-	}
-	for _, r := range revisions {
-		h, err := TemplateHash(r.Template)
-		if err != nil {
-			return 0, err
-		}
-		if h == want {
-			if r.Number == 0 {
-				return 0, fmt.Errorf("revision of ReplicaSet %s is not a number", r.Object.Name)
-			}
-			return r.Number, nil
-		}
-	}
-	return 0, fmt.Errorf("%w: none has the template to put back", ErrNoSuchRevision)
 }
 
 // TemplateHash hashes a pod template the way actions bind it.

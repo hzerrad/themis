@@ -1,7 +1,6 @@
 package rollback_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,15 +43,6 @@ func planPartial(t *testing.T, target incident.TargetRef, revision int64, change
 	return p
 }
 
-func container(t *testing.T, raw json.RawMessage) corev1.Container {
-	t.Helper()
-	var tpl corev1.PodTemplateSpec
-	if err := json.Unmarshal(raw, &tpl); err != nil {
-		t.Fatal(err)
-	}
-	return tpl.Spec.Containers[0]
-}
-
 func env(c corev1.Container, name string) *corev1.EnvVar {
 	for i := range c.Env {
 		if c.Env[i].Name == name {
@@ -65,22 +55,15 @@ func env(c corev1.Container, name string) *corev1.EnvVar {
 // A partial rollback puts back only the changes named, as the revision before
 // had them, a Secret reference as the reference, and keeps every other change
 // of the rollout, the new image first. What it changes is shown with values
-// that look secret hidden, and once applied, putting it back is a rollback to
-// the revision it replaced.
+// that look secret hidden, its record keeps none of them, and once applied,
+// putting it back is a rollback to the revision it replaced.
 func TestPartial_RollsBackOnlyWhatIsNamed(t *testing.T) {
 	target := loadPartial(t)
 	// Named as people copy them: capitalised, with a full stop, or by key.
 	p := planPartial(t, target, 1, "The environment variable MODE of container app changed.", "container.app.env.DB_URL")
 
-	got := container(t, p.After)
-	if got.Image != "example/checkout:2.4.0" || env(got, "LOG_LEVEL") == nil || len(got.VolumeMounts) != 1 {
-		t.Errorf("the rollout's other changes weren't kept: %+v", got)
-	}
-	if e := env(got, "MODE"); e == nil || e.Value != "healthy" {
-		t.Errorf("MODE = %+v, want revision 1's healthy", e)
-	}
-	if e := env(got, "DB_URL"); e == nil || e.Value != "" || e.ValueFrom == nil || e.ValueFrom.SecretKeyRef.Name != "db" {
-		t.Errorf("DB_URL = %+v, want revision 1's Secret reference", e)
+	if strings.Contains(string(p.Record), "s3cr3t") {
+		t.Errorf("the record keeps the literal DB_URL: %s", p.Record)
 	}
 	if fmt.Sprint(p.Params["changes"]) != fmt.Sprint([]any{modeChanged, dbURLChanged}) || p.Params["templateHash"] != p.Mark {
 		t.Errorf("Params = %v, want the changes as the rollout history says them, and the template bound", p.Params)
@@ -92,7 +75,7 @@ func TestPartial_RollsBackOnlyWhatIsNamed(t *testing.T) {
 		t.Errorf("BlastRadius = %v, want deployedBy Helm", p.BlastRadius)
 	}
 
-	changes, err := rollback.Partial{}.Changes(p.Before, p.After)
+	changes, err := rollback.Partial{}.Changes(p.Record)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +84,7 @@ func TestPartial_RollsBackOnlyWhatIsNamed(t *testing.T) {
 		t.Errorf("Changes = %+v, want MODE and DB_URL with the literal hidden", changes)
 	}
 
-	w := rollback.Partial{}.Words("checkout", p.Params, p.Before, p.After)
+	w := rollback.Partial{}.Words("checkout", p.Params, p.Record)
 	if w.Noun != "partial rollback" || w.Act != "Roll back checkout's environment variable MODE and environment variable DB_URL to revision 1" ||
 		w.Note != "Keeps the rollout's other 4 changes, including the new image." {
 		t.Errorf("Words = %+v", w)
@@ -120,10 +103,20 @@ func TestPartial_RollsBackOnlyWhatIsNamed(t *testing.T) {
 	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: target.Namespace, Name: target.Name}, &d); err != nil {
 		t.Fatal(err)
 	}
+	got := d.Spec.Template.Spec.Containers[0]
+	if got.Image != "example/checkout:2.4.0" || env(got, "LOG_LEVEL") == nil || len(got.VolumeMounts) != 1 {
+		t.Errorf("the rollout's other changes weren't kept: %+v", got)
+	}
+	if e := env(got, "MODE"); e == nil || e.Value != "healthy" {
+		t.Errorf("MODE = %+v, want revision 1's healthy", e)
+	}
+	if e := env(got, "DB_URL"); e == nil || e.Value != "" || e.ValueFrom == nil || e.ValueFrom.SecretKeyRef.Name != "db" {
+		t.Errorf("DB_URL = %+v, want revision 1's Secret reference", e)
+	}
 	if mark, _ := (rollback.Partial{}).Mark(t.Context(), k8s, target); mark != p.Mark {
 		t.Errorf("the live template's mark is %s, want the plan's %s", mark, p.Mark)
 	}
-	name, params, err := rollback.Partial{}.Undo(t.Context(), k8s, target, p.Before)
+	name, params, err := rollback.Partial{}.Undo(t.Context(), k8s, target, p.Record)
 	if err != nil || name != rollback.Name || params["revision"] != int64(2) {
 		t.Errorf("Undo = %s %v, %v; want a rollback to revision 2", name, params, err)
 	}
@@ -141,19 +134,19 @@ func TestPartial_ImageAndEveryChange(t *testing.T) {
 	if fmt.Sprint(more) != "map[images:map[app:map[after:sha256:"+strings.Repeat("1", 64)+" before:sha256:"+strings.Repeat("2", 64)+"]]]" {
 		t.Errorf("Describe = %v, want the digests of revision 2's image before and revision 1's after", more)
 	}
-	if note := (rollback.Partial{}).Words("checkout", p.Params, p.Before, p.After).Note; p.Facts["image"] != "rolled_back" || note != "Keeps the rollout's other 5 changes." {
+	if note := (rollback.Partial{}).Words("checkout", p.Params, p.Record).Note; p.Facts["image"] != "rolled_back" || note != "Keeps the rollout's other 5 changes." {
 		t.Errorf("Facts = %v", p.Facts)
 	}
 
 	// Keeping one change names it: an approver sees what stays as it is.
 	logLevel := "the environment variable LOG_LEVEL of container app was added"
 	allButMode := planPartial(t, target, 1, imageChanged, dbURLChanged, logLevel, mountsChange, cacheAdded)
-	if note := (rollback.Partial{}).Words("checkout", allButMode.Params, allButMode.Before, allButMode.After).Note; note != "Keeps the rollout's change to the environment variable MODE of container app." {
+	if note := (rollback.Partial{}).Words("checkout", allButMode.Params, allButMode.Record).Note; note != "Keeps the rollout's change to the environment variable MODE of container app." {
 		t.Errorf("Note = %q", note)
 	}
 
 	all := planPartial(t, target, 1, imageChanged, modeChanged, dbURLChanged, logLevel, mountsChange, cacheAdded)
-	w := (rollback.Partial{}).Words("checkout", all.Params, all.Before, all.After)
+	w := (rollback.Partial{}).Words("checkout", all.Params, all.Record)
 	if all.Facts["all"] != "true" || w.Act != "Roll back 6 of checkout's changes to revision 1" ||
 		w.Note != "Rolls back every change of the rollout to what the pods run, the same as a rollback to revision 1." {
 		t.Errorf("every change: Facts = %v, Words = %+v", all.Facts, w)
@@ -225,7 +218,7 @@ func TestPartial_Validate(t *testing.T) {
 
 // Without the cluster, the words count the changes a suggestion names.
 func TestPartial_WordsOfASuggestion(t *testing.T) {
-	w := rollback.Partial{}.Words("checkout", map[string]any{"revision": int64(1), "changes": []any{modeChanged}}, nil, nil)
+	w := rollback.Partial{}.Words("checkout", map[string]any{"revision": int64(1), "changes": []any{modeChanged}}, nil)
 	if w.Act != "Roll back one of checkout's changes to revision 1" || w.Note != "" {
 		t.Errorf("Words = %+v", w)
 	}

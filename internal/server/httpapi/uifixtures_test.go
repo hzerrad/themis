@@ -248,7 +248,7 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 		Checks: checks, Past: []string{"failures_came_with_rollout", "memory_at_limit_before_kill", "evicted_for_node_memory"},
 		Decided: governance.Decided{
 			Decision: policy.Decision{Outcome: policy.RequireApproval, Reason: shopRaiseRule, PolicyID: "raise-needs-approval"},
-			Action:   store.Action{PreState: []byte(shopPre), Desired: []byte(shopRaised)},
+			Action:   store.Action{Record: uiRecord(resources.Name, nil, shopPre, shopRaised)},
 		},
 	}
 	refused := governance.Judgement{
@@ -258,14 +258,14 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 				Outcome: policy.Deny, PolicyID: "raise-a-memory-limit-only",
 				Reason: "Policy rule raise-a-memory-limit-only of the oom-limit-too-low profile forbids this fix.",
 			},
-			Action: store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))},
+			Action: store.Action{Record: uiRecord(resources.Name, nil, shopPre, strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))},
 		},
 	}
 	recommended := governance.Judgement{
 		Checks: checks, Past: accepted.Past,
 		Decided: governance.Decided{
 			Decision: policy.Decision{Outcome: policy.Deny, Reason: uiExecutorOff, PolicyID: governance.ExecutorRule},
-			Action:   store.Action{PreState: []byte(shopPre), Desired: []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"80Mi"`, 1))},
+			Action:   store.Action{Record: uiRecord(resources.Name, nil, shopPre, strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"80Mi"`, 1))},
 		},
 	}
 	// A partial rollback of MODE on checkout, which keeps its new image.
@@ -277,7 +277,7 @@ func uiPreviewsOf(t *testing.T, api *API, cfg config.Config, cat catalog.Catalog
 				Outcome: policy.RequireApproval, PolicyID: "rollback-needs-approval",
 				Reason: "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval.",
 			},
-			Action: store.Action{PreState: []byte(partialPre), Desired: []byte(partialDesired)},
+			Action: store.Action{Record: uiRecord(rollback.PartialName, partialParams, partialPre, partialDesired)},
 		},
 	}
 	return map[string]previewView{
@@ -318,7 +318,7 @@ func uiSummary(rec incidentRecord) store.IncidentSummary {
 	if n := len(rec.actions); n > 0 {
 		a := rec.actions[n-1].action
 		s.Capability, s.Params, s.Rule = a.Capability, a.Params, a.PolicyID
-		s.PreState, s.Desired = a.PreState, a.Desired
+		s.Record = a.Record
 	}
 	if inv := rec.investigation; inv != nil {
 		var hs []struct{ RootCauseClass, Status string }
@@ -602,6 +602,19 @@ const (
 	uiDigest = "sha256:5f2a9c0b7e1d4a3f8c6b2e9d0a1f7c3b5e8d2a4f6c9b0e1d3a5f7c2b4e6d8a0f"
 )
 
+// partialParams roll MODE back.
+var partialParams = map[string]any{"revision": int64(1), "changes": []any{partialMode}}
+
+// uiRecord is the record fix keeps of a change from the pod template before
+// to the one after.
+func uiRecord(fix string, params map[string]any, before, after string) []byte {
+	r, err := catalog.Fixes().Record(fix, params, []byte(before), []byte(after))
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
 // investigatorProposal is the investigator's rollback to revision 1.
 func uiInvestigatorProposal(id string, status store.ProposalStatus) store.Proposal {
 	return store.Proposal{
@@ -618,7 +631,7 @@ func uiInvestigatorProposal(id string, status store.ProposalStatus) store.Propos
 func uiRollback(id, proposal string, state store.ActionState) store.Action {
 	return store.Action{
 		ID: id, ProposalID: proposal, Capability: rollback.Name, CapabilityVersion: "1", Target: uiIdentity,
-		Params: map[string]any{"revision": int64(1), "templateHash": "sha256:t1"}, PreState: []byte(rollbackPre), Desired: []byte(rollbackDesired),
+		Params: map[string]any{"revision": int64(1), "templateHash": "sha256:t1"}, Record: uiRecord(rollback.Name, map[string]any{"revision": int64(1)}, rollbackPre, rollbackDesired),
 		BlastRadius: map[string]any{"replicas": int64(3), "atOnce": int64(1), "images": map[string]any{"app": map[string]any{"before": uiDigest, "after": ""}}}, Risk: "medium",
 		Decision: "require_approval", DecisionReason: "A rollback in shop needs a person's approval.", PolicyID: "approve-in-shop", PolicyDigest: "sha256:p",
 		Digest: "sha256:9b2f", State: state, ExpiresAt: uiAtPtr(34), CreatedAt: uiAt(4),
@@ -696,7 +709,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 	}
 	shopAction := func(id string, state store.ActionState) store.Action {
 		a := rb(id, p1, state)
-		a.Capability, a.Params, a.PreState, a.Desired = resources.Name, shopRaise, []byte(shopPre), []byte(shopRaised)
+		a.Capability, a.Params, a.Record = resources.Name, shopRaise, uiRecord(resources.Name, nil, shopPre, shopRaised)
 		a.Target.Name, a.Target.UID = shopTarget.Name, shopTarget.UID
 		a.BlastRadius = map[string]any{"replicas": int64(2), "atOnce": int64(1)}
 		a.DecisionReason, a.PolicyID = shopRaiseRule, "raise-needs-approval"
@@ -727,7 +740,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{person(p2, "alice", resources.Name, resourcesParams, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p2, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.Desired, a.Risk = resources.Name, resourcesParams, []byte(resourcesDesired), "low"
+				a.Capability, a.Params, a.Record, a.Risk = resources.Name, resourcesParams, uiRecord(resources.Name, nil, rollbackPre, resourcesDesired), "low"
 				return a
 			}()}},
 		},
@@ -843,12 +856,12 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			actions: []actionRecord{
 				{action: func() store.Action {
 					a := rb(a2, "", store.ActionDenied)
-					a.Capability, a.Params, a.Desired = resources.Name, resourcesParams, []byte(resourcesDesired)
+					a.Capability, a.Params, a.Record = resources.Name, resourcesParams, uiRecord(resources.Name, nil, rollbackPre, resourcesDesired)
 					return a
 				}()},
 				{action: func() store.Action {
 					a := rb(a1, p2, store.ActionSucceeded)
-					a.Capability, a.Params, a.PreState, a.Desired, a.Decision = probes.Name, probesParams, []byte(probesPre), []byte(probesDesired), "allow"
+					a.Capability, a.Params, a.Record, a.Decision = probes.Name, probesParams, uiRecord(probes.Name, nil, probesPre, probesDesired), "allow"
 					return a
 				}(), execution: uiExecuted("succeeded", "Lengthened checkout's liveness probe timeout from 1s to 3s.", 7), verification: uiVerified("resolved", "healthy", "3 of 3 pods ready for 5 minutes.")},
 			},
@@ -917,7 +930,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{investigatorFix(p1, resources.Name, cpuParams, "throttling_data_available", "cpu_throttled_at_limit", "cpu_usage_near_limit")},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, cpuParams, []byte(cpuPre), []byte(cpuRaised)
+				a.Capability, a.Params, a.Record = resources.Name, cpuParams, uiRecord(resources.Name, nil, cpuPre, cpuRaised)
 				a.BlastRadius = map[string]any{"replicas": int64(4), "atOnce": int64(2)}
 				a.DecisionReason, a.PolicyID = "Policy rule raise-needs-approval of the cpu-throttling profile requires a person's approval.", "raise-needs-approval"
 				return a
@@ -933,7 +946,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{person(p2, "bob", resources.Name, lowerParams, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p2, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, lowerParams, []byte(twoPre), []byte(twoLowered)
+				a.Capability, a.Params, a.Record = resources.Name, lowerParams, uiRecord(resources.Name, nil, twoPre, twoLowered)
 				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(3)}
 				return a
 			}()}},
@@ -947,7 +960,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{person(p2, "bob", probes.Name, probesBothParams, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p2, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.PreState, a.Desired = probes.Name, probesBothParams, []byte(probesPre), []byte(probesBothDesired)
+				a.Capability, a.Params, a.Record = probes.Name, probesBothParams, uiRecord(probes.Name, nil, probesPre, probesBothDesired)
 				a.BlastRadius = map[string]any{"replicas": int64(1)}
 				return a
 			}()}},
@@ -964,7 +977,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{person(p2, "alice", resources.Name, memoryParams, store.ProposalAccepted)},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p2, store.ActionSucceeded)
-				a.Capability, a.Params, a.Desired, a.Decision = resources.Name, memoryParams, []byte(memoryRaised), "allow"
+				a.Capability, a.Params, a.Record, a.Decision = resources.Name, memoryParams, uiRecord(resources.Name, nil, rollbackPre, memoryRaised), "allow"
 				return a
 			}(), execution: uiExecuted("succeeded", "Raised checkout's memory limit from 256Mi to 512Mi.", 5), verification: uiVerified("", "unchanged", "")}},
 		},
@@ -980,7 +993,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{investigatorFix(p1, resources.Name, oneValue("app", "limits", "cpu", "450m"), "cpu_throttled_at_limit", "earlier_revision_healthy")},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionAwaitingApproval)
-				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, oneValue("app", "limits", "cpu", "450m"), []byte(cpuRaised), []byte(cpuRaisedAgain)
+				a.Capability, a.Params, a.Record = resources.Name, oneValue("app", "limits", "cpu", "450m"), uiRecord(resources.Name, nil, cpuRaised, cpuRaisedAgain)
 				return a
 			}()}},
 		},
@@ -997,7 +1010,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			proposals: []store.Proposal{investigatorFix(p1, resources.Name, cpuParams, "cpu_throttled_at_limit")},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionSucceeded)
-				a.Capability, a.Params, a.PreState, a.Desired = resources.Name, cpuParams, []byte(cpuPre), []byte(cpuRaised)
+				a.Capability, a.Params, a.Record = resources.Name, cpuParams, uiRecord(resources.Name, nil, cpuPre, cpuRaised)
 				return a
 			}(), execution: uiExecuted("succeeded", "Raised checkout's CPU limit from 200m to 300m.", 6), verification: uiVerified("unchanged", "healthy", "1 of 1 pods are ready.")}},
 		},
@@ -1060,7 +1073,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			}()},
 			actions: []actionRecord{{action: shopAction(a1, store.ActionExpired)}, {action: func() store.Action {
 				a := shopAction(a2, store.ActionDenied)
-				a.ProposalID, a.Params, a.Desired = p2, oneValue("app", "limits", "memory", "50Mi"), []byte(strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))
+				a.ProposalID, a.Params, a.Record = p2, oneValue("app", "limits", "memory", "50Mi"), uiRecord(resources.Name, nil, shopPre, strings.Replace(shopPre, `"memory":"60Mi"`, `"memory":"50Mi"`, 1))
 				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", shopLowerRefused, "raise-a-memory-limit-only", nil
 				return a
 			}()}},
@@ -1082,7 +1095,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			}()},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionAwaitingApproval)
-				a.Capability, a.PreState, a.Desired = rollback.PartialName, []byte(partialPre), []byte(partialDesired)
+				a.Capability, a.Record = rollback.PartialName, uiRecord(rollback.PartialName, partialParams, partialPre, partialDesired)
 				a.Params = map[string]any{"revision": int64(1), "changes": []any{partialMode}, "templateHash": "sha256:t2"}
 				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(1), "deployedBy": "Helm"}
 				a.DecisionReason, a.PolicyID = "Policy rule rollback-needs-approval of the rollout-regression profile requires a person's approval.", "rollback-needs-approval"
@@ -1130,7 +1143,7 @@ func uiIncidents(t *testing.T, cat catalog.Catalog) []incidentRecord {
 			}()},
 			actions: []actionRecord{{action: func() store.Action {
 				a := rb(a1, p1, store.ActionDenied)
-				a.Capability, a.PreState, a.Desired = rollback.PartialName, []byte(partialPre), []byte(partialDesired)
+				a.Capability, a.Record = rollback.PartialName, uiRecord(rollback.PartialName, partialParams, partialPre, partialDesired)
 				a.Params = map[string]any{"revision": int64(1), "changes": []any{partialMode}, "templateHash": "sha256:t2"}
 				a.BlastRadius = map[string]any{"replicas": int64(3), "atOnce": int64(1), "deployedBy": "Helm"}
 				a.Decision, a.DecisionReason, a.PolicyID, a.ExpiresAt = "deny", uiOtherNamespace, governance.ExecutorRule, nil

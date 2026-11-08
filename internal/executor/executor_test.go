@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -276,6 +277,64 @@ func TestExecute_SpecChangedSinceApproval_Stale(t *testing.T) {
 	if res.Status != executor.Stale || e.image(t) != "example/checkout:2.4.0" {
 		t.Errorf("result = %+v, image = %s", res, e.image(t))
 	}
+}
+
+// The executor reads the template a rollback writes from its revision's
+// ReplicaSet again, and writes it only when its hash is the one approved: a
+// ReplicaSet changed since, or gone, or an approved hash altered in the
+// database, leaves the workload as it is, and the incident goes to a person.
+func TestExecute_TemplateNotTheOneApproved_Stale(t *testing.T) {
+	for name, tt := range map[string]struct {
+		change func(t *testing.T, e *env, a store.Action)
+		want   string
+	}{
+		"the revision's template changed": {func(t *testing.T, e *env, _ store.Action) {
+			rs := revision1(t, e)
+			rs.Spec.Template.Spec.Containers[0].Image = "example/checkout:6.6.6"
+			if err := k8s.Update(t.Context(), rs); err != nil {
+				t.Fatal(err)
+			}
+		}, "Not applied. The workload changed after the fix was approved. Referred to a person."},
+		"the revision is gone": {func(t *testing.T, e *env, _ store.Action) {
+			if err := k8s.Delete(t.Context(), revision1(t, e)); err != nil {
+				t.Fatal(err)
+			}
+		}, "Not applied. Revision 1 no longer exists, so Themis can't roll back to it. Referred to a person."},
+		"the approved hash altered": {func(t *testing.T, e *env, a store.Action) {
+			if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET mark = 'sha256:another' WHERE id = $1`, a.ID); err != nil {
+				t.Fatal(err)
+			}
+		}, "Not applied. The workload changed after the fix was approved. Referred to a person."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e, a := approved(t)
+			tt.change(t, e, a)
+			res, err := e.executor(k8s.Client).Execute(t.Context(), a.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Status != executor.Stale || e.image(t) != "example/checkout:2.4.0" {
+				t.Errorf("result = %+v, image = %s; want stale and untouched", res, e.image(t))
+			}
+			trail, err := e.store.Transitions(t.Context(), a.IncidentID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if last := trail[len(trail)-1]; last.To != incident.Escalated || last.Reason != tt.want {
+				t.Errorf("last transition = %s %q, want escalated %q", last.To, last.Reason, tt.want)
+			}
+		})
+	}
+}
+
+// revision1 is the ReplicaSet of scenario 1's revision 1.
+func revision1(t *testing.T, e *env) *appsv1.ReplicaSet {
+	t.Helper()
+	var rs appsv1.ReplicaSet
+	if err := k8s.Get(t.Context(), client.ObjectKey{Namespace: e.target.Namespace, Name: "checkout-5c6a1e2f3"}, &rs); err != nil {
+		t.Fatal(err)
+	}
+	return &rs
 }
 
 // resourceVersion is not bound: a status update after approval is fine.

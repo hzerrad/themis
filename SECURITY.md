@@ -20,7 +20,7 @@ In scope, for example:
 
 - A change applied, or put to a person for approval, without the controls described under [Governance](README.md#governance): a valid target, a justifying check, policy, and an approval bound to the change.
 - Text in logs, events or other evidence that makes Themis act on another workload, or gets a harmful fix past its controls.
-- Secrets reaching the model, the web UI, the logs or the database without redaction.
+- Secrets reaching the model, the web UI, the logs or the database without redaction. Themis stores no pod template with an action, only [what it needs](docs/architecture.md#data) to show the change and put it back.
 - Bypassing authentication or roles in the web UI, the HTTP API or the gRPC API.
 - A component using Kubernetes permissions beyond those [documented](docs/architecture.md#what-protects-what).
 - The executor applying a fix outside `executor.namespaces` or `executor.fixes`.

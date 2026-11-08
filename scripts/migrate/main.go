@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/hzerrad/themis/internal/catalog"
 	"github.com/hzerrad/themis/internal/store"
 )
 
@@ -45,7 +46,7 @@ func run(url string) error {
 		return fmt.Errorf("database unreachable: %w", err)
 	}
 
-	if err := store.Migrate(ctx, pool); err != nil {
+	if err := store.Migrate(ctx, pool, catalog.Fixes().Record); err != nil {
 		return err
 	}
 	fmt.Println("migrations applied")

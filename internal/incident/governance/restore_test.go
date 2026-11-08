@@ -281,9 +281,7 @@ func restoreJob(attempt int, actionID string) *river.Job[governance.RestoreArgs]
 func TestRestoreWorker_EscalatesOnTheLastAttempt(t *testing.T) {
 	e := shipped(t)
 	id, fix := e.restoring(t)
-	if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET pre_state = '[]' WHERE id = $1`, fix.ID); err != nil {
-		t.Fatal(err)
-	}
+	e.worker.Reader = unreachable{k8s}
 	w := &governance.RestoreWorker{Governor: e.worker}
 
 	if err := w.Work(t.Context(), restoreJob(1, fix.ID)); err == nil {
@@ -322,6 +320,12 @@ func TestRestore_CannotPutItBack(t *testing.T) {
 				t.Fatal(err)
 			}
 		}, "Not restored. Kubernetes no longer keeps the revision from before Themis acted. The fix stays in place. Referred to a person."},
+		// An earlier version's fix whose record the upgrade couldn't work out.
+		"no record": {func(t *testing.T, e *env) {
+			if _, err := e.pool.Exec(t.Context(), `UPDATE actions SET record = '{}'`); err != nil {
+				t.Fatal(err)
+			}
+		}, "Not restored. Themis kept no record of the revision from before it acted. The fix stays in place. Referred to a person."},
 	} {
 		e := shipped(t)
 		id, fix := e.restoring(t)

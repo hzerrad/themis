@@ -1,10 +1,10 @@
 package governance_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -247,15 +247,9 @@ func TestDecide(t *testing.T) {
 			if a.BlastRadius["replicas"] != int64(3) || a.Risk != "medium" || a.Mark != a.Params["templateHash"] {
 				t.Errorf("blast radius %v, risk %q, mark %q", a.BlastRadius, a.Risk, a.Mark)
 			}
-			var pre, desired appsv1.Deployment
-			if err := json.Unmarshal(a.PreState, &pre.Spec.Template); err != nil {
-				t.Fatal(err)
-			}
-			if err := json.Unmarshal(a.Desired, &desired.Spec.Template); err != nil {
-				t.Fatal(err)
-			}
-			if pre.Spec.Template.Spec.Containers[0].Image != "example/checkout:2.4.0" || desired.Spec.Template.Spec.Containers[0].Image != "example/checkout:2.3.1" {
-				t.Errorf("pre-state %s, desired %s", pre.Spec.Template.Spec.Containers[0].Image, desired.Spec.Template.Spec.Containers[0].Image)
+			changes, err := rollback.Capability{}.Changes(a.Record)
+			if err != nil || !slices.Contains(changes, capability.Change{Container: "app", Field: "image", Before: "example/checkout:2.4.0", After: "example/checkout:2.3.1"}) {
+				t.Errorf("changes %+v (%v), want the image put back", changes, err)
 			}
 		})
 	}

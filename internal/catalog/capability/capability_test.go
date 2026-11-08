@@ -34,9 +34,9 @@ func (named) Undo(context.Context, client.Reader, incident.TargetRef, json.RawMe
 	return "", nil, nil
 }
 
-func (named) Changes(json.RawMessage, json.RawMessage) ([]capability.Change, error) { return nil, nil }
+func (named) Changes(json.RawMessage) ([]capability.Change, error) { return nil, nil }
 
-func (named) Words(target string, _ map[string]any, _, _ json.RawMessage) capability.Words {
+func (named) Words(target string, _ map[string]any, _ json.RawMessage) capability.Words {
 	return capability.Say("fix", capability.VerbChange, target, "")
 }
 
@@ -53,6 +53,10 @@ func TestRegistry(t *testing.T) {
 	}
 	if f, ok := r["b.second"]; !ok || f.Name() != "b.second" {
 		t.Errorf("lookup = %v, %v", f, ok)
+	}
+	// Only a fix that writes a pod template works out a record from two.
+	if _, err := r.Record("b.second", nil, nil, nil); err == nil {
+		t.Error("Record worked out a record for a fix that writes no template")
 	}
 }
 
@@ -83,7 +87,7 @@ func TestRegistry_Words(t *testing.T) {
 		"a fix it has":     {"x.fix", nil, capability.Say("fix", capability.VerbChange, "payments", "")},
 		"a fix it doesn't": {"y.fix", nil, capability.Words{Noun: "change", Act: "Apply this change to payments", Doing: "Applying the change to payments.", Done: "Changed payments."}},
 	} {
-		if got := r.Words(tc.fix, "payments", tc.params, nil, nil); got != tc.want {
+		if got := r.Words(tc.fix, "payments", tc.params, nil); got != tc.want {
 			t.Errorf("%s: %+v, want %+v", name, got, tc.want)
 		}
 	}

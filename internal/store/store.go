@@ -120,31 +120,13 @@ func (s *Store) EnqueueManyTx(ctx context.Context, tx pgx.Tx, args []river.JobAr
 	return nil
 }
 
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
-	sub, err := fs.Sub(migrationsFS, "migrations")
-	if err != nil {
-		return fmt.Errorf("open migrations: %w", err)
+// Migrate brings the database up to date. records works out the record each
+// fix keeps of a change, for actions an earlier version of Themis stored with
+// whole pod templates; nil will do for a database that has none.
+func Migrate(ctx context.Context, pool *pgxpool.Pool, records Records) error {
+	if err := migrate(ctx, pool, records, goose.MaxVersion); err != nil {
+		return err
 	}
-
-	// A table lock to holds through transaction-mode connection poolers
-	locker, err := lock.NewPostgresTableLocker()
-	if err != nil {
-		return fmt.Errorf("create migration locker: %w", err)
-	}
-
-	db := stdlib.OpenDBFromPool(pool)
-
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub, goose.WithLocker(locker))
-	if err != nil {
-		_ = db.Close()
-		return fmt.Errorf("create goose provider: %w", err)
-	}
-	defer func() { _ = provider.Close() }()
-
-	if _, err := provider.Up(ctx); err != nil {
-		return fmt.Errorf("goose up: %w", err)
-	}
-
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
 	if err != nil {
 		return fmt.Errorf("create river migrator: %w", err)
@@ -154,6 +136,44 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("river migrate: %w", err)
 	}
 	return nil
+}
+
+// migrate applies Themis's own migrations up to version.
+func migrate(ctx context.Context, pool *pgxpool.Pool, records Records, version int64) error {
+	provider, err := migrations(pool, records)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = provider.Close() }()
+
+	if _, err := provider.UpTo(ctx, version); err != nil {
+		return fmt.Errorf("goose up: %w", err)
+	}
+	return nil
+}
+
+// migrations are Themis's own migrations, on the database of pool: the SQL
+// ones, and the one written in Go, which works records out with records.
+func migrations(pool *pgxpool.Pool, records Records) (*goose.Provider, error) {
+	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return nil, fmt.Errorf("open migrations: %w", err)
+	}
+
+	// A table lock to holds through transaction-mode connection poolers
+	locker, err := lock.NewPostgresTableLocker()
+	if err != nil {
+		return nil, fmt.Errorf("create migration locker: %w", err)
+	}
+
+	db := stdlib.OpenDBFromPool(pool)
+
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub, goose.WithLocker(locker), goose.WithGoMigrations(keepRecords(records)))
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create goose provider: %w", err)
+	}
+	return provider, nil
 }
 
 func bytesReader(b []byte) *bytes.Reader { return bytes.NewReader(b) }

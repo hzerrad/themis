@@ -165,7 +165,7 @@ func TestUndo(t *testing.T) {
 		t.Errorf("Mark = %s, %v; want the planned template's %s", mark, err, fix.Mark)
 	}
 
-	name, params, err := probes.Capability{}.Undo(t.Context(), k8s, target, fix.Before)
+	name, params, err := probes.Capability{}.Undo(t.Context(), k8s, target, fix.Record)
 	if err != nil || name != probes.Name {
 		t.Fatalf("Undo = %s, %v", name, err)
 	}
@@ -181,14 +181,14 @@ func TestUndo(t *testing.T) {
 		t.Error("the undo left a template other than the one before the fix")
 	}
 
-	_, _, err = probes.Capability{}.Undo(t.Context(), k8s, target, fix.Before)
+	_, _, err = probes.Capability{}.Undo(t.Context(), k8s, target, fix.Record)
 	if refusal, ok := errors.AsType[*capability.Refusal](err); !ok || !refusal.NoOp {
 		t.Errorf("nothing to undo: err = %v, want a no-op refusal", err)
 	}
 	if err := k8s.Delete(t.Context(), live(t, target)); err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = probes.Capability{}.Undo(t.Context(), k8s, target, fix.Before)
+	_, _, err = probes.Capability{}.Undo(t.Context(), k8s, target, fix.Record)
 	if refusal, ok := errors.AsType[*capability.Refusal](err); !ok || !strings.Contains(refusal.Reason, "deleted") {
 		t.Errorf("deleted: err = %v, want a refusal", err)
 	}

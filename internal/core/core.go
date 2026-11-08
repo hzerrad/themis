@@ -142,8 +142,10 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	defer pool.Close()
-	// Migrations take locks, so concurrent replicas are safe.
-	if err := store.Migrate(ctx, pool); err != nil {
+	// Migrations take locks, so concurrent replicas are safe. Every fix
+	// Themis ships with works out the records of actions an earlier version
+	// stored with whole pod templates, whatever packs this install disables.
+	if err := store.Migrate(ctx, pool, catalog.Fixes().Record); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	s, err := store.New(pool)

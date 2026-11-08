@@ -41,7 +41,7 @@ func TestApplyAndUndo(t *testing.T) {
 		t.Errorf("mark %s (%v), want the plan's %s", mark, err, p.Mark)
 	}
 
-	name, params, err := fix.Undo(ctx, k8s, tt, p.Before)
+	name, params, err := fix.Undo(ctx, k8s, tt, p.Record)
 	if want := set("app", map[string]string{"limits.memory": "256Mi"}); err != nil || name != resources.Name || !reflect.DeepEqual(params, want) {
 		t.Fatalf("Undo = %s %v, %v; want %v", name, params, err, want)
 	}

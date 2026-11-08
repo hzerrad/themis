@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -21,7 +22,7 @@ var (
 
 // Commands roll the workload back to the revision, as kubectl does: it
 // writes that revision's template, as the rollback would.
-func (Capability) Commands(t incident.TargetRef, params map[string]any, _, _ json.RawMessage) []string {
+func (Capability) Commands(t incident.TargetRef, params map[string]any, _ json.RawMessage) []string {
 	revision, ok := RevisionParam(params)
 	if !ok {
 		return nil
@@ -30,26 +31,30 @@ func (Capability) Commands(t incident.TargetRef, params map[string]any, _, _ jso
 }
 
 // Commands set the images, environment variables and resources the partial
-// rollback puts back, container by container. None when it changes anything
-// else, such as a command, or an environment variable that comes from a
-// reference or looks secret.
-func (Partial) Commands(t incident.TargetRef, _ map[string]any, before, after json.RawMessage) []string {
-	var pre partialBefore
-	var desired corev1.PodTemplateSpec
-	if json.Unmarshal(before, &pre) != nil || json.Unmarshal(after, &desired) != nil {
+// rollback puts back, container by container, as its record keeps them.
+// None when it changes anything else, such as a command, or an environment
+// variable that comes from a reference, looks secret or is too long to show.
+func (Partial) Commands(t incident.TargetRef, _ map[string]any, raw json.RawMessage) []string {
+	rec, err := readPartial(raw)
+	if err != nil || len(rec.Set) == 0 {
 		return nil
 	}
-	return setCommands(t, pre.Template, desired)
+	out := make([]string, 0, len(rec.Set))
+	for _, c := range rec.Set {
+		out = append(out, capability.Kubectl(t, c.Verb, c.Args...))
+	}
+	return out
 }
 
 // setCommands are the kubectl set commands that write desired over pre, or
 // none when kubectl set can't.
-func setCommands(t incident.TargetRef, pre, desired corev1.PodTemplateSpec) []string {
+func setCommands(pre, desired corev1.PodTemplateSpec) []command {
 	if !reflect.DeepEqual(withoutSettable(pre), withoutSettable(desired)) {
 		return nil
 	}
 	before := containersByName(pre)
-	var images, out []string
+	var images []string
+	var out []command
 	for _, a := range desired.Spec.Containers {
 		b := before[a.Name]
 		if a.Image != b.Image {
@@ -60,18 +65,18 @@ func setCommands(t incident.TargetRef, pre, desired corev1.PodTemplateSpec) []st
 			return nil
 		}
 		if len(env) > 0 {
-			out = append(out, capability.Kubectl(t, "set env", append([]string{"-c", a.Name}, env...)...))
+			out = append(out, command{Verb: "set env", Args: append([]string{"-c", a.Name}, env...)})
 		}
 		res, ok := resourceArgs(b.Resources, a.Resources)
 		if !ok {
 			return nil
 		}
 		if len(res) > 0 {
-			out = append(out, capability.Kubectl(t, "set resources", append([]string{"-c", a.Name}, res...)...))
+			out = append(out, command{Verb: "set resources", Args: append([]string{"-c", a.Name}, res...)})
 		}
 	}
 	if len(images) > 0 {
-		out = append([]string{capability.Kubectl(t, "set image", images...)}, out...)
+		out = append([]command{{Verb: "set image", Args: images}}, out...)
 	}
 	return out
 }
@@ -91,7 +96,9 @@ func withoutSettable(t corev1.PodTemplateSpec) corev1.PodTemplateSpec {
 // NAME=value for each value set, NAME- for each removed. kubectl keeps the
 // order of the variables it updates and adds new ones last, so after must
 // list them that way. Not ok otherwise, or when a value set comes from a
-// reference, or replaces one, or either looks secret, or spans lines.
+// reference, or replaces one, or either looks secret, or spans lines, or is
+// longer than the change shows: Themis keeps the commands, and keeps no
+// more of a value than it shows.
 func envArgs(before, after []corev1.EnvVar) ([]string, bool) {
 	b, a := envByName(before), envByName(after)
 	if len(b) != len(before) || len(a) != len(after) {
@@ -114,7 +121,8 @@ func envArgs(before, after []corev1.EnvVar) ([]string, bool) {
 		if ok && sameEnv(old, e) {
 			continue
 		}
-		if e.ValueFrom != nil || old.ValueFrom != nil || envValue(e).hidden || (ok && envValue(old).hidden) || strings.ContainsAny(e.Value, "\r\n") {
+		if e.ValueFrom != nil || old.ValueFrom != nil || envValue(e).hidden || (ok && envValue(old).hidden) || strings.ContainsAny(e.Value, "\r\n") ||
+			utf8.RuneCountInString(e.Value) > maxShown {
 			return nil, false
 		}
 		set = append(set, capability.Quote(e.Name+"="+e.Value))
