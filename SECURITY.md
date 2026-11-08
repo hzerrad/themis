@@ -30,6 +30,8 @@ Out of scope:
 - A wrong diagnosis or fix from the investigator that Themis's controls refuse. Report it as a [bug](https://github.com/hzerrad/themis/issues/new?template=bug.yml); it may become an evaluation case.
 - Attacks that already need cluster-admin rights, or write access to Themis's namespace, Secrets or database.
 - A change applied through an approval written straight into Themis's database, within `executor.namespaces`, `executor.fixes` and the checks against the live cluster. The executor trusts the approvals recorded there.
+- Reading or changing traffic between Themis's components from inside the cluster network. gRPC there is not encrypted yet: the NetworkPolicy limits who can reach it, and mTLS is planned.
+- The investigator reaching an address within `investigator.egressCIDR` on the model's port. Set the CIDR to the model's addresses to narrow it.
 - Vulnerabilities in dependencies with no impact specific to Themis. Report them upstream.
 
 ## Supported versions

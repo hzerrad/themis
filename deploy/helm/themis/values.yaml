@@ -115,6 +115,12 @@ investigator:
   tokenBudget: 200000
   # CIDR the investigator may reach the model at, for the NetworkPolicy.
   egressCIDR: 0.0.0.0/0
+  # Ports it may reach the model on, such as [11434]. Empty: the port in
+  # model.baseURL, 80 for http:// without one, and 443 otherwise, as for
+  # Anthropic's API or an address set on the Setup page. List them for a model
+  # set on the Setup page at another port, or behind a Service whose port
+  # differs from its pods': the NetworkPolicy matches the pods' port.
+  egressPorts: []
   resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 512Mi}}
   # Bring your own model: any OpenAI-compatible endpoint, hosted or local, or
   # Claude through Anthropic's API.

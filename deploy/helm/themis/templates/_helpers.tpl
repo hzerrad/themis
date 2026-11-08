@@ -83,6 +83,35 @@ its own address.
 {{- end }}
 
 {{/*
+The ports the investigator may reach the model on, as a list for its
+NetworkPolicy: investigator.egressPorts when set. Otherwise the port
+investigator.model.baseURL names, 80 for http:// without one, and 443 for the
+rest: https://, Anthropic's API, or an address set on the Setup page.
+*/}}
+{{- define "themis.modelEgressPorts" -}}
+{{- $investigator := .Values.investigator | default dict -}}
+{{- $ports := $investigator.egressPorts | default list -}}
+{{- if not (kindIs "slice" $ports) }}{{ $ports = list $ports }}{{ end -}}
+{{- if not $ports -}}
+{{- $port := "443" -}}
+{{- with ((($investigator.model | default dict).baseURL) | default "" | toString | trim) -}}
+{{- $url := urlParse . -}}
+{{- if eq (lower $url.scheme) "http" }}{{ $port = "80" }}{{ end -}}
+{{- with regexFind ":[0-9]+$" $url.host }}{{ $port = trimPrefix ":" . }}{{ end -}}
+{{- end -}}
+{{- $ports = list $port -}}
+{{- end -}}
+[
+{{- range $i, $p := $ports -}}
+{{- if not (regexMatch "^[0-9]+$" (toString $p)) -}}
+{{- fail (printf "investigator.egressPorts must list port numbers, such as [11434], not %v." $p) -}}
+{{- end -}}
+{{- if $i }}, {{ end }}{port: {{ $p }}, protocol: TCP}
+{{- end -}}
+]
+{{- end }}
+
+{{/*
 Whether the core reads the Kubernetes metrics API. Values from before
 metrics.kubernetes existed, kept with --reuse-values, have no such key, so a
 missing key means on.
