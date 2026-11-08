@@ -241,7 +241,7 @@ func otherChanges(path string, a, b any) []Change {
 		}
 		return []Change{{Field: path, Before: "changed", After: "changed", Withheld: capability.Summary}}
 	}
-	keys := make([]string, 0, len(ma)+len(mb))
+	keys := make([]string, 0, len(ma))
 	for k := range ma {
 		keys = append(keys, k)
 	}
