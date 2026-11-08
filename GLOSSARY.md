@@ -105,7 +105,7 @@ One concrete change to one target, derived from the live cluster rather than fro
 _Avoid_: operation, job, change request
 
 **Policy**:
-The rules that decide, for each action, whether it is forbidden or needs a person's approval.
+The rules that decide, for each action, whether it goes ahead, needs a person's approval, or is forbidden.
 _Avoid_: permissions, RBAC
 
 **Justifying check**:

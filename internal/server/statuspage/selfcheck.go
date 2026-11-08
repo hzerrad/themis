@@ -169,7 +169,7 @@ func (c *Checker) investigator(ctx context.Context) Check {
 var modelFixes = map[string]struct{ summary, fix string }{
 	"model_unavailable": {
 		"Unreachable in the last investigation.",
-		"Check investigator.model.baseURL and the API key, and that investigator.egressCIDR includes the model's address.",
+		"Check investigator.model.baseURL and the API key, and that investigator.egressCIDR and investigator.egressPorts include the model's address and port.",
 	},
 	"invalid_model_output": {
 		"Answers in the last investigation didn't follow Themis's reply format.",

@@ -49,7 +49,7 @@ func TestResult_Text(t *testing.T) {
 		},
 		{
 			with(ollama, func(r *modeltest.Result) { r.Outcome, r.Detail = modeltest.Unreachable, "Connection refused" }), none,
-			"Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that investigator.egressCIDR allows it.",
+			"Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that investigator.egressCIDR and investigator.egressPorts allow it.",
 		},
 		{
 			with(anthropic, func(r *modeltest.Result) { r.Outcome = modeltest.Unreachable }), none,

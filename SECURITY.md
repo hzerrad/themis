@@ -43,7 +43,7 @@ Themis is in alpha. Security fixes land on `main` and ship in the next pre-relea
 The release workflow signs every image with cosign. To check one:
 
 ```sh
-cosign verify ghcr.io/hzerrad/themis-core:v0.1.0-alpha1 \
+cosign verify ghcr.io/hzerrad/themis-core:v0.1.0-alpha2 \
   --certificate-identity-regexp 'https://github.com/hzerrad/themis/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```

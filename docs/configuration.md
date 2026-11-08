@@ -74,7 +74,7 @@ The reply format is the chart's `investigator.model.strictOutput` and `investiga
 | Failed. No model named gpt-4.2 at https://api.openai.com/v1 (404). | The endpoint serves no model by that name. |
 | Failed. No chat completions at http://ollama:11434 (404). Check the address, such as https://api.openai.com/v1. | The address lacks its API path, usually `/v1`. |
 | Failed. No answer from http://ollama:11434/v1 within 20 s. | The model is too slow or overloaded. |
-| Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that investigator.egressCIDR allows it. | Nothing listens at the address, or the NetworkPolicy blocks its address or port: see the chart's `investigator.egressCIDR` and `investigator.egressPorts`. |
+| Failed. Can't connect to http://ollama:11434/v1 (connection refused). Check the address, and that investigator.egressCIDR and investigator.egressPorts allow it. | Nothing listens at the address, or the NetworkPolicy blocks its address or port: see the chart's `investigator.egressCIDR` and `investigator.egressPorts`. |
 | Failed. https://api.openai.com/v1 refused the request (400): *the provider's text*. *Remedy.* | The provider refused a setting. The remedy names it when the text does, such as `investigator.model.outputLimitField=max_completion_tokens`. |
 | Failed. The model answered, but not in the reply format. *Remedy.* | The one remedy that applies: OpenAI's strict form, Not strict, its Helm value, or a larger model. |
 | Failed. The reply was cut off at 512 tokens. Raise investigator.model.maxOutputTokens for a model that reasons. | The model reasons past the output limit. |
