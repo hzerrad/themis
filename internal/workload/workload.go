@@ -109,12 +109,13 @@ type Workload struct {
 
 	Replicas Replicas
 
-	reader     client.Reader
-	deployment *appsv1.Deployment
-	revisions  []Revision
-	pods       []Pod
-	listedRS   bool
-	listedPods bool
+	reader       client.Reader
+	deployment   *appsv1.Deployment
+	revisions    []Revision
+	pods         []Pod
+	shuttingDown int
+	listedRS     bool
+	listedPods   bool
 }
 
 // Revision is one revision Kubernetes keeps of a workload.
@@ -130,7 +131,7 @@ type Revision struct {
 	Object *appsv1.ReplicaSet
 }
 
-// Pod is one pod of a workload, with the revision it runs.
+// Pod is one pod of a workload, with the revision it belongs to.
 type Pod struct {
 	*corev1.Pod
 	Revision int64
@@ -273,7 +274,12 @@ func (w *Workload) RevisionAt(ctx context.Context, n int64) (Revision, error) {
 	return Revision{}, fmt.Errorf("%w: %d", ErrNoRevision, n)
 }
 
-// Pods are the workload's pods, of every revision it keeps.
+// Pods are the workload's pods, of every revision it keeps, without those
+// shutting down, which ShuttingDown counts. A pod shutting down belongs to
+// no revision: when a Deployment goes back to a pod template it had before,
+// Kubernetes takes up that template's ReplicaSet again under a new revision
+// number, and the pods it is still stopping from its earlier use would pass
+// for pods of the new revision, their earlier failures with them.
 func (w *Workload) Pods(ctx context.Context) ([]Pod, error) {
 	if w.listedPods {
 		return w.pods, nil
@@ -291,16 +297,34 @@ func (w *Workload) Pods(ctx context.Context) ([]Pod, error) {
 		return nil, err
 	}
 	var pods []Pod
+	stopping := 0
 	for i := range podList.Items {
 		p := &podList.Items[i]
-		if ref := metav1.GetControllerOf(p); ref != nil {
-			if n, ok := numbers[ref.UID]; ok {
-				pods = append(pods, Pod{Pod: p, Revision: n})
-			}
+		ref := metav1.GetControllerOf(p)
+		if ref == nil {
+			continue
+		}
+		n, ok := numbers[ref.UID]
+		switch {
+		case !ok:
+			continue
+		case p.DeletionTimestamp != nil:
+			stopping++
+		default:
+			pods = append(pods, Pod{Pod: p, Revision: n})
 		}
 	}
-	w.pods, w.listedPods = pods, true
+	w.pods, w.shuttingDown, w.listedPods = pods, stopping, true
 	return pods, nil
+}
+
+// ShuttingDown counts the workload's pods that are shutting down: deleted,
+// and stopping within their grace period.
+func (w *Workload) ShuttingDown(ctx context.Context) (int, error) {
+	if _, err := w.Pods(ctx); err != nil {
+		return 0, err
+	}
+	return w.shuttingDown, nil
 }
 
 // list lists objects of the kind of into that the Deployment's selector

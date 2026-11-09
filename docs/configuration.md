@@ -318,8 +318,8 @@ The investigator cannot query the cluster: it can only ask for a template by nam
 | Template | What it reads |
 |---|---|
 | `rollout_history` | The Deployment's rollout progress and conditions, when its template last changed and by which field manager, GitOps ownership markers, each ReplicaSet revision with its images, resource limits and probe timings (never what a probe calls), and what the current revision changed from the one before it: in what its pods run, such as an image, an environment variable, a command, a limit, a probe or a volume, or only in their labels and annotations, as `kubectl rollout restart` does. A value that may hold a secret, such as an environment variable's or a command, is named, never shown |
-| `pod_states` | Each pod: its revision, readiness, and each container's current state and last termination, where `OOMKilled` shows |
-| `target_events` | Recent events of the Deployment, its ReplicaSets and its pods |
+| `pod_states` | Each pod: its revision, readiness, and each container's current state and last termination, where `OOMKilled` shows. A pod shutting down is counted, not listed, and belongs to no revision. When a Deployment goes back to an earlier pod template, Kubernetes takes up that template's ReplicaSet again, and the pods it is still stopping would otherwise pass for the new revision's |
+| `target_events` | Recent events of the Deployment, its ReplicaSets and its pods, except pods shutting down |
 | `referenced_config` | The ConfigMaps and Secrets the pod template refers to, and when each ConfigMap last changed. Names and times only. Secrets are listed by name and never read. |
 | `container_logs_tail` | The end of one container's logs, the pod needing attention most by default. Classified `sensitive`. |
 | `container_memory` | For each container of the current revision: its memory request and limit, the memory it uses now and at its peak over a window (`window`, 1h by default), each the highest among the revision's pods and as a share of the limit, and which [metrics source](#metrics) said so |

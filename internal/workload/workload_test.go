@@ -179,13 +179,23 @@ func TestTemplateHash(t *testing.T) {
 }
 
 // Revisions and pods are the ones the Deployment controls, not whatever
-// matches its labels.
+// matches its labels. A pod shutting down belongs to no revision, such as
+// one a ReplicaSet the Deployment took up again still stops from its earlier
+// use: the current revision's state, which verification reads, leaves its
+// restarts out.
 func TestRevisionsAndPods(t *testing.T) {
 	d := deployment()
 	current := replicaSet("checkout-c", "rs-3", "3", "shop/checkout:1.4.2", d)
 	previous := replicaSet("checkout-p", "rs-2", "2", "shop/checkout:1.4.1", d)
 	stranger := replicaSet("other", "rs-x", "9", "other:1", nil)
-	w, err := workload.Read(t.Context(), reader(d, current, previous, stranger, pod("a", current), pod("b", previous), pod("c", stranger)), target)
+	a := pod("a", current)
+	a.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 1}}
+	stopping := pod("s", current)
+	stopping.DeletionTimestamp = ptr.To(metav1.NewTime(at))
+	// The fake client keeps a deleted object only while a finalizer holds it.
+	stopping.Finalizers = []string{"example.com/hold"}
+	stopping.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 4}}
+	w, err := workload.Read(t.Context(), reader(d, current, previous, stranger, a, stopping, pod("b", previous), pod("c", stranger)), target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +224,13 @@ func TestRevisionsAndPods(t *testing.T) {
 		got[p.Name] = p.Revision
 	}
 	if len(got) != 2 || got["a"] != 3 || got["b"] != 2 {
-		t.Errorf("pods = %v, want a at revision 3 and b at revision 2", got)
+		t.Errorf("pods = %v, want a at revision 3 and b at revision 2, and not s, which is shutting down", got)
+	}
+	if n, err := w.ShuttingDown(t.Context()); err != nil || n != 1 {
+		t.Errorf("shutting down = %d, %v, want 1", n, err)
+	}
+	if s, err := w.State(t.Context(), at); err != nil || s.Restarts != 1 {
+		t.Errorf("state = %+v, %v, want the 1 restart of pod a", s, err)
 	}
 }
 

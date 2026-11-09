@@ -27,6 +27,9 @@ const revisionAnnotation = "deployment.kubernetes.io/revision"
 type PodStatesView struct {
 	Pods      []PodView `json:"pods"`
 	TotalPods int       `json:"totalPods"`
+	// ShuttingDown counts the pods deleted and stopping, which belong to no
+	// revision and aren't listed.
+	ShuttingDown int `json:"shuttingDown,omitzero"`
 }
 
 type PodView struct {
@@ -79,7 +82,11 @@ func (podStates) Collect(ctx context.Context, _ client.Reader, w *workload.Workl
 	if err != nil {
 		return Item{}, err
 	}
-	var view PodStatesView
+	stopping, err := w.ShuttingDown(ctx)
+	if err != nil {
+		return Item{}, err
+	}
+	view := PodStatesView{ShuttingDown: stopping}
 	for _, pod := range pods {
 		view.Pods = append(view.Pods, viewPod(pod.Pod, revisionString(pod.Revision)))
 	}

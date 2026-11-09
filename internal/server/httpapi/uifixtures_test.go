@@ -1267,7 +1267,7 @@ func uiShop(t *testing.T, cat catalog.Catalog) ([]evidence.Item, []check.Result)
 			}},
 			TotalRevisions: 1,
 		}, 1},
-		{evShopPods, evidence.PodStates, evidence.PodStatesView{TotalPods: 2, Pods: []evidence.PodView{
+		{evShopPods, evidence.PodStates, evidence.PodStatesView{TotalPods: 2, ShuttingDown: 1, Pods: []evidence.PodView{
 			{Name: shopPod, Revision: "1", Phase: "Running", StartedAt: uiAt(-600), Containers: []evidence.ContainerView{{
 				Name: "app", Image: "busybox:1.37", RestartCount: 2, State: &evidence.StateView{Status: "waiting", Reason: "CrashLoopBackOff"}, LastTermination: killed(-3),
 			}}},
