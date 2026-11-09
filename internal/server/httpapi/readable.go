@@ -268,6 +268,9 @@ func (r *readable) pods(it evidence.Item) (phrase, error) {
 	if v.TotalPods > len(v.Pods) {
 		r.Notes = append(r.Notes, phrase{}.text(fmt.Sprintf("Showing %d of %d pods, those not ready first.", len(v.Pods), v.TotalPods)))
 	}
+	if v.ShuttingDown > 0 {
+		r.Notes = append(r.Notes, phrase{}.text(plural(v.ShuttingDown, "other pod is", "other pods are")+" shutting down."))
+	}
 	d := phrase{}.text(plural(v.TotalPods, "pod", "pods"))
 	switch {
 	case ready == len(v.Pods):

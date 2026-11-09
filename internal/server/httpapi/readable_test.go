@@ -44,6 +44,9 @@ func TestShown(t *testing.T) {
 		rows[0].Ended != "OOMKilled, exit 137" || !rows[0].Failed || !rows[1].Ready {
 		t.Errorf("pod rows = %+v", rows)
 	}
+	if notes := views[evShopPods].Notes; len(notes) != 1 || notes[0].String() != "1 other pod is shutting down." {
+		t.Errorf("pod notes = %v", notes)
+	}
 	if rows := views[evShopEvents].Events.Rows; len(rows) != 2 || !rows[0].Warning || rows[0].Count != 4 || rows[1].Warning {
 		t.Errorf("event rows = %+v", rows)
 	}
