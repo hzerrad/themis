@@ -1,6 +1,6 @@
 {{- if .Values.holmesgpt.enabled }}
 # Puts incidents waiting for a suggestion to HolmesGPT, and suggests the
-# rollbacks it finds, which Themis checks like any other suggestion.
+# fixes it chooses, which Themis checks like any other suggestion.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

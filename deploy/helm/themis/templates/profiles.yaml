@@ -7,11 +7,19 @@ metadata:
   labels: {{- include "themis.labels" $ | nindent 4 }}
 spec: {{- toYaml (omit . "name") | nindent 2 }}
 {{- end }}
-{{- /* The HolmesGPT adapter is added to the sources of suggestions. */}}
+{{- /* The HolmesGPT adapter is added to the sources of suggestions, with
+every fix Themis has unless holmesgpt.fixes names fewer. */}}
 {{- $spec := deepCopy (.Values.themisConfig | default dict) }}
 {{- if .Values.holmesgpt.enabled }}
+{{- $all := .Files.Get "files/fixes.yaml" | fromYamlArray }}
+{{- $fixes := .Values.holmesgpt.fixes | default $all | uniq }}
+{{- range $fixes }}
+{{- if not (has . $all) }}
+{{- fail (printf "holmesgpt.fixes names %s, which isn't a fix Themis has. Name only fixes Themis has: %s." . (join ", " $all)) }}
+{{- end }}
+{{- end }}
 {{- $proposals := get $spec "externalProposals" | default dict }}
-{{- $source := dict "serviceAccount" (printf "%s/%s-holmesgpt" .Release.Namespace .Release.Name) "namespaces" .Values.enrolledNamespaces "capabilities" (list "deployment.rollback-to-revision") "perMinute" .Values.holmesgpt.perMinute "ceiling" "internal" }}
+{{- $source := dict "serviceAccount" (printf "%s/%s-holmesgpt" .Release.Namespace .Release.Name) "namespaces" .Values.enrolledNamespaces "capabilities" $fixes "perMinute" .Values.holmesgpt.perMinute "ceiling" "internal" }}
 {{- $_ := set $proposals "sources" (append (get $proposals "sources" | default list) $source) }}
 {{- $_ := set $spec "externalProposals" $proposals }}
 {{- end }}

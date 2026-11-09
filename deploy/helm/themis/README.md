@@ -245,6 +245,12 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `oidc.scopes` | `[]` (`email`, `profile`) | Scopes to ask for, besides `openid`. Add `groups` for Dex or Okta |
 | `access` | `[]` | Roles for people who sign in, by `users` or `groups`; see [People and roles](../../../docs/configuration.md#people-and-roles) |
 | `approvals.requireAnotherApprover` | `false` | Refuse the approval of a fix by the person who suggested it: someone else must approve it |
+| `holmesgpt.enabled` | `false` | Install an adapter that puts each incident waiting for a suggestion to an existing HolmesGPT, which may suggest one of the fixes the incident offers. See [Fixes suggested from outside](../../../docs/configuration.md#fixes-suggested-from-outside) |
+| `holmesgpt.url` | `""` | Required with `holmesgpt.enabled`: HolmesGPT's HTTP API, such as `http://holmes-holmes.holmes`. Version 0.25 or later |
+| `holmesgpt.apiKeySecret` | `""` | A Secret with an `apiKey` key: HolmesGPT's `HOLMES_API_KEY` |
+| `holmesgpt.model` | `""` | A key of HolmesGPT's `modelList`. Empty uses its default |
+| `holmesgpt.perMinute` | `6` | How many suggestions a minute it may make |
+| `holmesgpt.fixes` | `[]` | The fixes it may suggest, such as `deployment.rollback-to-revision`. Themis refuses any other from it. Empty: every fix the incident's profiles offer |
 | `networkPolicy.enabled` | `true` | Limit the investigator to the core, DNS and the model's port, and the executor to the core |
 | `metrics.kubernetes.enabled` | `true` | Read containers' current memory and CPU use from the Kubernetes metrics API (metrics-server), and let the core read it in each enrolled namespace |
 | `metrics.prometheus.address` | `""` | A server answering Prometheus queries, for peak memory and CPU throttling too; see [Metrics](../../../docs/configuration.md#metrics). Empty: not used |

@@ -9,16 +9,14 @@ import grpc
 from google.protobuf import struct_pb2
 
 from themis.v1 import common_pb2, proposal_pb2, proposal_pb2_grpc
-from themis_intelligence.holmesgpt.decide import SCHEMA, NoSuggestion, decide, revisions
+from themis_intelligence.holmesgpt.decide import NoSuggestion, decide, offered, verdict_schema
 from themis_intelligence.holmesgpt.holmes import Holmes, HolmesError
-from themis_intelligence.holmesgpt.prompt import CONCLUDE, INSTRUCTIONS, PROMPT_VERSION, describe
+from themis_intelligence.holmesgpt.prompt import INSTRUCTIONS, PROMPT_VERSION, conclude, describe
 
 log = logging.getLogger(__name__)
 
 CALL_TIMEOUT_S = 30.0
 SOURCE = "holmesgpt"
-# The only fix this adapter suggests: HolmesGPT is asked for a rollback.
-ROLLBACK = "deployment.rollback-to-revision"
 
 # The states in which Themis takes a suggestion and nothing else is working on
 # it. While Themis's own investigator runs, HolmesGPT isn't asked.
@@ -128,14 +126,26 @@ class Agent:
     async def handle(self, incident_id: str) -> None:
         incident = await self.themis.get_incident(incident_id)
         target = incident.incident.target
-        history_id, history = revisions(list(incident.evidence))
+        # The fixes Themis lets this source suggest for the incident: those its
+        # profiles offer that the source's own list names.
+        fixes = offered(incident.capabilities)
+        if not fixes:
+            log.info(
+                "HolmesGPT not asked",
+                extra={"incident": incident_id, "reason": "the incident offers it no fix"},
+            )
+            return
+        evidence_ids = [e.id for e in incident.evidence]
         log.info(
             "asking HolmesGPT",
             extra={"incident": incident_id, "target": f"{target.namespace}/{target.name}"},
         )
         try:
             answer = await self.holmes.ask(
-                describe(incident, history), INSTRUCTIONS, CONCLUDE, SCHEMA
+                describe(incident, fixes),
+                INSTRUCTIONS,
+                conclude(fixes),
+                verdict_schema(fixes, evidence_ids),
             )
         except HolmesError as e:
             log.warning(
@@ -145,23 +155,21 @@ class Agent:
         log.info(
             "HolmesGPT answered", extra={"incident": incident_id, "tools_run": answer.tools_run}
         )
-        outcome = decide(
-            answer.analysis, target, history_id, history, {e.id for e in incident.evidence}
-        )
+        outcome = decide(answer.analysis, target, fixes, set(evidence_ids))
         if isinstance(outcome, NoSuggestion):
             log.info("no suggestion", extra={"incident": incident_id, "reason": outcome.reason})
             return
+        params = struct_pb2.Struct()
+        params.update(outcome.params)
         resp = await self.themis.submit(
             proposal_pb2.SubmitProposalRequest(
                 incident_id=incident_id,
                 client_proposal_id=f"{SOURCE}-{incident_id}",
                 target=target,
-                capability_name=ROLLBACK,
-                params=struct_pb2.Struct(
-                    fields={"revision": struct_pb2.Value(number_value=outcome.revision)}
-                ),
+                capability_name=outcome.fix,
+                params=params,
                 rationale=outcome.rationale,
-                expected_effect=f"The Deployment runs revision {outcome.revision} and recovers.",
+                expected_effect=outcome.expected_effect,
                 cited_evidence_ids=list(outcome.cited),
                 notes=answer.notes,
                 provenance=common_pb2.Provenance(
@@ -173,12 +181,9 @@ class Agent:
             )
         )
         if resp.status == proposal_pb2.PROPOSAL_STATUS_ACCEPTED:
-            log.info(
-                "suggested a rollback",
-                extra={"incident": incident_id, "revision": outcome.revision},
-            )
+            log.info("suggested a fix", extra={"incident": incident_id, "fix": outcome.fix})
         else:
             log.warning(
                 "Themis didn't accept the suggestion",
-                extra={"incident": incident_id, "reason": resp.message},
+                extra={"incident": incident_id, "fix": outcome.fix, "reason": resp.message},
             )
