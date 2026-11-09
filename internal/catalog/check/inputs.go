@@ -310,22 +310,26 @@ func failures(decoded map[string]any, ids map[string]string) []failure {
 // firstFailure is the earliest failure, dated by the pods' status, which only
 // Kubernetes' own components write in practice: anyone who may create events
 // can date one as they like. A container's last termination dates a failure,
-// and its first when it restarted at most once. The status doesn't date the
-// first failure of a container that restarted more than once, or of a pod
-// that isn't ready for another reason: an event about that pod dates it, when
-// the pod started no later than the event. Other events are left out, since
-// the status already says when, or that nothing failed. There is none when a
-// failure can't be dated, as it could be earlier still.
+// and its first when it restarted at most once. A container that restarted
+// more than once failed first before its last end, so an event about its pod
+// must show the failures too: the first failure is the earlier of the two.
+// The kubelet records its BackOff event just after a container's second end,
+// so on the second restart that event comes a moment after the end the status
+// shows, and the end dates the failures. The status doesn't date the failure
+// of a pod that isn't ready for another reason: an event about that pod dates
+// it. Only events from when the pod started count. Other events are left out,
+// since the status already says when, or that nothing failed. There is none
+// when a failure can't be dated, as it could be earlier still.
 func firstFailure(decoded map[string]any, ids map[string]string) (failure, bool) {
 	ps, ok := decoded[evidence.PodStates].(*evidence.PodStatesView)
 	if !ok {
 		return failure{}, false
 	}
 	var fs []failure
-	// The pods whose first failure only an event can date, and for those
-	// that must have one, the latest it can be.
+	// The pods whose failures only an event can date, and of those, the ones
+	// that must have one.
 	open := map[string]evidence.PodView{}
-	needed := map[string]time.Time{}
+	needed := map[string]bool{}
 	for _, p := range ps.Pods {
 		ended := false
 		for _, c := range p.Containers {
@@ -340,9 +344,7 @@ func firstFailure(decoded map[string]any, ids map[string]string) (failure, bool)
 			fs = append(fs, failure{t.FinishedAt, t.Reason + " of " + p.Name + "/" + c.Name, ids[evidence.PodStates]})
 			if c.RestartCount > 1 {
 				open["Pod/"+p.Name] = p
-				if by, ok := needed[p.Name]; !ok || t.FinishedAt.Before(by) {
-					needed[p.Name] = t.FinishedAt
-				}
+				needed[p.Name] = true
 			}
 		}
 		if !p.Ready && !ended {
@@ -359,9 +361,7 @@ func firstFailure(decoded map[string]any, ids map[string]string) (failure, bool)
 				return failure{}, false
 			}
 			fs = append(fs, failure{e.FirstSeen, e.Reason + " on " + e.Object, ids[evidence.TargetEvents]})
-			if by, ok := needed[p.Name]; ok && !e.FirstSeen.After(by) {
-				delete(needed, p.Name)
-			}
+			delete(needed, p.Name)
 		}
 	}
 	if len(fs) == 0 || len(needed) > 0 {

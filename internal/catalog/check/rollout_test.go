@@ -536,6 +536,9 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 	}
 	// A warning event about the pod, three minutes after the rollout.
 	early := []evidence.EventView{{Object: "Pod/p", Type: "Warning", Reason: "BackOff", FirstSeen: rolloutAt.Add(3 * time.Minute)}}
+	// The kubelet's BackOff event, recorded a second after the container's
+	// second end, as the status shows it on its second restart.
+	late := []evidence.EventView{{Object: "Pod/p", Type: "Warning", Reason: "BackOff", FirstSeen: failedAt.Add(time.Second)}}
 	tests := []struct {
 		name   string
 		refs   []evidence.ConfigRefView
@@ -560,6 +563,7 @@ func TestConfigChangedBeforeFailure(t *testing.T) {
 		// A container that restarted many times failed first before its last
 		// end: an event about its pod, since it started, dates that.
 		{"restarted many times, dated by an event", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.False, "", 7, early},
+		{"restarted twice, its event just after its last end", nil, check.False, "", 2, late},
 		{"restarted many times, no event", []evidence.ConfigRefView{cm(rolloutAt.Add(5 * time.Minute))}, check.Unknown, "no failure with a known time", 7, nil},
 	}
 	for _, tt := range tests {
