@@ -166,7 +166,7 @@ Permissions and the threat model are in [docs/architecture.md](docs/architecture
 
 ## Governance
 
-<img src="docs/assets/themis-workflow.gif" width="340" align="right" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
+<img src="docs/assets/themis-workflow.gif" width="340" align="right" hspace="20" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
 
 Every proposal, whatever its source, passes the same controls in `themis-core`:
 
