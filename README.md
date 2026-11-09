@@ -31,7 +31,7 @@ Investigation and governance are separate:
 | Produces | A ranked diagnosis and one proposed fix, citing evidence | A decision on the proposal, then execution and verification |
 | Trust | Untrusted. Every proposal is validated | Holds the only write access, through the executor |
 
-## Install
+## Quickstart
 
 You need Kubernetes 1.35, 1.36 or 1.37, Helm, and Alertmanager in the cluster.
 
@@ -64,7 +64,7 @@ helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -
   --set executor.enabled=true --set executor.namespaces='{payments}'
 ```
 
-For a local or OpenAI-compatible model, see the [chart README](deploy/helm/themis/README.md). To try Themis on kind, with sample workloads that break on demand, follow the [quickstart](docs/quickstart.md).
+For a local or OpenAI-compatible model, see the [chart README](deploy/helm/themis/README.md). The [full quickstart](docs/quickstart.md) walks through each step and a first incident, on your cluster or on kind with sample workloads that break on demand.
 
 ## Example
 
@@ -179,7 +179,7 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Model (optional) | Claude through Anthropic's API, or an OpenAI-compatible endpoint with JSON-schema structured output, such as OpenAI, Ollama or vLLM |
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
-The commands are under [Install](#install). Themis watches only the namespaces in `enrolledNamespaces`.
+The commands are under [Quickstart](#quickstart). Themis watches only the namespaces in `enrolledNamespaces`.
 
 A default install is read-only. The investigator and fixes are turned on separately:
 
