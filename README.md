@@ -67,7 +67,7 @@ helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -
   --set investigator.model.schemaDialect=openai-strict
 ```
 
-An existing HolmesGPT (0.25 or later) can suggest rollbacks instead, through an adapter the chart installs:
+An existing HolmesGPT (0.25 or later) can suggest fixes instead, through an adapter the chart installs:
 
 ```sh
 kubectl -n themis create secret generic holmes-key --from-literal=apiKey=<HolmesGPT's API key>

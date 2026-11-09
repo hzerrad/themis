@@ -257,10 +257,10 @@ approvals:
   requireAnotherApprover: false
 
 # HolmesGPT as a source of fixes: each incident waiting for a suggestion, or
-# that Themis couldn't decide, is put to an existing HolmesGPT install. A
-# rollback it finds is suggested to Themis, which checks it like any other:
-# against the cluster, then policy and approval. HolmesGPT never sees
-# Themis's container logs; it reads the cluster itself.
+# that Themis couldn't decide, is put to an existing HolmesGPT install. The
+# fix it chooses from those the incident offers is suggested to Themis, which
+# checks it like any other: against the cluster, then policy and approval.
+# HolmesGPT never sees Themis's container logs; it reads the cluster itself.
 holmesgpt:
   enabled: false
   # HolmesGPT's HTTP API, such as http://holmes-holmes.holmes (its chart's
@@ -273,6 +273,10 @@ holmesgpt:
   model: ""
   # How many suggestions a minute it may make.
   perMinute: 6
+  # The fixes it may suggest, such as [deployment.rollback-to-revision].
+  # Themis refuses any other from it. Empty: every fix the incident's profiles
+  # offer.
+  fixes: []
 
 networkPolicy:
   enabled: true

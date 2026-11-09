@@ -157,10 +157,11 @@ vuln-images: images ## Scan the images for fixable HIGH and CRITICAL vulnerabili
 # Code generation
 
 .PHONY: gen
-gen: ## Generate code from protobuf contracts, the config schema, and the alerting rules for the chart and kind
+gen: ## Generate code from protobuf contracts, the config schema, the alerting rules for the chart and kind, and the chart's list of fixes
 	$(GO_TOOL) buf generate
 	go run ./scripts/gen-config-schema deploy/config/themis.schema.json deploy/helm/themis/crds
 	go run ./scripts/gen-alert-rules deploy/helm/themis/files/alert-rules.yaml scripts/dev/monitoring/fast.yaml scripts/dev/monitoring/rules.yaml
+	go run ./scripts/gen-fix-list deploy/helm/themis/files/fixes.yaml
 	$(UV) sync --quiet --reinstall-package themis-intelligence  # pick up new generated packages
 
 GENERATED := gen intelligence/gen deploy/config/themis.schema.json deploy/helm/themis/crds deploy/helm/themis/files scripts/dev/monitoring/rules.yaml
