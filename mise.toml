@@ -9,6 +9,6 @@ helm = "4.3.1"
 kubectl = "1.37.2"
 # For the web UI's test; CI reads it here too.
 node = "26.13.0"
-ollama = "0.40.13"
+ollama = "0.40.15"
 trivy = "0.76.0"
 uv = "0.13.6"
