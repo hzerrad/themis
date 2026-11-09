@@ -27,6 +27,63 @@ Investigation and governance are separate:
 | Produces | A ranked diagnosis and one proposed fix, citing evidence | A decision on the proposal, then execution and verification |
 | Trust | Untrusted. Every proposal is validated | Holds the only write access, through the executor |
 
+## Quickstart
+
+You need Kubernetes 1.35, 1.36 or 1.37, Helm, and Alertmanager in the cluster.
+
+**1. Install Themis** for the namespaces it should watch. They must exist first. It installs read-only:
+
+```sh
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  --namespace themis --create-namespace \
+  --set enrolledNamespaces='{payments,orders}'
+```
+
+The chart finds Alertmanager in the cluster and prints the address Themis reads. Add `--set metrics.prometheus.address=<your Prometheus>` to read CPU throttling, memory peaks and history.
+
+**2. Open Themis and create the first admin account:**
+
+```sh
+kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n themis port-forward deploy/themis-core 8080:8080
+```
+
+Open http://localhost:8080 and sign in with that password. Creating the admin account signs you in with it.
+
+**3. Optional: choose what suggests fixes.** Without it, an engineer suggests each fix on the incident page. Themis's investigator sends the evidence to the model you choose:
+
+```sh
+# Claude, through Anthropic's API
+kubectl -n themis create secret generic model-key --from-literal=apiKey=<your Anthropic API key>
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set investigator.enabled=true --set investigator.model.provider=anthropic \
+  --set investigator.model.name=claude-haiku-5-5 --set investigator.model.apiKeySecret=model-key
+
+# Or any OpenAI-compatible endpoint, such as OpenAI, Ollama or vLLM, with model-key holding its key if it needs one.
+# schemaDialect=openai-strict is for OpenAI only
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set investigator.enabled=true --set investigator.model.baseURL=https://api.openai.com/v1 \
+  --set investigator.model.name=gpt-4.1 --set investigator.model.apiKeySecret=model-key \
+  --set investigator.model.schemaDialect=openai-strict
+```
+
+An existing HolmesGPT (0.25 or later) can suggest rollbacks instead, through an adapter the chart installs:
+
+```sh
+kubectl -n themis create secret generic holmes-key --from-literal=apiKey=<HolmesGPT's API key>
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set holmesgpt.enabled=true --set holmesgpt.url=http://holmes-holmes.holmes --set holmesgpt.apiKeySecret=holmes-key
+```
+
+**4. Optional: turn on fixes.** Themis then applies each fix a person approves, only in the namespaces you list:
+
+```sh
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set executor.enabled=true --set executor.namespaces='{payments}'
+```
+
+Every model setting is in the [chart README](deploy/helm/themis/README.md), and other AI SRE agents can suggest fixes through Themis's API, as [docs/configuration.md](docs/configuration.md#fixes-suggested-from-outside) describes. The [full quickstart](docs/quickstart.md) walks through each step and a first incident, on your cluster or on kind with sample workloads that break on demand.
+
 ## Example
 
 A Deployment `checkout` in namespace `shop` is rolled out with a new image and a changed environment variable `MODE`. The new pods crash.
@@ -109,6 +166,8 @@ Permissions and the threat model are in [docs/architecture.md](docs/architecture
 
 ## Governance
 
+<img src="docs/assets/themis-workflow.gif" width="357" align="right" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
+
 Every proposal, whatever its source, passes the same controls in `themis-core`:
 
 1. **Validation.** The proposal must name the incident's exact target, UID included, use a fix the incident's profiles offer, and cite evidence Themis collected. Anything else is rejected. A wrong target is recorded as a safety event.
@@ -140,14 +199,7 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Model (optional) | Claude through Anthropic's API, or an OpenAI-compatible endpoint with JSON-schema structured output, such as OpenAI, Ollama or vLLM |
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
-```sh
-kubectl create namespace shop
-helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
-  --namespace themis --create-namespace \
-  --set enrolledNamespaces='{shop}'
-```
-
-Themis watches only the namespaces in `enrolledNamespaces`, here `shop`. Each must exist before the install.
+The commands are under [Quickstart](#quickstart). Themis watches only the namespaces in `enrolledNamespaces`.
 
 A default install is read-only. The investigator and fixes are turned on separately:
 
@@ -157,7 +209,7 @@ A default install is read-only. The investigator and fixes are turned on separat
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
 | Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each fix after a person approves it, only in those namespaces. Putting back one that made things worse needs no approval by default |
 
-- The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
+- The [quickstart](docs/quickstart.md) walks through a first incident on kind or your own cluster.
 - Until the first admin account is created, Themis serves only the page that creates it.
 - Images are signed and published for linux/amd64 and linux/arm64.
 - The [chart README](deploy/helm/themis/README.md) lists every value, including GitOps installs and an external database.
