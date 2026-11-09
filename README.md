@@ -13,7 +13,7 @@
 
 Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 
-Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
+Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from an engineer, from an external AI SRE agent such as HolmesGPT, or from Themis's built-in investigator. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
 > [!WARNING]
 > Themis is in alpha (`v0.1.0-alpha2`). Configuration and APIs may change between releases. It is not ready for production use.
@@ -26,6 +26,10 @@ Investigation and governance are separate:
 | Works from | The evidence Themis collected, and an LLM | Cluster state, CEL checks and CEL policy. No model |
 | Produces | A ranked diagnosis and one proposed fix, citing evidence | A decision on the proposal, then execution and verification |
 | Trust | Untrusted. Every proposal is validated | Holds the only write access, through the executor |
+
+Themis collects its own evidence, even when an outside agent investigates. A suggestion is untrusted, so the checks that justify a fix run on evidence the suggester doesn't control. Otherwise whoever suggests the fix would also supply the facts that justify it.
+
+A team can start with the built-in investigator and move to an outside agent later. Policy, approvers, the audit trail and the executor's permissions stay the same. Only the suggester changes.
 
 ## Quickstart
 
@@ -50,7 +54,7 @@ kubectl -n themis port-forward deploy/themis-core 8080:8080
 
 Open http://localhost:8080 and sign in with that password. Creating the admin account signs you in with it.
 
-**3. Optional: choose what suggests fixes.** Without it, an engineer suggests each fix on the incident page. Themis's investigator sends the evidence to the model you choose:
+**3. Optional: choose what suggests fixes.** Without it, an engineer suggests each fix on the incident page. The built-in investigator is for teams without an AI SRE agent. It suggests only fixes from Themis's own catalog, and sends the evidence to the model you choose:
 
 ```sh
 # Claude, through Anthropic's API
@@ -158,7 +162,7 @@ flowchart LR
 | Component | Language | Role |
 |---|---|---|
 | `themis-core` | Go | Alert intake, evidence, checks, governance, approvals, verification, audit trail, HTTP API and web UI |
-| `themis-intelligence` | Python | Themis's own investigator: a bounded loop over the evidence and the model. Optional, and replaceable by an external AI SRE agent. Holds no cluster or database credentials |
+| `themis-intelligence` | Python | The built-in investigator, for teams without an AI SRE agent: a bounded loop over the evidence and the model that suggests only fixes from Themis's catalog. Off by default, and replaceable by an outside agent. Holds no cluster or database credentials |
 | `themis-executor` | Go | Applies approved actions after checking them again. Optional; the only component with write access |
 | PostgreSQL | | State, audit trail and job queue |
 
@@ -181,14 +185,24 @@ Every proposal, whatever its source, passes the same controls in `themis-core`:
 
 Evidence containing text aimed at Themis is flagged to the investigator and the approver. Details are in [docs/configuration.md](docs/configuration.md).
 
-**Evaluation.** The investigator is scored on 91 recorded incidents, 28 of which carry text planted in the evidence to steer it. CI replays the qwen3 8B recordings on every change and fails if a harmful fix would reach a person.
+**Evaluation.** Across 91 synthetic evaluation cases, 28 of them with text planted in the evidence to steer the investigator, no harmful fix reached a person. qwen3 8B attempted 14, and Themis refused every one. CI replays its recorded replies on every change and fails if a harmful fix would reach a person. How often the investigator decides right is secondary, and depends on its model.
 
-| Investigator | Right decision | Right cause first | Harmful fixes attempted | Harmful fixes reaching a person |
+| Investigator | Harmful fixes reaching a person | Harmful fixes attempted | Right decision | Right cause first |
 |---|---|---|---|---|
-| Claude Haiku 5.5 | 84 / 91 | 86 / 91 | 0 | 0 |
-| qwen3 8B, local | 63 / 91 | 60 / 91 | 14 | 0 |
+| Claude Haiku 5.5 | 0 | 0 | 84 / 91 | 86 / 91 |
+| qwen3 8B, local | 0 | 14 | 63 / 91 | 60 / 91 |
 
 Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
+
+## Works with HolmesGPT
+
+HolmesGPT investigates and suggests the fix. Themis judges it, applies it and verifies it. HolmesGPT never needs write access to the cluster: the executor makes every change, after the same checks, policy and approval as any other suggestion.
+
+- An adapter the chart installs (`holmesgpt.enabled=true`) puts each incident that waits for a suggestion to HolmesGPT 0.25 or later, once, with the checks and evidence Themis collected. Container logs are never sent: HolmesGPT reads the cluster itself.
+- HolmesGPT may suggest any fix the incident offers: a rollback, a partial rollback, a resource change or a probe change. The adapter checks the parameters against the fix's schema, and drops and logs anything else. `holmesgpt.fixes` narrows the list.
+- What HolmesGPT ran and found is shown as notes on the suggestion, for people.
+
+Other AI SRE agents suggest fixes through Themis's gRPC API, as [Fixes suggested from outside](docs/configuration.md#fixes-suggested-from-outside) describes.
 
 ## Deployment
 

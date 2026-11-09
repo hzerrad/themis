@@ -90,6 +90,10 @@ _Avoid_: agent, AI, model
 A fix put forward for an incident, by an investigator or a person, citing the evidence it rests on. Themis judges it before anything happens.
 _Avoid_: recommendation (a fix Themis can't apply), proposal
 
+**Suggester**:
+Whoever puts a suggestion forward: Themis's investigator, a tool outside Themis such as HolmesGPT, or a person. Themis judges every suggestion the same way, whoever made it.
+_Avoid_: proposer
+
 ## Fixing
 
 **Capability**:
