@@ -56,15 +56,31 @@ field() { python3 -c "import json,sys; d=json.load(sys.stdin); print(eval(sys.ar
 latest() { api /v1/incidents | field 'd[0]["id"] if d else ""'; }
 state() { api "/v1/incidents/$1" | field 'd["Incident"]["state"]'; }
 
-# wait_state <id> <timeout-seconds> <state...>
+# explain <id> prints, on stderr, why an incident is where it is: its last
+# transition's reason and its checks.
+explain() {
+  api "/v1/incidents/$1" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+last = (d.get("Transitions") or [{}])[-1]
+print("  incident %s is %s: %s" % (d["Incident"]["id"], d["Incident"]["state"], last.get("Reason", "")))
+for p in d.get("Predicates") or []:
+    print("    %s: %s, %s" % (p["Name"], p["Value"], p["Reason"]))' >&2 || true
+}
+
+# wait_state <id> <timeout-seconds> <state...> prints the first of the states
+# the incident reaches, or the state it is in at the timeout. The first state
+# is the one waited for: on any other, it explains why.
 wait_state() {
-  local id=$1 deadline=$((SECONDS + $2)); shift 2
-  while [ $SECONDS -lt $deadline ]; do
-    local s; s=$(state "$id")
-    for want in "$@"; do [ "$s" = "$want" ] && { echo "$s"; return 0; }; done
+  local id=$1 deadline=$((SECONDS + $2)) s want; shift 2
+  while :; do
+    s=$(state "$id")
+    for want in "$@"; do [ "$s" = "$want" ] && break 2; done
+    [ $SECONDS -lt $deadline ] || break
     sleep 3
   done
-  state "$id"
+  [ "$s" = "$1" ] || explain "$id"
+  echo "$s"
 }
 
 # heal restores the healthy checkout.
@@ -180,7 +196,10 @@ check "before an admin account, alerts are refused" [ "$(code -H "Authorization:
 check "before an admin account, Alertmanager isn't read" bash -c "! curl -sf http://127.0.0.1:18182/metrics | grep -q '^themis_intake_reads_total{'"
 check "the initial admin password in the chart's Secret signs in" [ "$(as "$BROWSER" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 204 ]
 cp "$BROWSER" "$FIRST"
-check "it creates the first admin account, with its own password" [ "$(as "$BROWSER" POST /v1/accounts -d "{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$OWN\"}")" = 201 ]
+# In a variable: the bash macOS ships expands the braces of a literal with
+# commas inside "$(...)".
+ACCOUNT="{\"username\":\"e2e-admin\",\"role\":\"admin\",\"password\":\"$OWN\"}"
+check "it creates the first admin account, with its own password" [ "$(as "$BROWSER" POST /v1/accounts -d "$ACCOUNT")" = 201 ]
 check "which signs the browser in as it" [ "$(curl -s -b "$BROWSER" "$API/v1/me" | field 'd["username"] + " " + str(d.get("temporaryPassword", False))')" = "e2e-admin False" ]
 check "and retires the initial admin password's session" [ "$(as "$FIRST" GET /v1/me)" = 401 ]
 check "and the password" [ "$(as "$FIRST" POST /auth/initial-admin -d "{\"password\":\"$(initial_password)\"}")" = 403 ]
@@ -296,7 +315,7 @@ WITHOUT_EVENTS=$(python3 -c 'import json,sys; print(json.dumps([r for r in json.
 $K -n shop patch "$READ_ROLE" --type=json -p "[{\"op\":\"replace\",\"path\":\"/rules/0/resources\",\"value\":$WITHOUT_EVENTS}]" >/dev/null
 ID=$(incident_after_break)
 check "an incident opens though Themis may not read events" [ -n "$ID" ]
-wait_state "$ID" 300 awaiting_approval closed_no_action escalated awaiting_suggestion >/dev/null
+wait_state "$ID" 300 awaiting_suggestion closed_no_action escalated awaiting_approval >/dev/null
 MISSING=$(api "/v1/incidents/$ID" | field '"\n".join(d.get("Missing") or [])')
 printf '%s\n' "$MISSING" | sed 's/^/  /'
 check "the incident says Themis may not read the events, and which Role to check" \
@@ -313,7 +332,7 @@ while [ "$ID" = "$BEFORE" ] && [ $SECONDS -lt $DEADLINE ]; do sleep 5; ID=$(late
 # Themis's own checks still support rolling checkout back, so a person hears
 # of it rather than the injection quietly dropping the fix, and Themis waits
 # for the fix they suggest.
-check "a person is told the checks support a fix" [ "$(wait_state "$ID" 300 closed_no_action awaiting_approval escalated awaiting_suggestion)" = awaiting_suggestion ]
+check "a person is told the checks support a fix" [ "$(wait_state "$ID" 300 awaiting_suggestion closed_no_action awaiting_approval escalated)" = awaiting_suggestion ]
 REASON=$(api "/v1/incidents/$ID" | field 'd["Transitions"][-1]["Reason"]')
 check "the reason says the checks support a fix no one proposed" grep -q "^No fix proposed. The checks support " <<<"$REASON"
 REFUSED=$(api "/v1/incidents/$ID" | field 'any(p["Status"] == "rejected" and p["RejectionReason"] == "REJECTION_REASON_TARGET_MISMATCH" for p in d["Proposals"] or []) and not d["Actions"]')
