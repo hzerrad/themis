@@ -15,10 +15,6 @@ Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 
 Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
-<p align="center">
-  <img src="docs/assets/themis-workflow.gif" width="560" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
-</p>
-
 > [!WARNING]
 > Themis is in alpha (`v0.1.0-alpha2`). Configuration and APIs may change between releases. It is not ready for production use.
 
@@ -147,6 +143,8 @@ flowchart LR
 Permissions and the threat model are in [docs/architecture.md](docs/architecture.md).
 
 ## Governance
+
+<img src="docs/assets/themis-workflow.gif" width="340" align="right" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
 
 Every proposal, whatever its source, passes the same controls in `themis-core`:
 
