@@ -15,6 +15,10 @@ Governance engine for AI-proposed fixes to Kubernetes incidents and workloads.
 
 Themis turns alerts about Kubernetes workloads into incidents, collects evidence from the cluster, and decides whether a proposed fix may be applied. A fix can come from Themis's own LLM investigator, from an external AI SRE agent, or from an engineer. Themis applies it only when its checks justify it, policy allows it and a person approves it, then verifies the result.
 
+<p align="center">
+  <img src="docs/assets/themis-workflow.gif" width="560" alt="Animation of Themis handling an OOMKilled Deployment: Alertmanager fires, Themis reads the evidence, the investigator suggests raising the memory limit, policy and a person approve it, the executor applies it, Themis verifies the pods recover, and a fix that makes things worse is put back">
+</p>
+
 > [!WARNING]
 > Themis is in alpha (`v0.1.0-alpha2`). Configuration and APIs may change between releases. It is not ready for production use.
 
@@ -26,6 +30,41 @@ Investigation and governance are separate:
 | Works from | The evidence Themis collected, and an LLM | Cluster state, CEL checks and CEL policy. No model |
 | Produces | A ranked diagnosis and one proposed fix, citing evidence | A decision on the proposal, then execution and verification |
 | Trust | Untrusted. Every proposal is validated | Holds the only write access, through the executor |
+
+## Install
+
+You need Kubernetes 1.35, 1.36 or 1.37, Helm, and Alertmanager in the cluster.
+
+**1. Install Themis** for the namespaces it should watch. They must exist first. It installs read-only:
+
+```sh
+helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
+  --namespace themis --create-namespace \
+  --set enrolledNamespaces='{payments,orders}'
+```
+
+The chart finds Alertmanager in the cluster and prints the address Themis reads. Add `--set metrics.prometheus.address=<your Prometheus>` to read CPU throttling, memory peaks and history.
+
+**2. Open Themis and create the first admin account:**
+
+```sh
+kubectl -n themis get secret themis-initial-admin -o jsonpath='{.data.password}' | base64 -d; echo
+kubectl -n themis port-forward deploy/themis-core 8080:8080
+```
+
+Open http://localhost:8080 and sign in with that password. Creating the admin account signs you in with it.
+
+**3. Optional: turn on the investigator and fixes.** This sends the evidence to the model, and lets Themis change workloads in `payments` once a person approves:
+
+```sh
+kubectl -n themis create secret generic model-key --from-literal=apiKey=<your Anthropic API key>
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set investigator.enabled=true --set investigator.model.provider=anthropic \
+  --set investigator.model.name=claude-haiku-5-5 --set investigator.model.apiKeySecret=model-key \
+  --set executor.enabled=true --set executor.namespaces='{payments}'
+```
+
+For a local or OpenAI-compatible model, see the [chart README](deploy/helm/themis/README.md). To try Themis on kind, with sample workloads that break on demand, follow the [quickstart](docs/quickstart.md).
 
 ## Example
 
@@ -140,14 +179,7 @@ Method and caveats are in [docs/evaluation.md](docs/evaluation.md).
 | Model (optional) | Claude through Anthropic's API, or an OpenAI-compatible endpoint with JSON-schema structured output, such as OpenAI, Ollama or vLLM |
 | Metrics (optional) | Kubernetes metrics API. A Prometheus-compatible server for throttling, peaks and history |
 
-```sh
-kubectl create namespace shop
-helm install themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 \
-  --namespace themis --create-namespace \
-  --set enrolledNamespaces='{shop}'
-```
-
-Themis watches only the namespaces in `enrolledNamespaces`, here `shop`. Each must exist before the install.
+The commands are under [Install](#install). Themis watches only the namespaces in `enrolledNamespaces`.
 
 A default install is read-only. The investigator and fixes are turned on separately:
 
@@ -157,7 +189,7 @@ A default install is read-only. The investigator and fixes are turned on separat
 | Investigator | `investigator.enabled=true`, and the model in `investigator.model` | To the model. A model in the cluster keeps it there | None |
 | Fixes | `executor.enabled=true`, and the namespaces it may change in `executor.namespaces` | None, unless the investigator is on | Each fix after a person approves it, only in those namespaces. Putting back one that made things worse needs no approval by default |
 
-- The [quickstart](docs/quickstart.md) installs Themis on kind or an existing cluster and walks through a first incident.
+- The [quickstart](docs/quickstart.md) walks through a first incident on kind or your own cluster.
 - Until the first admin account is created, Themis serves only the page that creates it.
 - Images are signed and published for linux/amd64 and linux/arm64.
 - The [chart README](deploy/helm/themis/README.md) lists every value, including GitOps installs and an external database.
