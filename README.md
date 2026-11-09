@@ -50,17 +50,39 @@ kubectl -n themis port-forward deploy/themis-core 8080:8080
 
 Open http://localhost:8080 and sign in with that password. Creating the admin account signs you in with it.
 
-**3. Optional: turn on the investigator and fixes.** This sends the evidence to the model, and lets Themis change workloads in `payments` once a person approves:
+**3. Optional: choose what suggests fixes.** Without it, an engineer suggests each fix on the incident page. Themis's investigator sends the evidence to the model you choose:
 
 ```sh
+# Claude, through Anthropic's API
 kubectl -n themis create secret generic model-key --from-literal=apiKey=<your Anthropic API key>
 helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set investigator.enabled=true --set investigator.model.provider=anthropic \
-  --set investigator.model.name=claude-haiku-5-5 --set investigator.model.apiKeySecret=model-key \
+  --set investigator.model.name=claude-haiku-5-5 --set investigator.model.apiKeySecret=model-key
+
+# Or any OpenAI-compatible endpoint, such as OpenAI, Ollama or vLLM, with model-key holding its key if it needs one.
+# schemaDialect=openai-strict is for OpenAI only
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set investigator.enabled=true --set investigator.model.baseURL=https://api.openai.com/v1 \
+  --set investigator.model.name=gpt-4.1 --set investigator.model.apiKeySecret=model-key \
+  --set investigator.model.schemaDialect=openai-strict
+```
+
+An existing HolmesGPT (0.25 or later) can suggest rollbacks instead, through an adapter the chart installs:
+
+```sh
+kubectl -n themis create secret generic holmes-key --from-literal=apiKey=<HolmesGPT's API key>
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
+  --set holmesgpt.enabled=true --set holmesgpt.url=http://holmes-holmes.holmes --set holmesgpt.apiKeySecret=holmes-key
+```
+
+**4. Optional: turn on fixes.** Themis then applies each fix a person approves, only in the namespaces you list:
+
+```sh
+helm upgrade themis oci://ghcr.io/hzerrad/charts/themis --version 0.1.0-alpha2 -n themis --reuse-values \
   --set executor.enabled=true --set executor.namespaces='{payments}'
 ```
 
-For a local or OpenAI-compatible model, see the [chart README](deploy/helm/themis/README.md). The [full quickstart](docs/quickstart.md) walks through each step and a first incident, on your cluster or on kind with sample workloads that break on demand.
+Every model setting is in the [chart README](deploy/helm/themis/README.md), and other AI SRE agents can suggest fixes through Themis's API, as [docs/configuration.md](docs/configuration.md#fixes-suggested-from-outside) describes. The [full quickstart](docs/quickstart.md) walks through each step and a first incident, on your cluster or on kind with sample workloads that break on demand.
 
 ## Example
 
