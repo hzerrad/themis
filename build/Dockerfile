@@ -1,7 +1,7 @@
 # themis-core and themis-executor. Build one with --build-arg BIN=<name>.
 # Go builds for the target platform from the build machine's own, so an arm64
 # image needs no emulation.
-FROM --platform=$BUILDPLATFORM golang:1.27 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e AS build
 ARG BIN=themis-core
 ARG TARGETOS TARGETARCH
 WORKDIR /src
