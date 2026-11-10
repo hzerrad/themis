@@ -210,7 +210,7 @@ Every escalation is POSTed as JSON; the format is in [Escalation notices](../../
 | `alerting.rules.labels` | `{}` | The PrometheusRule's labels, which your Prometheus selects rules by. Empty: those of the first `Prometheus` resource found at install |
 | `database.existingSecret` | `""` | A Secret with a `DATABASE_URL` key. Empty uses the bundled PostgreSQL. |
 | `postgres.enabled` | `true` | A single PostgreSQL for trying Themis; not for production |
-| `postgres.image`, `postgres.storage` | `postgres:17-alpine`, `1Gi` | |
+| `postgres.image`, `postgres.storage` | `postgres:17-alpine`, pinned by digest; `1Gi` | |
 | `investigator.enabled` | `false` | Install the investigator. Off, each incident waits for a suggested fix |
 | `investigator.tokenBudget` | `200000` | Tokens per incident, shared by its investigations when a person has it investigated again |
 | `investigator.egressCIDR` | `0.0.0.0/0` | Where the investigator may reach the model, for the NetworkPolicy |
