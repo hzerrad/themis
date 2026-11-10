@@ -100,7 +100,7 @@ database:
 # A single PostgreSQL for trying Themis; not for production.
 postgres:
   enabled: true
-  image: postgres:17-alpine
+  image: postgres:17-alpine@sha256:3540c0362c809df084ffac0ae69fe794515f9de92692f02178bcdce0ef0302ac
   storage: 1Gi
 
 # Themis's own investigator, themis-intelligence, which asks a model for a
