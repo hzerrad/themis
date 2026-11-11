@@ -120,7 +120,7 @@ An investigation isn't a job. It waits as a lease: the investigator asks for one
 stateDiagram-v2
   [*] --> received
   received --> investigating
-  received --> rejected: its profile is gone
+  received --> rejected: unsupported kind, or its profile is gone
   investigating --> diagnosed
   investigating --> inconclusive: no conclusion
   investigating --> awaiting_suggestion: no investigator, or referred
