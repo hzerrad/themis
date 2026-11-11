@@ -5,30 +5,34 @@ Themis separates who suggests a fix from who decides and applies it. Suggesters 
 ## Components
 
 ```mermaid
-flowchart LR
+flowchart TD
   subgraph suggesters["Suggesters: untrusted"]
     INV["themis-intelligence<br/>built-in investigator"]
     AGENT["AI SRE agent<br/>such as HolmesGPT"]
     ENG["Engineer<br/>web UI"]
   end
+  MODEL["Model endpoint"]
+  AM["Alertmanager"]
+  MET["Metrics API<br/>or Prometheus"]
   subgraph themis["Themis: deterministic"]
     CORE["themis-core<br/>evidence, checks, policy,<br/>approvals, verification"]
     EXEC["themis-executor<br/>the only writer, opt-in"]
     DB[("PostgreSQL<br/>state, audit trail, jobs")]
   end
-  AM["Alertmanager"] -->|"alerts, read or pushed"| CORE
-  MET["metrics API<br/>or Prometheus"] -->|usage and history| CORE
+  HOOK["Notification webhook"]
   K8S[("Kubernetes API")]
-  CORE -->|reads| K8S
+  INV -->|evidence| MODEL
   INV <-->|"gRPC: lease, evidence, suggestion"| CORE
-  INV -->|evidence| MODEL["Model endpoint"]
   AGENT -->|"gRPC: suggestion"| CORE
   ENG <-->|"HTTP: suggest, approve"| CORE
-  CORE -->|approved action| EXEC
-  EXEC -->|get, patch| K8S
-  CORE -->|escalations| HOOK["Notification webhook"]
+  AM -->|"alerts, read or pushed"| CORE
+  MET -->|"usage and history"| CORE
+  CORE -->|"approved action"| EXEC
   CORE --- DB
   EXEC --- DB
+  CORE -->|escalations| HOOK
+  CORE -->|reads| K8S
+  EXEC -->|"get, patch"| K8S
 ```
 
 | Component | Can | Cannot |
@@ -51,20 +55,20 @@ sequenceDiagram
   participant P as Approver
   participant E as themis-executor
   AM->>C: alert
-  C->>K: read evidence: pods, events, logs, rollout history, metrics
-  C->>C: decide the checks from that evidence
+  C->>K: read pods, events, logs, history, metrics
+  C->>C: decide the checks
   S->>C: ask for the incident
-  C-->>S: evidence, check results, the fixes it may suggest
-  S->>C: suggestion: fix, parameters, cited evidence
-  C->>C: validate, justify by a check, decide policy
-  C->>K: work out the change from the live object, check it fits
+  C-->>S: evidence, checks, fixes it may suggest
+  S->>C: suggest a fix, citing evidence
+  C->>C: validate, justify, apply policy
+  C->>K: plan the change from the live object
   C->>P: the exact change, bound to a digest
   P->>C: approve the digest
   C->>E: the approved action
   E->>K: read again, recompute the digest, dry run
-  E->>K: patch, on the resourceVersion it read
-  C->>K: decide the symptom checks again from the new pods
-  C->>C: resolved, or put back and hand to a person
+  E->>K: patch on the resourceVersion read
+  C->>K: check the symptom on the new pods
+  C->>C: resolved, or put back and escalated
 ```
 
 The flow stops early in three cases:
@@ -78,26 +82,26 @@ The flow stops early in three cases:
 Each stage of an incident is its own package. A stage hands the next one its work as a job in a queue stored in PostgreSQL, committed in the same transaction as the state change. So a crash never leaves an incident moved without its next step, and every job is safe to run twice.
 
 ```mermaid
-flowchart LR
+flowchart TD
   AM["Alertmanager"] --> INTAKE["Intake<br/>alerts to incidents"]
+  REC["Reconciliation<br/>changes made outside Themis"]
   INTAKE -. investigate .-> INVEST["Investigation<br/>evidence, checks, leases"]
+  REC -. "investigate a replacement" .-> INVEST
   INVEST --> SUG["Suggestion<br/>one door for every fix"]
   OUT["Investigator, agents, people"] --> SUG
   SUG -. govern .-> GOV["Governance<br/>justify, plan, policy, approval"]
   GOV -. execute .-> EXEC["themis-executor"]
   EXEC -. verify .-> VER["Verification<br/>did it work?"]
   VER -. restore .-> GOV
-  REC["Reconciliation<br/>changes made outside Themis"] -.-> INVEST
-  GOV -. notify_escalation .-> NOTE["Notification"] --> HOOK["Webhook"]
 ```
 
-Dashed arrows are queued jobs. Every suggested fix, from the investigator, an agent or a person, enters through Suggestion and is judged the same way.
+Dashed arrows are queued jobs. Every suggested fix, from the investigator, an agent or a person, enters through Suggestion and is judged the same way. A notice to the webhook is queued the same way, whenever an incident is handed to a person.
 
 | Job | Queued by | Does |
 |---|---|---|
 | `process_alert` | Intake, for each alert pushed or read | Opens, joins or closes an incident |
 | `read_alertmanager` | A timer, in poll mode | Reads Alertmanager's active alerts and stores them as if pushed |
-| `investigate` | Intake, for a new incident | Reads the first evidence, decides the checks, and opens the investigation for a lease |
+| `investigate` | Intake, for a new incident; Reconciliation, for one that replaces an incident | Reads the first evidence, decides the checks, and opens the investigation for a lease |
 | `alerts_stopped` | Intake, when all of an incident's alerts stop | Decides its checks again: closes it only if they no longer find the failure |
 | `govern` | Suggestion | Decides one fix: the action and the incident's next state |
 | `execute` | Governance, on approval | Hands the action to the executor |
